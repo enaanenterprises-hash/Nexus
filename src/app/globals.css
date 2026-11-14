@@ -19,22 +19,15 @@
   --radial-b: rgba(56, 140, 180, 0.1);
 
   /* Landing (pitch black + gold) */
-  --land-bg: #000000;
-  --land-ink: #f3f1ea;
-  --land-muted: #a39e93;
-  --land-faint: #6f6a60;
-  --land-line: rgba(232, 200, 120, 0.16);
-  --land-gold: #e2a93b;
-  --land-gold-soft: #f0c56d;
-  --land-gold-dim: rgba(226, 169, 59, 0.45);
-  --land-chrome-hi: #f7f7f7;
-  --land-chrome-mid: #b8b8b8;
-  --land-chrome-lo: #6e6e6e;
+  --land-ink: #f5f5f7;
+  --land-muted: #a1a1a6;
+  --land-line: rgba(255, 255, 255, 0.16);
+  --land-gold: #f0b54a;
 
   --font-display: var(--font-syne), "Segoe UI", sans-serif;
   --font-body: var(--font-figtree), "Segoe UI", sans-serif;
   --font-mono: var(--font-ibm-plex-mono), ui-monospace, monospace;
-  --font-wordmark: var(--font-syncopate), var(--font-syne), sans-serif;
+  --font-landing: var(--font-inter-tight), -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif;
 }
 
 @theme inline {
@@ -62,8 +55,8 @@ body {
 }
 
 ::selection {
-  background: rgba(226, 169, 59, 0.28);
-  color: var(--land-ink);
+  background: rgba(240, 181, 74, 0.3);
+  color: #fff;
 }
 
 a {
@@ -77,150 +70,105 @@ textarea {
 }
 
 /* ——— Landing ——— */
-.landing-root {
-  background: var(--land-bg);
+.landing {
+  background: #000;
   color: var(--land-ink);
+  font-family: var(--font-landing);
+  -webkit-font-smoothing: antialiased;
 }
 
-.nexus-chrome-wordmark {
-  background: linear-gradient(
-    185deg,
-    var(--land-chrome-hi) 0%,
-    var(--land-chrome-mid) 38%,
-    #8d8d8d 52%,
-    var(--land-chrome-hi) 68%,
-    var(--land-chrome-lo) 100%
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.12));
+.landing-line {
+  font-size: clamp(1.375rem, 2.6vw, 2.25rem);
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.022em;
+  color: var(--land-ink);
+  text-wrap: balance;
 }
 
-.landing-tag {
+.landing-title {
+  font-size: clamp(1.75rem, 3.4vw, 2.5rem);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+.landing-signup {
+  display: inline-flex;
+  align-items: center;
+  height: 2.25rem;
+  padding: 0 1.15rem;
+  border-radius: 999px;
   border: 1px solid var(--land-line);
-  background: rgba(255, 255, 255, 0.03);
-  padding: 0.4rem 0.75rem;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  color: var(--land-ink);
+  transition:
+    background 200ms ease,
+    border-color 200ms ease;
+}
+
+.landing-signup:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.landing-input {
+  display: block;
+  width: 100%;
+  height: 3.25rem;
+  padding: 0 1.1rem;
+  border-radius: 14px;
+  border: 1px solid var(--land-line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--land-ink);
+  font-size: 16px;
+  outline: none;
+  transition: border-color 200ms ease;
+}
+
+.landing-input::placeholder {
   color: var(--land-muted);
 }
 
-.landing-cta-solid {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.88);
-  background: #f4f1ea;
-  color: #0a0a0a;
-  padding: 0.7rem 1.15rem;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  transition:
-    background 160ms ease,
-    border-color 160ms ease,
-    transform 160ms ease;
+.landing-input:focus {
+  border-color: var(--land-gold);
 }
 
-.landing-cta-solid:hover {
+.landing-primary {
+  height: 3.25rem;
+  border-radius: 14px;
+  background: var(--land-ink);
+  color: #000;
+  font-size: 16px;
+  font-weight: 600;
+  transition: background 200ms ease;
+}
+
+.landing-primary:hover {
   background: #fff;
 }
 
-.landing-cta-ghost {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid var(--land-line);
-  background: transparent;
-  color: var(--land-ink);
-  padding: 0.7rem 1.15rem;
-  font-size: 13px;
-  letter-spacing: 0.02em;
-  transition:
-    border-color 160ms ease,
-    background 160ms ease;
+.landing-enter {
+  animation: landing-enter 1.2s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
 }
 
-.landing-cta-ghost:hover {
-  border-color: var(--land-gold-dim);
-  background: rgba(226, 169, 59, 0.06);
+.landing-enter--late {
+  animation-delay: 0.9s;
 }
 
-.landing-glass {
-  border: 1px solid var(--land-line);
-  background: linear-gradient(
-    155deg,
-    rgba(28, 24, 18, 0.72) 0%,
-    rgba(8, 8, 8, 0.78) 100%
-  );
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
-}
-
-.landing-neural__glow {
-  position: absolute;
-  right: -8%;
-  top: 4%;
-  width: min(780px, 92vw);
-  height: min(620px, 78vh);
-  background: radial-gradient(
-    ellipse at center,
-    rgba(255, 236, 170, 0.28) 0%,
-    rgba(226, 169, 59, 0.16) 26%,
-    rgba(120, 70, 20, 0.06) 52%,
-    transparent 72%
-  );
-  filter: blur(6px);
-  animation: landing-glow-breathe 7s ease-in-out infinite;
-}
-
-@media (max-width: 1023px) {
-  .landing-neural__glow {
-    right: -20%;
-    top: -4%;
-    opacity: 0.7;
-  }
-}
-
-.landing-filaments path {
-  stroke-dasharray: 8 14;
-  animation: landing-filament-flow 18s linear infinite;
-}
-
-.landing-particle {
-  animation: landing-particle-twinkle 3.6s ease-in-out infinite;
-}
-
-@keyframes landing-glow-breathe {
-  0%,
-  100% {
-    opacity: 0.85;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.04);
-  }
-}
-
-@keyframes landing-filament-flow {
+@keyframes landing-enter {
   from {
-    stroke-dashoffset: 0;
+    opacity: 0;
+    transform: translateY(10px);
   }
   to {
-    stroke-dashoffset: -240;
-  }
-}
-
-@keyframes landing-particle-twinkle {
-  0%,
-  100% {
-    opacity: 0.35;
-  }
-  50% {
     opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -339,9 +287,7 @@ textarea {
   .motion-rise,
   .motion-pulse-ring,
   .motion-scan,
-  .landing-neural__glow,
-  .landing-filaments path,
-  .landing-particle {
+  .landing-enter {
     animation: none;
   }
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ExtensionHub } from "./ExtensionHub";
 import { NetworkCanvas } from "./NetworkCanvas";
 import { NexusInteraction, NexusOrb } from "./NexusCore";
@@ -12,12 +13,12 @@ export function Dashboard() {
         <NetworkCanvas />
 
         <nav className="flex items-center justify-between px-5 py-5 sm:px-8">
-          <a
+          <Link
             href="/"
             className="font-[family-name:var(--font-mono)] text-[11px] tracking-[0.28em] text-[color:var(--ink-soft)] uppercase transition-colors hover:text-[color:var(--ink)]"
           >
             Nexus
-          </a>
+          </Link>
           <div className="flex items-center gap-6">
             <a
               href="#top"

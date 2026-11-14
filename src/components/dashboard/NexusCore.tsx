@@ -32,7 +32,9 @@ export function NexusOrb() {
 
 /** Direct Nexus interaction — proactive pulses, not an SMS transcript. */
 export function NexusInteraction() {
-  const [pulses, setPulses] = useState<PulseMessage[]>([]);
+  const [pulses, setPulses] = useState<PulseMessage[]>([
+    { id: "seed-1", role: "nexus", text: BOOT_MESSAGE, at: "" },
+  ]);
   const [draft, setDraft] = useState("");
   const [thinking, setThinking] = useState(false);
   const [proactive, setProactive] = useState(() => pickProactiveSuggestion(0));
@@ -48,15 +50,6 @@ export function NexusInteraction() {
   });
 
   useEffect(() => {
-    const bootAt = new Date().toISOString();
-    setPulses([
-      {
-        id: "seed-1",
-        role: "nexus",
-        text: BOOT_MESSAGE,
-        at: bootAt,
-      },
-    ]);
     nexusBus.emit("nexus:ready", { version: "0.1.0" });
     nexusBus.setSharedContext({
       activeTaskIds: ["t-1", "t-2"],

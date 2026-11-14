@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Figtree, IBM_Plex_Mono, Syncopate, Syne } from "next/font/google";
+import { Figtree, IBM_Plex_Mono, Inter_Tight, Syne } from "next/font/google";
 import "./globals.css";
 
 const syne = Syne({
@@ -20,10 +20,10 @@ const ibmPlexMono = IBM_Plex_Mono({
   weight: ["400", "500"],
 });
 
-const syncopate = Syncopate({
-  variable: "--font-syncopate",
+const interTight = Inter_Tight({
+  variable: "--font-inter-tight",
   subsets: ["latin"],
-  weight: ["400", "700"],
+  weight: ["400", "500", "600"],
 });
 
 export const metadata: Metadata = {
@@ -40,7 +40,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${syne.variable} ${figtree.variable} ${ibmPlexMono.variable} ${syncopate.variable} h-full antialiased`}
+      className={`${syne.variable} ${figtree.variable} ${ibmPlexMono.variable} ${interTight.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">{children}</body>
     </html>

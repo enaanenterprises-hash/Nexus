@@ -28,12 +28,13 @@ npm run start   # serve production build
 
 | Route | Surface |
 | --- | --- |
-| `/` | Pre-signup marketing landing (gold neural / chrome NEXUS) |
+| `/` | Landing: animated golden neural network, logo, one-line description, Sign up |
+| `/signup` | Sign-up stub (email → continues to the dashboard; no auth yet) |
 | `/dashboard` | Main Nexus Interaction Dashboard + Extension Hub |
 
 ## What’s shipped
 
-1. **Marketing landing** — nav, hero, glass dashboard preview, extension callouts, freemium note.
+1. **Landing** — procedurally drawn golden neural network on canvas (`src/components/landing/GoldenNetwork.tsx`): bezier filaments pinching through a core and fanning out, flowing particles, gentle sway; static frame under reduced motion.
 2. **Living Nexus core** — proactive suggestions + mock intelligent replies (no real LLM required).
 3. **Task & life organization** — active tasks, priorities, ongoing context (local mock state).
 4. **Extension Hub** — orbital nodes for Studio / Study / Call / Calendar / third-party; **2 free** active slots, additional nodes gated behind a **Pro stub**.
