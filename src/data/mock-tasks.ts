@@ -4,8 +4,10 @@ export type NexusTask = {
   id: string;
   title: string;
   priority: TaskPriority;
-  status: "active" | "waiting" | "done";
-  context: string;
+  status: "active" | "done";
+  note: string;
+  /** Time block Nexus assigned when organizing the day, e.g. "9:00". */
+  block?: string;
 };
 
 export type LifeContextThread = {
@@ -17,48 +19,43 @@ export type LifeContextThread = {
 export const INITIAL_TASKS: NexusTask[] = [
   {
     id: "t-1",
-    title: "Ship Nexus Step 1 dashboard",
+    title: "Finalize the Nexus pitch deck",
     priority: "critical",
     status: "active",
-    context: "Core interaction + extension socket",
+    note: "Investor call Thursday",
   },
   {
     id: "t-2",
     title: "Draft Pro pricing narrative",
     priority: "high",
     status: "active",
-    context: "Freemium: 2 free nodes, rest on Pro",
+    note: "Two free nodes, the rest on Pro",
   },
   {
     id: "t-3",
-    title: "Sketch Studio extension contract",
-    priority: "steady",
-    status: "waiting",
-    context: "Placeholder slot only — not built yet",
+    title: "Reply to Maya about the studio space",
+    priority: "high",
+    status: "active",
+    note: "She needs an answer by Friday",
   },
   {
     id: "t-4",
-    title: "Review Study node UX notes",
+    title: "Book a dentist appointment",
     priority: "steady",
-    status: "waiting",
-    context: "Future learning companion",
+    status: "active",
+    note: "Overdue since October",
+  },
+  {
+    id: "t-5",
+    title: "Evening run",
+    priority: "steady",
+    status: "active",
+    note: "30 minutes, easy pace",
   },
 ];
 
 export const INITIAL_CONTEXT_THREADS: LifeContextThread[] = [
-  {
-    id: "c-1",
-    label: "Focus arc",
-    detail: "Build the living network before any real extensions.",
-  },
-  {
-    id: "c-2",
-    label: "Open loop",
-    detail: "Decide when to stub auth for the Pro gate.",
-  },
-  {
-    id: "c-3",
-    label: "Personal",
-    detail: "Protect deep-work mornings; keep evenings for review.",
-  },
+  { id: "c-1", label: "This week", detail: "Investor prep comes before everything else." },
+  { id: "c-2", label: "Open loop", detail: "Decide when to wire real auth behind the Pro gate." },
+  { id: "c-3", label: "Personal", detail: "Protect deep-work mornings; evenings are for review." },
 ];

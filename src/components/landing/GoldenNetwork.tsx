@@ -1,8 +1,17 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-
-type Vec = { x: number; y: number };
+import {
+  add,
+  clamp,
+  fitCanvas,
+  pointOnPath,
+  polar,
+  radialGlow,
+  seededHelpers,
+  sub,
+  type Vec,
+} from "@/lib/network/geometry";
 
 type Filament = {
   bucket: number;
@@ -46,38 +55,8 @@ const PARTICLE_COUNT = 460;
 const DUST_COUNT = 2600;
 const INTRO_SECONDS = 2.6;
 
-function mulberry32(seed: number) {
-  let a = seed;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-const polar = (r: number, angle: number): Vec => ({ x: Math.cos(angle) * r, y: Math.sin(angle) * r });
-const add = (a: Vec, b: Vec): Vec => ({ x: a.x + b.x, y: a.y + b.y });
-const sub = (a: Vec, b: Vec): Vec => ({ x: a.x - b.x, y: a.y - b.y });
-const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
-
-function bezier(p0: Vec, p1: Vec, p2: Vec, p3: Vec, t: number): Vec {
-  const m = 1 - t;
-  const a = m * m * m;
-  const b = 3 * m * m * t;
-  const c = 3 * m * t * t;
-  const d = t * t * t;
-  return {
-    x: a * p0.x + b * p1.x + c * p2.x + d * p3.x,
-    y: a * p0.y + b * p1.y + c * p2.y + d * p3.y,
-  };
-}
-
 function createField() {
-  const rnd = mulberry32(20261113);
-  const gauss = () => (rnd() + rnd() + rnd() - 1.5) / 1.5;
-  const between = (lo: number, hi: number) => lo + rnd() * (hi - lo);
+  const { rnd, gauss, between } = seededHelpers(20261113);
 
   const filaments: Filament[] = [];
   BUCKETS.forEach((bucket, bucketIndex) => {
@@ -208,20 +187,6 @@ function segmentsFor(f: Filament, layout: Layout, time: number): Vec[][] {
   return [incoming, [pinch, d1, d2, hub], [hub, e1, e2, p4]];
 }
 
-function pointOnPath(segments: Vec[][], u: number): Vec {
-  const scaled = clamp(u, 0, 0.9999) * segments.length;
-  const index = Math.floor(scaled);
-  const [a, b, c, d] = segments[index]!;
-  return bezier(a!, b!, c!, d!, scaled - index);
-}
-
-function radialGlow(ctx: CanvasRenderingContext2D, at: Vec, radius: number, stops: Array<[number, string]>) {
-  const g = ctx.createRadialGradient(at.x, at.y, 0, at.x, at.y, radius);
-  for (const [offset, color] of stops) g.addColorStop(offset, color);
-  ctx.fillStyle = g;
-  ctx.fillRect(at.x - radius, at.y - radius, radius * 2, radius * 2);
-}
-
 export function GoldenNetwork({ className = "" }: { className?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -338,12 +303,8 @@ export function GoldenNetwork({ className = "" }: { className?: string }) {
     };
 
     const resize = () => {
-      const rect = canvas.getBoundingClientRect();
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      canvas.width = Math.round(rect.width * dpr);
-      canvas.height = Math.round(rect.height * dpr);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      layout = computeLayout(rect.width, rect.height);
+      const { width, height } = fitCanvas(canvas, ctx);
+      layout = computeLayout(width, height);
       if (reduceMotion) draw(0, 0);
     };
 
