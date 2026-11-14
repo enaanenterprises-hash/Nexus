@@ -422,9 +422,9 @@ export const CONNECTOR_CATALOG: readonly ConnectorManifest[] = (
     description: "Starts and pauses your focus playlist.",
     monogram: "Sp",
     auth: { type: "oauth", provider: "spotify", scopes: ["user-modify-playback-state", "user-read-playback-state"], docsUrl: "https://developer.spotify.com/documentation/web-api/concepts/authorization" },
-    produces: ["command.activity"],
+    produces: [],
     actions: ["music.play", "music.pause"],
-    settings: [{ key: "playlist", label: "Focus playlist", type: "text", defaultValue: "Deep Focus" }],
+    settings: [{ key: "playlist", label: "Focus playlist", type: "text", placeholder: "https://open.spotify.com/playlist/…", help: "Paste a playlist link. Empty resumes whatever was playing." }],
     live: { status: "available", api: "Spotify Web API (playback control needs Premium)", env: ["SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET"] },
   },
   {

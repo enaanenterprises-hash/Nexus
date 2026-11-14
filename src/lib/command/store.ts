@@ -72,10 +72,10 @@ export async function saveConnection(
   const settings = input.settings ?? {}
   const [row] = await sql`
     INSERT INTO command_connection ("userId", "connectorId", "settings", "credentials", "status")
-    VALUES (${userId}, ${connectorId}, ${sql.json(settings)}, ${sealed ?? null}, 'ok')
+    VALUES (${userId}, ${connectorId}, ${JSON.stringify(settings)}::text::jsonb, ${sealed ?? null}, 'ok')
     ON CONFLICT ("userId", "connectorId") DO UPDATE SET
-      "settings" = CASE WHEN ${input.settings === undefined} THEN command_connection."settings" ELSE EXCLUDED."settings" END,
-      "credentials" = CASE WHEN ${sealed === undefined} THEN command_connection."credentials" ELSE EXCLUDED."credentials" END,
+      "settings" = ${input.settings === undefined ? sql`command_connection."settings"` : sql`EXCLUDED."settings"`},
+      "credentials" = ${sealed === undefined ? sql`command_connection."credentials"` : sql`EXCLUDED."credentials"`},
       "status" = 'ok', "lastError" = NULL, "updatedAt" = now()
     RETURNING *`
   return toConnection(row!)
@@ -85,7 +85,7 @@ export async function markConnection(userId: string, connectorId: string, status
   const sql = await db()
   await sql`
     UPDATE command_connection SET "status" = ${status}, "lastError" = ${error},
-      "lastSyncAt" = CASE WHEN ${status === "ok"} THEN now() ELSE "lastSyncAt" END, "updatedAt" = now()
+      "lastSyncAt" = ${status === "ok" ? sql`now()` : sql`"lastSyncAt"`}, "updatedAt" = now()
     WHERE "userId" = ${userId} AND "connectorId" = ${connectorId}`
 }
 
@@ -112,25 +112,48 @@ function toItem(row: Row): CommandItem {
   } as CommandItem
 }
 
-/** Upserts items and returns the ones that did not exist before. */
-export async function upsertItems(userId: string, items: CommandItem[]): Promise<{ created: CommandItem[]; all: CommandItem[] }> {
-  if (items.length === 0) return { created: [], all: [] }
+/**
+ * Upserts items in one statement. `created` did not exist before; `changed`
+ * existed with a different `status` (a deploy that failed, a task finished).
+ */
+export async function upsertItems(
+  userId: string,
+  items: CommandItem[],
+): Promise<{ created: CommandItem[]; changed: CommandItem[]; all: CommandItem[] }> {
+  if (items.length === 0) return { created: [], changed: [], all: [] }
   const sql = await db()
+  const unique = [...new Map(items.map((i) => [i.id, i])).values()]
+  const input = unique.map((i) => ({
+    id: i.id,
+    kind: i.kind,
+    connectorId: i.data.connectorId,
+    origin: i.data.origin,
+    title: i.title,
+    data: i.data,
+    occursAt: itemTime(i),
+  }))
+  const rows = await sql`
+    WITH input AS (
+      SELECT * FROM jsonb_to_recordset(${JSON.stringify(input)}::text::jsonb)
+        AS x("id" text, "kind" text, "connectorId" text, "origin" text, "title" text, "data" jsonb, "occursAt" timestamptz)
+    ), prev AS (
+      SELECT c."id", c."data"->>'status' AS "prevStatus" FROM command_item c JOIN input i ON c."id" = i."id" WHERE c."userId" = ${userId}
+    )
+    INSERT INTO command_item ("userId", "id", "kind", "connectorId", "origin", "title", "data", "occursAt")
+    SELECT ${userId}, "id", "kind", "connectorId", "origin", "title", "data", "occursAt" FROM input
+    ON CONFLICT ("userId", "id") DO UPDATE SET
+      "title" = EXCLUDED."title", "data" = EXCLUDED."data", "occursAt" = EXCLUDED."occursAt", "origin" = EXCLUDED."origin", "updatedAt" = now()
+    RETURNING command_item.*, (xmax = 0) AS "inserted", (SELECT "prevStatus" FROM prev WHERE prev."id" = command_item."id") AS "prevStatus"`
   const created: CommandItem[] = []
-  const all: CommandItem[] = []
-  for (const item of items) {
-    const at = itemTime(item)
-    const [row] = await sql`
-      INSERT INTO command_item ("userId", "id", "kind", "connectorId", "origin", "title", "data", "occursAt")
-      VALUES (${userId}, ${item.id}, ${item.kind}, ${item.data.connectorId}, ${item.data.origin}, ${item.title}, ${sql.json(item.data as never)}, ${at})
-      ON CONFLICT ("userId", "id") DO UPDATE SET
-        "title" = EXCLUDED."title", "data" = EXCLUDED."data", "occursAt" = EXCLUDED."occursAt", "updatedAt" = now()
-      RETURNING *, (xmax = 0) AS "inserted"`
-    const stored = toItem(row!)
-    all.push(stored)
-    if (row!["inserted"]) created.push(stored)
-  }
-  return { created, all }
+  const changed: CommandItem[] = []
+  const all = rows.map((row) => {
+    const item = toItem(row)
+    const status = (item.data as { status?: string }).status
+    if (row["inserted"]) created.push(item)
+    else if (status && row["prevStatus"] && status !== row["prevStatus"]) changed.push(item)
+    return item
+  })
+  return { created, changed, all }
 }
 
 /** Drops synced items a connector no longer reports (closed issues, past sessions). */
@@ -138,13 +161,13 @@ export async function pruneSynced(userId: string, connectorId: string, keepIds: 
   const sql = await db()
   await sql`
     DELETE FROM command_item WHERE "userId" = ${userId} AND "connectorId" = ${connectorId} AND "origin" = 'sync'
-      AND NOT ("id" = ANY(${keepIds}))`
+      AND "id" NOT IN (SELECT jsonb_array_elements_text(${JSON.stringify(keepIds)}::text::jsonb))`
 }
 
 export async function updateItemData(userId: string, item: CommandItem): Promise<CommandItem> {
   const sql = await db()
   const [row] = await sql`
-    UPDATE command_item SET "data" = ${sql.json(item.data as never)}, "title" = ${item.title}, "occursAt" = ${itemTime(item)}, "updatedAt" = now()
+    UPDATE command_item SET "data" = ${JSON.stringify(item.data)}::text::jsonb, "title" = ${item.title}, "occursAt" = ${itemTime(item)}::text::timestamptz, "updatedAt" = now()
     WHERE "userId" = ${userId} AND "id" = ${item.id} RETURNING *`
   return toItem(row!)
 }
@@ -156,7 +179,7 @@ export async function listRecentItems(userId: string, now = new Date()): Promise
   const to = new Date(now.getTime() + 14 * 86_400_000)
   const rows = await sql`
     SELECT * FROM command_item WHERE "userId" = ${userId}
-      AND ("occursAt" IS NULL OR "occursAt" BETWEEN ${from} AND ${to} OR "kind" IN ('command.signal', 'command.shipment', 'command.task'))
+      AND ("occursAt" IS NULL OR "occursAt" BETWEEN ${from.toISOString()}::text::timestamptz AND ${to.toISOString()}::text::timestamptz OR "kind" IN ('command.signal', 'command.shipment', 'command.task'))
     ORDER BY "occursAt" NULLS LAST LIMIT 600`
   return rows.map(toItem)
 }
@@ -165,8 +188,8 @@ export async function listItems(userId: string, kind: CommandKind, query: { conn
   const sql = await db()
   const limit = Math.min(query.limit ?? 200, 500)
   const rows = query.connectorId
-    ? await sql`SELECT * FROM command_item WHERE "userId" = ${userId} AND "kind" = ${kind} AND "connectorId" = ${query.connectorId} ORDER BY "occursAt" DESC NULLS LAST LIMIT ${limit}`
-    : await sql`SELECT * FROM command_item WHERE "userId" = ${userId} AND "kind" = ${kind} ORDER BY "occursAt" DESC NULLS LAST LIMIT ${limit}`
+    ? await sql`SELECT * FROM command_item WHERE "userId" = ${userId} AND "kind" = ${kind} AND "connectorId" = ${query.connectorId} ORDER BY "occursAt" DESC NULLS LAST LIMIT ${String(limit)}::text::int`
+    : await sql`SELECT * FROM command_item WHERE "userId" = ${userId} AND "kind" = ${kind} ORDER BY "occursAt" DESC NULLS LAST LIMIT ${String(limit)}::text::int`
   return rows.map(toItem)
 }
 
@@ -196,7 +219,7 @@ export async function recipeStates(userId: string): Promise<Record<string, boole
 export async function setRecipeState(userId: string, recipeId: string, enabled: boolean) {
   const sql = await db()
   await sql`
-    INSERT INTO command_recipe_state ("userId", "recipeId", "enabled") VALUES (${userId}, ${recipeId}, ${enabled})
+    INSERT INTO command_recipe_state ("userId", "recipeId", "enabled") VALUES (${userId}, ${recipeId}, ${enabled ? "true" : "false"}::text::boolean)
     ON CONFLICT ("userId", "recipeId") DO UPDATE SET "enabled" = EXCLUDED."enabled"`
 }
 
@@ -217,14 +240,14 @@ export async function recordRun(userId: string, run: Omit<AutomationRun, "id" | 
   const sql = await db()
   const [row] = await sql`
     INSERT INTO command_automation_run ("id", "userId", "recipeId", "recipeName", "trigger", "triggerItemId", "status", "steps")
-    VALUES (${randomUUID()}, ${userId}, ${run.recipeId}, ${run.recipeName}, ${run.trigger}, ${run.triggerItemId}, ${run.status}, ${sql.json(run.steps as never)})
+    VALUES (${randomUUID()}, ${userId}, ${run.recipeId}, ${run.recipeName}, ${run.trigger}, ${run.triggerItemId}, ${run.status}, ${JSON.stringify(run.steps)}::text::jsonb)
     RETURNING *`
   return toRun(row!)
 }
 
 export async function listRuns(userId: string, limit = 30): Promise<AutomationRun[]> {
   const sql = await db()
-  const rows = await sql`SELECT * FROM command_automation_run WHERE "userId" = ${userId} ORDER BY "createdAt" DESC LIMIT ${limit}`
+  const rows = await sql`SELECT * FROM command_automation_run WHERE "userId" = ${userId} ORDER BY "createdAt" DESC LIMIT ${String(limit)}::text::int`
   return rows.map(toRun)
 }
 
@@ -234,7 +257,7 @@ export async function ranFor(userId: string, recipeId: string, itemIds: string[]
   const sql = await db()
   const rows = await sql`
     SELECT DISTINCT "triggerItemId" FROM command_automation_run
-    WHERE "userId" = ${userId} AND "recipeId" = ${recipeId} AND "triggerItemId" = ANY(${itemIds})`
+    WHERE "userId" = ${userId} AND "recipeId" = ${recipeId} AND "triggerItemId" IN (SELECT jsonb_array_elements_text(${JSON.stringify(itemIds)}::text::jsonb))`
   return new Set(rows.map((r) => String(r["triggerItemId"])))
 }
 
@@ -263,13 +286,13 @@ export async function createFocus(userId: string, input: { title: string; minute
   const endsAt = new Date(now.getTime() + input.minutes * 60_000)
   const [row] = await sql`
     INSERT INTO command_focus ("id", "userId", "title", "targetItemId", "minutes", "startedAt", "endsAt")
-    VALUES (${randomUUID()}, ${userId}, ${input.title}, ${input.targetItemId}, ${input.minutes}, ${now}, ${endsAt}) RETURNING *`
+    VALUES (${randomUUID()}, ${userId}, ${input.title}, ${input.targetItemId}, ${String(input.minutes)}::text::int, ${now.toISOString()}::text::timestamptz, ${endsAt.toISOString()}::text::timestamptz) RETURNING *`
   return toFocus(row!)
 }
 
 export async function finishFocus(userId: string, id: string, now = new Date()): Promise<FocusSession | null> {
   const sql = await db()
   const [row] = await sql`
-    UPDATE command_focus SET "endedAt" = ${now} WHERE "userId" = ${userId} AND "id" = ${id} AND "endedAt" IS NULL RETURNING *`
+    UPDATE command_focus SET "endedAt" = ${now.toISOString()}::text::timestamptz WHERE "userId" = ${userId} AND "id" = ${id} AND "endedAt" IS NULL RETURNING *`
   return row ? toFocus(row) : null
 }

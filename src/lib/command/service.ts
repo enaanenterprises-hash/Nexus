@@ -99,11 +99,11 @@ export async function syncCommand(options: { userId: string; timeZone: string; d
       continue
     }
     if (!drivers[connection.connectorId]?.fetch) continue
-    const { created } = await store.upsertItems(userId, pull.value.items)
+    const { created, changed } = await store.upsertItems(userId, pull.value.items)
     await store.pruneSynced(userId, connection.connectorId, pull.value.items.map((i) => i.id))
     await store.markConnection(userId, connection.connectorId, "ok", null)
     // The first sync is a baseline: automations react to what changes afterwards, not to history.
-    if (connection.lastSyncAt) fresh.push(...created)
+    if (connection.lastSyncAt) fresh.push(...created, ...changed)
     result.created.push(...created)
   }
 
@@ -387,4 +387,27 @@ export async function createGoal(userId: string, input: { title: string; metric:
     data: { status: "open", priority: "medium", dueAt: input.dueAt, project: "Goals", doneAt: null, goal: { metric: input.metric, target: input.target, unit: input.unit, progress: 0 } },
   })
   return (await store.upsertItems(userId, [item])).all[0]!
+}
+
+/** Runs a driver's `verify` against credentials and settings that are not saved yet. */
+export async function verifyConnection(options: {
+  userId: string
+  connectorId: string
+  credentials: Record<string, string> | null
+  settings: Record<string, string>
+  timeZone: string
+  drivers: DriverRegistry
+}) {
+  const driver = options.drivers[options.connectorId]
+  if (!driver?.verify) return
+  const ctx: DriverContext = {
+    userId: options.userId,
+    connectorId: options.connectorId,
+    credentials: options.credentials,
+    settings: settingsFor(options.connectorId, options.settings),
+    now: new Date(),
+    timeZone: options.timeZone,
+    saveCredentials: async () => {},
+  }
+  await withTimeout(driver.verify(ctx), getConnector(options.connectorId)?.name ?? options.connectorId)
 }

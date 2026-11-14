@@ -320,7 +320,7 @@ A finance extension that wants receipts declares `content:command.purchase:read`
 
 `src/lib/command/automation/` is a small deterministic engine. A `Recipe` is a trigger, conditions and action steps:
 
-- **Triggers:** `item.created` (a kind, optionally limited to connectors), `item.upcoming` (fires once per item when its time is within `withinHours`; checked on every sync), `focus.started`, `focus.ended`.
+- **Triggers:** `item.created` (a new item of a kind, or an existing one whose `status` changed, such as a deploy that failed; optionally limited to connectors), `item.upcoming` (fires once per item when its time is within `withinHours`; checked on every sync), `focus.started`, `focus.ended`.
 - **Conditions:** `{ path, op, value }` over the run scope (`item`, `focus`, `receipt`, `hoursUntil`, `now`). Operators: `eq`, `neq`, `in`, `contains`, `exists`, `gte`, `lte`, `within_hours`.
 - **Actions:** `{ action, params }`, where string params may use `{{path}}` templates. Connector actions dispatch to `one` connected service or to `all` of them (Do Not Disturb on Slack and Discord). Core actions (`purchase.record`, `shipment.track`, `goal.check`, `signal.update`, `task.create`, `activity.log`) run inside Command.
 - `planRun()` is pure. `executePlan()` runs each step; a step with no connected service is `skipped`, a failing step is `failed`, and neither stops the rest. Items an automation creates can trigger further recipes, up to two levels deep. Every run is logged in `command_automation_run`.
@@ -330,7 +330,7 @@ Built-in recipes (`recipes.ts`): **Deep work** and **Deep work wrap-up**, **Rece
 
 ### Timeline
 
-`buildTimeline(items, { now, timeZone })` returns the viewer's day: timed entries in order with `past`/`live` flags and a now index, an `anytime` lane (open untimed tasks and tasks finished today), the signal strip, and moving shipments.
+`buildTimeline(items, { now, timeZone })` returns the viewer's day: timed entries in order with `past`/`live` flags and a now index, an `anytime` lane (open untimed tasks and tasks finished today), today's `goals`, the signal strip, and moving shipments.
 
 ## Changes from Step 1
 
