@@ -30,7 +30,7 @@ npm run start   # serve production build
 
 | Route | Surface |
 | --- | --- |
-| `/` | Landing: animated golden neural network, logo, one-line description, Sign up, then product sections and a footer |
+| `/` | Landing: golden neural network, in beta mark, visual scenes, footer |
 | `/about` | About Nexus |
 | `/privacy` | Privacy policy |
 | `/terms` | Terms of use |
@@ -40,7 +40,7 @@ npm run start   # serve production build
 
 ## What’s shipped
 
-1. **Landing** — procedurally drawn golden neural network on canvas (`src/components/landing/GoldenNetwork.tsx`): bezier filaments pinching through a core and fanning out, flowing particles, gentle sway; static frame under reduced motion. Below that first screen: the network and chat, extensions, Research, and Command, then a footer (About, Privacy, Terms).
+1. **Landing** — procedurally drawn golden neural network on canvas (`src/components/landing/GoldenNetwork.tsx`): bezier filaments pinching through a core and fanning out, flowing particles, gentle sway; static frame under reduced motion. An “in beta” mark sits beside the wordmark. Below the hero, the page shows the network passing content between nodes, a Command scene (weather, mail, calendar, timeline), and sockets connecting into the core. Motion pauses to a still frame under reduced motion. Footer: About, Privacy, Terms.
 2. **Dashboard network** — the same golden network, full-bleed and pitch black (`src/components/dashboard/NeuralStage.tsx`). The core reacts to Nexus: sparks converge while it thinks, ripples spread while it speaks.
 3. **Talking to Nexus** — one calm voice under the core with word-by-word replies, proactive openers and nudges, and follow-up suggestions (mock brain, no real LLM).
 4. **Today** — focus, priorities, and ongoing context. Nexus rewrites it when you ask (organize the day, add or complete tasks, note context).
