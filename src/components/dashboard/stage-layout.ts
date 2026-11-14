@@ -13,14 +13,14 @@ export type StageLayout = {
   scale: number;
 };
 
-/** Below this width the dashboard stacks and the stage becomes a section. */
+/** Below this width the network draws tighter around the core. */
 export const WIDE_MIN_WIDTH = 1100;
 
 /** Shared by the canvas and the DOM socket overlay so both agree on positions. */
 export function computeStageLayout(width: number, height: number, socketCount: number): StageLayout {
   const compact = width < WIDE_MIN_WIDTH;
   const core = compact
-    ? { x: width * 0.5, y: height * 0.66 }
+    ? { x: width * 0.5, y: height * 0.38 }
     : { x: width * 0.5, y: Math.max(300, height * 0.39) };
   const radius = compact
     ? Math.min(width * 0.37, height * 0.46)

@@ -24,6 +24,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => ({
   session: { strategy: "database" },
   trustHost: true,
   secret: authSecret() || undefined,
+  callbacks: {
+    // The default callback drops the id; per-user data (Research) needs it.
+    session: ({ session, user }) => ({ ...session, user: { ...session.user, id: user.id } }),
+  },
   pages: {
     signIn: "/signup",
     verifyRequest: "/signup/verify",

@@ -22,6 +22,8 @@ export type StageSignal = {
   sockets: SocketVisual[];
   /** Increments each time an extension snaps in; `index` is the socket. */
   snap: { index: number; serial: number } | null;
+  /** Skip drawing while a full view covers the stage. */
+  paused?: boolean;
 };
 
 type Ambient = {
@@ -386,7 +388,7 @@ export function NeuralStage({ signal, className = "" }: { signal: StageSignal; c
       if (!start) start = last = now;
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
-      draw((now - start) / 1000, dt);
+      if (!signalRef.current.paused) draw((now - start) / 1000, dt);
       frame = requestAnimationFrame(loop);
     };
 
