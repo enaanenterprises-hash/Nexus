@@ -12,6 +12,7 @@ export const ACTION_DEFINITIONS = {
   "lights.scene": { label: "Set a lighting scene", dispatch: "all", core: false },
   "telemetry.track": { label: "Track coding time", dispatch: "one", core: false },
   "notify.send": { label: "Send an alert", dispatch: "one", core: false },
+  "mail.send": { label: "Send an email", dispatch: "one", core: false },
   "purchase.record": { label: "Record the purchase on the network", dispatch: "core", core: true },
   "shipment.track": { label: "Pin a package tracker to the schedule", dispatch: "core", core: true },
   "goal.check": { label: "Check off a matching goal", dispatch: "core", core: true },

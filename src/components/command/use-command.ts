@@ -114,6 +114,11 @@ export function useCommand() {
     endFocus: () => run("focus", () => commandApi.endFocus()),
     setRecipe: (id: string, enabled: boolean) => run(`recipe:${id}`, () => commandApi.setRecipe(id, enabled)),
     addGoal: (target: number) => run("goal", () => commandApi.addGoal("run", target)),
+    sendMail: (message: Parameters<typeof commandApi.sendMail>[0]) =>
+      run("mail", async () => {
+        await commandApi.sendMail(message);
+        return commandApi.state();
+      }),
   };
 }
 

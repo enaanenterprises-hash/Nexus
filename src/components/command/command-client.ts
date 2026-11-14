@@ -53,4 +53,19 @@ export const commandApi = {
   setRecipe: (id: string, enabled: boolean) => call<CommandSnapshot>(`/recipes/${encodeURIComponent(id)}`, "PUT", { enabled }),
   addGoal: (type: "run", target: number) => call<CommandSnapshot>("/goals", "POST", withZone({ type, target })),
   geocode: (q: string) => call<{ places: { label: string; value: string }[] }>(`/geocode?q=${encodeURIComponent(q)}`),
+  /** Keyless forecast. Works with no connection. */
+  weather: () => call<{ signal: LiveWeather | null; location: string }>(`/weather?timeZone=${encodeURIComponent(viewerTimeZone())}`),
+  sendMail: (message: { to: string; cc?: string; subject: string; body: string; threadId?: string | null; inReplyTo?: string | null }) =>
+    call<{ detail: string; sentId: string | null }>("/mail", "POST", withZone(message)),
 };
+
+/** The forecast Today shows. Comes straight from Open-Meteo, not from stored items. */
+export interface LiveWeather {
+  title: string;
+  data: {
+    value: number | null;
+    display: string;
+    status: "good" | "fair" | "poor" | "neutral";
+    details: Record<string, string | number | null>;
+  };
+}

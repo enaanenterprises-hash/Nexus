@@ -56,6 +56,8 @@ export function buildTimeline(items: readonly CommandItem[], options: { now: Dat
       if (item.data.dueAt && dayKey(item.data.dueAt, timeZone) === today) goals.push(item);
       continue;
     }
+    // Mail has its own list on Today; keeping it off the timeline avoids a second copy of the inbox.
+    if (item.kind === "command.message") continue;
     if (item.kind === "command.task") {
       const doneToday = item.data.status === "done" && item.data.doneAt && dayKey(item.data.doneAt, timeZone) === today;
       const dueToday = item.data.dueAt && dayKey(item.data.dueAt, timeZone) === today;

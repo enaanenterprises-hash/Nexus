@@ -311,7 +311,7 @@ All eight kinds are `version: 1`, read-only for consumers, and travel in the usu
 | `command.activity` | `activity` (run, ride, sleep, deploy, focus, …), `status`, `startedAt`, `endedAt`, `durationMin`, `metrics`, `detail` |
 | `command.purchase` | `merchant`, `total`, `currency`, `orderNumber`, `purchasedAt`, `items[]`, `sourceItemId` |
 | `command.shipment` | `carrier`, `trackingNumber`, `status`, `eta`, `merchant`, `lastEvent`, `purchaseItemId` |
-| `command.message` | `channel`, `from`, `subject`, `snippet`, `body`, `receivedAt`, `labels` |
+| `command.message` | `channel`, `from`, `subject`, `snippet`, `body`, `receivedAt`, `labels`, and for email `threadId`, `rfcMessageId` (optional, still version 1) |
 | `command.signal` | `metric`, `value`, `unit`, `display`, `change`, `status`, `observedAt`, `details` |
 
 A finance extension that wants receipts declares `content:command.purchase:read`, then reacts to `command:item-published` and reads history with `runtime.content.list("command.purchase")`. The HTTP routes are the shared ones (`/api/extensions/content/command.purchase/items`, …).
@@ -322,7 +322,7 @@ A finance extension that wants receipts declares `content:command.purchase:read`
 
 - **Triggers:** `item.created` (a new item of a kind, or an existing one whose `status` changed, such as a deploy that failed; optionally limited to connectors), `item.upcoming` (fires once per item when its time is within `withinHours`; checked on every sync), `focus.started`, `focus.ended`.
 - **Conditions:** `{ path, op, value }` over the run scope (`item`, `focus`, `receipt`, `hoursUntil`, `now`). Operators: `eq`, `neq`, `in`, `contains`, `exists`, `gte`, `lte`, `within_hours`.
-- **Actions:** `{ action, params }`, where string params may use `{{path}}` templates. Connector actions dispatch to `one` connected service or to `all` of them (Do Not Disturb on Slack and Discord). Core actions (`purchase.record`, `shipment.track`, `goal.check`, `signal.update`, `task.create`, `activity.log`) run inside Command.
+- **Actions:** `{ action, params }`, where string params may use `{{path}}` templates. Connector actions dispatch to `one` connected service or to `all` of them (Do Not Disturb on Slack and Discord). `mail.send` goes to the Gmail sending connector (`gmail.send` scope, separate from `gmail.readonly`). Core actions (`purchase.record`, `shipment.track`, `goal.check`, `signal.update`, `task.create`, `activity.log`) run inside Command.
 - `planRun()` is pure. `executePlan()` runs each step; a step with no connected service is `skipped`, a failing step is `failed`, and neither stops the rest. Items an automation creates can trigger further recipes, up to two levels deep. Every run is logged in `command_automation_run`.
 - The first sync of a new connection is a baseline: automations react to what changes after it, not to history.
 
@@ -330,7 +330,7 @@ Built-in recipes (`recipes.ts`): **Deep work** and **Deep work wrap-up**, **Rece
 
 ### Drivers shipped
 
-`src/lib/command/drivers/index.ts` registers the real drivers: `weather`, `sky`, `markets`, `f1`, `uptime` (keyless), `google-calendar`, `gmail`, `google-tasks` (Google incremental scopes), `github`, `vercel`, `telegram` (tokens), `strava`, `spotify` (OAuth through `drivers/oauth.ts`). Connectors without a driver stay `planned` and cannot be connected. Setup for each is in the README.
+`src/lib/command/drivers/index.ts` registers the real drivers: `weather`, `sky`, `markets` (crypto only; currency exchange was removed), `f1`, `uptime` (keyless), `google-calendar` (next 30 days), `gmail` (recent inbox, kept on `gmail.readonly`), `gmail-send` (`gmail.send` only), `google-tasks` (Google incremental scopes), `github`, `vercel`, `telegram` (tokens), `strava`, `spotify` (OAuth through `drivers/oauth.ts`). Connectors without a driver stay `planned` and cannot be connected. Setup for each is in the README. Today shows keyless weather with no connection; mail, the 30-day calendar and sending stay empty with a connect action until Google is connected.
 
 ### HTTP API
 
@@ -338,7 +338,9 @@ All routes need the user's session and Postgres. Mutations return the full Comma
 
 | Route | Purpose |
 | --- | --- |
-| `GET /api/command/state` | Connections (no secrets), recent items, runs, recipes with enablement, active focus, per-connector availability |
+| `GET /api/command/state` | Connections (no secrets), recent items (from 7 days ago through 31 days ahead), runs, recipes with enablement, active focus, per-connector availability |
+| `GET /api/command/weather` | Keyless Open-Meteo reading for Today. Uses a Weather connection's location when one exists, otherwise the viewer's time zone |
+| `POST /api/command/mail` | Send or reply through the Gmail sending connection (`to`, `cc`, `subject`, `body`, `threadId`, `inReplyTo`) |
 | `POST /api/command/sync` | Pull every connected service, then run automations |
 | `POST /api/command/connections` | Connect a keyless or token service (`connectorId`, `credentials`, `settings`), or update settings. Verified before saving |
 | `DELETE /api/command/connections/:id` | Disconnect and drop its synced items |

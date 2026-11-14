@@ -17,6 +17,8 @@ export interface DriverContext {
 export interface ActionOutcome {
   detail: string;
   items?: CommandItemInput[];
+  /** Id the service assigned, when the action created something there (a sent message). */
+  sentId?: string;
 }
 
 /** Server-side implementation of one connector manifest. */

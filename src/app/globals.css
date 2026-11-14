@@ -1006,6 +1006,221 @@ select.research-field option {
   padding: 1.5rem 1.5rem 4rem;
 }
 
+.cmd-overview {
+  display: grid;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .cmd-overview {
+    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+    gap: 2rem;
+  }
+}
+
+.cmd-weather,
+.cmd-mail,
+.cmd-calendar {
+  min-width: 0;
+}
+
+.cmd-weather {
+  padding: 1rem 1.05rem 0.85rem;
+  border: 1px solid rgba(240, 181, 74, 0.22);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(240, 181, 74, 0.09), rgba(240, 181, 74, 0.02) 42%, transparent);
+}
+
+.cmd-weather-temp {
+  margin-top: 0.15rem;
+  font-size: 2.75rem;
+  font-weight: 300;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--land-gold-soft);
+}
+
+.cmd-hours--compact {
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  margin: 0.9rem 0 0;
+}
+
+.cmd-mail-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-bottom: 1px solid var(--land-hair);
+}
+
+.cmd-mail-open {
+  display: grid;
+  grid-template-columns: minmax(0, 9.5rem) minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: baseline;
+  flex: 1;
+  min-width: 0;
+  padding: 0.62rem 0;
+  text-align: left;
+  color: inherit;
+}
+
+.cmd-mail-open:hover .cmd-mail-subject {
+  color: var(--land-gold-soft);
+}
+
+.cmd-mail-from,
+.cmd-mail-subject {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmd-mail-from {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.cmd-mail-subject {
+  font-size: 13.5px;
+  color: var(--land-muted);
+}
+
+.cmd-mail-time {
+  font-size: 12px;
+  color: var(--land-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 700px) {
+  .cmd-mail-open {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .cmd-mail-subject {
+    grid-column: 1 / -1;
+  }
+}
+
+.cmd-connect-empty {
+  padding: 0.85rem 0 0.2rem;
+  color: var(--land-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.cmd-calendar {
+  margin-top: 1.75rem;
+}
+
+.cmd-month-head,
+.cmd-month {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.cmd-month-head {
+  margin-top: 0.75rem;
+  color: var(--land-faint);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.cmd-month-head span,
+.cmd-day {
+  padding: 0 0.35rem;
+}
+
+.cmd-day {
+  min-height: 4.4rem;
+  padding: 0.3rem 0.4rem 0.35rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.cmd-day--today {
+  background: rgba(240, 181, 74, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(240, 181, 74, 0.45);
+}
+
+.cmd-day--pad {
+  background: transparent;
+  opacity: 0.38;
+}
+
+.cmd-day-num {
+  display: block;
+  font-size: 11px;
+  color: var(--land-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.cmd-day--today .cmd-day-num {
+  color: var(--land-gold-soft);
+}
+
+.cmd-day-event,
+.cmd-day-more {
+  display: block;
+  overflow: hidden;
+  margin-top: 0.15rem;
+  font-size: 11px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--land-gold-soft);
+}
+
+.cmd-day-more {
+  color: var(--land-faint);
+}
+
+.cmd-compose-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.62);
+  padding: 1rem;
+}
+
+@media (min-width: 700px) {
+  .cmd-compose-backdrop {
+    align-items: center;
+  }
+}
+
+.cmd-compose {
+  width: min(34rem, 100%);
+  padding: 1.1rem 1.15rem 1.15rem;
+  border: 1px solid rgba(240, 181, 74, 0.28);
+  border-radius: 16px;
+  background: #0c0c0e;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+}
+
+.cmd-compose-field {
+  display: grid;
+  grid-template-columns: 4.25rem minmax(0, 1fr);
+  gap: 0.6rem;
+  align-items: center;
+  margin-top: 0.65rem;
+  color: var(--land-faint);
+  font-size: 13px;
+}
+
+.cmd-compose-body {
+  display: block;
+  width: 100%;
+  min-height: 9rem;
+  margin-top: 0.75rem;
+  resize: vertical;
+}
+
 .cmd-today-grid {
   display: grid;
   gap: 2.5rem;
@@ -1150,6 +1365,11 @@ select.research-field option {
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 0.25rem;
   margin-bottom: 2.25rem;
+}
+
+.cmd-hours.cmd-hours--compact {
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  margin: 0.9rem 0 0;
 }
 
 .cmd-hour {
