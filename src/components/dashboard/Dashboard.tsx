@@ -4,32 +4,39 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { NexusLogo } from "@/components/landing/NexusLogo";
 import { SubmitButton } from "@/components/landing/SubmitButton";
+import { ResearchView } from "@/components/research/ResearchView";
 import { signOutAction } from "@/lib/auth/actions";
 import type { Viewer } from "@/lib/auth/types";
+import { RESEARCH_NODE_ID } from "@/extensions/research/node";
 import { SAMPLE_EXTENSIONS } from "@/extensions/samples";
 import {
   canUseSlot,
   extensionRegistry,
+  nexusBus,
   setStubPro,
   type ExtensionId,
   type SlotId,
 } from "@/lib/extensions";
 import { useExtensionHub } from "@/lib/extensions/use-extension-hub";
+import { researchIntent } from "@/lib/nexus/brain";
 import { ExtensionHub } from "./ExtensionHub";
+import { ExtensionPanel } from "./ExtensionPanel";
+import { CloseIcon } from "./icons";
 import { NeuralStage, type SocketVisual, type StageSignal } from "./NeuralStage";
+import { NodeMenu, NodeRail, type PanelId, type Surface } from "./NodeNav";
 import { NexusInput, NexusVoice } from "./NexusVoice";
-import { StageSockets } from "./StageSockets";
 import { TodayPanel } from "./TodayPanel";
 import { useNexusSession } from "./use-nexus-session";
-import { WIDE_MIN_WIDTH } from "./stage-layout";
 
 export function Dashboard({ viewer }: { viewer: Viewer }) {
   const session = useNexusSession();
   const hub = useExtensionHub();
+  const [surface, setSurface] = useState<Surface>({ view: "home", panel: null });
+  const [researchMounted, setResearchMounted] = useState(false);
+  const [researchRequest, setResearchRequest] = useState<{ input: string; serial: number } | null>(null);
   const [selected, setSelected] = useState<SlotId | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const noticeTimer = useRef<number | undefined>(undefined);
-  const hubRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     for (const extension of SAMPLE_EXTENSIONS) {
@@ -38,11 +45,26 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
     return () => window.clearTimeout(noticeTimer.current);
   }, []);
 
-  const visuals = useMemo<SocketVisual[]>(
+  useEffect(
     () =>
-      hub.slots.map((slot) =>
-        slot.occupiedBy ? "occupied" : canUseSlot(slot, hub.entitlement) ? "open" : "locked",
-      ),
+      nexusBus.subscribe("nexus:open-node", (event) => {
+        if (event.payload.nodeId === RESEARCH_NODE_ID) openResearch(event.payload.input);
+        else if (extensionRegistry.get(event.payload.nodeId)) openPanel({ extension: event.payload.nodeId });
+      }),
+    [],
+  );
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setSurface((s) => (s.panel ? { ...s, panel: null } : s));
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const visuals = useMemo<SocketVisual[]>(
+    () => hub.slots.map((slot) => (slot.occupiedBy ? "occupied" : canUseSlot(slot, hub.entitlement) ? "open" : "locked")),
     [hub.slots, hub.entitlement],
   );
 
@@ -52,13 +74,37 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
       brain: session.brain,
       sockets: visuals,
       snap: hub.lastSnapped && snapIndex >= 0 ? { index: snapIndex, serial: hub.lastSnapped.serial } : null,
+      paused: surface.view === "research",
     };
-  }, [session.brain, visuals, hub.lastSnapped, hub.slots]);
+  }, [session.brain, visuals, hub.lastSnapped, hub.slots, surface.view]);
 
   function flash(message: string) {
     setNotice(message);
     window.clearTimeout(noticeTimer.current);
     noticeTimer.current = window.setTimeout(() => setNotice(null), 6000);
+  }
+
+  function openResearch(input?: string) {
+    setResearchMounted(true);
+    setSurface({ view: "research", panel: null });
+    if (input !== undefined) setResearchRequest((r) => ({ input, serial: (r?.serial ?? 0) + 1 }));
+  }
+
+  function openPanel(panel: PanelId) {
+    setSurface((s) => {
+      const same = typeof panel === "string" ? s.panel === panel : typeof s.panel === "object" && s.panel?.extension === panel.extension;
+      return { view: s.view, panel: same ? null : panel };
+    });
+  }
+
+  function chat(text: string) {
+    const query = researchIntent(text);
+    if (query) {
+      session.announce(`Opening Research for “${query}”.`);
+      openResearch(query);
+      return;
+    }
+    session.ask(text);
   }
 
   async function snap(id: ExtensionId) {
@@ -82,42 +128,35 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
     const name = extensionRegistry.get(id)?.manifest.name ?? id;
     await extensionRegistry.deactivate(id);
     flash(`${name} released. Its socket is open again.`);
+    setSurface((s) => (typeof s.panel === "object" && s.panel?.extension === id ? { ...s, panel: "nodes" } : s));
   }
 
-  function selectSocket(slotId: SlotId) {
+  function selectSlot(slotId: SlotId) {
     const slot = hub.slots.find((s) => s.id === slotId);
     if (!slot) return;
-    setSelected((current) => (current === slotId ? null : slotId));
     if (slot.occupiedBy) {
-      flash(`${extensionRegistry.get(slot.occupiedBy)?.manifest.name} is live in this socket.`);
-    } else if (!canUseSlot(slot, hub.entitlement)) {
-      flash("Pro sockets unlock with Nexus Pro. Try “Preview Pro” to open them.");
-    } else {
-      flash("Socket selected. Choose an extension to snap into it.");
+      openPanel({ extension: slot.occupiedBy });
+      return;
     }
-    if (window.innerWidth < WIDE_MIN_WIDTH) hubRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setSelected(slotId);
+    setSurface((s) => ({ ...s, panel: "nodes" }));
+    flash(canUseSlot(slot, hub.entitlement) ? "Socket selected. Choose an extension to snap into it." : "Pro sockets unlock with Nexus Pro. Try “Preview Pro” to open them.");
   }
 
+  const panel = surface.panel;
+
   return (
-    <div className="dash relative flex min-h-[100svh] flex-1 flex-col min-[1100px]:h-[100svh] min-[1100px]:overflow-hidden">
-      <section
-        aria-label="Nexus network"
-        className="relative h-[clamp(420px,60svh,560px)] w-full overflow-hidden min-[1100px]:absolute min-[1100px]:inset-0 min-[1100px]:h-full"
-      >
+    <div className="dash relative h-[100svh] w-full flex-1 overflow-hidden">
+      <section aria-label="Nexus network" className="absolute inset-0">
         <NeuralStage signal={signal} />
-        <div className="dash-scrim pointer-events-none absolute inset-0 hidden min-[1100px]:block" />
-        <div className="dash-scrim--compact pointer-events-none absolute inset-0 min-[1100px]:hidden" />
-        <StageSockets hub={hub} visuals={visuals} selected={selected} onSelect={selectSocket} />
+        <div className="dash-scrim--home pointer-events-none absolute inset-0" />
       </section>
 
-      <header className="landing-enter absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-3 px-6 pt-6 sm:px-10 min-[1100px]:px-10 min-[1100px]:pt-8">
+      <header className="landing-enter absolute inset-x-0 top-0 z-30 flex h-16 items-center justify-between gap-3 pl-5 pr-4 sm:pl-6 sm:pr-6">
         <Link href="/" aria-label="Nexus home" className="inline-flex shrink-0">
           <NexusLogo className="h-[13px] w-auto sm:h-[15px]" />
         </Link>
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-          <p className="dash-eyebrow hidden min-[1100px]:block">
-            {hub.entitlement.isPro ? "Pro preview" : "Free plan"}
-          </p>
           <p className="min-w-0 max-w-[34vw] truncate text-[13px] text-[color:var(--land-muted)] sm:max-w-[220px]">
             <span className="sr-only">Signed in as </span>
             {viewer.name || viewer.email || "Signed in"}
@@ -130,46 +169,48 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
         </div>
       </header>
 
-      <div className="relative z-10 -mt-24 px-6 min-[1100px]:absolute min-[1100px]:left-1/2 min-[1100px]:top-[calc(max(300px,39svh)+64px)] min-[1100px]:mt-0 min-[1100px]:w-[min(560px,calc(100vw-2*(clamp(270px,22vw,330px)+88px)))] min-[1100px]:-translate-x-1/2 min-[1100px]:px-0">
-        <NexusVoice
-          brain={session.brain}
-          current={session.current}
-          pendingPrompt={session.pendingPrompt}
-          revealed={session.revealed}
-          history={session.history}
-          followUps={session.followUps}
-          onAsk={session.ask}
-        />
-      </div>
+      <NodeMenu hub={hub} surface={surface} onHome={() => setSurface({ view: "home", panel: null })} onResearch={() => openResearch()} onPanel={openPanel} />
+      <NodeRail hub={hub} surface={surface} onResearch={() => openResearch()} onSlot={selectSlot} />
 
-      <div className="sticky bottom-4 z-30 mt-8 px-4 sm:mx-auto sm:w-full sm:max-w-xl min-[1100px]:absolute min-[1100px]:bottom-9 min-[1100px]:left-1/2 min-[1100px]:mt-0 min-[1100px]:w-[min(560px,calc(100vw-2*(clamp(270px,22vw,330px)+88px)))] min-[1100px]:max-w-none min-[1100px]:-translate-x-1/2 min-[1100px]:px-0">
-        <NexusInput disabled={session.brain === "thinking"} onAsk={session.ask} />
-      </div>
+      {surface.view === "home" ? (
+        <div className="pointer-events-none absolute inset-x-0 bottom-6 z-10 flex justify-center pl-[84px] pr-3 sm:bottom-9 sm:pr-[76px]">
+          <div className="dash-chat pointer-events-auto flex w-full max-w-[600px] flex-col items-center gap-6">
+          <NexusVoice
+            brain={session.brain}
+            current={session.current}
+            pendingPrompt={session.pendingPrompt}
+            revealed={session.revealed}
+            history={session.history}
+            followUps={[]}
+            onAsk={chat}
+          />
+          <NexusInput disabled={session.brain === "thinking"} onAsk={chat} onResearch={(text) => openResearch(text)} />
+          </div>
+        </div>
+      ) : null}
 
-      <div className="relative z-10 grid gap-14 px-6 pb-28 pt-16 sm:grid-cols-2 sm:gap-10 sm:px-10 min-[1100px]:contents">
-        <aside className="dash-panel min-[1100px]:absolute min-[1100px]:bottom-9 min-[1100px]:left-10 min-[1100px]:top-28 min-[1100px]:w-[clamp(270px,22vw,330px)] min-[1100px]:overflow-y-auto">
-          <TodayPanel
-            tasks={session.tasks}
-            threads={session.threads}
-            touched={session.touched}
-            organized={session.organized}
-            onToggle={session.toggleTask}
-          />
+      {researchMounted ? (
+        <div className="node-full" hidden={surface.view !== "research"}>
+          <ResearchView request={researchRequest} onClose={() => setSurface({ view: "home", panel: null })} />
+        </div>
+      ) : null}
+
+      {panel ? (
+        <aside className="node-panel" aria-label="Node panel">
+          <button type="button" className="research-icon-button absolute right-3 top-3 z-10" onClick={() => setSurface((s) => ({ ...s, panel: null }))} aria-label="Close panel">
+            <CloseIcon size={15} />
+          </button>
+          <div className="dash-panel h-full overflow-y-auto p-6 pt-7">
+            {panel === "today" ? (
+              <TodayPanel tasks={session.tasks} threads={session.threads} touched={session.touched} organized={session.organized} onToggle={session.toggleTask} />
+            ) : panel === "nodes" ? (
+              <ExtensionHub hub={hub} selected={selected} notice={notice} onSnap={snap} onRelease={release} onTogglePro={() => setStubPro(!hub.entitlement.isPro)} />
+            ) : (
+              <ExtensionPanel hub={hub} id={panel.extension} onRelease={release} />
+            )}
+          </div>
         </aside>
-        <aside
-          ref={hubRef}
-          className="dash-panel scroll-mt-6 min-[1100px]:absolute min-[1100px]:bottom-9 min-[1100px]:right-10 min-[1100px]:top-28 min-[1100px]:w-[clamp(270px,22vw,330px)] min-[1100px]:overflow-y-auto"
-        >
-          <ExtensionHub
-            hub={hub}
-            selected={selected}
-            notice={notice}
-            onSnap={snap}
-            onRelease={release}
-            onTogglePro={() => setStubPro(!hub.entitlement.isPro)}
-          />
-        </aside>
-      </div>
+      ) : null}
     </div>
   );
 }

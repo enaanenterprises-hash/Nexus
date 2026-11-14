@@ -4,6 +4,9 @@
  * the network bus, and share context with the central Nexus brain.
  */
 
+import type { ContentClient } from "./content-access";
+import type { ContentCapability, ContentKindDeclaration } from "./content";
+
 /** Bumped only on breaking contract changes. Manifests must declare it. */
 export const NEXUS_EXTENSION_API_VERSION = 1;
 
@@ -17,7 +20,9 @@ export type ExtensionCapability =
   | "calendar"
   | "voice"
   | "research"
-  | "custom";
+  | "custom"
+  /** Shared content access, e.g. `content:research.source:read`. */
+  | ContentCapability;
 
 export interface ExtensionManifest {
   id: ExtensionId;
@@ -34,6 +39,8 @@ export interface ExtensionManifest {
   /** Extension only runs in Pro sockets. */
   requiresPro?: boolean;
   author?: string;
+  /** Content kinds this extension owns and serves to others. */
+  provides?: ContentKindDeclaration[];
 }
 
 export interface NexusSharedContext {
@@ -62,6 +69,12 @@ export type NexusEventMap = {
   "extension:deactivated": { id: ExtensionId; slotId: SlotId };
   "extension:denied": { id: ExtensionId; reason: string };
   "entitlement:changed": { isPro: boolean };
+  /** Ask the dashboard shell to bring a node into view, optionally with input for it. */
+  "nexus:open-node": { nodeId: ExtensionId; input?: string };
+  "research:query": { query: string; kind: "search" | "url" };
+  "research:page-opened": { url: string; title: string; siteName: string | null; sourceId: string | null };
+  "research:source-saved": { sourceId: string; collectionId: string; url: string; title: string };
+  "research:highlight-added": { sourceId: string; highlightId: string; quote: string };
 };
 
 export type NexusEventType = keyof NexusEventMap;
@@ -88,6 +101,8 @@ export interface ExtensionRuntimeContext {
     type: T,
     handler: NexusEventHandler<T>,
   ) => () => void;
+  /** Shared content (`content:<kind>:<action>` capabilities). */
+  content: ContentClient;
 }
 
 export interface ExtensionHandlers {

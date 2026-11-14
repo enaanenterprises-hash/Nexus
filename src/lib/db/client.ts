@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/postgres-js"
 import postgres from "postgres"
-import { AUTH_SCHEMA_STATEMENTS } from "./statements"
+import { AUTH_SCHEMA_STATEMENTS, RESEARCH_SCHEMA_STATEMENTS } from "./statements"
 
 type Sql = ReturnType<typeof postgres>
 type Database = ReturnType<typeof drizzle>
@@ -8,6 +8,7 @@ type Database = ReturnType<typeof drizzle>
 let sql: Sql | undefined
 let database: Database | undefined
 let schemaReady: Promise<void> | null = null
+let researchReady: Promise<void> | null = null
 
 export function databaseUrl() {
   const url = process.env["DATABASE_URL"]?.trim()
@@ -27,6 +28,8 @@ export function getSql() {
     ssl: sslFor(url),
     idle_timeout: 20,
     connect_timeout: 10,
+    // CREATE ... IF NOT EXISTS emits a notice on every boot.
+    onnotice: () => {},
   })
   return sql
 }
@@ -49,4 +52,19 @@ export function ensureAuthSchema() {
     throw error
   })
   return schemaReady
+}
+
+/** Creates the Research tables (after the Auth.js ones they reference). */
+export function ensureResearchSchema() {
+  researchReady ??= (async () => {
+    await ensureAuthSchema()
+    const connection = getSql()
+    for (const statement of RESEARCH_SCHEMA_STATEMENTS) {
+      await connection.unsafe(statement)
+    }
+  })().catch((error: unknown) => {
+    researchReady = null
+    throw error
+  })
+  return researchReady
 }

@@ -65,6 +65,19 @@ function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
+const URL_LIKE = /^(?:https?:\/\/\S+|(?:[a-z0-9-]+\.)+[a-z]{2,24}(?:[/?#]\S*)?)$/i;
+
+/**
+ * Chat requests the Research node should take: "research …", "search for …",
+ * "look up …", or a bare web address. Returns what to search / open.
+ */
+export function researchIntent(raw: string): string | null {
+  const input = raw.trim();
+  if (URL_LIKE.test(input)) return input;
+  const match = input.match(/^(?:research|search(?: the web)?(?: for)?|look up|google|find (?:sources|articles) (?:on|about))\s*:?\s+(.+)/i);
+  return match ? match[1]!.trim() : null;
+}
+
 export function think(raw: string, { tasks, activeExtensions }: BrainInput): BrainReply {
   const input = raw.trim();
   const lower = input.toLowerCase();
@@ -138,7 +151,7 @@ export function think(raw: string, { tasks, activeExtensions }: BrainInput): Bra
     return {
       text: activeExtensions.length
         ? `${activeExtensions.join(" and ")} ${activeExtensions.length > 1 ? "are" : "is"} wired in. Free plans run two at once; Pro opens the rest of the sockets.`
-        : "No extensions are wired in yet. Pick one from the hub and it snaps into an open socket on the network. Studio, Study, Call, and Calendar are coming soon.",
+        : "No extensions are wired in yet. Open Nodes in the left menu and snap one into an open socket. Studio, Study, Call, and Calendar are coming soon.",
       actions: [],
       followUps: ["Organize my day", "What should I focus on?"],
     };

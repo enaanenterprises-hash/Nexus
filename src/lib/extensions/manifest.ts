@@ -1,3 +1,4 @@
+import { validateContentDeclarations } from "./content";
 import {
   NEXUS_EXTENSION_API_VERSION,
   type ExtensionCapability,
@@ -41,10 +42,12 @@ export function validateManifest(manifest: ExtensionManifest): string[] {
   if (!SEMVER_PATTERN.test(manifest.version)) problems.push("version must be semver");
   if (manifest.capabilities.length === 0) problems.push("declare at least one capability");
   for (const capability of manifest.capabilities) {
+    if (capability.startsWith("content:")) continue;
     if (!KNOWN_CAPABILITIES.includes(capability)) {
       problems.push(`unknown capability "${capability}"`);
     }
   }
+  problems.push(...validateContentDeclarations(manifest.capabilities, manifest.provides));
   if (manifest.monogram && manifest.monogram.length > 2) {
     problems.push("monogram must be at most 2 characters");
   }

@@ -78,5 +78,60 @@ assert(snapshot === registry.getSnapshot(), "snapshot is stable between changes"
 await registry.deactivate("com.acme.a");
 assert(snapshot !== registry.getSnapshot(), "snapshot changes after deactivate");
 
+const R = "content:research.source:read";
+const A = "content:research.source:annotate";
+assert(validateManifest(manifest("com.acme.r", { capabilities: [R] })).length === 0, "content read capability is valid");
+assert(validateManifest(manifest("com.acme.w", { capabilities: [A] })).length > 0, "annotate without read is rejected");
+assert(validateManifest(manifest("com.acme.x", { capabilities: ["content:Bad:read"] })).length > 0, "malformed content capability is rejected");
+assert(validateManifest(manifest("com.acme.y", { capabilities: ["content:research.source:delete"] })).length > 0, "unknown content action is rejected");
+assert(
+  validateManifest(manifest("com.acme.p", { provides: [{ kind: "study.flashcard", version: 0, description: "", actions: ["read"] }] })).length > 0,
+  "provided kind needs version >= 1",
+);
+
+const { createContentClient, contentKinds } = ext;
+const calls = [];
+const fakeFetch = async (url, init) => {
+  calls.push({ url, init });
+  return new Response(JSON.stringify({ collections: [], items: [] }), { status: 200, headers: { "content-type": "application/json" } });
+};
+let active = false;
+const reader = createContentClient({ extensionId: "com.acme.reader", capabilities: [R], isActive: () => active, fetch: fakeFetch });
+assert(reader.can("research.source", "read") && !reader.can("research.source", "annotate"), "client reports declared capabilities");
+const inactive = await reader.collections("research.source").then(() => null, (e) => e);
+assert(inactive?.code === "inactive" && calls.length === 0, "content client refuses while not in a socket");
+active = true;
+const denied = await reader.annotate("research.source", "s1", { notes: { body: "x" } }).then(() => null, (e) => e);
+assert(denied?.code === "forbidden" && calls.length === 0, "undeclared annotate is refused before any request");
+await reader.list("research.source", { collectionId: "c1", tag: "ai" });
+const h = calls[0]?.init.headers ?? {};
+assert(
+  calls[0]?.url === "/api/extensions/content/research.source/items?collectionId=c1&tag=ai" &&
+    h["x-nexus-extension"] === "com.acme.reader" &&
+    h["x-nexus-capabilities"] === R &&
+    h["x-nexus-content-version"] === "1",
+  "content client sends id, capabilities and schema version",
+);
+
+await registry.register({
+  manifest: manifest("com.acme.study", {
+    capabilities: [R],
+    provides: [{ kind: "study.flashcard", version: 1, description: "smoke", actions: ["read"] }],
+  }),
+});
+assert(contentKinds.get("study.flashcard")?.provider === "com.acme.study", "registering a provider adds its content kind");
+const clash = await registry
+  .register({ manifest: manifest("com.acme.other", { provides: [{ kind: "study.flashcard", version: 1, description: "x", actions: ["read"] }] }) })
+  .then(() => null, (e) => e);
+assert(clash instanceof Error, "a second provider for the same kind is refused");
+await registry.unregister("com.acme.study");
+assert(!contentKinds.get("study.flashcard"), "unregistering removes the provider's kinds");
+let runtimeContent;
+await registry.register({
+  manifest: manifest("com.acme.docs", { capabilities: [R] }),
+  handlers: { onRegister: (runtime) => void (runtimeContent = runtime.content) },
+});
+assert(runtimeContent?.can("research.source", "read"), "registry hands a content client to the runtime");
+
 if (failed > 0) process.exit(1);
 console.log("smoke-extensions passed");

@@ -40,3 +40,57 @@ export const AUTH_SCHEMA_STATEMENTS = [
     CONSTRAINT "verificationToken_identifier_token_pk" PRIMARY KEY ("identifier", "token")
   )`,
 ] as const
+
+/**
+ * Research node storage, owned per user next to the Auth.js tables.
+ * `summary`, `notes` and `lean` stay NULL until an analyzer fills them
+ * (see `src/lib/research/analyzers.ts`).
+ */
+export const RESEARCH_SCHEMA_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS "research_collection" (
+    "id" text PRIMARY KEY NOT NULL,
+    "userId" text NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
+    "name" text NOT NULL,
+    "description" text,
+    "createdAt" timestamptz NOT NULL DEFAULT now(),
+    "updatedAt" timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS "research_collection_userId_idx" ON "research_collection" ("userId")`,
+  `CREATE TABLE IF NOT EXISTS "research_source" (
+    "id" text PRIMARY KEY NOT NULL,
+    "userId" text NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
+    "collectionId" text NOT NULL REFERENCES "research_collection" ("id") ON DELETE CASCADE,
+    "url" text NOT NULL,
+    "canonicalUrl" text,
+    "title" text NOT NULL,
+    "siteName" text,
+    "author" text,
+    "publishedAt" text,
+    "excerpt" text,
+    "lang" text,
+    "imageUrl" text,
+    "contentHtml" text NOT NULL,
+    "textContent" text NOT NULL,
+    "wordCount" integer NOT NULL DEFAULT 0,
+    "tags" text[] NOT NULL DEFAULT '{}',
+    "summary" jsonb,
+    "notes" jsonb,
+    "lean" jsonb,
+    "fetchedAt" timestamptz NOT NULL,
+    "savedAt" timestamptz NOT NULL DEFAULT now(),
+    "updatedAt" timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT "research_source_collection_url_unique" UNIQUE ("collectionId", "url")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "research_source_userId_idx" ON "research_source" ("userId")`,
+  `CREATE TABLE IF NOT EXISTS "research_highlight" (
+    "id" text PRIMARY KEY NOT NULL,
+    "userId" text NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
+    "sourceId" text NOT NULL REFERENCES "research_source" ("id") ON DELETE CASCADE,
+    "quote" text NOT NULL,
+    "prefix" text NOT NULL DEFAULT '',
+    "suffix" text NOT NULL DEFAULT '',
+    "note" text,
+    "createdAt" timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS "research_highlight_sourceId_idx" ON "research_highlight" ("sourceId")`,
+] as const

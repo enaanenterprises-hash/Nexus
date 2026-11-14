@@ -7,6 +7,8 @@ import {
   proRequiredMessage,
   subscribeEntitlement,
 } from "./pro-gate";
+import { contentKinds } from "./content";
+import { createContentClient } from "./content-access";
 import { createEmptySlots } from "./slots";
 import type {
   ActivationFailure,
@@ -81,7 +83,13 @@ export class ExtensionRegistry {
       getSharedContext: () => this.bus.getSharedContext(),
       emit: (type, payload) => this.bus.emit(type, payload, id),
       subscribe: (type, handler) => this.bus.subscribe(type, handler),
+      content: createContentClient({
+        extensionId: id,
+        capabilities: extension.manifest.capabilities,
+        isActive: () => this.isActive(id),
+      }),
     };
+    contentKinds.add(id, extension.manifest.provides);
     const entry: Entry = { extension, runtime };
     const onEvent = extension.handlers?.onEvent;
     if (onEvent) {
@@ -101,6 +109,7 @@ export class ExtensionRegistry {
     if (!entry) return;
     await this.deactivate(id);
     entry.unsubscribe?.();
+    contentKinds.removeProvider(id);
     this.entries.delete(id);
     this.bus.emit("extension:unregistered", { id }, "system");
     this.commit();

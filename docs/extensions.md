@@ -1,6 +1,6 @@
 # Nexus Extension Contract
 
-Nexus is a central AI network. Extensions (first-party and third-party) plug into the same typed **extension socket** so context and actions flow through the brain instead of living in silos. On the dashboard, every active extension sits in a **hub socket** wired into the golden network.
+Nexus is a central AI network. Extensions (first-party and third-party) plug into the same typed **extension socket** so context and actions flow through the brain instead of living in silos. Every active extension sits in a **hub socket** wired into the golden network; bundled **core nodes** (Research) are always on.
 
 Contract version: **`apiVersion: 1`** (`NEXUS_EXTENSION_API_VERSION`).
 
@@ -15,14 +15,19 @@ Contract version: **`apiVersion: 1`** (`NEXUS_EXTENSION_API_VERSION`).
 | `src/lib/extensions/pro-gate.ts` | Freemium gate (stub) + entitlement changes |
 | `src/lib/extensions/slots.ts` | Hub socket blueprint + planned first-party placeholders |
 | `src/lib/extensions/use-extension-hub.ts` | React binding (`useSyncExternalStore`) |
+| `src/lib/extensions/core-nodes.ts` | Bundled core nodes (always on, no socket) |
+| `src/lib/extensions/content.ts` | Shared content kinds, envelopes, `content:` capabilities |
+| `src/lib/extensions/content-access.ts` | `runtime.content` client |
+| `src/lib/content/` | Server side: provider interface, capability checks |
 | `src/extensions/samples.ts` | Reference extensions written against this contract |
+| `src/extensions/research/node.ts` | Research core node manifest |
 
 ## Lifecycle
 
 1. **Define** — `defineExtension({ manifest, handlers })`. Manifests are validated when defined and again on register; problems throw a `ManifestError` listing every issue.
 2. **Register** — `extensionRegistry.register(extension)`. Adds it to the hub catalog and calls `onRegister(runtime)`.
 3. **Activate** — `extensionRegistry.activate(id, { slotId? })` snaps it into a socket. Without `slotId`, the first open socket the plan allows is used.
-4. **Run** — while active, `onEvent(event, runtime)` receives every bus event not emitted by the extension itself. Use `runtime.emit` / `runtime.subscribe` / `runtime.getSharedContext`.
+4. **Run** — while active, `onEvent(event, runtime)` receives every bus event not emitted by the extension itself. Use `runtime.emit` / `runtime.subscribe` / `runtime.getSharedContext`, and `runtime.content` for [shared content](#shared-content).
 5. **Deactivate / unregister** — frees the socket, calls `onDeactivate(runtime)`, tears down listeners.
 
 ```ts
@@ -63,7 +68,8 @@ if (!result.ok) console.warn(result.reason, result.message); // e.g. "pro_requir
 | `id` | Reverse-DNS, lowercase: `com.acme.notes` |
 | `apiVersion` | Must equal `NEXUS_EXTENSION_API_VERSION` |
 | `version` | Semver |
-| `capabilities` | At least one of `tasks`, `context`, `media`, `calendar`, `voice`, `research`, `custom` |
+| `capabilities` | At least one of `tasks`, `context`, `media`, `calendar`, `voice`, `research`, `custom`, or a content capability `content:<kind>:<read\|annotate>` |
+| `provides` | Optional; content kinds this extension owns (see [Shared content](#shared-content)) |
 | `monogram` | Optional, ≤ 2 characters, shown inside the hub node |
 | `requiresPro` | Optional; activation is denied on the free plan |
 
@@ -109,8 +115,157 @@ if (!result.ok) console.warn(result.reason, result.message); // e.g. "pro_requir
 | `extension:activated` / `deactivated` | `{ id, slotId }` | Socket occupancy |
 | `extension:denied` | `{ id, reason }` | Activation blocked (usually Pro) |
 | `entitlement:changed` | `{ isPro }` | Plan changed |
+| `nexus:open-node` | `{ nodeId, input? }` | Ask the dashboard to open a node (Research takes `input` as a URL or query) |
+| `research:query` | `{ query, kind: "search" \| "url" }` | Research ran a search or opened an address |
+| `research:page-opened` | `{ url, title, siteName, sourceId }` | A page is showing in the reader |
+| `research:source-saved` | `{ sourceId, collectionId, url, title }` | A page was saved into a collection |
+| `research:highlight-added` | `{ sourceId, highlightId, quote }` | Text was highlighted on a saved source |
 
 Every event carries `source` (extension id, `"nexus"`, or `"system"`) and an ISO `at`. Handler errors are caught and logged; one failing extension cannot break the bus.
+
+## Core nodes
+
+Core nodes ship with Nexus and use the same manifest contract, but they are always available: they never take a hub socket and do not count toward the free plan's two active extensions. They are declared with `defineCoreNode({ extension, presentation })`, where `presentation` is `"full"` (takes over the stage) or `"panel"`.
+
+On the dashboard the default view is only the network and the chat box. The **left menu** opens nodes: core nodes as full views, and Today, Nodes (the hub and slot manager), and each wired-in extension as panels. The **right rail** gives one-tap access to Research and to every socket (live, open, or locked). Socket and Pro rules are unchanged. They live in the registry, and only the UI moved.
+
+### Research (`dev.nexus.core.research`)
+
+Research is the browser built into Nexus.
+
+| Piece | Where |
+| --- | --- |
+| UI: tabs, back/forward, address bar, reader, live view, collections | `src/components/research/` |
+| Reader route: SSRF-guarded fetch, Readability, sanitize | `GET /api/research/read?url=` (`src/lib/research/safe-fetch.ts`, `net-guard.ts`, `extract.ts`) |
+| Search: one `SearchProvider` interface, Brave by default | `GET /api/research/search?q=` (`src/lib/research/search.ts`) |
+| Library: collections, sources, highlights per user (Postgres) | `/api/research/collections`, `/sources`, `/highlights` (`src/lib/research/store.ts`) |
+| Status for the UI (search configured, database present) | `GET /api/research/status` |
+
+- **Address bar:** a URL or bare domain opens the page. Anything else runs a web search. Without `BRAVE_SEARCH_API_KEY` the node shows a notice, and opening addresses still works.
+- **Reader:** clean article text plus title, site, author, date, reading time, source and canonical URL. Links open inside Nexus (Cmd/Ctrl-click opens a new tab). **Open original** is always there. A **live view** toggle appears only when the site's `X-Frame-Options` / CSP `frame-ancestors` allow framing.
+- **Fetch safety:** only http(s) on ports 80/443. Credentials in URLs, `localhost`, `.local`/`.internal`-style names, and private, loopback, link-local, CGNAT and metadata addresses are refused. DNS answers are checked again at connect time, which covers rebinding and every redirect hop (max 5). Bodies are capped at 3 MB and the whole fetch at 12 s. HTML is sanitized with an allowlist, and links get `rel="noopener noreferrer nofollow"`.
+- **Sources:** saving stores sanitized HTML, plain text and metadata, so nothing has to be fetched again. Tags and highlights (text-quote anchors: `quote`, `prefix`, `suffix`) are stored alongside. Client-sent content is re-sanitized on save.
+- **AI extension points (not built):** every source has nullable `summary`, `notes` and `lean` columns, typed as `SourceSummary`, `SourceNotes` and `SourceLean` in `src/lib/research/types.ts`. A server-side `SourceAnalyzer` can be registered with `registerSourceAnalyzer()` (`src/lib/research/analyzers.ts`). Analyzers run after each save via `after()` and write one field. None are registered today.
+- The chat box hands off to Research: the globe button, "research …", "search for …", "look up …", or a bare URL. `nexus:open-node` does the same from any extension.
+
+## Shared content
+
+Extensions interoperate through **typed, versioned content** rather than through AI. The scheme is small on purpose. Research's saved sources are the first and only kind today. Notes, documents, flashcards, 3D models and the rest get added the same way later.
+
+### Kinds and envelopes
+
+A content kind is named `namespace.name` (lowercase), for example `research.source`. Every item travels in an envelope:
+
+```ts
+interface ContentEnvelope<K, V, D> {
+  kind: K;            // "research.source"
+  version: V;         // schema version of `data`, an integer
+  id: string;
+  title: string;
+  collectionId: string | null;
+  createdAt: string;  // ISO
+  updatedAt: string;
+  data: D;            // kind-specific payload
+}
+```
+
+Items are grouped in `ContentCollection`s (`id`, `name`, `description`, `itemCount`, `updatedAt`). For Research these are the user's research collections.
+
+**Versioning.** A breaking change to `data` bumps the kind's `version`. Providers list every version they still serve. Clients send the version they were built against (`x-nexus-content-version`), and anything unsupported gets `400 unsupported_version`. Additive, optional fields do not need a bump.
+
+### Providing a kind
+
+The extension that owns a kind declares it in its manifest:
+
+```ts
+provides: [{
+  kind: "research.source",
+  version: 1,
+  description: "A saved web page: metadata, plain text, tags, highlights, summary and notes.",
+  actions: ["read", "annotate"],
+}]
+```
+
+The registry records providers in `contentKinds` when an extension (or core node) registers, and drops them on unregister. A kind has exactly one provider, so a second registration for the same kind is refused. On the server each kind has a `ContentProvider` (`src/lib/content/provider.ts`) that implements `collections`, `list`, `get`, and optionally `annotate`. It is listed in `PROVIDERS` in `src/lib/content/access.ts`, and its TypeScript types are added to `ContentKindMap` by declaration merging:
+
+```ts
+declare module "@/lib/extensions/content" {
+  interface ContentKindMap {
+    "study.flashcard": { version: 1; listItem: FlashcardListItemV1; item: FlashcardV1; annotation: FlashcardAnnotationV1 };
+  }
+}
+```
+
+### Requesting access
+
+Consumers declare capabilities `content:<kind>:<action>`:
+
+| Capability | Grants |
+| --- | --- |
+| `content:<kind>:read` | List collections and items, read full items |
+| `content:<kind>:annotate` | Write the kind's annotation fields. Requires `read` for the same kind |
+
+`validateManifest` rejects malformed capabilities, unknown actions, `annotate` without `read`, and bad `provides` entries. A manifest may name a kind whose provider is not installed: calls return `unknown_kind` until it is.
+
+Every extension's runtime has `runtime.content`:
+
+```ts
+const notesNode = defineExtension({
+  manifest: {
+    id: "com.example.notes",
+    apiVersion: NEXUS_EXTENSION_API_VERSION,
+    name: "Notes",
+    version: "0.1.0",
+    description: "Turns research sources into notes",
+    capabilities: ["content:research.source:read", "content:research.source:annotate"],
+  },
+  handlers: {
+    onEvent: async (event, runtime) => {
+      if (event.type !== "research:source-saved") return;
+      const source = await runtime.content.get("research.source", event.payload.sourceId);
+      await runtime.content.annotate("research.source", source.id, {
+        notes: { body: `Read later: ${source.title} (${source.data.wordCount} words)` },
+      });
+    },
+  },
+});
+```
+
+| Method | Needs |
+| --- | --- |
+| `can(kind, action)` | — |
+| `collections(kind)` | `read` |
+| `list(kind, { collectionId?, tag? })` | `read` |
+| `get(kind, id)` | `read` |
+| `annotate(kind, id, input)` | `annotate` |
+
+Calls fail fast with `ContentClientError` when the capability is not declared (`forbidden`) or the extension is not in a socket (`inactive`).
+
+HTTP, for the client and future out-of-process extensions (all require the user's session):
+
+| Route | Purpose |
+| --- | --- |
+| `GET /api/extensions/content` | Kinds this server serves, with versions and actions |
+| `GET /api/extensions/content/:kind/collections` | Collections |
+| `GET /api/extensions/content/:kind/items?collectionId=&tag=` | Item envelopes, listing payload |
+| `GET /api/extensions/content/:kind/items/:id` | Full item |
+| `PUT /api/extensions/content/:kind/items/:id/annotations` | Annotation write-back |
+
+Headers: `x-nexus-extension` (manifest id), `x-nexus-capabilities` (comma-separated `content:` capabilities), `x-nexus-content-version`. Errors are `{ error, code }` with `forbidden` 403, `not_found` 404, `unknown_kind` 404, `invalid` 400, or `unsupported_version` 400.
+
+**Trust model.** Every query is scoped to the signed-in user, so an extension can never reach another user's data. Today extensions run in the dashboard page with the user's session. That makes capabilities a declared contract the registry and server enforce, not a sandbox. When packaged third-party extensions run isolated, the loader will issue per-extension tokens bound to their declared capabilities, and the same routes and checks apply.
+
+### `research.source` v1
+
+Provided by Research. Types live in `src/lib/research/types.ts`.
+
+| Shape | `data` fields |
+| --- | --- |
+| List item (`ResearchSourceListItemV1`) | `url`, `canonicalUrl`, `siteName`, `author`, `publishedAt`, `excerpt`, `tags`, `wordCount`, `highlightCount` |
+| Item (`ResearchSourceContentV1`) | the above without `highlightCount`, plus `lang`, `imageUrl`, `text` (plain article text), `fetchedAt`, `highlights[]` (`id`, `quote`, `prefix`, `suffix`, `note`, `createdAt`), `summary`, `notes`, `lean` |
+| Annotation (`ResearchSourceAnnotationV1`) | `summary?: { text, keyPoints?, model }`, `notes?: { body }` |
+
+Research lists items per collection (`collectionId` is required). The sanitized HTML stays inside Research. Write-back is limited to `summary` and `notes`. The server stamps `generatedAt` / `updatedAt` and the writing `extensionId`, and sets `notes.author` to `"extension"`. `lean` stays read-only for extensions and is reserved for analyzers.
 
 ## Changes from Step 1
 
@@ -127,5 +282,7 @@ Every event carries `source` (extension id, `"nexus"`, or `"system"`) and an ISO
 - Prefer bus events over reaching into UI state.
 - Treat shared context as read-mostly; emit focused events for writes the brain should merge.
 - Never assume Pro. Handle `pro_required` gracefully.
+- Share data as a content kind you `provide`, and read others' data only through `runtime.content`. Do not reach into another extension's storage or UI.
+- Work without AI. AI may enrich content (summaries, lean, drafts) but must not be required to read or exchange it.
 
 Run `npm run smoke` to check the gate and socket rules against the real sources.

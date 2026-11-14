@@ -33,7 +33,7 @@ npm run start   # serve production build
 | `/` | Landing: animated golden neural network, logo, one-line description, Sign up |
 | `/signup` | Sign in with Google or an email magic link |
 | `/signup/verify` | “Check your email” after a magic link is sent |
-| `/dashboard` | Main Nexus Interaction Dashboard + Extension Hub (requires a session) |
+| `/dashboard` | Network + chat box; left menu opens nodes (Research, Today, Nodes), right rail for quick access (requires a session) |
 
 ## What’s shipped
 
@@ -41,8 +41,10 @@ npm run start   # serve production build
 2. **Dashboard network** — the same golden network, full-bleed and pitch black (`src/components/dashboard/NeuralStage.tsx`). The core reacts to Nexus: sparks converge while it thinks, ripples spread while it speaks.
 3. **Talking to Nexus** — one calm voice under the core with word-by-word replies, proactive openers and nudges, and follow-up suggestions (mock brain, no real LLM).
 4. **Today** — focus, priorities, and ongoing context. Nexus rewrites it when you ask (organize the day, add or complete tasks, note context).
-5. **Extension Hub** — five sockets on an arc wired into the core: **2 free**, 3 behind a **Pro stub**. Studio / Study / Call / Calendar are placeholders; three sample extensions show how a node snaps in.
-6. **Extension socket** — validated manifests, slot-aware registry, typed bus, Pro gate, React binding. See [docs/extensions.md](docs/extensions.md).
+5. **Decluttered dashboard** — by default only the network and the chat box. The **left menu** opens nodes as full views (Research) or panels (Today, Nodes, each wired-in extension). The **right rail** gives one-tap access to Research and the five sockets.
+6. **Extension Hub** — five sockets wired into the core: **2 free**, 3 behind a **Pro stub**, managed from the **Nodes** panel. Studio / Study / Call / Calendar are placeholders; three sample extensions show how a node snaps in.
+7. **Research (core node)** — a browser built into Nexus. One address bar for URLs and web search (Brave Search). It has a clean reader (Readability + sanitize, SSRF-guarded fetch), tabs, back/forward, open original, and a live view when the site allows framing. Pages are saved into per-user collections with tags and highlights. The chat box can start a search ("research …").
+8. **Extension socket** — validated manifests, slot-aware registry, typed bus, Pro gate, React binding, and **shared content**: typed, versioned content kinds (`research.source` first) that extensions read and annotate through `content:<kind>:<action>` capabilities. See [docs/extensions.md](docs/extensions.md).
 
 Studio, Study, Call, Calendar, and Dev products are **not** implemented — placeholders and the socket only.
 
@@ -55,7 +57,10 @@ Studio, Study, Call, Calendar, and Dev products are **not** implemented — plac
 | `src/app/dashboard/page.tsx` | Dashboard entry (session required) |
 | `src/auth.ts` | Auth.js config (Google, Resend, database sessions) |
 | `src/components/landing/` | Landing UI |
-| `src/components/dashboard/` | Dashboard UI (stage, sockets, voice, Today, hub) |
+| `src/components/dashboard/` | Dashboard UI (stage, menu, rail, voice, Today, hub) |
+| `src/components/research/` | Research node UI (tabs, reader, search, collections) |
+| `src/lib/research/` | Reader fetch + extraction, search provider, research storage |
+| `src/lib/content/` | Shared content providers and capability checks (server) |
 | `src/lib/network/geometry.ts` | Shared math for both network renderers |
 | `src/lib/extensions/` | Registry, bus, manifest validation, Pro gate, slots |
 | `src/extensions/samples.ts` | Sample extensions built on the public contract |
@@ -93,6 +98,7 @@ If a required variable is missing, the sign-in page says which ones, and nothing
 | `AUTH_GOOGLE_SECRET` | For Google | OAuth client secret. `GOOGLE_CLIENT_SECRET` is also accepted. |
 | `AUTH_RESEND_KEY` | For email | Resend API key with sending access. |
 | `EMAIL_FROM` | For email | From address on a domain verified in Resend, for example `Nexus <noreply@yourdomain.com>`. |
+| `BRAVE_SEARCH_API_KEY` | For web search | [Brave Search API](https://brave.com/search/api/) key, used server-side by Research. Without it, Research shows a notice and opening addresses still works. |
 
 ### Google Cloud OAuth
 
@@ -121,7 +127,7 @@ The link in the email expires in 24 hours and returns the person to `/dashboard`
 Any Postgres works. [Neon](https://neon.tech) is a good fit for the Vercel deployment:
 
 1. Create a project and copy the **pooled** connection string into `DATABASE_URL`.
-2. Tables are created on the first sign-in attempt. To create them yourself:
+2. Tables (Auth.js plus Research: `research_collection`, `research_source`, `research_highlight`) are created on first use. To create them yourself:
 
 ```bash
 DATABASE_URL="postgresql://…" npm run db:setup
