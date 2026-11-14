@@ -33,7 +33,7 @@ npm run start   # serve production build
 | `/` | Landing: animated golden neural network, logo, one-line description, Sign up |
 | `/signup` | Sign in with Google or an email magic link |
 | `/signup/verify` | “Check your email” after a magic link is sent |
-| `/dashboard` | Network + chat box; left menu opens nodes (Research, Today, Nodes), right rail for quick access (requires a session) |
+| `/dashboard` | Network + chat box; left menu opens nodes (Command, Today, Nodes), right rail for quick access (requires a session) |
 
 ## What’s shipped
 
@@ -41,10 +41,11 @@ npm run start   # serve production build
 2. **Dashboard network** — the same golden network, full-bleed and pitch black (`src/components/dashboard/NeuralStage.tsx`). The core reacts to Nexus: sparks converge while it thinks, ripples spread while it speaks.
 3. **Talking to Nexus** — one calm voice under the core with word-by-word replies, proactive openers and nudges, and follow-up suggestions (mock brain, no real LLM).
 4. **Today** — focus, priorities, and ongoing context. Nexus rewrites it when you ask (organize the day, add or complete tasks, note context).
-5. **Decluttered dashboard** — by default only the network and the chat box. The **left menu** opens nodes as full views (Research) or panels (Today, Nodes, each wired-in extension). The **right rail** gives one-tap access to Research and the five sockets.
+5. **Decluttered dashboard** — by default only the network and the chat box. The **left menu** opens nodes as full views (Command) or panels (Today, Nodes, each wired-in extension). The **right rail** gives one-tap access to Command and the five sockets.
 6. **Extension Hub** — five sockets wired into the core: **2 free**, 3 behind a **Pro stub**, managed from the **Nodes** panel. Studio / Study / Call / Calendar are placeholders; three sample extensions show how a node snaps in.
-7. **Research (core node)** — a browser built into Nexus. One address bar for URLs and web search (Brave Search). It has a clean reader (Readability + sanitize, SSRF-guarded fetch), tabs, back/forward, open original, and a live view when the site allows framing. Pages are saved into per-user collections with tags and highlights. The chat box can start a search ("research …").
-8. **Extension socket** — validated manifests, slot-aware registry, typed bus, Pro gate, React binding, and **shared content**: typed, versioned content kinds (`research.source` first) that extensions read and annotate through `content:<kind>:<action>` capabilities. See [docs/extensions.md](docs/extensions.md).
+7. **Nexus Command (core node)** — the cockpit for the outside world, no AI required. Connect real services (weather, night sky, markets, F1 and uptime with no keys; Google Calendar, Gmail and Tasks through Google sign-in; GitHub, Vercel and Telegram with tokens; Strava and Spotify with OAuth). Everything lands on one daily timeline with live readings, a Deep work launcher, goals, deliveries and an automation log. Built-in automations connect the services: Deep work books the calendar and starts your playlist, receipts in Gmail become purchases and package trackers, a Strava run checks off your goal. Items are published as typed `command.*` content other extensions can read. See [Nexus Command](#nexus-command).
+8. **Research (core node, hidden for now)** — a browser built into Nexus. One address bar for URLs and web search (Brave Search). It has a clean reader (Readability + sanitize, SSRF-guarded fetch), tabs, back/forward, open original, and a live view when the site allows framing. Pages are saved into per-user collections with tags and highlights. Its code, routes and tables stay in place; it is hidden from navigation by `RESEARCH_VISIBLE` in `src/components/dashboard/Dashboard.tsx`.
+9. **Extension socket** — validated manifests, slot-aware registry, typed bus, Pro gate, React binding, and **shared content**: typed, versioned content kinds (`research.source`, `command.*`) that extensions read and annotate through `content:<kind>:<action>` capabilities. Bus events that carry content are only delivered to extensions holding the matching capability. See [docs/extensions.md](docs/extensions.md).
 
 Studio, Study, Call, Calendar, and Dev products are **not** implemented — placeholders and the socket only.
 
@@ -58,12 +59,15 @@ Studio, Study, Call, Calendar, and Dev products are **not** implemented — plac
 | `src/auth.ts` | Auth.js config (Google, Resend, database sessions) |
 | `src/components/landing/` | Landing UI |
 | `src/components/dashboard/` | Dashboard UI (stage, menu, rail, voice, Today, hub) |
+| `src/components/command/` | Command node UI (Today, Connections, Automations) |
+| `src/lib/command/` | Command kinds, automation engine, recipes, timeline, storage, sync, drivers |
+| `src/lib/connectors/` | Connector manifests, catalog, credential vault |
 | `src/components/research/` | Research node UI (tabs, reader, search, collections) |
 | `src/lib/research/` | Reader fetch + extraction, search provider, research storage |
 | `src/lib/content/` | Shared content providers and capability checks (server) |
 | `src/lib/network/geometry.ts` | Shared math for both network renderers |
 | `src/lib/extensions/` | Registry, bus, manifest validation, Pro gate, slots |
-| `src/extensions/samples.ts` | Sample extensions built on the public contract |
+| `src/extensions/samples.ts` | Sample extensions built on the public contract (Ledger reads `command.purchase`) |
 | `src/lib/nexus/brain.ts` | Mock brain (intents → replies + task actions) |
 | `docs/extensions.md` | Extension author contract |
 
@@ -99,6 +103,9 @@ If a required variable is missing, the sign-in page says which ones, and nothing
 | `AUTH_RESEND_KEY` | For email | Resend API key with sending access. |
 | `EMAIL_FROM` | For email | From address on a domain verified in Resend, for example `Nexus <noreply@yourdomain.com>`. |
 | `BRAVE_SEARCH_API_KEY` | For web search | [Brave Search API](https://brave.com/search/api/) key, used server-side by Research. Without it, Research shows a notice and opening addresses still works. |
+| `NEXUS_CREDENTIALS_KEY` | Recommended | 32 random bytes, base64 (`openssl rand -base64 32`). Encrypts Command connector tokens (AES-256-GCM). Without it the key is derived from `AUTH_SECRET`, so rotating `AUTH_SECRET` would force every token-based service to reconnect. |
+| `STRAVA_CLIENT_ID` / `STRAVA_CLIENT_SECRET` | For Strava | [Strava API application](https://www.strava.com/settings/api). |
+| `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` | For Spotify | [Spotify app](https://developer.spotify.com/dashboard). Playback control needs Spotify Premium. |
 
 ### Google Cloud OAuth
 
@@ -127,10 +134,54 @@ The link in the email expires in 24 hours and returns the person to `/dashboard`
 Any Postgres works. [Neon](https://neon.tech) is a good fit for the Vercel deployment:
 
 1. Create a project and copy the **pooled** connection string into `DATABASE_URL`.
-2. Tables (Auth.js plus Research: `research_collection`, `research_source`, `research_highlight`) are created on first use. To create them yourself:
+2. Tables (Auth.js, Research: `research_collection`, `research_source`, `research_highlight`, and Command: `command_connection`, `command_item`, `command_automation_run`, `command_recipe_state`, `command_focus`) are created on first use. To create them yourself:
 
 ```bash
 DATABASE_URL="postgresql://…" npm run db:setup
 ```
 
 Do not commit the URL. `npm run db:setup` only prints a redacted error if the connection fails.
+
+## Nexus Command
+
+Command (`dev.nexus.core.command`) connects external services, puts your day on one timeline, and runs deterministic automations between them. It never needs AI. The platform side (connector manifests, `command.*` content kinds, gated bus events, automation engine) is documented in [docs/extensions.md](docs/extensions.md#nexus-command-devnexuscorecommand).
+
+### Services
+
+Only services with a real connection can be connected. The rest are listed under **Planned** in Connections, each with what it needs.
+
+| Service | Auth | What Command gets | Setup |
+| --- | --- | --- | --- |
+| Weather | none | Current conditions, high/low, next 12 hours | [Open-Meteo](https://open-meteo.com), no key |
+| Night sky | none | Sunset, astronomical darkness, moon phase, cloud cover, dark-sky window | Open-Meteo + local astronomy |
+| Markets | none | FX pairs (ECB reference rates) and crypto prices with daily change | [Frankfurter](https://frankfurter.dev) + [CoinGecko](https://www.coingecko.com/en/api) |
+| Formula 1 | none | Every session of the next Grand Prix weekend | [Jolpica F1](https://github.com/jolpica/jolpica-f1) |
+| Uptime | none | Response time of up to 5 public sites | Research's SSRF-guarded fetch |
+| Google Calendar | Google sign-in | Today and tomorrow; Deep work books focus blocks | Google OAuth below |
+| Gmail | Google sign-in | Last 3 days of mail; receipts and tracking numbers detected | Google OAuth below |
+| Google Tasks | Google sign-in | Open tasks and today's completed ones | Google OAuth below |
+| GitHub | token | Review requests, assigned issues, your open PRs, today's pushes | [Fine-grained token](https://github.com/settings/personal-access-tokens/new) with read access to issues, pull requests and metadata |
+| Vercel | token | Last 20 deployments; a failed deploy creates a task | [Access token](https://vercel.com/account/settings/tokens), optional team id |
+| Telegram alerts | bot token | Automations send alerts here | Create a bot with @BotFather, message it, read your chat id from `getUpdates` |
+| Strava | OAuth | Activities from the last 7 days; a run checks off your goal | `STRAVA_CLIENT_ID` / `STRAVA_CLIENT_SECRET` |
+| Spotify | OAuth | Deep work plays your focus playlist and pauses it after | `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET`, Premium |
+
+Tokens are sealed with AES-256-GCM before they are stored and are never sent back to the browser.
+
+### Google services (incremental scopes)
+
+Calendar, Gmail and Tasks reuse the Google sign-in client (`AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`). **Continue with Google** re-runs Google sign-in asking only for that service's extra scope (`include_granted_scopes`, offline access), and the grant is stored for that service. In Google Cloud Console:
+
+1. Enable the **Google Calendar API**, **Gmail API** and **Google Tasks API** for the project.
+2. On the OAuth consent screen, add the scopes `…/auth/calendar.events`, `…/auth/gmail.readonly` and `…/auth/tasks`.
+3. No new redirect URI is needed; it is the existing `/api/auth/callback/google`.
+
+`gmail.readonly` is a restricted scope. While the consent screen is in **Testing**, it works for listed test users; publishing to everyone requires Google's verification.
+
+### Strava and Spotify
+
+Register an app with each provider and set the redirect URI to `{AUTH_URL}/api/command/oauth/strava/callback` or `{AUTH_URL}/api/command/oauth/spotify/callback` (add `http://localhost:3000/...` for local work). Put the client id and secret in the variables above.
+
+### Automations
+
+Deep work, Deep work wrap-up, Receipts → tracker + ledger, Run → goal + recovery, Failed deploy alert, Due-soon guard and F1 session reminder ship built in and can be switched off in **Automations**. A step whose service isn't connected is skipped and logged, never faked.

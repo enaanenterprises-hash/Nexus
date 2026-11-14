@@ -97,7 +97,8 @@ export function NexusInput({
 }: {
   disabled: boolean;
   onAsk: (text: string) => void;
-  onResearch: (text: string) => void;
+  /** Shows the Research hand-off button when set. */
+  onResearch?: (text: string) => void;
 }) {
   const [draft, setDraft] = useState("");
 
@@ -117,21 +118,23 @@ export function NexusInput({
         id="nexus-input"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
-        placeholder="Ask Nexus, or search the web"
+        placeholder={onResearch ? "Ask Nexus, or search the web" : "Ask Nexus"}
         autoComplete="off"
       />
-      <button
-        type="button"
-        className="dash-research"
-        onClick={() => {
-          onResearch(draft);
-          setDraft("");
-        }}
-        aria-label={draft.trim() ? `Research “${draft.trim()}”` : "Open Research"}
-        title={draft.trim() ? "Search the web with Research" : "Open Research"}
-      >
-        <ResearchIcon size={18} />
-      </button>
+      {onResearch ? (
+        <button
+          type="button"
+          className="dash-research"
+          onClick={() => {
+            onResearch(draft);
+            setDraft("");
+          }}
+          aria-label={draft.trim() ? `Research “${draft.trim()}”` : "Open Research"}
+          title={draft.trim() ? "Search the web with Research" : "Open Research"}
+        >
+          <ResearchIcon size={18} />
+        </button>
+      ) : null}
       <button type="submit" className="dash-send" disabled={disabled || !draft.trim()} aria-label="Send to Nexus">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
           <path d="M8 13V3M3.5 7.5 8 3l4.5 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
