@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { GoldenNetwork } from "./GoldenNetwork";
-import { LandingStory } from "./LandingStory";
+import { LandingScenes } from "./LandingScenes";
 import { NexusWordmark } from "./NexusLogo";
 import { SiteFooter } from "./SiteFooter";
 
@@ -15,9 +15,12 @@ export function LandingPage() {
           <div className="landing-scrim pointer-events-none absolute inset-0" />
 
           <header className="landing-enter relative z-10 flex items-center justify-between px-6 pt-6 sm:px-10 sm:pt-8 lg:px-14">
-            <Link href="/" aria-label="Nexus home" className="inline-flex">
-              <NexusWordmark className="h-[14px] w-auto sm:h-[17px]" />
-            </Link>
+            <div className="flex items-center gap-3">
+              <Link href="/" aria-label="Nexus home" className="inline-flex">
+                <NexusWordmark className="h-[14px] w-auto sm:h-[17px]" />
+              </Link>
+              <span className="landing-beta">in beta</span>
+            </div>
             <Link href="/signup" className="landing-signup">
               Sign up
             </Link>
@@ -30,7 +33,7 @@ export function LandingPage() {
           </div>
         </section>
 
-        <LandingStory />
+        <LandingScenes />
       </main>
       <SiteFooter />
     </div>
