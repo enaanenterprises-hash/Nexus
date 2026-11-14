@@ -1064,6 +1064,9 @@ select.research-field option {
   text-transform: uppercase;
   color: var(--land-faint);
   white-space: nowrap;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .cmd-signal-value {
