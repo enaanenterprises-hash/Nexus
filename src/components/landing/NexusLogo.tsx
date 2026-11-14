@@ -9,7 +9,7 @@ export function NexusMark({ className = "" }: { className?: string }) {
   return <Image src={mark} alt="Nexus" unoptimized draggable={false} className={`select-none ${className}`} />;
 }
 
-/** Chrome NEXUS wordmark, reserved for the landing page. */
-export function NexusWordmark({ className = "" }: { className?: string }) {
-  return <Image src={wordmark} alt="Nexus" unoptimized preload draggable={false} className={`select-none ${className}`} />;
+/** Chrome NEXUS wordmark for the public site. */
+export function NexusWordmark({ className = "", preload = true }: { className?: string; preload?: boolean }) {
+  return <Image src={wordmark} alt="Nexus" unoptimized preload={preload} draggable={false} className={`select-none ${className}`} />;
 }
