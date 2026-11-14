@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { GoldenNetwork } from "./GoldenNetwork";
-import { NexusLogo } from "./NexusLogo";
+import { NexusWordmark } from "./NexusLogo";
 
 export function LandingPage() {
   return (
@@ -12,7 +12,7 @@ export function LandingPage() {
 
       <header className="landing-enter relative z-10 flex items-center justify-between px-6 pt-6 sm:px-10 sm:pt-8 lg:px-14">
         <Link href="/" aria-label="Nexus home" className="inline-flex">
-          <NexusLogo className="h-[13px] w-auto sm:h-[15px]" />
+          <NexusWordmark className="h-[14px] w-auto sm:h-[17px]" />
         </Link>
         <Link href="/signup" className="landing-signup">
           Sign up

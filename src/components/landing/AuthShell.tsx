@@ -1,7 +1,7 @@
 import Link from "next/link"
 import type { ReactNode } from "react"
 import { GoldenNetwork } from "./GoldenNetwork"
-import { NexusLogo } from "./NexusLogo"
+import { NexusMark } from "./NexusLogo"
 
 export function AuthShell({ children }: { children: ReactNode }) {
   return (
@@ -11,7 +11,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
       </div>
       <header className="relative z-10 flex items-center px-6 pt-6 sm:px-10 sm:pt-8 lg:px-14">
         <Link href="/" aria-label="Nexus home" className="inline-flex">
-          <NexusLogo className="h-[13px] w-auto sm:h-[15px]" />
+          <NexusMark className="h-7 w-auto sm:h-8" />
         </Link>
       </header>
       <main className="relative z-10 flex flex-1 items-center justify-center px-6 pb-16">
