@@ -1,6 +1,6 @@
 # Nexus Extension Contract
 
-Nexus is a central AI network. Extensions (first-party and third-party) plug into the same typed **extension socket** so context and actions flow through the brain instead of living in silos. Every active extension sits in a **hub socket** wired into the golden network; bundled **core nodes** (Research) are always on.
+Nexus is a central AI network. Extensions (first-party and third-party) plug into the same typed **extension socket** so context and actions flow through the brain instead of living in silos. Every active extension sits in a **hub socket** wired into the golden network; bundled **core nodes** (Command, Research) are always on.
 
 Contract version: **`apiVersion: 1`** (`NEXUS_EXTENSION_API_VERSION`).
 
@@ -20,7 +20,11 @@ Contract version: **`apiVersion: 1`** (`NEXUS_EXTENSION_API_VERSION`).
 | `src/lib/extensions/content-access.ts` | `runtime.content` client |
 | `src/lib/content/` | Server side: provider interface, capability checks |
 | `src/extensions/samples.ts` | Reference extensions written against this contract |
+| `src/lib/extensions/event-access.ts` | Which bus events need which capability |
 | `src/extensions/research/node.ts` | Research core node manifest |
+| `src/extensions/command/node.ts` | Command core node manifest |
+| `src/lib/connectors/` | Connector framework: manifests, catalog, credential vault |
+| `src/lib/command/` | Command kinds, automation engine, recipes, timeline, storage, sync |
 
 ## Lifecycle
 
@@ -68,7 +72,7 @@ if (!result.ok) console.warn(result.reason, result.message); // e.g. "pro_requir
 | `id` | Reverse-DNS, lowercase: `com.acme.notes` |
 | `apiVersion` | Must equal `NEXUS_EXTENSION_API_VERSION` |
 | `version` | Semver |
-| `capabilities` | At least one of `tasks`, `context`, `media`, `calendar`, `voice`, `research`, `custom`, or a content capability `content:<kind>:<read\|annotate>` |
+| `capabilities` | At least one of `tasks`, `context`, `media`, `calendar`, `voice`, `research`, `automations`, `custom`, or a content capability `content:<kind>:<read\|annotate>` |
 | `provides` | Optional; content kinds this extension owns (see [Shared content](#shared-content)) |
 | `monogram` | Optional, ≤ 2 characters, shown inside the hub node |
 | `requiresPro` | Optional; activation is denied on the free plan |
@@ -120,8 +124,14 @@ if (!result.ok) console.warn(result.reason, result.message); // e.g. "pro_requir
 | `research:page-opened` | `{ url, title, siteName, sourceId }` | A page is showing in the reader |
 | `research:source-saved` | `{ sourceId, collectionId, url, title }` | A page was saved into a collection |
 | `research:highlight-added` | `{ sourceId, highlightId, quote }` | Text was highlighted on a saved source |
+| `command:item-published` | `{ kind, item }` | A new Command item reached the network. **Gated:** needs `content:<kind>:read` |
+| `command:automation-ran` | `{ run }` | An automation ran (trigger, steps, outcome). **Gated:** needs `automations` |
+| `command:connection-changed` | `{ connectorId, connected }` | A service was connected or disconnected |
+| `command:focus-changed` | `{ focus }` | A focus session started (`focus`) or ended (`null`) |
 
 Every event carries `source` (extension id, `"nexus"`, or `"system"`) and an ISO `at`. Handler errors are caught and logged; one failing extension cannot break the bus.
+
+**Gated events.** Events that carry user content are only delivered to extensions that declared the matching capability, both through `onEvent` and `runtime.subscribe` (`src/lib/extensions/event-access.ts`). Subscribing to the bus never reveals more than `runtime.content` would.
 
 ## Core nodes
 
@@ -267,6 +277,61 @@ Provided by Research. Types live in `src/lib/research/types.ts`.
 
 Research lists items per collection (`collectionId` is required). The sanitized HTML stays inside Research. Write-back is limited to `summary` and `notes`. The server stamps `generatedAt` / `updatedAt` and the writing `extensionId`, and sets `notes.author` to `"extension"`. `lean` stays read-only for extensions and is reserved for analyzers.
 
+## Nexus Command (`dev.nexus.core.command`)
+
+Command is the cockpit for external services and works without AI. It connects services through **connectors**, normalizes what they report into **`command.*` content kinds**, puts the day on one **timeline**, and lets services work together through deterministic **automations**. Other extensions build on it by reading those kinds and listening for gated events.
+
+### Connectors
+
+One typed manifest per service, in `src/lib/connectors/catalog.ts`, validated by `defineConnector`:
+
+| Field | Meaning |
+| --- | --- |
+| `id`, `name`, `monogram`, `description` | Identity; `id` is kebab-case |
+| `category` | `comms`, `dev`, `academics`, `fitness`, `environment`, `media`, `markets` |
+| `auth` | `{ type: "none" }`, `{ type: "api_key", fields, docsUrl }` (at least one `secret` field), or `{ type: "oauth", provider, scopes, docsUrl }` |
+| `produces` | `command.*` kinds the service publishes |
+| `actions` | Automation actions it can carry out (`calendar.block`, `presence.dnd`, `notify.send`, …). Core actions are refused |
+| `settings` | Typed, non-secret settings (`location`, `list`, `text`) with defaults |
+| `live` | `{ status: "available", api, env? }` or `{ status: "planned", note }`. Only available connectors can be connected |
+
+The server side of a connector is a `ConnectorDriver` (`src/lib/command/drivers/types.ts`): optional `verify`, `fetch` (a snapshot; items missing from the next snapshot are pruned) and `actions`. Drivers throw `DriverError` (`auth`, `config`, `upstream`) with a message the user can act on.
+
+**Credentials** are stored per user in `command_connection.credentials`, sealed with AES-256-GCM (`src/lib/connectors/vault.ts`). The key is `NEXUS_CREDENTIALS_KEY` (32 bytes, base64), or an HKDF derivation of `AUTH_SECRET` when it is not set. Secrets are never returned to the browser; the client only sees `hasCredentials`.
+
+### Content kinds
+
+All eight kinds are `version: 1`, read-only for consumers, and travel in the usual envelope. `collectionId` is the connector id (`command` for items Command itself creates). Every `data` has `connectorId`, `origin` (`sync`, `automation`, `user`), `externalId` and `url`. Types live in `src/lib/command/kinds.ts`.
+
+| Kind | Kind-specific `data` |
+| --- | --- |
+| `command.event` | `startsAt`, `endsAt`, `allDay`, `location`, `category`, `status` |
+| `command.task` | `status`, `priority`, `dueAt`, `project`, `doneAt`, `goal` (`metric`, `target`, `unit`, `progress`) |
+| `command.deadline` | `dueAt`, `course`, `status`, `points` |
+| `command.activity` | `activity` (run, ride, sleep, deploy, focus, …), `status`, `startedAt`, `endedAt`, `durationMin`, `metrics`, `detail` |
+| `command.purchase` | `merchant`, `total`, `currency`, `orderNumber`, `purchasedAt`, `items[]`, `sourceItemId` |
+| `command.shipment` | `carrier`, `trackingNumber`, `status`, `eta`, `merchant`, `lastEvent`, `purchaseItemId` |
+| `command.message` | `channel`, `from`, `subject`, `snippet`, `body`, `receivedAt`, `labels` |
+| `command.signal` | `metric`, `value`, `unit`, `display`, `change`, `status`, `observedAt`, `details` |
+
+A finance extension that wants receipts declares `content:command.purchase:read`, then reacts to `command:item-published` and reads history with `runtime.content.list("command.purchase")`. The HTTP routes are the shared ones (`/api/extensions/content/command.purchase/items`, …).
+
+### Automations
+
+`src/lib/command/automation/` is a small deterministic engine. A `Recipe` is a trigger, conditions and action steps:
+
+- **Triggers:** `item.created` (a new item of a kind, or an existing one whose `status` changed, such as a deploy that failed; optionally limited to connectors), `item.upcoming` (fires once per item when its time is within `withinHours`; checked on every sync), `focus.started`, `focus.ended`.
+- **Conditions:** `{ path, op, value }` over the run scope (`item`, `focus`, `receipt`, `hoursUntil`, `now`). Operators: `eq`, `neq`, `in`, `contains`, `exists`, `gte`, `lte`, `within_hours`.
+- **Actions:** `{ action, params }`, where string params may use `{{path}}` templates. Connector actions dispatch to `one` connected service or to `all` of them (Do Not Disturb on Slack and Discord). Core actions (`purchase.record`, `shipment.track`, `goal.check`, `signal.update`, `task.create`, `activity.log`) run inside Command.
+- `planRun()` is pure. `executePlan()` runs each step; a step with no connected service is `skipped`, a failing step is `failed`, and neither stops the rest. Items an automation creates can trigger further recipes, up to two levels deep. Every run is logged in `command_automation_run`.
+- The first sync of a new connection is a baseline: automations react to what changes after it, not to history.
+
+Built-in recipes (`recipes.ts`): **Deep work** and **Deep work wrap-up**, **Receipts → tracker + ledger** (deterministic receipt and tracking-number parser in `parsers/receipt.ts`), **Run → goal + recovery**, **Failed deploy alert**, **Due-soon guard**, **F1 session reminder**.
+
+### Timeline
+
+`buildTimeline(items, { now, timeZone })` returns the viewer's day: timed entries in order with `past`/`live` flags and a now index, an `anytime` lane (open untimed tasks and tasks finished today), today's `goals`, the signal strip, and moving shipments.
+
 ## Changes from Step 1
 
 - Manifests require `apiVersion` and are validated (`ManifestError`).
@@ -283,6 +348,7 @@ Research lists items per collection (`collectionId` is required). The sanitized 
 - Treat shared context as read-mostly; emit focused events for writes the brain should merge.
 - Never assume Pro. Handle `pro_required` gracefully.
 - Share data as a content kind you `provide`, and read others' data only through `runtime.content`. Do not reach into another extension's storage or UI.
+- To react to the outside world, consume `command.*` kinds instead of calling services yourself. Declare `content:<kind>:read` for what you need and `automations` only if you watch automation runs.
 - Work without AI. AI may enrich content (summaries, lean, drafts) but must not be required to read or exchange it.
 
 Run `npm run smoke` to check the gate and socket rules against the real sources.

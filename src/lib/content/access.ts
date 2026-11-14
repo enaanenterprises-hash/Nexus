@@ -1,5 +1,6 @@
 import "server-only"
 import { contentCapability, type ContentAction, type KnownContentKind } from "@/lib/extensions/content"
+import { commandContentProviders } from "@/lib/command/content-provider"
 import { researchSourceProvider } from "@/lib/research/content-provider"
 import { json, jsonError, libraryFailure, requireLibraryUser } from "@/lib/research/route-helpers"
 import { ContentAccessError, type ContentProvider } from "./provider"
@@ -7,6 +8,7 @@ import { ContentAccessError, type ContentProvider } from "./provider"
 /** Server-side providers by kind. New kinds register here. */
 const PROVIDERS: { [K in KnownContentKind]: ContentProvider<K> } = {
   "research.source": researchSourceProvider,
+  ...commandContentProviders,
 }
 
 export const EXTENSION_HEADER = "x-nexus-extension"

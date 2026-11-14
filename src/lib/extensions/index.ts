@@ -29,6 +29,7 @@ export {
   type ContentKindMap,
   type KnownContentKind,
 } from "./content";
+export { canReceive, requiredCapability } from "./event-access";
 export { ContentClientError, createContentClient, type ContentClient } from "./content-access";
 export {
   EXTENSION_SLOT_BLUEPRINT,

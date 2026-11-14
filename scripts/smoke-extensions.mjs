@@ -133,5 +133,110 @@ await registry.register({
 });
 assert(runtimeContent?.can("research.source", "read"), "registry hands a content client to the runtime");
 
+// ——— Nexus Command platform ———
+const { CONNECTOR_CATALOG } = await import("../src/lib/connectors/catalog.ts");
+const { validateConnectorManifest } = await import("../src/lib/connectors/validate.ts");
+const { planRun, executePlan, resolveParams } = await import("../src/lib/command/automation/engine.ts");
+const { BUILT_IN_RECIPES } = await import("../src/lib/command/automation/recipes.ts");
+const { parseReceipt } = await import("../src/lib/command/parsers/receipt.ts");
+const { buildTimeline } = await import("../src/lib/command/timeline.ts");
+
+assert(CONNECTOR_CATALOG.length >= 30 && CONNECTOR_CATALOG.every((m) => validateConnectorManifest(m).length === 0), "every connector manifest is valid");
+assert(new Set(CONNECTOR_CATALOG.map((m) => m.id)).size === CONNECTOR_CATALOG.length, "connector ids are unique");
+assert(
+  validateConnectorManifest({ ...CONNECTOR_CATALOG[0], actions: ["goal.check"] }).length > 0,
+  "connectors cannot claim core actions",
+);
+assert(
+  validateConnectorManifest({ ...CONNECTOR_CATALOG[0], auth: { type: "api_key", docsUrl: "", fields: [{ key: "x", label: "x", secret: false }] } }).length > 0,
+  "api_key auth needs a secret field",
+);
+
+const item = (kind, data, extra = {}) => ({
+  kind,
+  version: 1,
+  id: `${data.connectorId}:${extra.externalId ?? "x"}`,
+  title: extra.title ?? "Item",
+  collectionId: data.connectorId,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  data: { origin: "sync", externalId: "x", url: null, ...data },
+});
+
+const gatedBus = new ExtensionBus();
+const gatedRegistry = new ExtensionRegistry(gatedBus);
+const got = { ledger: [], blind: [] };
+await gatedRegistry.register({
+  manifest: manifest("com.acme.ledger", { capabilities: ["content:command.purchase:read"] }),
+  handlers: { onEvent: (e) => void got.ledger.push(e.type) },
+});
+await gatedRegistry.register({ manifest: manifest("com.acme.blind"), handlers: { onEvent: (e) => void got.blind.push(e.type) } });
+await gatedRegistry.activate("com.acme.ledger");
+await gatedRegistry.activate("com.acme.blind");
+const purchase = item("command.purchase", { connectorId: "command", merchant: "Acme", total: 12, currency: "USD" });
+gatedBus.emit("command:item-published", { kind: "command.purchase", item: purchase }, "dev.nexus.core.command");
+gatedBus.emit("command:item-published", { kind: "command.message", item: purchase }, "dev.nexus.core.command");
+await new Promise((r) => setTimeout(r, 0));
+assert(got.ledger.filter((t) => t === "command:item-published").length === 1, "command items reach only extensions with content:<kind>:read");
+assert(!got.blind.includes("command:item-published"), "extensions without the capability never see command items");
+
+const now = new Date("2026-11-14T15:00:00Z");
+const focus = { id: "f1", title: "Fix #42", targetItemId: null, minutes: 50, startedAt: now.toISOString(), endsAt: "2026-11-14T15:50:00Z", endedAt: null };
+const deep = BUILT_IN_RECIPES.find((r) => r.id === "deep-work-start");
+const targets = [
+  { connectorId: "google-calendar", actions: ["calendar.block"] },
+  { connectorId: "slack", actions: ["presence.dnd"] },
+  { connectorId: "discord", actions: ["presence.dnd"] },
+];
+const plan = planRun(deep, { type: "focus.started", focus }, targets, now);
+const step = (a) => plan.steps.find((s) => s.action === a);
+assert(plan.matched && step("calendar.block").params.title === "Focus · Fix #42", "deep work plans a calendar block from templates");
+assert(step("presence.dnd").targets.length === 2, "dispatch 'all' fans out to every connected service");
+assert(step("music.play").skipped !== null, "actions with no connected service are skipped, not failed");
+const results = await executePlan(plan, async (s, c) => {
+  if (c === "discord") throw new Error("boom");
+  return { detail: `${s.action} on ${c}` };
+});
+assert(results.some((r) => r.status === "failed") && results.some((r) => r.status === "ok"), "one failing step does not stop the run");
+assert(resolveParams({ n: "{{a.b}}", s: "x{{a.b}}" }, { a: { b: 3 } }).n === 3, "whole-template params keep their type");
+
+const email = {
+  from: "Acme Store <orders@acme.com>",
+  subject: "Your order #A1B2C3D has shipped",
+  body: "Thanks for your order!\n1 x Mechanical keyboard $89.00\nOrder total: $94.50\nTracking: 1Z999AA10123456784",
+};
+const r = parseReceipt(email);
+assert(r.isReceipt && r.total === 94.5 && r.currency === "USD" && r.orderNumber === "A1B2C3D", "receipt parser reads total, currency and order number");
+assert(r.tracking?.carrier === "ups" && r.tracking.number === "1Z999AA10123456784" && r.merchant === "Acme Store", "receipt parser finds carrier tracking and merchant");
+assert(!parseReceipt({ from: "a@b.com", subject: "Lunch?", body: "Total vibes" }).isReceipt, "ordinary mail is not a receipt");
+const receiptRecipe = BUILT_IN_RECIPES.find((x) => x.id === "receipt-to-tracker");
+const msg = item("command.message", { connectorId: "gmail", channel: "email", ...email, snippet: "", receivedAt: now.toISOString(), labels: [] });
+assert(planRun(receiptRecipe, { type: "item.created", item: msg }, [], now).matched, "receipt recipe matches a receipt email");
+
+const run = BUILT_IN_RECIPES.find((x) => x.id === "run-to-goal");
+const stravaRun = item("command.activity", { connectorId: "strava", activity: "run", status: "completed", startedAt: now.toISOString(), metrics: { distance_km: 5.2 } });
+const ride = item("command.activity", { connectorId: "strava", activity: "ride", status: "completed", startedAt: now.toISOString(), metrics: {} });
+const runPlan = planRun(run, { type: "item.created", item: stravaRun }, [], now);
+assert(runPlan.matched && runPlan.steps[0].params.value === 5.2, "a Strava run triggers the goal recipe with its distance");
+assert(!planRun(run, { type: "item.created", item: ride }, [], now).matched, "a ride does not trigger the run recipe");
+const f1 = BUILT_IN_RECIPES.find((x) => x.id === "f1-session-reminder");
+const soon = item("command.event", { connectorId: "f1", category: "sport", startsAt: "2026-11-14T15:40:00Z", status: "confirmed" });
+const later = item("command.event", { connectorId: "f1", category: "sport", startsAt: "2026-11-14T19:00:00Z", status: "confirmed" });
+assert(planRun(f1, { type: "item.upcoming", item: soon }, [], now).matched && !planRun(f1, { type: "item.upcoming", item: later }, [], now).matched, "upcoming triggers respect their window");
+
+const tl = buildTimeline(
+  [
+    item("command.event", { connectorId: "google-calendar", startsAt: "2026-11-14T14:00:00Z", endsAt: "2026-11-14T16:00:00Z", status: "confirmed" }, { externalId: "a", title: "Standup" }),
+    item("command.event", { connectorId: "google-calendar", startsAt: "2026-11-14T20:00:00Z", endsAt: null, status: "confirmed" }, { externalId: "b", title: "Dinner" }),
+    item("command.event", { connectorId: "google-calendar", startsAt: "2026-11-15T20:00:00Z", endsAt: null, status: "confirmed" }, { externalId: "c", title: "Tomorrow" }),
+    item("command.task", { connectorId: "github", status: "open", priority: "high", dueAt: null }, { externalId: "d", title: "Review PR" }),
+    item("command.signal", { connectorId: "weather", metric: "weather.now" }, { externalId: "e", title: "Weather" }),
+  ],
+  { now, timeZone: "America/Toronto" },
+);
+assert(tl.day === "2026-11-14" && tl.entries.length === 2, "timeline keeps only today's timed items in the viewer's zone");
+assert(tl.entries[0].live && tl.nowIndex === 1, "timeline marks live entries and places the now marker");
+assert(tl.anytime.length === 1 && tl.signals.length === 1, "untimed tasks and signals get their own lanes");
+
 if (failed > 0) process.exit(1);
 console.log("smoke-extensions passed");
