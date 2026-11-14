@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Figtree, IBM_Plex_Mono, Syne } from "next/font/google";
+import { Figtree, IBM_Plex_Mono, Syncopate, Syne } from "next/font/google";
 import "./globals.css";
 
 const syne = Syne({
@@ -20,19 +20,29 @@ const ibmPlexMono = IBM_Plex_Mono({
   weight: ["400", "500"],
 });
 
+const syncopate = Syncopate({
+  variable: "--font-syncopate",
+  subsets: ["latin"],
+  weight: ["400", "700"],
+});
+
 export const metadata: Metadata = {
   title: "Nexus — Personal AI Network",
   description:
-    "Centralized AI operating environment with a modular extension network. Step 1: interaction dashboard and extension socket.",
+    "A personal AI operating environment with a modular extension network. One living brain — extensions share context instead of silos.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
     <html
       lang="en"
-      className={`${syne.variable} ${figtree.variable} ${ibmPlexMono.variable} h-full antialiased`}
+      className={`${syne.variable} ${figtree.variable} ${ibmPlexMono.variable} ${syncopate.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="flex min-h-full flex-col">{children}</body>
     </html>
   );
 }

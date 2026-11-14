@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  /* Dashboard (teal network) */
   --bg-deep: #0b1218;
   --bg-mid: #121c26;
   --bg-lift: #182430;
@@ -16,9 +17,24 @@
   --danger: #d9776c;
   --radial-a: rgba(62, 207, 190, 0.14);
   --radial-b: rgba(56, 140, 180, 0.1);
+
+  /* Landing (pitch black + gold) */
+  --land-bg: #000000;
+  --land-ink: #f3f1ea;
+  --land-muted: #a39e93;
+  --land-faint: #6f6a60;
+  --land-line: rgba(232, 200, 120, 0.16);
+  --land-gold: #e2a93b;
+  --land-gold-soft: #f0c56d;
+  --land-gold-dim: rgba(226, 169, 59, 0.45);
+  --land-chrome-hi: #f7f7f7;
+  --land-chrome-mid: #b8b8b8;
+  --land-chrome-lo: #6e6e6e;
+
   --font-display: var(--font-syne), "Segoe UI", sans-serif;
   --font-body: var(--font-figtree), "Segoe UI", sans-serif;
   --font-mono: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  --font-wordmark: var(--font-syncopate), var(--font-syne), sans-serif;
 }
 
 @theme inline {
@@ -46,8 +62,8 @@ body {
 }
 
 ::selection {
-  background: rgba(62, 207, 190, 0.28);
-  color: var(--ink);
+  background: rgba(226, 169, 59, 0.28);
+  color: var(--land-ink);
 }
 
 a {
@@ -60,7 +76,155 @@ textarea {
   font: inherit;
 }
 
-/* Atmospheric field */
+/* ——— Landing ——— */
+.landing-root {
+  background: var(--land-bg);
+  color: var(--land-ink);
+}
+
+.nexus-chrome-wordmark {
+  background: linear-gradient(
+    185deg,
+    var(--land-chrome-hi) 0%,
+    var(--land-chrome-mid) 38%,
+    #8d8d8d 52%,
+    var(--land-chrome-hi) 68%,
+    var(--land-chrome-lo) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.12));
+}
+
+.landing-tag {
+  border: 1px solid var(--land-line);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 0.4rem 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--land-muted);
+}
+
+.landing-cta-solid {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  background: #f4f1ea;
+  color: #0a0a0a;
+  padding: 0.7rem 1.15rem;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.landing-cta-solid:hover {
+  background: #fff;
+}
+
+.landing-cta-ghost {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--land-line);
+  background: transparent;
+  color: var(--land-ink);
+  padding: 0.7rem 1.15rem;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.landing-cta-ghost:hover {
+  border-color: var(--land-gold-dim);
+  background: rgba(226, 169, 59, 0.06);
+}
+
+.landing-glass {
+  border: 1px solid var(--land-line);
+  background: linear-gradient(
+    155deg,
+    rgba(28, 24, 18, 0.72) 0%,
+    rgba(8, 8, 8, 0.78) 100%
+  );
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+
+.landing-neural__glow {
+  position: absolute;
+  right: -8%;
+  top: 4%;
+  width: min(780px, 92vw);
+  height: min(620px, 78vh);
+  background: radial-gradient(
+    ellipse at center,
+    rgba(255, 236, 170, 0.28) 0%,
+    rgba(226, 169, 59, 0.16) 26%,
+    rgba(120, 70, 20, 0.06) 52%,
+    transparent 72%
+  );
+  filter: blur(6px);
+  animation: landing-glow-breathe 7s ease-in-out infinite;
+}
+
+@media (max-width: 1023px) {
+  .landing-neural__glow {
+    right: -20%;
+    top: -4%;
+    opacity: 0.7;
+  }
+}
+
+.landing-filaments path {
+  stroke-dasharray: 8 14;
+  animation: landing-filament-flow 18s linear infinite;
+}
+
+.landing-particle {
+  animation: landing-particle-twinkle 3.6s ease-in-out infinite;
+}
+
+@keyframes landing-glow-breathe {
+  0%,
+  100% {
+    opacity: 0.85;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+}
+
+@keyframes landing-filament-flow {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -240;
+  }
+}
+
+@keyframes landing-particle-twinkle {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Atmospheric field (dashboard) */
 .nexus-field {
   position: relative;
   isolation: isolate;
@@ -91,7 +255,7 @@ textarea {
   z-index: 1;
 }
 
-/* Motions */
+/* Motions (dashboard) */
 @keyframes nexus-breathe {
   0%,
   100% {
@@ -174,7 +338,10 @@ textarea {
   .motion-orbit,
   .motion-rise,
   .motion-pulse-ring,
-  .motion-scan {
+  .motion-scan,
+  .landing-neural__glow,
+  .landing-filaments path,
+  .landing-particle {
     animation: none;
   }
 }

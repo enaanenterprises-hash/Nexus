@@ -13,17 +13,25 @@ export function Dashboard() {
 
         <nav className="flex items-center justify-between px-5 py-5 sm:px-8">
           <a
-            href="#top"
-            className="font-[family-name:var(--font-mono)] text-[11px] tracking-[0.28em] text-[color:var(--ink-soft)] uppercase"
+            href="/"
+            className="font-[family-name:var(--font-mono)] text-[11px] tracking-[0.28em] text-[color:var(--ink-soft)] uppercase transition-colors hover:text-[color:var(--ink)]"
           >
-            Network
+            Nexus
           </a>
-          <a
-            href="#organize"
-            className="font-[family-name:var(--font-mono)] text-[11px] tracking-[0.28em] text-[color:var(--ink-faint)] uppercase transition-colors hover:text-[color:var(--ink)]"
-          >
-            Organize
-          </a>
+          <div className="flex items-center gap-6">
+            <a
+              href="#top"
+              className="font-[family-name:var(--font-mono)] text-[11px] tracking-[0.28em] text-[color:var(--ink-faint)] uppercase transition-colors hover:text-[color:var(--ink)]"
+            >
+              Network
+            </a>
+            <a
+              href="#organize"
+              className="font-[family-name:var(--font-mono)] text-[11px] tracking-[0.28em] text-[color:var(--ink-faint)] uppercase transition-colors hover:text-[color:var(--ink)]"
+            >
+              Organize
+            </a>
+          </div>
         </nav>
 
         <div
