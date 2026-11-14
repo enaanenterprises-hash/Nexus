@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { NexusLogo } from "@/components/landing/NexusLogo";
+import { SubmitButton } from "@/components/landing/SubmitButton";
+import { signOutAction } from "@/lib/auth/actions";
+import type { Viewer } from "@/lib/auth/types";
 import { SAMPLE_EXTENSIONS } from "@/extensions/samples";
 import {
   canUseSlot,
@@ -20,7 +23,7 @@ import { TodayPanel } from "./TodayPanel";
 import { useNexusSession } from "./use-nexus-session";
 import { WIDE_MIN_WIDTH } from "./stage-layout";
 
-export function Dashboard() {
+export function Dashboard({ viewer }: { viewer: Viewer }) {
   const session = useNexusSession();
   const hub = useExtensionHub();
   const [selected, setSelected] = useState<SlotId | null>(null);
@@ -107,11 +110,24 @@ export function Dashboard() {
         <StageSockets hub={hub} visuals={visuals} selected={selected} onSelect={selectSocket} />
       </section>
 
-      <header className="landing-enter absolute inset-x-0 top-0 z-20 flex items-center justify-between px-6 pt-6 sm:px-10 min-[1100px]:px-10 min-[1100px]:pt-8">
-        <Link href="/" aria-label="Nexus home" className="inline-flex">
+      <header className="landing-enter absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-3 px-6 pt-6 sm:px-10 min-[1100px]:px-10 min-[1100px]:pt-8">
+        <Link href="/" aria-label="Nexus home" className="inline-flex shrink-0">
           <NexusLogo className="h-[13px] w-auto sm:h-[15px]" />
         </Link>
-        <p className="dash-eyebrow hidden sm:block">{hub.entitlement.isPro ? "Pro preview" : "Free plan"}</p>
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <p className="dash-eyebrow hidden min-[1100px]:block">
+            {hub.entitlement.isPro ? "Pro preview" : "Free plan"}
+          </p>
+          <p className="min-w-0 max-w-[34vw] truncate text-[13px] text-[color:var(--land-muted)] sm:max-w-[220px]">
+            <span className="sr-only">Signed in as </span>
+            {viewer.name || viewer.email || "Signed in"}
+          </p>
+          <form action={signOutAction} className="shrink-0">
+            <SubmitButton className="landing-signup" pendingLabel="Signing out…">
+              Sign out
+            </SubmitButton>
+          </form>
+        </div>
       </header>
 
       <div className="relative z-10 -mt-24 px-6 min-[1100px]:absolute min-[1100px]:left-1/2 min-[1100px]:top-[calc(max(300px,39svh)+64px)] min-[1100px]:mt-0 min-[1100px]:w-[min(560px,calc(100vw-2*(clamp(270px,22vw,330px)+88px)))] min-[1100px]:-translate-x-1/2 min-[1100px]:px-0">
