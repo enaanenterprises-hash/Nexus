@@ -6,6 +6,7 @@ type Vec = { x: number; y: number };
 
 type Filament = {
   bucket: number;
+  fromAbove: boolean;
   waist: Vec;
   sourceAngle: number;
   sourceRadius: number;
@@ -41,8 +42,8 @@ const BUCKETS = [
   { count: 12, width: 3.4, color: "204, 116, 28", alpha: 0.03 },
 ] as const;
 
-const PARTICLE_COUNT = 420;
-const DUST_COUNT = 1500;
+const PARTICLE_COUNT = 460;
+const DUST_COUNT = 2600;
 const INTRO_SECONDS = 2.6;
 
 function mulberry32(seed: number) {
@@ -81,29 +82,47 @@ function createField() {
   const filaments: Filament[] = [];
   BUCKETS.forEach((bucket, bucketIndex) => {
     for (let i = 0; i < bucket.count; i++) {
+      // Incoming: a bright bundle dropping steeply from above, and long faint sweeps from the lower left.
       const fromAbove = rnd() < 0.5;
-      const lift = fromAbove ? between(0.3, 1.05) : between(0.08, 0.75);
+      const lift = fromAbove ? between(0.8, 1.2) : between(0.1, 0.62);
       const sourceAngle = fromAbove ? -(Math.PI - lift) : Math.PI - lift;
-      const arrivalAngle = (fromAbove ? lift : -lift) * 0.55 + gauss() * 0.1;
+      const arrivalAngle = fromAbove ? lift * 0.55 + gauss() * 0.1 : -between(0.35, 0.95);
 
+      // Outgoing: an upper fountain curling right, a main stream through the node, a lower fan.
       const lane = rnd();
-      const targetAngle =
-        lane < 0.38 ? between(-1.0, -0.32) : lane < 0.74 ? between(0.28, 0.92) : between(-0.28, 0.28);
-      const viaNode = lane >= 0.74 && bucketIndex !== 3 && bucketIndex !== 5 && rnd() < 0.6;
+      const upper = lane < 0.4;
+      const lower = lane >= 0.7;
+      const targetAngle = upper
+        ? between(-0.95, -0.28)
+        : lower
+          ? between(0.35, 1.0)
+          : between(-0.22, 0.25);
+      const departAngle = upper
+        ? clamp(targetAngle - between(0.3, 0.7), -1.45, 0)
+        : lower
+          ? clamp(targetAngle + between(0.05, 0.3), 0, 1.15)
+          : targetAngle * between(1.1, 1.4);
+      const endAngle = upper
+        ? between(0.05, 0.95)
+        : lower
+          ? targetAngle * between(0.5, 1.15)
+          : -targetAngle * between(0.0, 0.55) + gauss() * 0.2;
+      const viaNode = !upper && !lower && bucketIndex !== 3 && bucketIndex !== 5 && rnd() < 0.8;
 
       filaments.push({
         bucket: bucketIndex,
-        waist: { x: gauss() * 0.006, y: gauss() * (rnd() < 0.1 ? 0.028 : 0.008) },
+        fromAbove,
+        waist: { x: gauss() * 0.006, y: gauss() * (rnd() < 0.1 ? 0.026 : 0.007) },
         sourceAngle,
-        sourceRadius: between(0.9, 1.8),
+        sourceRadius: fromAbove ? between(0.75, 1.3) : between(1.1, 2.1),
         arrivalAngle,
-        arrivalPull: between(0.25, 0.5),
-        sourceBend: gauss() * 1.1,
+        arrivalPull: fromAbove ? between(0.18, 0.36) : between(0.35, 0.6),
+        sourceBend: fromAbove ? 0.35 + gauss() * 0.45 : -0.25 + gauss() * 0.4,
         targetAngle,
-        targetRadius: between(0.7, 1.6),
-        departAngle: clamp(targetAngle * between(1.1, 1.4), -1.2, 1.1),
-        departPull: between(0.22, 0.45),
-        endAngle: -targetAngle * between(0.05, 0.6) + gauss() * 0.25,
+        targetRadius: upper ? between(0.6, 1.35) : between(0.65, 1.45),
+        departAngle,
+        departPull: upper ? between(0.3, 0.55) : between(0.2, 0.42),
+        endAngle,
         viaNode,
         hubJitter: { x: gauss() * 0.006, y: gauss() * 0.01 },
         hubAngle: 0.1 + gauss() * 0.25,
@@ -127,9 +146,9 @@ function createField() {
   const dust: Dust[] = Array.from({ length: DUST_COUNT }, () => ({
     filament: Math.floor(rnd() * filaments.length),
     t: Math.pow(rnd(), 0.8),
-    offset: { x: gauss() * 0.045, y: gauss() * 0.045 },
-    size: between(0.4, 1.3),
-    alpha: between(0.2, 0.8),
+    offset: { x: gauss() * 0.04, y: gauss() * 0.04 },
+    size: between(0.5, 1.5),
+    alpha: between(0.35, 1),
     phase: rnd() * Math.PI * 2,
   }));
 
@@ -141,17 +160,17 @@ function computeLayout(width: number, height: number): Layout {
     return {
       width,
       height,
-      core: { x: width * 0.4, y: height * 0.4 },
-      node: { x: width * 0.84, y: height * 0.455 },
-      scale: Math.max(width * 1.05, height * 0.5),
+      core: { x: width * 0.5, y: height * 0.3 },
+      node: { x: width * 0.9, y: height * 0.35 },
+      scale: Math.max(width * 0.9, height * 0.42),
     };
   }
   return {
     width,
     height,
-    core: { x: width * 0.46, y: height * 0.44 },
-    node: { x: width * 0.72, y: height * 0.515 },
-    scale: Math.max(width * 0.5, height * 0.85),
+    core: { x: width * 0.576, y: height * 0.413 },
+    node: { x: width * 0.84, y: height * 0.495 },
+    scale: Math.max(width * 0.42, height * 0.78),
   };
 }
 
@@ -223,8 +242,8 @@ export function GoldenNetwork({ className = "" }: { className?: string }) {
       const intro = reduceMotion ? 1 : Math.min(1, time / INTRO_SECONDS);
       const ease = 1 - Math.pow(1 - intro, 3);
       const breathe = 1 + 0.05 * Math.sin(time * 0.55);
-      const lightCenter = { x: core.x + S * 0.2, y: core.y + S * 0.03 };
-      const lightRadius = S * 1.3 * (0.55 + 0.45 * ease);
+      const lightCenter = { x: core.x + S * 0.25, y: core.y + S * 0.03 };
+      const lightRadius = S * 1.4 * (0.55 + 0.45 * ease);
 
       ctx.globalCompositeOperation = "source-over";
       ctx.globalAlpha = 1;
@@ -249,7 +268,7 @@ export function GoldenNetwork({ className = "" }: { className?: string }) {
 
       const paths = field.filaments.map((f) => segmentsFor(f, layout, time));
 
-      const strokeBucket = (bucketIndex: number, part: "incoming" | "outgoing", strength: number) => {
+      const strokeBucket = (bucketIndex: number, part: "above" | "below" | "outgoing", strength: number) => {
         const bucket = BUCKETS[bucketIndex]!;
         const a = bucket.alpha * strength;
         const gradient = ctx.createRadialGradient(
@@ -264,8 +283,10 @@ export function GoldenNetwork({ className = "" }: { className?: string }) {
         ctx.beginPath();
         field.filaments.forEach((f, i) => {
           if (f.bucket !== bucketIndex) return;
+          if (part === "above" && !f.fromAbove) return;
+          if (part === "below" && f.fromAbove) return;
           const all = paths[i]!;
-          const segments = part === "incoming" ? all.slice(0, 1) : all.slice(1);
+          const segments = part === "outgoing" ? all.slice(1) : all.slice(0, 1);
           ctx.moveTo(segments[0]![0]!.x, segments[0]![0]!.y);
           for (const [, b, c, d] of segments) ctx.bezierCurveTo(b!.x, b!.y, c!.x, c!.y, d!.x, d!.y);
         });
@@ -275,8 +296,9 @@ export function GoldenNetwork({ className = "" }: { className?: string }) {
       };
 
       BUCKETS.forEach((_, bucketIndex) => {
-        strokeBucket(bucketIndex, "incoming", 0.42);
-        strokeBucket(bucketIndex, "outgoing", 1);
+        strokeBucket(bucketIndex, "above", 0.95);
+        strokeBucket(bucketIndex, "below", 0.5);
+        strokeBucket(bucketIndex, "outgoing", 1.3);
       });
 
       radialGlow(ctx, core, S * 0.09 * breathe, [
@@ -300,7 +322,7 @@ export function GoldenNetwork({ className = "" }: { className?: string }) {
         const base = pointOnPath(outgoing, d.t);
         const p = { x: base.x + d.offset.x * S, y: base.y + d.offset.y * S };
         const twinkle = 0.5 + 0.5 * Math.sin(time * 1.4 + d.phase);
-        ctx.globalAlpha = ease * d.alpha * twinkle * falloff(p);
+        ctx.globalAlpha = ease * d.alpha * twinkle * Math.min(1, falloff(p) * 1.5);
         ctx.fillRect(p.x, p.y, d.size, d.size);
       }
 

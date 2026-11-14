@@ -8,7 +8,7 @@ export function LandingPage() {
       <div className="absolute inset-0">
         <GoldenNetwork />
       </div>
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[38%] bg-gradient-to-t from-black via-black/60 to-transparent" />
+      <div className="landing-scrim pointer-events-none absolute inset-0" />
 
       <header className="landing-enter relative z-10 flex items-center justify-between px-6 pt-6 sm:px-10 sm:pt-8 lg:px-14">
         <Link href="/" aria-label="Nexus home" className="inline-flex">
@@ -19,8 +19,8 @@ export function LandingPage() {
         </Link>
       </header>
 
-      <main className="relative z-10 mt-auto px-6 pb-[12svh] text-center sm:px-10">
-        <h1 className="landing-line landing-enter landing-enter--late mx-auto max-w-3xl">
+      <main className="relative z-10 flex flex-1 items-end px-6 pb-[14svh] sm:px-10 md:items-center md:pb-[8svh] lg:px-14">
+        <h1 className="landing-line landing-enter landing-enter--late max-w-[18ch]">
           One intelligence, connecting everything you do.
         </h1>
       </main>
