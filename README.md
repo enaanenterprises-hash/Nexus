@@ -43,7 +43,7 @@ npm run start   # serve production build
 4. **Today** — focus, priorities, and ongoing context. Nexus rewrites it when you ask (organize the day, add or complete tasks, note context).
 5. **Decluttered dashboard** — by default only the network and the chat box. The **left menu** opens nodes as full views (Command) or panels (Today, Nodes, each wired-in extension). The **right rail** gives one-tap access to Command and the five sockets.
 6. **Extension Hub** — five sockets wired into the core: **2 free**, 3 behind a **Pro stub**, managed from the **Nodes** panel. Studio / Study / Call / Calendar are placeholders; three sample extensions show how a node snaps in.
-7. **Nexus Command (core node)** — the cockpit for the outside world, no AI required. Connect real services (weather, night sky, markets, F1 and uptime with no keys; Google Calendar, Gmail and Tasks through Google sign-in; GitHub, Vercel and Telegram with tokens; Strava and Spotify with OAuth). Everything lands on one daily timeline with live readings, a Deep work launcher, goals, deliveries and an automation log. Built-in automations connect the services: Deep work books the calendar and starts your playlist, receipts in Gmail become purchases and package trackers, a Strava run checks off your goal. Items are published as typed `command.*` content other extensions can read. See [Nexus Command](#nexus-command).
+7. **Nexus Command (core node)** — the cockpit for the outside world, no AI required. Connect real services (weather, night sky, crypto, F1 and uptime with no keys; Google Calendar, Gmail, Gmail sending and Tasks through Google sign-in; GitHub, Vercel and Telegram with tokens; Strava and Spotify with OAuth). Everything lands on one daily timeline with live readings, a Deep work launcher, goals, deliveries and an automation log. Built-in automations connect the services: Deep work books the calendar and starts your playlist, receipts in Gmail become purchases and package trackers, a Strava run checks off your goal. Items are published as typed `command.*` content other extensions can read. See [Nexus Command](#nexus-command).
 8. **Research (core node, hidden for now)** — a browser built into Nexus. One address bar for URLs and web search (Brave Search). It has a clean reader (Readability + sanitize, SSRF-guarded fetch), tabs, back/forward, open original, and a live view when the site allows framing. Pages are saved into per-user collections with tags and highlights. Its code, routes and tables stay in place; it is hidden from navigation by `RESEARCH_VISIBLE` in `src/components/dashboard/Dashboard.tsx`.
 9. **Extension socket** — validated manifests, slot-aware registry, typed bus, Pro gate, React binding, and **shared content**: typed, versioned content kinds (`research.source`, `command.*`) that extensions read and annotate through `content:<kind>:<action>` capabilities. Bus events that carry content are only delivered to extensions holding the matching capability. See [docs/extensions.md](docs/extensions.md).
 
@@ -154,11 +154,12 @@ Only services with a real connection can be connected. The rest are listed under
 | --- | --- | --- | --- |
 | Weather | none | Current conditions, high/low, next 12 hours | [Open-Meteo](https://open-meteo.com), no key |
 | Night sky | none | Sunset, astronomical darkness, moon phase, cloud cover, dark-sky window | Open-Meteo + local astronomy |
-| Markets | none | FX pairs (ECB reference rates) and crypto prices with daily change | [Frankfurter](https://frankfurter.dev) + [CoinGecko](https://www.coingecko.com/en/api) |
+| Crypto | none | Prices and 24-hour change for the coins you follow | [CoinGecko](https://www.coingecko.com/en/api), no key |
 | Formula 1 | none | Every session of the next Grand Prix weekend | [Jolpica F1](https://github.com/jolpica/jolpica-f1) |
 | Uptime | none | Response time of up to 5 public sites | Research's SSRF-guarded fetch |
-| Google Calendar | Google sign-in | Today and tomorrow; Deep work books focus blocks | Google OAuth below |
-| Gmail | Google sign-in | Last 3 days of mail; receipts and tracking numbers detected | Google OAuth below |
+| Google Calendar | Google sign-in | The next 30 days; Deep work books focus blocks | Google OAuth below |
+| Gmail | Google sign-in | The 25 most recent inbox messages from the last week; receipts and tracking numbers detected | Google OAuth below |
+| Gmail sending | Google sign-in | Compose and reply from Today. Read access stays on `gmail.readonly` | Google OAuth below |
 | Google Tasks | Google sign-in | Open tasks and today's completed ones | Google OAuth below |
 | GitHub | token | Review requests, assigned issues, your open PRs, today's pushes | [Fine-grained token](https://github.com/settings/personal-access-tokens/new) with read access to issues, pull requests and metadata |
 | Vercel | token | Last 20 deployments; a failed deploy creates a task | [Access token](https://vercel.com/account/settings/tokens), optional team id |
@@ -170,13 +171,17 @@ Tokens are sealed with AES-256-GCM before they are stored and are never sent bac
 
 ### Google services (incremental scopes)
 
-Calendar, Gmail and Tasks reuse the Google sign-in client (`AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`). **Continue with Google** re-runs Google sign-in asking only for that service's extra scope (`include_granted_scopes`, offline access), and the grant is stored for that service. In Google Cloud Console:
+Calendar, Gmail, Gmail sending and Tasks reuse the Google sign-in client (`AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`). **Continue with Google** re-runs Google sign-in asking only for that service's extra scope (`include_granted_scopes`, offline access), and the grant is stored for that service. Connecting Gmail from Today asks for reading and sending together. In Google Cloud Console:
 
 1. Enable the **Google Calendar API**, **Gmail API** and **Google Tasks API** for the project.
-2. On the OAuth consent screen, add the scopes `…/auth/calendar.events`, `…/auth/gmail.readonly` and `…/auth/tasks`.
+2. On the OAuth consent screen, add these scopes:
+   - `https://www.googleapis.com/auth/calendar.events`
+   - `https://www.googleapis.com/auth/gmail.readonly` (reading the inbox)
+   - `https://www.googleapis.com/auth/gmail.send` (compose and reply — add this one)
+   - `https://www.googleapis.com/auth/tasks`
 3. No new redirect URI is needed; it is the existing `/api/auth/callback/google`.
 
-`gmail.readonly` is a restricted scope. While the consent screen is in **Testing**, it works for listed test users; publishing to everyone requires Google's verification.
+`gmail.readonly` is a restricted scope. While the consent screen is in **Testing**, it works for listed test users; publishing to everyone requires Google's verification. `gmail.send` is a sensitive scope and is requested on its own so reading stays read-only.
 
 ### Strava and Spotify
 

@@ -26,7 +26,16 @@ export interface CommandResult {
   errors: { connectorId: string; message: string }[]
 }
 
-export function stampItem(connectorId: string, origin: ItemOrigin, input: CommandItemInput, now = new Date()): CommandItem {
+/** Postgres jsonb rejects U+0000, which real email bodies sometimes contain. */
+function stripNul<T>(value: T): T {
+  if (typeof value === "string") return value.replaceAll("\u0000", "") as T
+  if (Array.isArray(value)) return value.map(stripNul) as T
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, stripNul(v)])) as T
+  return value
+}
+
+export function stampItem(connectorId: string, origin: ItemOrigin, rawInput: CommandItemInput, now = new Date()): CommandItem {
+  const input = stripNul(rawInput)
   const id = commandItemId(connectorId, input.externalId)
   const at = now.toISOString()
   return {
@@ -99,17 +108,30 @@ export async function syncCommand(options: { userId: string; timeZone: string; d
       continue
     }
     if (!drivers[connection.connectorId]?.fetch) continue
-    const { created, changed } = await store.upsertItems(userId, pull.value.items)
-    await store.pruneSynced(userId, connection.connectorId, pull.value.items.map((i) => i.id))
-    await store.markConnection(userId, connection.connectorId, "ok", null)
-    // The first sync is a baseline: automations react to what changes afterwards, not to history.
-    if (connection.lastSyncAt) fresh.push(...created, ...changed)
-    result.created.push(...created)
+    // One service's bad data must not stop the others from landing.
+    try {
+      const { created, changed } = await store.upsertItems(userId, pull.value.items)
+      await store.pruneSynced(userId, connection.connectorId, pull.value.items.map((i) => i.id))
+      await store.markConnection(userId, connection.connectorId, "ok", null)
+      // The first sync is a baseline: automations react to what changes afterwards, not to history.
+      if (connection.lastSyncAt) fresh.push(...created, ...changed)
+      result.created.push(...created)
+    } catch (error) {
+      console.error("[command] storing items failed", connection.connectorId, error instanceof Error ? error.message : error)
+      const message = "Its latest items could not be saved."
+      result.errors.push({ connectorId: connection.connectorId, message })
+      await store.markConnection(userId, connection.connectorId, "error", message).catch(() => {})
+    }
   }
 
-  const ctx = await automationContext(userId, timeZone, drivers, now)
-  for (const item of fresh) await fire(ctx, { type: "item.created", item }, result, 0)
-  await fireUpcoming(ctx, result)
+  try {
+    const ctx = await automationContext(userId, timeZone, drivers, now)
+    for (const item of fresh) await fire(ctx, { type: "item.created", item }, result, 0)
+    await fireUpcoming(ctx, result)
+  } catch (error) {
+    console.error("[command] automations failed", error instanceof Error ? error.message : error)
+    result.errors.push({ connectorId: COMMAND_CORE_SOURCE, message: "Automations could not run this time." })
+  }
   return result
 }
 
@@ -410,4 +432,19 @@ export async function verifyConnection(options: {
     saveCredentials: async () => {},
   }
   await withTimeout(driver.verify(ctx), getConnector(options.connectorId)?.name ?? options.connectorId)
+}
+
+/** Sends an email through the user's Gmail sending connection. */
+export async function sendMail(options: {
+  userId: string
+  timeZone: string
+  drivers: DriverRegistry
+  message: { to: string; cc?: string; subject: string; body: string; threadId?: string | null; inReplyTo?: string | null }
+}): Promise<{ detail: string; sentId: string | null }> {
+  const connection = await store.getConnection(options.userId, "gmail-send")
+  if (!connection) throw new DriverError("Allow Command to send mail first.", "auth")
+  const send = options.drivers["gmail-send"]?.actions?.["mail.send"]
+  if (!send) throw new DriverError("Sending is not available on this server.", "config")
+  const out = await withTimeout(send(driverContext(options.userId, connection, options.timeZone, new Date()), { ...options.message }), "Gmail")
+  return { detail: out.detail, sentId: out.sentId ?? null }
 }

@@ -3,6 +3,8 @@ import { COMMAND_DRIVERS } from "@/lib/command/drivers"
 import { endFocus, startFocus } from "@/lib/command/service"
 import { readJson, str } from "@/lib/research/route-helpers"
 
+export const maxDuration = 60
+
 export async function POST(request: Request) {
   const user = await requireCommandUser()
   if ("response" in user) return user.response

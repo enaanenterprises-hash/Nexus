@@ -75,11 +75,11 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
     const params = new URLSearchParams(window.location.search);
     const outcome = params.get("command");
     if (!outcome) return;
-    const service = params.get("service");
-    const name = service ? (getConnector(service)?.name ?? service) : "The service";
+    const ids = (params.get("service") ?? "").split(",").filter(Boolean);
+    const name = ids.length ? ids.map((id) => getConnector(id)?.name ?? id).join(" and ") : "The service";
     const notice = outcome === "connected" ? `${name} is connected.` : `${name} couldn't connect. ${OAUTH_ERRORS[params.get("reason") ?? ""] ?? ""}`.trim();
     window.history.replaceState(null, "", window.location.pathname);
-    openCommand({ tab: "connections", service, notice });
+    openCommand({ tab: outcome === "connected" ? "today" : "connections", service: ids[0] ?? null, notice });
   }, []);
 
   useEffect(() => {

@@ -1,15 +1,31 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { ACTION_DEFINITIONS } from "@/lib/command/actions";
 import type { CommandItem, CommandItemOf } from "@/lib/command/kinds";
+import { connectGoogleServices } from "@/lib/command/google-connect";
 import { buildTimeline, type TimelineEntry } from "@/lib/command/timeline";
 import { getConnector } from "@/lib/connectors/catalog";
-import { ExternalIcon } from "@/components/dashboard/icons";
-import { viewerTimeZone } from "./command-client";
+import { CloseIcon, ExternalIcon } from "@/components/dashboard/icons";
+import { commandApi, viewerTimeZone, type LiveWeather } from "./command-client";
 import { clock, countdown, dayLabel, money, relative, sourceName } from "./format";
 import { KindIcon, Section, SourceGlyph, StatusDot, useNow } from "./parts";
 import type { CommandController } from "./use-command";
+
+type MailItem = CommandItemOf<"command.message">;
+type EventItem = CommandItemOf<"command.event">;
+
+type Draft = {
+  to: string;
+  cc: string;
+  subject: string;
+  body: string;
+  threadId: string | null;
+  inReplyTo: string | null;
+  reply: boolean;
+};
+
+const blankDraft = (): Draft => ({ to: "", cc: "", subject: "", body: "", threadId: null, inReplyTo: null, reply: false });
 
 export function TodayView({ command, onConnections }: { command: CommandController; onConnections: () => void }) {
   const state = command.state!;
@@ -17,18 +33,61 @@ export function TodayView({ command, onConnections }: { command: CommandControll
   const timeZone = useMemo(() => viewerTimeZone(), []);
   const timeline = useMemo(() => buildTimeline(state.items, { now: new Date(now), timeZone }), [state.items, now, timeZone]);
   const { goals, anytime } = timeline;
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [sent, setSent] = useState<string | null>(null);
+  const mail = useMemo(
+    () =>
+      state.items
+        .filter((i): i is MailItem => i.kind === "command.message" && i.data.channel === "email")
+        .sort((a, b) => Date.parse(b.data.receivedAt) - Date.parse(a.data.receivedAt))
+        .slice(0, 12),
+    [state.items],
+  );
+  const calendarEvents = useMemo(() => monthEvents(state.items, now), [state.items, now]);
+  const gmail = state.connections.find((c) => c.connectorId === "gmail") ?? null;
+  const calendar = state.connections.find((c) => c.connectorId === "google-calendar") ?? null;
+  const canSend = state.connections.some((c) => c.connectorId === "gmail-send" && c.status !== "needs_auth");
   const upcoming = state.items
-    .filter((i): i is CommandItemOf<"command.event"> => i.kind === "command.event" && Date.parse(i.data.startsAt) > now && !timeline.entries.some((e) => e.item.id === i.id))
+    .filter((i): i is EventItem => i.kind === "command.event" && i.data.category !== "sky" && Date.parse(i.data.startsAt) > now && !timeline.entries.some((e) => e.item.id === i.id))
     .sort((a, b) => Date.parse(a.data.startsAt) - Date.parse(b.data.startsAt))
     .slice(0, 4);
   const purchases = state.items.filter((i): i is CommandItemOf<"command.purchase"> => i.kind === "command.purchase").slice(0, 4);
 
+  function replyTo(message: MailItem) {
+    const subject = message.data.subject.startsWith("Re:") ? message.data.subject : `Re: ${message.data.subject}`;
+    setSent(null);
+    setDraft({
+      to: senderEmail(message.data.from),
+      cc: "",
+      subject,
+      body: "",
+      threadId: message.data.threadId ?? null,
+      inReplyTo: message.data.rfcMessageId ?? null,
+      reply: true,
+    });
+  }
+
   return (
     <div className="cmd-today">
-      {timeline.signals.length ? <SignalStrip signals={timeline.signals} /> : null}
+      <div className="cmd-overview">
+        <WeatherCard />
+        <MailCard
+          mail={mail}
+          connection={gmail}
+          canSend={canSend}
+          sent={sent}
+          now={now}
+          onCompose={() => {
+            setSent(null);
+            setDraft(blankDraft());
+          }}
+          onReply={replyTo}
+          onConnections={onConnections}
+        />
+      </div>
+      <MonthCalendar events={calendarEvents} connection={calendar} now={now} />
       <div className="cmd-today-grid">
         <div className="min-w-0">
-          <HourlyStrip signal={timeline.signals.find((x) => x.data.metric === "weather.now")} />
           <Section title="Today" aside={<>{timeline.entries.length} on the timeline</>}>
             {timeline.entries.length ? (
               <ol className="cmd-timeline">
@@ -40,8 +99,8 @@ export function TodayView({ command, onConnections }: { command: CommandControll
             ) : (
               <p className="cmd-empty">
                 Nothing timed today yet.{" "}
-                {state.connections.some((c) => c.connectorId === "google-calendar") ? null : (
-                  <button type="button" className="cmd-link" onClick={onConnections}>
+                {calendar ? null : (
+                  <button type="button" className="cmd-link" onClick={() => void connectGoogleServices(["google-calendar"])}>
                     Connect Google Calendar
                   </button>
                 )}
@@ -113,78 +172,327 @@ export function TodayView({ command, onConnections }: { command: CommandControll
           <RunsPanel command={command} />
         </aside>
       </div>
+      {draft ? (
+        <ComposeMail
+          draft={draft}
+          canSend={canSend}
+          sending={command.pending === "mail"}
+          onChange={setDraft}
+          onClose={() => setDraft(null)}
+          onSend={async () => {
+            const failure = await command.sendMail({
+              to: draft.to,
+              cc: draft.cc.trim() || undefined,
+              subject: draft.subject,
+              body: draft.body,
+              threadId: draft.threadId,
+              inReplyTo: draft.inReplyTo,
+            });
+            if (!failure) {
+              setSent(draft.reply ? `Reply sent to ${draft.to}.` : `Sent to ${draft.to}.`);
+              setDraft(null);
+            }
+            return failure;
+          }}
+        />
+      ) : null}
     </div>
   );
 }
 
-function SignalStrip({ signals }: { signals: CommandItemOf<"command.signal">[] }) {
-  return (
-    <div className="cmd-signals" role="list" aria-label="Live readings">
-      {signals.map((s) => {
-        const r = reading(s);
-        return (
-          <a key={s.id} role="listitem" href={s.data.url ?? undefined} target="_blank" rel="noopener noreferrer" className="cmd-signal" title={`${sourceName(s.data.connectorId)} · ${s.title}`}>
-            <span className="cmd-signal-label">
-              <StatusDot tone={s.data.status === "good" ? "ok" : s.data.status === "fair" ? "warn" : s.data.status === "poor" ? "alert" : "idle"} />
-              {r.label}
-            </span>
-            <span className="cmd-signal-value">{r.value}</span>
-            <span className={`cmd-signal-sub ${r.trend === "up" ? "cmd-up" : r.trend === "down" ? "cmd-down" : ""}`}>{r.sub}</span>
-          </a>
-        );
-      })}
-    </div>
-  );
-}
-
-function reading(s: CommandItemOf<"command.signal">): { label: string; value: string; sub: string; trend?: "up" | "down" } {
-  const d = s.data.details;
-  if (s.data.metric === "weather.now") {
-    const rain = Number(d["rainChance"] ?? 0);
-    return { label: String(d["location"] ?? "Weather"), value: `${s.data.value}°`, sub: `${d["condition"]} · H ${d["high"]}° L ${d["low"]}°${rain >= 30 ? ` · ${rain}% rain` : ""}` };
-  }
-  if (s.data.metric === "sky.tonight") {
-    const dark = d["darkStart"] ? `dark ${clock(String(d["darkStart"]))}` : `sunset ${clock(String(d["sunset"]))}`;
-    return { label: "Tonight's sky", value: s.data.display.split(" · ")[0]!, sub: `${d["moonIllumination"]}% moon · ${dark}` };
-  }
-  if (s.data.metric.startsWith("market.")) {
-    const change = s.data.change;
-    return {
-      label: s.title,
-      value: s.data.display,
-      sub: change === null ? String(d["asOf"] ?? "") : `${change >= 0 ? "▲" : "▼"} ${Math.abs(change).toFixed(2)}%${d["window"] ? ` ${d["window"]}` : ""}`,
-      trend: change === null ? undefined : change >= 0 ? "up" : "down",
+function WeatherCard() {
+  const [weather, setWeather] = useState<LiveWeather | null | undefined>(undefined);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    commandApi.weather().then(
+      (r) => alive && setWeather(r.signal),
+      (e: Error) => {
+        if (!alive) return;
+        setError(e.message);
+        setWeather(null);
+      },
+    );
+    return () => {
+      alive = false;
     };
-  }
-  if (s.data.metric.startsWith("uptime.")) {
-    return { label: s.title, value: s.data.value === null ? "Down" : `${s.data.value} ms`, sub: s.data.value === null ? `Answered ${d["code"]}` : "Up" };
-  }
-  if (s.data.metric === "training.load") return { label: "Training load", value: `${s.data.value} min`, sub: `7 days · ${d["advice"]}` };
-  return { label: s.title, value: s.data.display, sub: sourceName(s.data.connectorId) };
+  }, []);
+  const details = weather?.data.details;
+  const hourly = typeof details?.["hourly"] === "string" ? details["hourly"] : "";
+  return (
+    <section className="cmd-weather" aria-label="Weather">
+      <p className="dash-eyebrow">Weather</p>
+      {weather === undefined ? (
+        <p className="cmd-empty mt-3">Reading the sky…</p>
+      ) : weather ? (
+        <>
+          <p className="mt-2 text-[13px] text-[color:var(--land-muted)]">{String(details?.["location"] ?? "")}</p>
+          <p className="cmd-weather-temp">{weather.data.value}°</p>
+          <p className="text-[14px] text-[color:var(--land-muted)]">
+            {String(details?.["condition"] ?? "")}
+            <span className="text-[color:var(--land-faint)]">
+              {" "}
+              · H {String(details?.["high"])}° L {String(details?.["low"])}°
+            </span>
+          </p>
+          <Hourly hours={hourly} />
+        </>
+      ) : (
+        <p className="cmd-empty mt-3">{error ?? "Weather is unavailable right now."}</p>
+      )}
+    </section>
+  );
 }
 
-function HourlyStrip({ signal }: { signal: CommandItemOf<"command.signal"> | undefined }) {
-  const raw = signal?.data.details["hourly"];
-  if (typeof raw !== "string" || !raw) return null;
-  const hours = raw.split(",").map((h) => {
+function Hourly({ hours }: { hours: string }) {
+  if (!hours) return null;
+  const parsed = hours.split(",").slice(0, 8).map((h) => {
     const [t, temp, rain] = h.split(":").map(Number);
     return { at: new Date(t! * 1000), temp: temp!, rain: rain! };
   });
   return (
-    <Section title="Next hours" aside={<>{String(signal!.data.details["location"] ?? "")} · rain chance</>}>
-      <ol className="cmd-hours">
-        {hours.map((h, i) => (
-          <li key={i} className="cmd-hour" title={`${h.rain}% chance of rain`}>
-            <span className="text-[13px]">{h.temp}°</span>
-            <span className="cmd-hour-bar" aria-hidden>
-              <span style={{ height: `${Math.max(3, h.rain)}%` }} />
-            </span>
-            <span className="text-[10.5px] text-[color:var(--land-faint)]">{i === 0 ? "Now" : h.at.toLocaleTimeString(undefined, { hour: "numeric" })}</span>
-          </li>
-        ))}
-      </ol>
-    </Section>
+    <ol className="cmd-hours cmd-hours--compact" aria-label="Next hours">
+      {parsed.map((h, i) => (
+        <li key={i} className="cmd-hour" title={`${h.rain}% chance of rain`}>
+          <span className="text-[13px]">{h.temp}°</span>
+          <span className="cmd-hour-bar" aria-hidden>
+            <span style={{ height: `${Math.max(3, h.rain)}%` }} />
+          </span>
+          <span className="text-[10.5px] text-[color:var(--land-faint)]">{i === 0 ? "Now" : h.at.toLocaleTimeString(undefined, { hour: "numeric" })}</span>
+        </li>
+      ))}
+    </ol>
   );
+}
+
+function MailCard({
+  mail,
+  connection,
+  canSend,
+  sent,
+  now,
+  onCompose,
+  onReply,
+  onConnections,
+}: {
+  mail: MailItem[];
+  connection: { status: string; lastError: string | null } | null;
+  canSend: boolean;
+  sent: string | null;
+  now: number;
+  onCompose: () => void;
+  onReply: (message: MailItem) => void;
+  onConnections: () => void;
+}) {
+  const broken = connection && connection.status !== "ok";
+  return (
+    <section className="cmd-mail" aria-label="Recent mail">
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="text-[15px] font-medium tracking-[-0.01em]">Mail</h3>
+        <div className="flex items-center gap-3">
+          {sent ? <span className="text-[12px] text-[color:var(--land-gold-soft)]">{sent}</span> : null}
+          {connection ? (
+            <button type="button" className="cmd-link text-[13px]" onClick={canSend ? onCompose : () => void connectGoogleServices(["gmail-send"])}>
+              {canSend ? "Compose" : "Allow sending"}
+            </button>
+          ) : null}
+        </div>
+      </div>
+      {broken ? <p className="cmd-error mt-2">{connection.lastError ?? "Gmail needs to be connected again."}</p> : null}
+      {!connection ? (
+        <div className="cmd-connect-empty">
+          <p>Recent messages show here once Gmail is connected. Nothing is invented in the meantime.</p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button type="button" className="dash-button dash-button--gold h-8 px-3 text-[13px]" onClick={() => void connectGoogleServices(["gmail", "gmail-send"])}>
+              Connect Gmail
+            </button>
+            <button type="button" className="cmd-link text-[13px]" onClick={onConnections}>
+              All connections
+            </button>
+          </div>
+        </div>
+      ) : mail.length === 0 ? (
+        <p className="cmd-empty mt-3">No inbox messages from the last week.</p>
+      ) : (
+        <ul className="mt-1">
+          {mail.map((message) => (
+            <li key={message.id} className="cmd-mail-row">
+              <button type="button" className="cmd-mail-open" onClick={() => onReply(message)}>
+                <span className="cmd-mail-from">{senderName(message.data.from)}</span>
+                <span className="cmd-mail-subject">{message.data.subject || "(no subject)"}</span>
+                <span className="cmd-mail-time">{relative(message.data.receivedAt, now)}</span>
+              </button>
+              {message.data.url ? <ItemLink href={message.data.url} label={`Open ${message.data.subject || "message"}`} /> : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function MonthCalendar({ events, connection, now }: { events: Map<string, EventItem[]>; connection: { status: string; lastError: string | null } | null; now: number }) {
+  const days = useMemo(() => buildMonth(now), [now]);
+  const broken = connection && connection.status !== "ok";
+  return (
+    <section className="cmd-calendar" aria-label="Next 30 days">
+      <div className="flex items-baseline justify-between gap-3">
+        <h3 className="text-[15px] font-medium tracking-[-0.01em]">Next 30 days</h3>
+        {connection ? <span className="text-[12px] text-[color:var(--land-faint)]">{[...events.values()].reduce((n, list) => n + list.length, 0)} events</span> : null}
+      </div>
+      {broken ? <p className="cmd-error mt-2">{connection.lastError ?? "Google Calendar needs to be connected again."}</p> : null}
+      {!connection ? (
+        <div className="cmd-connect-empty">
+          <p>Your events for the next 30 days show here after Google Calendar is connected.</p>
+          <button type="button" className="dash-button dash-button--gold mt-3 h-8 px-3 text-[13px]" onClick={() => void connectGoogleServices(["google-calendar"])}>
+            Connect Google Calendar
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="cmd-month-head" aria-hidden>
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+              <span key={d}>{d}</span>
+            ))}
+          </div>
+          <div className="cmd-month" role="grid">
+            {days.map((day) => {
+              const list = day.inRange ? (events.get(day.key) ?? []) : [];
+              return (
+                <div key={day.key} role="gridcell" className={`cmd-day ${day.today ? "cmd-day--today" : ""} ${day.inRange ? "" : "cmd-day--pad"}`}>
+                  <span className="cmd-day-num">{day.date.getDate()}</span>
+                  {list.slice(0, 2).map((event) => (
+                    <span key={event.id} className="cmd-day-event" title={event.title}>
+                      {event.data.allDay ? "" : `${clock(event.data.startsAt)} `}
+                      {event.title}
+                    </span>
+                  ))}
+                  {list.length > 2 ? <span className="cmd-day-more">+{list.length - 2}</span> : null}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function ComposeMail({
+  draft,
+  canSend,
+  sending,
+  onChange,
+  onClose,
+  onSend,
+}: {
+  draft: Draft;
+  canSend: boolean;
+  sending: boolean;
+  onChange: (draft: Draft) => void;
+  onClose: () => void;
+  onSend: () => Promise<string | null>;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    const failure = await onSend();
+    if (failure) setError(failure);
+  }
+  return (
+    <div className="cmd-compose-backdrop" role="presentation" onMouseDown={onClose}>
+      <form className="cmd-compose" role="dialog" aria-labelledby="cmd-compose-title" onMouseDown={(e) => e.stopPropagation()} onSubmit={(e) => void submit(e)}>
+        <div className="flex items-center justify-between gap-3">
+          <h3 id="cmd-compose-title" className="text-[15px] font-medium">
+            {draft.reply ? "Reply" : "New message"}
+          </h3>
+          <button type="button" className="research-icon-button h-7 w-7" onClick={onClose} aria-label="Close compose">
+            <CloseIcon size={13} />
+          </button>
+        </div>
+        {canSend ? (
+          <>
+            <label className="cmd-compose-field">
+              <span>To</span>
+              <input className="cmd-field" value={draft.to} onChange={(e) => onChange({ ...draft, to: e.target.value })} required autoComplete="off" />
+            </label>
+            <label className="cmd-compose-field">
+              <span>Cc</span>
+              <input className="cmd-field" value={draft.cc} onChange={(e) => onChange({ ...draft, cc: e.target.value })} autoComplete="off" />
+            </label>
+            <label className="cmd-compose-field">
+              <span>Subject</span>
+              <input className="cmd-field" value={draft.subject} onChange={(e) => onChange({ ...draft, subject: e.target.value })} maxLength={300} autoComplete="off" />
+            </label>
+            <textarea className="cmd-field cmd-compose-body" value={draft.body} onChange={(e) => onChange({ ...draft, body: e.target.value })} placeholder="Write your message" maxLength={50000} />
+            {error ? <p className="cmd-error">{error}</p> : null}
+            <div className="mt-3 flex justify-end">
+              <button type="submit" className="dash-button dash-button--gold h-8 px-3 text-[13px]" disabled={sending || !draft.to.trim()}>
+                {sending ? "Sending…" : "Send"}
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="cmd-connect-empty">
+            <p>Sending needs its own Google permission. Reading your inbox stays on the read-only scope.</p>
+            <button type="button" className="dash-button dash-button--gold mt-3 h-8 px-3 text-[13px]" onClick={() => void connectGoogleServices(["gmail-send"])}>
+              Allow sending
+            </button>
+          </div>
+        )}
+      </form>
+    </div>
+  );
+}
+
+function senderName(from: string) {
+  const named = /^([^<]+)</.exec(from);
+  return (named?.[1] ?? from).replace(/"/g, "").trim() || from;
+}
+
+function senderEmail(from: string) {
+  return /<([^>]+)>/.exec(from)?.[1]?.trim() ?? (from.includes("@") ? from.trim() : "");
+}
+
+function dayStamp(date: Date) {
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+function buildMonth(now: number) {
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  const start = new Date(today);
+  start.setDate(start.getDate() - start.getDay());
+  const end = new Date(today);
+  end.setDate(end.getDate() + 29);
+  const last = new Date(end);
+  last.setDate(last.getDate() + (6 - last.getDay()));
+  const days: { key: string; date: Date; today: boolean; inRange: boolean }[] = [];
+  for (let cursor = new Date(start); cursor <= last; cursor.setDate(cursor.getDate() + 1)) {
+    const date = new Date(cursor);
+    days.push({ key: dayStamp(date), date, today: dayStamp(date) === dayStamp(today), inRange: date >= today && date <= end });
+  }
+  return days;
+}
+
+function monthEvents(items: CommandItem[], now: number) {
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  const end = new Date(today);
+  end.setDate(end.getDate() + 30);
+  const grouped = new Map<string, EventItem[]>();
+  for (const item of items) {
+    if (item.kind !== "command.event" || item.data.category === "sky" || item.data.status === "cancelled") continue;
+    const starts = new Date(item.data.startsAt);
+    if (Number.isNaN(starts.getTime()) || starts < today || starts >= end) continue;
+    const key = dayStamp(starts);
+    const list = grouped.get(key) ?? [];
+    list.push(item);
+    grouped.set(key, list);
+  }
+  for (const list of grouped.values()) list.sort((a, b) => Date.parse(a.data.startsAt) - Date.parse(b.data.startsAt));
+  return grouped;
 }
 
 function NowMarker({ now }: { now: number }) {

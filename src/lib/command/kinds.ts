@@ -120,6 +120,9 @@ export interface CommandMessageV1 extends CommandBaseV1 {
   body: string;
   receivedAt: string;
   labels: string[];
+  /** Email only: lets a reply stay in the same thread. Optional, added without a version bump. */
+  threadId?: string | null;
+  rfcMessageId?: string | null;
 }
 
 export interface CommandSignalV1 extends CommandBaseV1 {

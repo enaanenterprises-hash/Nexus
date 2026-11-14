@@ -4,7 +4,7 @@ import { parseReceipt } from "../parsers/receipt"
 import { apiJson } from "./http"
 import { accessToken } from "./oauth"
 import { localDay, startOfLocalDay, zonedDate } from "./time"
-import type { ConnectorDriver, DriverContext } from "./types"
+import { DriverError, type ConnectorDriver, type DriverContext } from "./types"
 
 async function google<T>(ctx: DriverContext, url: string, init: RequestInit = {}) {
   const token = await accessToken(ctx, "google")
@@ -27,7 +27,9 @@ const CAL = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
 
 const localClock = (iso: string, timeZone: string) => new Date(iso).toLocaleTimeString("en-US", { timeZone, hour: "numeric", minute: "2-digit" })
 
-/** Today and tomorrow on the primary calendar; books focus blocks for Deep work. */
+export const CALENDAR_DAYS = 30
+
+/** The next 30 days of the primary calendar; books focus blocks for Deep work. */
 export const googleCalendarDriver: ConnectorDriver = {
   id: "google-calendar",
   async verify(ctx) {
@@ -35,8 +37,8 @@ export const googleCalendarDriver: ConnectorDriver = {
   },
   async fetch(ctx) {
     const start = startOfLocalDay(ctx.now, ctx.timeZone)
-    const end = new Date(start.getTime() + 2 * 86_400_000)
-    const params = new URLSearchParams({ timeMin: start.toISOString(), timeMax: end.toISOString(), singleEvents: "true", orderBy: "startTime", maxResults: "60" })
+    const end = new Date(start.getTime() + CALENDAR_DAYS * 86_400_000)
+    const params = new URLSearchParams({ timeMin: start.toISOString(), timeMax: end.toISOString(), singleEvents: "true", orderBy: "startTime", maxResults: "250" })
     const { items = [] } = await google<{ items?: GEvent[] }>(ctx, `${CAL}?${params}`)
     return items.map((e): CommandItemInput => {
       const allDay = !e.start.dateTime
@@ -101,6 +103,7 @@ interface GPart {
 
 interface GMessage {
   id: string
+  threadId: string
   internalDate: string
   snippet: string
   labelIds?: string[]
@@ -121,15 +124,15 @@ function textOf(part: GPart): string {
   return ""
 }
 
-/** The last three days of mail (minus social). Bodies are kept only for receipts, so the receipt recipe can read them. */
+/** The 25 most recent inbox messages from the last week. Bodies are kept only for receipts, so the receipt recipe can read them. */
 export const gmailDriver: ConnectorDriver = {
   id: "gmail",
   async verify(ctx) {
     await google(ctx, "https://gmail.googleapis.com/gmail/v1/users/me/profile")
   },
   async fetch(ctx) {
-    const q = encodeURIComponent("newer_than:3d -category:social -in:chats")
-    const list = await google<{ messages?: { id: string }[] }>(ctx, `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=20&q=${q}`)
+    const q = encodeURIComponent("in:inbox newer_than:7d")
+    const list = await google<{ messages?: { id: string }[] }>(ctx, `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=25&q=${q}`)
     const messages = await Promise.all(
       (list.messages ?? []).map((m) => google<GMessage>(ctx, `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=full`)),
     )
@@ -152,9 +155,69 @@ export const gmailDriver: ConnectorDriver = {
           body: receipt.isReceipt ? body.slice(0, 4000) : "",
           receivedAt: new Date(Number(m.internalDate)).toISOString(),
           labels: (m.labelIds ?? []).filter((l) => !l.startsWith("Label_") && !l.startsWith("CATEGORY_")),
+          threadId: m.threadId || null,
+          rfcMessageId: header("message-id") || null,
         },
       }
     })
+  },
+}
+
+// ——— Sending ———
+
+const ADDRESS = /^[^\s@<>",;]+@[^\s@<>",;]+\.[^\s@<>",;]+$/
+
+/** Header values must not carry line breaks (header injection). Non-ASCII subjects use RFC 2047. */
+function headerValue(value: string): string {
+  const clean = value.replace(/[\r\n]+/g, " ").trim()
+  return /^[\x20-\x7e]*$/.test(clean) ? clean : `=?UTF-8?B?${Buffer.from(clean, "utf8").toString("base64")}?=`
+}
+
+export function parseRecipients(value: unknown): string[] {
+  const list = String(value ?? "")
+    .split(/[,;]/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (list.length === 0 || list.length > 20 || list.some((a) => !ADDRESS.test(a))) {
+    throw new DriverError("Enter up to 20 valid email addresses, separated by commas.", "config")
+  }
+  return list
+}
+
+/** Builds an RFC 2822 message as base64url for `users.messages.send`. */
+export function buildRawMessage(input: { to: string[]; cc: string[]; subject: string; body: string; inReplyTo?: string | null }): string {
+  const lines = [
+    `To: ${input.to.join(", ")}`,
+    ...(input.cc.length ? [`Cc: ${input.cc.join(", ")}`] : []),
+    `Subject: ${headerValue(input.subject)}`,
+    ...(input.inReplyTo ? [`In-Reply-To: ${headerValue(input.inReplyTo)}`, `References: ${headerValue(input.inReplyTo)}`] : []),
+    "MIME-Version: 1.0",
+    'Content-Type: text/plain; charset="UTF-8"',
+    "Content-Transfer-Encoding: base64",
+    "",
+    Buffer.from(input.body, "utf8").toString("base64").replace(/.{76}/g, "$&\r\n"),
+  ]
+  return Buffer.from(lines.join("\r\n"), "utf8").toString("base64url")
+}
+
+/** Send-only access (`gmail.send`). Reading stays on the separate Gmail connection. */
+export const gmailSendDriver: ConnectorDriver = {
+  id: "gmail-send",
+  actions: {
+    "mail.send": async (ctx, params) => {
+      const to = parseRecipients(params["to"])
+      const cc = params["cc"] ? parseRecipients(params["cc"]) : []
+      const subject = String(params["subject"] ?? "").slice(0, 300)
+      const body = String(params["body"] ?? "").slice(0, 50_000)
+      if (!subject.trim() && !body.trim()) throw new DriverError("Write a subject or a message.", "config")
+      const threadId = typeof params["threadId"] === "string" && params["threadId"] ? params["threadId"] : undefined
+      const raw = buildRawMessage({ to, cc, subject, body, inReplyTo: typeof params["inReplyTo"] === "string" ? params["inReplyTo"] : null })
+      const sent = await google<{ id: string; threadId: string }>(ctx, "https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+        method: "POST",
+        body: JSON.stringify({ raw, ...(threadId ? { threadId } : {}) }),
+      })
+      return { detail: `Sent to ${to.join(", ")}.`, sentId: sent.id }
+    },
   },
 }
 

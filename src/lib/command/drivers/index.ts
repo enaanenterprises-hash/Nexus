@@ -1,7 +1,7 @@
 import "server-only"
 import { f1Driver } from "./f1"
 import { githubDriver } from "./github"
-import { gmailDriver, googleCalendarDriver, googleTasksDriver } from "./google"
+import { gmailDriver, gmailSendDriver, googleCalendarDriver, googleTasksDriver } from "./google"
 import { marketsDriver } from "./markets"
 import { skyDriver } from "./sky"
 import { spotifyDriver } from "./spotify"
@@ -17,6 +17,7 @@ export const COMMAND_DRIVERS: DriverRegistry = Object.fromEntries(
   [
     googleCalendarDriver,
     gmailDriver,
+    gmailSendDriver,
     googleTasksDriver,
     telegramDriver,
     githubDriver,

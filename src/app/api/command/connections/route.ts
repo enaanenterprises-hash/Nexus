@@ -5,6 +5,8 @@ import { getConnection, readCredentials, saveConnection } from "@/lib/command/st
 import { getConnector } from "@/lib/connectors/catalog"
 import { readJson } from "@/lib/research/route-helpers"
 
+export const maxDuration = 60
+
 function pick(source: unknown, keys: string[], max: number): Record<string, string> {
   const out: Record<string, string> = {}
   if (!source || typeof source !== "object") return out
