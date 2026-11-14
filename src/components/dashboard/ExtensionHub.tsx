@@ -1,173 +1,194 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
 import {
   FREE_ACTIVE_EXTENSION_SLOTS,
-  createEmptySlots,
-  getProEntitlement,
-  setStubPro,
-  type ExtensionSlot,
+  PLANNED_EXTENSIONS,
+  canActivateAnother,
+  canUseSlot,
+  type ExtensionHubSnapshot,
+  type ExtensionId,
+  type SlotId,
 } from "@/lib/extensions";
 
-/** Polar angles (degrees) for orbital placement around the core. */
-const ANGLE_BY_INDEX = [-115, -55, 35, 125, 180];
-
-type HubProps = {
-  children?: ReactNode;
-  onProChange?: (isPro: boolean) => void;
+type Props = {
+  hub: ExtensionHubSnapshot;
+  selected: SlotId | null;
+  notice: string | null;
+  onSnap: (id: ExtensionId) => void;
+  onRelease: (id: ExtensionId) => void;
+  onTogglePro: () => void;
 };
 
-export function ExtensionHub({ children, onProChange }: HubProps) {
-  const [slots] = useState<ExtensionSlot[]>(() => createEmptySlots());
-  const [isPro, setIsPro] = useState(false);
-  const entitlement = useMemo(() => {
-    void isPro;
-    return getProEntitlement();
-  }, [isPro]);
+const CONTRACT_URL = "https://github.com/enaanenterprises-hash/Nexus/blob/main/docs/extensions.md";
 
-  function togglePro() {
-    const next = !isPro;
-    setStubPro(next);
-    setIsPro(next);
-    onProChange?.(next);
-  }
+/** Catalog + plan: where extensions are snapped into (and out of) the network. */
+export function ExtensionHub({ hub, selected, notice, onSnap, onRelease, onTogglePro }: Props) {
+  const { entitlement, slots, extensions } = hub;
+  const active = slots.filter((s) => s.occupiedBy);
+  const available = extensions.filter((e) => !slots.some((s) => s.occupiedBy === e.manifest.id));
+  const openSockets = slots.filter((s) => !s.occupiedBy && canUseSlot(s, entitlement)).length;
+  const hasRoom = openSockets > 0 && canActivateAnother(active.length, entitlement);
+  const selectedSlot = slots.find((s) => s.id === selected);
 
   return (
-    <div className="relative mx-auto w-full max-w-[42rem]">
-      {/* Desktop / tablet orbit */}
-      <div className="relative mx-auto hidden aspect-square w-full max-w-[36rem] md:block">
-        <div className="pointer-events-none absolute inset-[10%] rounded-full border border-dashed border-[color:var(--line)]" />
-        <div className="pointer-events-none absolute inset-[24%] rounded-full border border-[color:var(--line)]/60" />
-
-        <div className="absolute inset-0 flex items-center justify-center">
-          {children}
-        </div>
-
-        {slots.map((slot, index) => {
-          const angle = ANGLE_BY_INDEX[index] ?? index * 72 - 90;
-          const locked = slot.tier === "pro" && !entitlement.isPro;
-          return (
-            <ExtensionNode
-              key={slot.id}
-              slot={slot}
-              angle={angle}
-              locked={locked}
-              layout="orbit"
-            />
-          );
-        })}
-      </div>
-
-      {/* Mobile: core then node strip */}
-      <div className="md:hidden">
-        <div className="mb-8 flex justify-center">{children}</div>
-        <div className="flex flex-wrap items-start justify-center gap-5">
-          {slots.map((slot) => {
-            const locked = slot.tier === "pro" && !entitlement.isPro;
-            return (
-              <ExtensionNode
-                key={`m-${slot.id}`}
-                slot={slot}
-                angle={0}
-                locked={locked}
-                layout="strip"
-              />
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="mt-6 flex flex-col items-center gap-2 text-center">
-        <p className="font-[family-name:var(--font-mono)] text-[10px] tracking-[0.22em] text-[color:var(--ink-faint)] uppercase">
-          Hub · {FREE_ACTIVE_EXTENSION_SLOTS} free active slots
-          {entitlement.isPro ? " · Pro open" : " · 3 Pro-locked"}
+    <section aria-labelledby="hub-heading" className="flex flex-col gap-8">
+      <header>
+        <p className="dash-eyebrow">Extension hub</p>
+        <h2 id="hub-heading" className="dash-heading mt-2">
+          Network nodes
+        </h2>
+        <p className="mt-1 text-[13px] leading-snug text-[color:var(--land-muted)]">
+          Snap an extension in and it&apos;s wired to the core, sharing your context.
         </p>
-        <button
-          type="button"
-          onClick={togglePro}
-          className="border border-[color:var(--line)] px-3 py-1.5 font-[family-name:var(--font-mono)] text-[10px] tracking-[0.18em] text-[color:var(--pro)] uppercase transition-colors hover:border-[color:var(--pro)]"
-        >
-          {isPro ? "Stub: Pro on" : "Stub: Enable Pro"}
-        </button>
+      </header>
+
+      <div className="rounded-2xl border border-[color:var(--land-hair)] bg-white/[0.025] p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[13.5px] font-medium">{entitlement.isPro ? "Nexus Pro · preview" : "Free plan"}</p>
+            <p className="text-[12px] text-[color:var(--land-muted)]">
+              {entitlement.isPro
+                ? `${active.length} of ${slots.length} sockets in use`
+                : `${active.length} of ${FREE_ACTIVE_EXTENSION_SLOTS} free sockets in use`}
+            </p>
+          </div>
+          <button type="button" onClick={onTogglePro} className={`dash-button ${entitlement.isPro ? "" : "dash-button--gold"}`}>
+            {entitlement.isPro ? "Back to Free" : "Preview Pro"}
+          </button>
+        </div>
+        <div className="mt-3 flex gap-1.5" aria-hidden>
+          {slots.map((s) => (
+            <span
+              key={s.id}
+              className={`h-1 flex-1 rounded-full ${
+                s.occupiedBy ? "bg-[color:var(--land-gold)]" : canUseSlot(s, entitlement) ? "bg-white/25" : "bg-white/[0.07]"
+              }`}
+            />
+          ))}
+        </div>
+        {selectedSlot ? (
+          <p className="mt-3 text-[12px] leading-snug text-[color:var(--land-muted)]">{selectedSlot.description}.</p>
+        ) : null}
+        {notice ? (
+          <p role="status" className="mt-3 text-[12.5px] leading-snug text-[color:var(--land-gold-soft)]">
+            {notice}
+          </p>
+        ) : null}
       </div>
-    </div>
+
+      {active.length > 0 ? (
+        <div>
+          <p className="dash-eyebrow">Wired in</p>
+          <ul className="mt-2">
+            {active.map((slot) => {
+              const ext = extensions.find((e) => e.manifest.id === slot.occupiedBy)!;
+              return (
+                <ExtensionRow
+                  key={slot.id}
+                  monogram={ext.manifest.monogram ?? ext.manifest.name.slice(0, 2)}
+                  name={ext.manifest.name}
+                  detail={`${slot.tier === "pro" ? "Pro" : "Free"} socket · ${ext.manifest.capabilities.join(", ")}`}
+                  live
+                  action={
+                    <button type="button" className="dash-button" onClick={() => onRelease(ext.manifest.id)}>
+                      Release
+                    </button>
+                  }
+                />
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+
+      <div>
+        <p className="dash-eyebrow">Available</p>
+        <ul className="mt-2">
+          {available.map((ext) => (
+            <ExtensionRow
+              key={ext.manifest.id}
+              monogram={ext.manifest.monogram ?? ext.manifest.name.slice(0, 2)}
+              name={ext.manifest.name}
+              detail={ext.manifest.description}
+              action={
+                <button
+                  type="button"
+                  className={`dash-button ${hasRoom ? "dash-button--gold" : ""}`}
+                  onClick={() => onSnap(ext.manifest.id)}
+                  aria-label={`Snap ${ext.manifest.name} into the network`}
+                >
+                  {hasRoom ? "Snap in" : "Pro"}
+                </button>
+              }
+            />
+          ))}
+        </ul>
+        <p className="mt-2 text-[11.5px] text-[color:var(--land-faint)]">Sample extensions built on the public contract.</p>
+      </div>
+
+      <div>
+        <p className="dash-eyebrow">Coming soon</p>
+        <ul className="mt-2 grid grid-cols-2 gap-2">
+          {PLANNED_EXTENSIONS.map((p) => (
+            <li key={p.key} className="rounded-xl border border-dashed border-white/10 px-3 py-2.5">
+              <p className="text-[13.5px] font-medium text-[color:var(--land-muted)]">{p.name}</p>
+              <p className="text-[11.5px] text-[color:var(--land-faint)]">{p.tagline}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div>
+        <p className="dash-eyebrow">Build a node</p>
+        <pre className="dash-code mt-3 overflow-x-auto rounded-xl border border-[color:var(--land-hair)] bg-white/[0.02] p-3">
+          <span className="text-[color:var(--land-gold-soft)]">const</span> node = defineExtension({"{"} manifest, handlers {"}"});{"\n"}
+          <span className="text-[color:var(--land-gold-soft)]">await</span> extensionRegistry.register(node);{"\n"}
+          <span className="text-[color:var(--land-gold-soft)]">await</span> extensionRegistry.activate(node.manifest.id);
+        </pre>
+        <a
+          href={CONTRACT_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-2 inline-block text-[12.5px] font-medium text-[color:var(--land-gold-soft)] hover:underline"
+        >
+          Read the extension contract
+        </a>
+      </div>
+    </section>
   );
 }
 
-function ExtensionNode({
-  slot,
-  angle,
-  locked,
-  layout,
+function ExtensionRow({
+  monogram,
+  name,
+  detail,
+  action,
+  live = false,
 }: {
-  slot: ExtensionSlot;
-  angle: number;
-  locked: boolean;
-  layout: "orbit" | "strip";
+  monogram: string;
+  name: string;
+  detail: string;
+  action: React.ReactNode;
+  live?: boolean;
 }) {
-  const radius = 44;
-  const rad = (angle * Math.PI) / 180;
-  const x = 50 + radius * Math.cos(rad);
-  const y = 50 + radius * Math.sin(rad);
-  const label =
-    slot.placeholderKey === "third-party"
-      ? "3rd-party"
-      : titleCase(slot.placeholderKey);
-
-  const body = (
-    <div className="flex flex-col items-center gap-2">
-      <div
-        className={`relative flex h-14 w-14 items-center justify-center rounded-full border sm:h-16 sm:w-16 ${
-          locked
-            ? "border-[color:var(--pro)]/50 bg-[color:var(--bg-deep)]/80"
-            : "border-[color:var(--line-strong)] bg-[color:var(--bg-deep)]/80"
+  return (
+    <li className="flex items-center gap-3 border-b border-[color:var(--land-hair)] py-3 last:border-b-0">
+      <span
+        className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-[11px] font-semibold ${
+          live
+            ? "border border-[color:var(--land-gold-soft)] bg-[rgba(240,181,74,0.14)] text-[#fff4dc]"
+            : "border border-dashed border-[rgba(240,181,74,0.5)] text-[color:var(--land-gold)]"
         }`}
       >
-        <span
-          className={`h-2 w-2 rounded-full ${
-            locked ? "bg-[color:var(--pro)]" : "bg-[color:var(--accent-dim)]"
-          }`}
-        />
-        {locked ? (
-          <span className="absolute -right-1 -top-1 font-[family-name:var(--font-mono)] text-[8px] tracking-wider text-[color:var(--pro)] uppercase">
-            Pro
-          </span>
-        ) : (
-          <span className="absolute -right-1 -top-1 font-[family-name:var(--font-mono)] text-[8px] tracking-wider text-[color:var(--accent)] uppercase">
-            Free
-          </span>
-        )}
-      </div>
-      <div className="text-center">
-        <p className="font-[family-name:var(--font-display)] text-xs text-[color:var(--ink)] sm:text-sm">
-          {label}
-        </p>
-        <p className="font-[family-name:var(--font-mono)] text-[9px] tracking-[0.14em] text-[color:var(--ink-faint)] uppercase">
-          {locked ? "Locked" : "Empty"}
+        {monogram}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[14px] font-medium leading-tight">{name}</p>
+        <p className="mt-0.5 truncate text-[12px] text-[color:var(--land-faint)]" title={detail}>
+          {detail}
         </p>
       </div>
-    </div>
+      {action}
+    </li>
   );
-
-  if (layout === "strip") {
-    return (
-      <div className="w-[4.75rem]" title={slot.description}>
-        {body}
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className="absolute z-[2] -translate-x-1/2 -translate-y-1/2"
-      style={{ left: `${x}%`, top: `${y}%` }}
-      title={slot.description}
-    >
-      {body}
-    </div>
-  );
-}
-
-function titleCase(value: string): string {
-  return value.replace(/(^|-)(\w)/g, (_, _b, c: string) => c.toUpperCase());
 }

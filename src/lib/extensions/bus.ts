@@ -1,8 +1,8 @@
 import type {
-  ExtensionId,
   NexusEvent,
   NexusEventHandler,
   NexusEventMap,
+  NexusEventSource,
   NexusEventType,
   NexusSharedContext,
 } from "./types";
@@ -18,11 +18,11 @@ export class ExtensionBus {
   private sharedContext: NexusSharedContext = {
     activeTaskIds: [],
     focusSummary: "Bootstrapping personal network",
-    updatedAt: new Date().toISOString(),
+    updatedAt: new Date(0).toISOString(),
   };
 
   getSharedContext(): NexusSharedContext {
-    return { ...this.sharedContext };
+    return { ...this.sharedContext, activeTaskIds: [...this.sharedContext.activeTaskIds] };
   }
 
   setSharedContext(patch: Partial<NexusSharedContext>): void {
@@ -34,40 +34,38 @@ export class ExtensionBus {
     this.emit("nexus:context", this.getSharedContext(), "nexus");
   }
 
-  subscribe<T extends NexusEventType>(
-    type: T | "*",
-    handler: NexusEventHandler<T>,
-  ): () => void {
-    const key = type;
-    const set = this.listeners.get(key) ?? new Set();
-    set.add(handler as AnyHandler);
-    this.listeners.set(key, set);
+  subscribe<T extends NexusEventType>(type: T, handler: NexusEventHandler<T>): () => void;
+  subscribe(type: "*", handler: NexusEventHandler): () => void;
+  subscribe(type: NexusEventType | "*", handler: AnyHandler): () => void {
+    const set = this.listeners.get(type) ?? new Set();
+    set.add(handler);
+    this.listeners.set(type, set);
     return () => {
-      set.delete(handler as AnyHandler);
-      if (set.size === 0) this.listeners.delete(key);
+      set.delete(handler);
+      if (set.size === 0) this.listeners.delete(type);
     };
   }
 
   emit<T extends NexusEventType>(
     type: T,
     payload: NexusEventMap[T],
-    source: ExtensionId | "nexus" | "system" = "nexus",
+    source: NexusEventSource = "nexus",
   ): void {
-    const event: NexusEvent<T> = {
-      type,
-      payload,
-      source,
-      at: new Date().toISOString(),
-    };
-    const targeted = this.listeners.get(type);
-    const wildcard = this.listeners.get("*");
-    for (const handler of targeted ?? []) {
-      void handler(event as NexusEvent);
-    }
-    for (const handler of wildcard ?? []) {
-      void handler(event as NexusEvent);
+    const event = { type, payload, source, at: new Date().toISOString() } as NexusEvent;
+    for (const key of [type, "*"] as const) {
+      for (const handler of [...(this.listeners.get(key) ?? [])]) {
+        try {
+          void Promise.resolve(handler(event)).catch(reportHandlerError);
+        } catch (error) {
+          reportHandlerError(error);
+        }
+      }
     }
   }
+}
+
+function reportHandlerError(error: unknown) {
+  console.error("[nexus bus] handler failed", error);
 }
 
 export const nexusBus = new ExtensionBus();

@@ -1,31 +1,34 @@
+import type { ExtensionSlot, ProEntitlement } from "./types";
+
 /**
  * Freemium Pro gate (stub).
- * Free tier: up to FREE_ACTIVE_EXTENSION_SLOTS concurrent active extensions.
- * Nexus Pro unlocks additional slots and heavier AI capabilities.
+ * Free tier: up to FREE_ACTIVE_EXTENSION_SLOTS concurrent active extensions,
+ * and only in free sockets. Nexus Pro opens every socket.
  */
 
 export const FREE_ACTIVE_EXTENSION_SLOTS = 2;
 
-export interface ProEntitlement {
-  isPro: boolean;
-  maxActiveExtensions: number;
-}
-
-/** Stub: flip to true when billing/auth is wired. */
+/** Stub: replaced by billing/auth later. */
 let stubIsPro = false;
-
-export function setStubPro(enabled: boolean): void {
-  stubIsPro = enabled;
-}
+const listeners = new Set<(entitlement: ProEntitlement) => void>();
 
 export function getProEntitlement(): ProEntitlement {
   if (stubIsPro) {
     return { isPro: true, maxActiveExtensions: Number.POSITIVE_INFINITY };
   }
-  return {
-    isPro: false,
-    maxActiveExtensions: FREE_ACTIVE_EXTENSION_SLOTS,
-  };
+  return { isPro: false, maxActiveExtensions: FREE_ACTIVE_EXTENSION_SLOTS };
+}
+
+export function setStubPro(enabled: boolean): void {
+  if (stubIsPro === enabled) return;
+  stubIsPro = enabled;
+  const entitlement = getProEntitlement();
+  for (const listener of listeners) listener(entitlement);
+}
+
+export function subscribeEntitlement(listener: (entitlement: ProEntitlement) => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
 }
 
 export function canActivateAnother(
@@ -33,6 +36,10 @@ export function canActivateAnother(
   entitlement = getProEntitlement(),
 ): boolean {
   return currentActiveCount < entitlement.maxActiveExtensions;
+}
+
+export function canUseSlot(slot: ExtensionSlot, entitlement = getProEntitlement()): boolean {
+  return slot.tier === "free" || entitlement.isPro;
 }
 
 export function proRequiredMessage(activeCount: number): string {

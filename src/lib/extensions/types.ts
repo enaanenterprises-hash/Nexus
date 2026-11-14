@@ -1,9 +1,13 @@
 /**
  * Nexus Extension Contract — typed surface for first- and third-party nodes.
- * Extensions register with the registry, subscribe to the network bus, and
- * share context with the central Nexus brain.
+ * Extensions register with the registry, snap into a hub socket, subscribe to
+ * the network bus, and share context with the central Nexus brain.
  */
 
+/** Bumped only on breaking contract changes. Manifests must declare it. */
+export const NEXUS_EXTENSION_API_VERSION = 1;
+
+/** Reverse-DNS style, e.g. `com.acme.notes`. */
 export type ExtensionId = string;
 
 export type ExtensionCapability =
@@ -17,13 +21,18 @@ export type ExtensionCapability =
 
 export interface ExtensionManifest {
   id: ExtensionId;
+  /** Contract version the extension was built against. */
+  apiVersion: typeof NEXUS_EXTENSION_API_VERSION;
   name: string;
+  /** Semver, e.g. `0.1.0`. */
   version: string;
   description: string;
   /** Declared capabilities the extension may emit or consume. */
   capabilities: ExtensionCapability[];
-  /** Visual slot key used by the Extension Hub placeholders. */
-  slotKey?: string;
+  /** One or two characters shown inside the hub node. */
+  monogram?: string;
+  /** Extension only runs in Pro sockets. */
+  requiresPro?: boolean;
   author?: string;
 }
 
@@ -34,9 +43,13 @@ export interface NexusSharedContext {
   updatedAt: string;
 }
 
+/** What the brain is doing right now; the dashboard core visualises it. */
+export type NexusBrainState = "idle" | "thinking" | "responding";
+
 export type NexusEventMap = {
   "nexus:ready": { version: string };
   "nexus:context": NexusSharedContext;
+  "nexus:state": { state: NexusBrainState };
   "nexus:message": {
     role: "user" | "nexus" | "system";
     text: string;
@@ -45,17 +58,20 @@ export type NexusEventMap = {
   "nexus:proactive": { suggestion: string; at: string };
   "extension:registered": { id: ExtensionId };
   "extension:unregistered": { id: ExtensionId };
-  "extension:activated": { id: ExtensionId };
-  "extension:deactivated": { id: ExtensionId };
+  "extension:activated": { id: ExtensionId; slotId: SlotId };
+  "extension:deactivated": { id: ExtensionId; slotId: SlotId };
   "extension:denied": { id: ExtensionId; reason: string };
+  "entitlement:changed": { isPro: boolean };
 };
 
 export type NexusEventType = keyof NexusEventMap;
 
+export type NexusEventSource = ExtensionId | "nexus" | "system";
+
 export type NexusEvent<T extends NexusEventType = NexusEventType> = {
   type: T;
   payload: NexusEventMap[T];
-  source?: ExtensionId | "nexus" | "system";
+  source: NexusEventSource;
   at: string;
 };
 
@@ -63,12 +79,11 @@ export type NexusEventHandler<T extends NexusEventType = NexusEventType> = (
   event: NexusEvent<T>,
 ) => void | Promise<void>;
 
+/** Handed to an extension on register; the only surface it should touch. */
 export interface ExtensionRuntimeContext {
+  extensionId: ExtensionId;
   getSharedContext: () => NexusSharedContext;
-  emit: <T extends NexusEventType>(
-    type: T,
-    payload: NexusEventMap[T],
-  ) => void;
+  emit: <T extends NexusEventType>(type: T, payload: NexusEventMap[T]) => void;
   subscribe: <T extends NexusEventType>(
     type: T,
     handler: NexusEventHandler<T>,
@@ -77,9 +92,9 @@ export interface ExtensionRuntimeContext {
 
 export interface ExtensionHandlers {
   onRegister?: (runtime: ExtensionRuntimeContext) => void | Promise<void>;
-  onActivate?: () => void | Promise<void>;
-  onDeactivate?: () => void | Promise<void>;
-  onEvent?: (event: NexusEvent) => void | Promise<void>;
+  onActivate?: (runtime: ExtensionRuntimeContext) => void | Promise<void>;
+  onDeactivate?: (runtime: ExtensionRuntimeContext) => void | Promise<void>;
+  onEvent?: (event: NexusEvent, runtime: ExtensionRuntimeContext) => void | Promise<void>;
 }
 
 export interface NexusExtension {
@@ -87,18 +102,41 @@ export interface NexusExtension {
   handlers?: ExtensionHandlers;
 }
 
+export type SlotId = string;
 export type SlotTier = "free" | "pro";
 
 export interface ExtensionSlot {
-  id: string;
+  id: SlotId;
   label: string;
   tier: SlotTier;
+  /** Planned first-party extension shown as a ghost while the socket is empty. */
   placeholderKey: string;
   description: string;
   /** Bound extension id when occupied; null when empty. */
   occupiedBy: ExtensionId | null;
 }
 
+export type ActivationFailure =
+  | "not_registered"
+  | "already_active"
+  | "pro_required"
+  | "slot_occupied"
+  | "unknown_slot";
+
 export type ActivationResult =
-  | { ok: true; id: ExtensionId }
-  | { ok: false; id: ExtensionId; reason: "not_registered" | "pro_required" | "already_active" };
+  | { ok: true; id: ExtensionId; slotId: SlotId }
+  | { ok: false; id: ExtensionId; reason: ActivationFailure; message: string };
+
+export interface ProEntitlement {
+  isPro: boolean;
+  maxActiveExtensions: number;
+}
+
+/** Immutable view of the hub; a new object is produced on every change. */
+export interface ExtensionHubSnapshot {
+  extensions: readonly NexusExtension[];
+  slots: readonly ExtensionSlot[];
+  entitlement: ProEntitlement;
+  /** Id of the extension that most recently snapped in, for UI emphasis. */
+  lastSnapped: { id: ExtensionId; slotId: SlotId; serial: number } | null;
+}
