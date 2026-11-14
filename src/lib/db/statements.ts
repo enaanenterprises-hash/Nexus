@@ -94,3 +94,67 @@ export const RESEARCH_SCHEMA_STATEMENTS = [
   )`,
   `CREATE INDEX IF NOT EXISTS "research_highlight_sourceId_idx" ON "research_highlight" ("sourceId")`,
 ] as const
+
+/**
+ * Nexus Command storage. `credentials` holds AES-256-GCM ciphertext from
+ * `src/lib/connectors/vault.ts`; it is never returned to the browser.
+ */
+export const COMMAND_SCHEMA_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS "command_connection" (
+    "userId" text NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
+    "connectorId" text NOT NULL,
+    "status" text NOT NULL DEFAULT 'ok',
+    "credentials" text,
+    "settings" jsonb NOT NULL DEFAULT '{}',
+    "lastSyncAt" timestamptz,
+    "lastError" text,
+    "createdAt" timestamptz NOT NULL DEFAULT now(),
+    "updatedAt" timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT "command_connection_pk" PRIMARY KEY ("userId", "connectorId")
+  )`,
+  `CREATE TABLE IF NOT EXISTS "command_item" (
+    "userId" text NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
+    "id" text NOT NULL,
+    "kind" text NOT NULL,
+    "connectorId" text NOT NULL,
+    "origin" text NOT NULL,
+    "title" text NOT NULL,
+    "data" jsonb NOT NULL,
+    "occursAt" timestamptz,
+    "createdAt" timestamptz NOT NULL DEFAULT now(),
+    "updatedAt" timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT "command_item_pk" PRIMARY KEY ("userId", "id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "command_item_kind_idx" ON "command_item" ("userId", "kind")`,
+  `CREATE INDEX IF NOT EXISTS "command_item_occurs_idx" ON "command_item" ("userId", "occursAt")`,
+  `CREATE TABLE IF NOT EXISTS "command_automation_run" (
+    "id" text PRIMARY KEY NOT NULL,
+    "userId" text NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
+    "recipeId" text NOT NULL,
+    "recipeName" text NOT NULL,
+    "trigger" text NOT NULL,
+    "triggerItemId" text,
+    "status" text NOT NULL,
+    "steps" jsonb NOT NULL,
+    "createdAt" timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS "command_automation_run_user_idx" ON "command_automation_run" ("userId", "createdAt" DESC)`,
+  `CREATE INDEX IF NOT EXISTS "command_automation_run_trigger_idx" ON "command_automation_run" ("userId", "recipeId", "triggerItemId")`,
+  `CREATE TABLE IF NOT EXISTS "command_recipe_state" (
+    "userId" text NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
+    "recipeId" text NOT NULL,
+    "enabled" boolean NOT NULL,
+    CONSTRAINT "command_recipe_state_pk" PRIMARY KEY ("userId", "recipeId")
+  )`,
+  `CREATE TABLE IF NOT EXISTS "command_focus" (
+    "id" text PRIMARY KEY NOT NULL,
+    "userId" text NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
+    "title" text NOT NULL,
+    "targetItemId" text,
+    "minutes" integer NOT NULL,
+    "startedAt" timestamptz NOT NULL,
+    "endsAt" timestamptz NOT NULL,
+    "endedAt" timestamptz
+  )`,
+  `CREATE INDEX IF NOT EXISTS "command_focus_user_idx" ON "command_focus" ("userId", "startedAt" DESC)`,
+] as const

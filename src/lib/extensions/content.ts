@@ -3,7 +3,12 @@ import type {
   ResearchSourceContentV1,
   ResearchSourceListItemV1,
 } from "@/lib/research/types";
+import type { CommandItemOf, CommandKind } from "@/lib/command/kinds";
 import type { ExtensionId } from "./types";
+
+type CommandKindEntries = {
+  [K in CommandKind]: { version: 1; listItem: CommandItemOf<K>; item: CommandItemOf<K>; annotation: never };
+};
 
 /**
  * Shared content: the typed, versioned data extensions exchange without AI.
@@ -62,7 +67,7 @@ export interface ContentCollection {
  *     interface ContentKindMap { "study.flashcard": { version: 1; listItem: …; item: …; annotation: … } }
  *   }
  */
-export interface ContentKindMap {
+export interface ContentKindMap extends CommandKindEntries {
   "research.source": {
     version: 1;
     listItem: ResearchSourceListItemV1;
@@ -76,6 +81,14 @@ export type KnownContentKind = keyof ContentKindMap;
 /** Versions this build of Nexus speaks, sent with every request. */
 export const CONTENT_KIND_VERSIONS: { [K in KnownContentKind]: ContentKindMap[K]["version"] } = {
   "research.source": 1,
+  "command.event": 1,
+  "command.task": 1,
+  "command.deadline": 1,
+  "command.activity": 1,
+  "command.purchase": 1,
+  "command.shipment": 1,
+  "command.message": 1,
+  "command.signal": 1,
 };
 
 const KIND_PATTERN = /^[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*$/;

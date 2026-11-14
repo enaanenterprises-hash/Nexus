@@ -4,6 +4,8 @@
  * the network bus, and share context with the central Nexus brain.
  */
 
+import type { AutomationRun, FocusSession } from "@/lib/command/automation/types";
+import type { CommandItem, CommandKind } from "@/lib/command/kinds";
 import type { ContentClient } from "./content-access";
 import type { ContentCapability, ContentKindDeclaration } from "./content";
 
@@ -20,6 +22,8 @@ export type ExtensionCapability =
   | "calendar"
   | "voice"
   | "research"
+  /** Receive `command:automation-ran` events. */
+  | "automations"
   | "custom"
   /** Shared content access, e.g. `content:research.source:read`. */
   | ContentCapability;
@@ -75,6 +79,12 @@ export type NexusEventMap = {
   "research:page-opened": { url: string; title: string; siteName: string | null; sourceId: string | null };
   "research:source-saved": { sourceId: string; collectionId: string; url: string; title: string };
   "research:highlight-added": { sourceId: string; highlightId: string; quote: string };
+  /** A new Command item reached the network. Delivered only with `content:<kind>:read`. */
+  "command:item-published": { kind: CommandKind; item: CommandItem };
+  /** An automation ran. Delivered only with the `automations` capability. */
+  "command:automation-ran": { run: AutomationRun };
+  "command:connection-changed": { connectorId: string; connected: boolean };
+  "command:focus-changed": { focus: FocusSession | null };
 };
 
 export type NexusEventType = keyof NexusEventMap;

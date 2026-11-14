@@ -13,6 +13,7 @@ const KNOWN_CAPABILITIES: readonly ExtensionCapability[] = [
   "calendar",
   "voice",
   "research",
+  "automations",
   "custom",
 ];
 
