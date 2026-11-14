@@ -44,7 +44,7 @@ export const CONNECTOR_CATALOG: readonly ConnectorManifest[] = (
     id: "gmail",
     name: "Gmail",
     category: "comms",
-    description: "Your recent inbox on Today. Receipts and tracking numbers are detected automatically.",
+    description: "Read your inbox in the Gmail widget. Receipts and tracking numbers are detected automatically.",
     monogram: "Gm",
     auth: { type: "oauth", provider: "google", scopes: ["https://www.googleapis.com/auth/gmail.readonly"], docsUrl: "https://developers.google.com/gmail/api/auth/scopes" },
     produces: ["command.message"],

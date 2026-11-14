@@ -163,6 +163,24 @@ export const gmailDriver: ConnectorDriver = {
   },
 }
 
+/** One inbox message, body included, using the read-only Gmail grant. */
+export async function fetchGmailMessage(ctx: DriverContext, id: string) {
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(id)) throw new DriverError("That message could not be opened.", "config")
+  const m = await google<GMessage>(ctx, `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`)
+  const header = (name: string) => m.payload?.headers?.find((h) => h.name.toLowerCase() === name)?.value ?? ""
+  const body = textOf(m.payload).replace(/\n{3,}/g, "\n\n").trim()
+  return {
+    id: m.id,
+    threadId: m.threadId || null,
+    from: header("from"),
+    subject: header("subject") || "(no subject)",
+    snippet: m.snippet ?? "",
+    body: body || m.snippet || "",
+    receivedAt: new Date(Number(m.internalDate)).toISOString(),
+    rfcMessageId: header("message-id") || null,
+  }
+}
+
 // ——— Sending ———
 
 const ADDRESS = /^[^\s@<>",;]+@[^\s@<>",;]+\.[^\s@<>",;]+$/

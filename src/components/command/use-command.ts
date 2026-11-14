@@ -119,6 +119,7 @@ export function useCommand() {
         await commandApi.sendMail(message);
         return commandApi.state();
       }),
+    setOverview: (widgets: string[]) => run("overview", () => commandApi.setOverview(widgets)),
   };
 }
 

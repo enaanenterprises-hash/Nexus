@@ -8,6 +8,8 @@ export interface CommandSnapshot {
   runs: AutomationRun[];
   recipes: (Recipe & { enabled: boolean })[];
   focus: FocusSession | null;
+  /** Widget ids on the one overview page. Empty until the user adds one. */
+  overview: string[];
   availability: Record<string, { connectable: boolean; missing: string[] }>;
   /** Items and runs this request produced; published on the bus. */
   created: CommandItem[];
@@ -57,7 +59,20 @@ export const commandApi = {
   weather: () => call<{ signal: LiveWeather | null; location: string }>(`/weather?timeZone=${encodeURIComponent(viewerTimeZone())}`),
   sendMail: (message: { to: string; cc?: string; subject: string; body: string; threadId?: string | null; inReplyTo?: string | null }) =>
     call<{ detail: string; sentId: string | null }>("/mail", "POST", withZone(message)),
+  readMail: (id: string) => call<GmailLetter>(`/mail?id=${encodeURIComponent(id)}&timeZone=${encodeURIComponent(viewerTimeZone())}`),
+  setOverview: (widgets: string[]) => call<CommandSnapshot>("/overview", "PUT", { widgets }),
 };
+
+export interface GmailLetter {
+  id: string;
+  threadId: string | null;
+  from: string;
+  subject: string;
+  snippet: string;
+  body: string;
+  receivedAt: string;
+  rfcMessageId: string | null;
+}
 
 /** The forecast Today shows. Comes straight from Open-Meteo, not from stored items. */
 export interface LiveWeather {

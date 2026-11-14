@@ -79,13 +79,13 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
     const name = ids.length ? ids.map((id) => getConnector(id)?.name ?? id).join(" and ") : "The service";
     const notice = outcome === "connected" ? `${name} is connected.` : `${name} couldn't connect. ${OAUTH_ERRORS[params.get("reason") ?? ""] ?? ""}`.trim();
     window.history.replaceState(null, "", window.location.pathname);
-    openCommand({ tab: outcome === "connected" ? "today" : "connections", service: ids[0] ?? null, notice });
+    openCommand({ tab: outcome === "connected" ? "overview" : "connections", service: ids[0] ?? null, notice });
   }, []);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
-      setSurface((s) => (s.panel ? { ...s, panel: null } : s));
+      setSurface((s) => (s.panel ? { ...s, panel: null } : s.view === "command" ? { view: "home", panel: null } : s));
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -181,7 +181,7 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
 
   return (
     <div className="dash relative h-[100svh] w-full flex-1 overflow-hidden">
-      <section aria-label="Nexus network" className="absolute inset-0">
+      <section aria-label="Nexus network" className="absolute inset-0" hidden={surface.view === "command"}>
         <NeuralStage signal={signal} />
         <div className="dash-scrim--home pointer-events-none absolute inset-0" />
       </section>
@@ -230,7 +230,7 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
       ) : null}
 
       {commandMounted ? (
-        <div className="node-full" hidden={surface.view !== "command"}>
+        <div className="command-screen" hidden={surface.view !== "command"}>
           <CommandView request={commandRequest} onClose={() => setSurface({ view: "home", panel: null })} />
         </div>
       ) : null}
