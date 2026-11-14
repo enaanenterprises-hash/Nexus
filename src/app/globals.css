@@ -1,0 +1,303 @@
+@import "tailwindcss";
+
+:root {
+  /* Dashboard (teal network) */
+  --bg-deep: #0b1218;
+  --bg-mid: #121c26;
+  --bg-lift: #182430;
+  --ink: #e7eef5;
+  --ink-soft: #a8b7c7;
+  --ink-faint: #6d7f92;
+  --line: rgba(168, 198, 214, 0.18);
+  --line-strong: rgba(125, 211, 210, 0.45);
+  --accent: #3ecfbe;
+  --accent-dim: #1f8f86;
+  --signal: #e2a93b;
+  --pro: #c4a574;
+  --danger: #d9776c;
+  --radial-a: rgba(62, 207, 190, 0.14);
+  --radial-b: rgba(56, 140, 180, 0.1);
+
+  /* Landing (pitch black + gold) */
+  --land-ink: #f5f5f7;
+  --land-muted: #a1a1a6;
+  --land-line: rgba(255, 255, 255, 0.16);
+  --land-gold: #f0b54a;
+
+  --font-display: var(--font-syne), "Segoe UI", sans-serif;
+  --font-body: var(--font-figtree), "Segoe UI", sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), ui-monospace, monospace;
+  --font-landing: var(--font-manrope), -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif;
+}
+
+@theme inline {
+  --color-background: var(--bg-deep);
+  --color-foreground: var(--ink);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-mono);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100%;
+  color: var(--ink);
+  background: var(--bg-deep);
+  font-family: var(--font-body);
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgba(240, 181, 74, 0.3);
+  color: #fff;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+/* ——— Landing ——— */
+.landing {
+  background: #000;
+  color: var(--land-ink);
+  font-family: var(--font-landing);
+  -webkit-font-smoothing: antialiased;
+}
+
+.landing-line {
+  font-size: clamp(2.25rem, 4.4vw, 4.5rem);
+  font-weight: 300;
+  line-height: 1.06;
+  letter-spacing: -0.035em;
+  color: var(--land-ink);
+  text-wrap: balance;
+}
+
+.landing-scrim {
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.72) 0%, rgba(0, 0, 0, 0.35) 32%, transparent 52%);
+}
+
+@media (max-width: 767px) {
+  .landing-scrim {
+    background: linear-gradient(0deg, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.4) 35%, transparent 60%);
+  }
+}
+
+.landing-title {
+  font-size: clamp(1.75rem, 3.4vw, 2.5rem);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+.landing-signup {
+  display: inline-flex;
+  align-items: center;
+  height: 2.25rem;
+  padding: 0 1.15rem;
+  border-radius: 999px;
+  border: 1px solid var(--land-line);
+  background: rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  color: var(--land-ink);
+  transition:
+    background 200ms ease,
+    border-color 200ms ease;
+}
+
+.landing-signup:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.landing-input {
+  display: block;
+  width: 100%;
+  height: 3.25rem;
+  padding: 0 1.1rem;
+  border-radius: 14px;
+  border: 1px solid var(--land-line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--land-ink);
+  font-size: 16px;
+  outline: none;
+  transition: border-color 200ms ease;
+}
+
+.landing-input::placeholder {
+  color: var(--land-muted);
+}
+
+.landing-input:focus {
+  border-color: var(--land-gold);
+}
+
+.landing-primary {
+  height: 3.25rem;
+  border-radius: 14px;
+  background: var(--land-ink);
+  color: #000;
+  font-size: 16px;
+  font-weight: 600;
+  transition: background 200ms ease;
+}
+
+.landing-primary:hover {
+  background: #fff;
+}
+
+.landing-enter {
+  animation: landing-enter 1.2s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
+}
+
+.landing-enter--late {
+  animation-delay: 0.9s;
+}
+
+@keyframes landing-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Atmospheric field (dashboard) */
+.nexus-field {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    radial-gradient(1200px 700px at 50% -10%, var(--radial-a), transparent 60%),
+    radial-gradient(900px 600px at 85% 30%, var(--radial-b), transparent 55%),
+    radial-gradient(800px 500px at 10% 70%, rgba(226, 169, 59, 0.06), transparent 50%),
+    linear-gradient(165deg, #0b1218 0%, #101820 42%, #0d151c 100%);
+}
+
+.nexus-field::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image:
+    linear-gradient(rgba(168, 198, 214, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(168, 198, 214, 0.05) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at center, black 20%, transparent 75%);
+}
+
+.nexus-field > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Motions (dashboard) */
+@keyframes nexus-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.88;
+  }
+  50% {
+    transform: scale(1.045);
+    opacity: 1;
+  }
+}
+
+@keyframes nexus-orbit {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -220;
+  }
+}
+
+@keyframes nexus-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes nexus-pulse-ring {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.55;
+  }
+  70% {
+    transform: scale(1.25);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.25);
+    opacity: 0;
+  }
+}
+
+@keyframes nexus-scan {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.motion-breathe {
+  animation: nexus-breathe 4.8s ease-in-out infinite;
+}
+
+.motion-orbit {
+  animation: nexus-orbit 14s linear infinite;
+}
+
+.motion-rise {
+  animation: nexus-rise 0.65s ease-out both;
+}
+
+.motion-pulse-ring {
+  animation: nexus-pulse-ring 3.2s ease-out infinite;
+}
+
+.motion-scan {
+  animation: nexus-scan 2.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-breathe,
+  .motion-orbit,
+  .motion-rise,
+  .motion-pulse-ring,
+  .motion-scan,
+  .landing-enter {
+    animation: none;
+  }
+}
