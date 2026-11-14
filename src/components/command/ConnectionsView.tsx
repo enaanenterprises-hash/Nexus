@@ -26,7 +26,7 @@ export function ConnectionsView({ command, focusId }: { command: CommandControll
     <div className="cmd-connections">
       <header className="max-w-[40rem]">
         <p className="text-[14px] leading-relaxed text-[color:var(--land-muted)]">
-          Connect the services you use. Command keeps only what you connect, normalizes it into shared content, and lets other extensions read it with your permission.
+          The APIs and connections Nexus will use for nodes and the rest of the architecture. Connect, disconnect, and status live here, not on the overview.
           Tokens are encrypted on the server and never sent back to the browser.
         </p>
       </header>

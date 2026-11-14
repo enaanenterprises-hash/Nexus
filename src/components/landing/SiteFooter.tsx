@@ -23,7 +23,7 @@ export function SiteFooter() {
         </nav>
       </div>
       <p className="site-love">
-        Made with love from <span className="site-love-end">Toronto <Heart /></span>
+        Made with Love from <span className="site-love-end">Toronto <Heart /></span>
       </p>
     </footer>
   );

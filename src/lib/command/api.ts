@@ -48,12 +48,13 @@ export function connectorAvailability() {
 }
 
 export async function commandState(userId: string) {
-  const [connections, items, runs, enabled, focus] = await Promise.all([
+  const [connections, items, runs, enabled, focus, overview] = await Promise.all([
     store.listConnections(userId),
     store.listRecentItems(userId),
     store.listRuns(userId),
     store.recipeStates(userId),
     store.activeFocus(userId),
+    store.overviewWidgets(userId),
   ])
   return {
     connections: connections.map(store.publicConnection),
@@ -61,6 +62,7 @@ export async function commandState(userId: string) {
     runs,
     recipes: BUILT_IN_RECIPES.map((r) => ({ ...r, enabled: enabled[r.id] ?? r.defaultEnabled })),
     focus,
+    overview,
     availability: connectorAvailability(),
   }
 }

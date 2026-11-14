@@ -3,19 +3,17 @@
 import { useState, useSyncExternalStore } from "react";
 import { getConnector } from "@/lib/connectors/catalog";
 import { CloseIcon, SyncIcon } from "@/components/dashboard/icons";
-import { AutomationsView } from "./AutomationsView";
 import { ConnectionsView } from "./ConnectionsView";
 import { relative } from "./format";
+import { OverviewView } from "./OverviewView";
 import { useNow } from "./parts";
-import { TodayView } from "./TodayView";
 import { useCommand } from "./use-command";
 
-export type CommandTab = "today" | "connections" | "automations";
+export type CommandTab = "overview" | "connections";
 
 const TABS: { id: CommandTab; label: string }[] = [
-  { id: "today", label: "Today" },
+  { id: "overview", label: "Overview" },
   { id: "connections", label: "Connections" },
-  { id: "automations", label: "Automations" },
 ];
 
 const noopSubscribe = () => () => {};
@@ -30,7 +28,7 @@ type Props = {
 /** Nexus Command: connected services, one daily timeline, and deterministic automations. */
 export function CommandView({ request, onClose }: Props) {
   const command = useCommand();
-  const [tab, setTab] = useState<CommandTab>("today");
+  const [tab, setTab] = useState<CommandTab>("overview");
   const [notice, setNotice] = useState<string | null>(null);
   const date = useSyncExternalStore(noopSubscribe, todayLabel, () => "");
   const now = useNow(30_000);
@@ -45,7 +43,7 @@ export function CommandView({ request, onClose }: Props) {
   }
 
   return (
-    <section aria-label="Command" className="flex h-full min-h-0 flex-col">
+    <section aria-label="Command" className="cmd-screen flex h-full min-h-0 flex-col">
       <header className="cmd-header">
         <div className="min-w-0">
           <p className="dash-eyebrow">{date || "Today"}</p>
@@ -91,7 +89,7 @@ export function CommandView({ request, onClose }: Props) {
         </div>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className={`min-h-0 flex-1 ${tab === "overview" ? "overflow-hidden" : "overflow-y-auto"}`}>
         {!state ? (
           command.error ? (
             <p className="cmd-empty px-8 pt-10">{command.error}</p>
@@ -103,12 +101,10 @@ export function CommandView({ request, onClose }: Props) {
               </p>
             </div>
           )
-        ) : tab === "today" ? (
-          <TodayView command={command} onConnections={() => setTab("connections")} />
-        ) : tab === "connections" ? (
-          <ConnectionsView command={command} focusId={request?.service ?? null} />
+        ) : tab === "overview" ? (
+          <OverviewView command={command} onConnections={() => setTab("connections")} />
         ) : (
-          <AutomationsView command={command} />
+          <ConnectionsView command={command} focusId={request?.service ?? null} />
         )}
       </div>
     </section>

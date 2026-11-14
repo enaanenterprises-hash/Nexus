@@ -157,4 +157,8 @@ export const COMMAND_SCHEMA_STATEMENTS = [
     "endedAt" timestamptz
   )`,
   `CREATE INDEX IF NOT EXISTS "command_focus_user_idx" ON "command_focus" ("userId", "startedAt" DESC)`,
+  `CREATE TABLE IF NOT EXISTS "command_overview" (
+    "userId" text PRIMARY KEY REFERENCES "user" ("id") ON DELETE CASCADE,
+    "widgets" jsonb NOT NULL DEFAULT '[]'
+  )`,
 ] as const

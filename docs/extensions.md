@@ -330,7 +330,7 @@ Built-in recipes (`recipes.ts`): **Deep work** and **Deep work wrap-up**, **Rece
 
 ### Drivers shipped
 
-`src/lib/command/drivers/index.ts` registers the real drivers: `weather`, `sky`, `markets` (crypto only; currency exchange was removed), `f1`, `uptime` (keyless), `google-calendar` (next 30 days), `gmail` (recent inbox, kept on `gmail.readonly`), `gmail-send` (`gmail.send` only), `google-tasks` (Google incremental scopes), `github`, `vercel`, `telegram` (tokens), `strava`, `spotify` (OAuth through `drivers/oauth.ts`). Connectors without a driver stay `planned` and cannot be connected. Setup for each is in the README. Today shows keyless weather with no connection; mail, the 30-day calendar and sending stay empty with a connect action until Google is connected.
+`src/lib/command/drivers/index.ts` registers the real drivers: `weather`, `sky`, `markets` (crypto only; currency exchange was removed), `f1`, `uptime` (keyless), `google-calendar` (next 30 days), `gmail` (recent inbox, kept on `gmail.readonly`), `gmail-send` (`gmail.send` only), `google-tasks` (Google incremental scopes), `github`, `vercel`, `telegram` (tokens), `strava`, `spotify` (OAuth through `drivers/oauth.ts`). Connectors without a driver stay `planned` and cannot be connected. Setup for each is in the README. Command is a full screen with Overview and Connections. Overview starts empty; each added widget is built for one service and only as many fit on that page. The Gmail widget reads with `gmail.readonly` and sends with `gmail.send`. A missing scope is shown in the widget.
 
 ### HTTP API
 

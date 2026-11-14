@@ -5,6 +5,7 @@ import type { ActionId } from "./actions"
 import { buildScope, executePlan, planRun, runStatus, type StepHandler } from "./automation/engine"
 import { BUILT_IN_RECIPES } from "./automation/recipes"
 import type { ActionTarget, AutomationRun, FocusSession, PlannedStep, TriggerEvent } from "./automation/types"
+import { fetchGmailMessage } from "./drivers/google"
 import { DriverError, type DriverContext, type DriverRegistry } from "./drivers/types"
 import {
   COMMAND_CORE_SOURCE,
@@ -442,9 +443,20 @@ export async function sendMail(options: {
   message: { to: string; cc?: string; subject: string; body: string; threadId?: string | null; inReplyTo?: string | null }
 }): Promise<{ detail: string; sentId: string | null }> {
   const connection = await store.getConnection(options.userId, "gmail-send")
-  if (!connection) throw new DriverError("Allow Command to send mail first.", "auth")
+  if (!connection || connection.status === "needs_auth") {
+    throw new DriverError("Sending needs https://www.googleapis.com/auth/gmail.send. Allow sending, then try again.", "auth")
+  }
   const send = options.drivers["gmail-send"]?.actions?.["mail.send"]
   if (!send) throw new DriverError("Sending is not available on this server.", "config")
   const out = await withTimeout(send(driverContext(options.userId, connection, options.timeZone, new Date()), { ...options.message }), "Gmail")
   return { detail: out.detail, sentId: out.sentId ?? null }
+}
+
+/** Reads one Gmail message with the read-only grant. Does not invent a body. */
+export async function readMail(options: { userId: string; messageId: string; timeZone: string }) {
+  const connection = await store.getConnection(options.userId, "gmail")
+  if (!connection || connection.status === "needs_auth") {
+    throw new DriverError("Reading needs https://www.googleapis.com/auth/gmail.readonly. Connect Gmail, then try again.", "auth")
+  }
+  return withTimeout(fetchGmailMessage(driverContext(options.userId, connection, options.timeZone, new Date()), options.messageId), "Gmail")
 }

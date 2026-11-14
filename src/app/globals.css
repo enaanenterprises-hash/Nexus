@@ -1186,6 +1186,29 @@ button.landing-signup {
   }
 }
 
+/* Command replaces the network. Opaque, edge to edge, under the menu and header. */
+.command-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  background: #050403;
+}
+
+.command-screen[hidden] {
+  display: none !important;
+}
+
+.cmd-screen {
+  height: 100%;
+  padding: 4.15rem 1rem 1rem 5.25rem;
+}
+
+@media (min-width: 640px) {
+  .cmd-screen {
+    padding-right: 4.75rem;
+  }
+}
+
 .node-panel {
   position: absolute;
   z-index: 40;
@@ -2452,6 +2475,322 @@ select.research-field option {
 
 .dash-fade-in {
   animation: landing-enter 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.cmd-overview-page {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.cmd-overview-tools {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.cmd-picker {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  width: min(22rem, 80vw);
+  max-height: min(24rem, 60vh);
+  overflow: auto;
+  padding: 0.4rem;
+  border: 1px solid rgba(240, 181, 74, 0.28);
+  border-radius: 14px;
+  background: #100e0b;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+
+.cmd-picker button {
+  display: block;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  text-align: left;
+}
+
+.cmd-picker button:hover:not(:disabled) {
+  background: rgba(240, 181, 74, 0.08);
+}
+
+.cmd-picker button:disabled {
+  opacity: 0.4;
+}
+
+.cmd-picker-name {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 550;
+}
+
+.cmd-picker-blurb {
+  display: block;
+  margin-top: 0.1rem;
+  color: var(--land-faint);
+  font-size: 12px;
+}
+
+.cmd-overview-empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  text-align: center;
+  color: var(--land-muted);
+}
+
+.cmd-board {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.cmd-widget {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(240, 181, 74, 0.18);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.cmd-widget-bar {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.65rem 0.75rem 0.35rem;
+}
+
+.cmd-widget-bar h3 {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--land-gold-soft);
+}
+
+.cmd-widget-hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--land-faint);
+  font-size: 12px;
+}
+
+.cmd-widget-remove {
+  margin-left: auto;
+  color: var(--land-faint);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.cmd-widget-body {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 0.2rem 0.8rem 0.75rem;
+}
+
+.cmd-widget-empty {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.45rem;
+  color: var(--land-muted);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.cmd-scope {
+  color: var(--land-faint);
+  font-size: 11.5px;
+  word-break: break-all;
+}
+
+.cmd-gmail {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 0.75rem;
+  height: 100%;
+  min-height: 0;
+}
+
+.cmd-gmail-list {
+  min-height: 0;
+  overflow: auto;
+  border-right: 1px solid var(--land-hair);
+  padding-right: 0.65rem;
+}
+
+.cmd-gmail-row {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.15rem 0.5rem;
+  padding: 0.45rem 0.2rem;
+  border-bottom: 1px solid var(--land-hair);
+  text-align: left;
+}
+
+.cmd-gmail-row--on {
+  background: rgba(240, 181, 74, 0.08);
+}
+
+.cmd-gmail-from {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmd-gmail-subject {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--land-muted);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmd-gmail-time {
+  color: var(--land-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cmd-gmail-read {
+  min-height: 0;
+  overflow: auto;
+}
+
+.cmd-gmail-body {
+  margin-top: 0.6rem;
+  white-space: pre-wrap;
+  color: var(--land-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.cmd-gmail-field {
+  display: grid;
+  grid-template-columns: 3.2rem minmax(0, 1fr);
+  gap: 0.4rem;
+  align-items: center;
+  margin-top: 0.4rem;
+  color: var(--land-faint);
+  font-size: 12px;
+}
+
+.cmd-wx-temp {
+  font-size: 2.4rem;
+  font-weight: 300;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--land-gold-soft);
+}
+
+.cmd-wx-hours {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 0.55rem;
+}
+
+.cmd-wx-hours li {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cmd-cal-row,
+.cmd-task-row,
+.cmd-gh-row,
+.cmd-deploy-row {
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--land-hair);
+  font-size: 13px;
+}
+
+.cmd-cal-time {
+  width: 4.6rem;
+  flex: none;
+  color: var(--land-gold-soft);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.cmd-crypto-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.35rem 0;
+}
+
+.cmd-crypto-price {
+  font-size: 1.35rem;
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.cmd-up-meter {
+  height: 6px;
+  margin: 0.25rem 0 0.55rem;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.cmd-up-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #ffd99a, #f0b54a);
+}
+
+.cmd-moon {
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff6df, #f0b54a 55%, #6a4a12);
+  box-shadow: 0 0 18px rgba(240, 181, 74, 0.35);
+}
+
+.cmd-run-distance {
+  font-size: 2rem;
+  font-weight: 300;
+  letter-spacing: -0.04em;
+  color: var(--land-gold-soft);
+}
+
+.cmd-f1-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.28rem 0;
+  border-bottom: 1px solid var(--land-hair);
+  font-size: 12.5px;
 }
 
 @media (prefers-reduced-motion: reduce) {

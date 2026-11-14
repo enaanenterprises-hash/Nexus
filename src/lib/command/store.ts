@@ -296,3 +296,21 @@ export async function finishFocus(userId: string, id: string, now = new Date()):
     UPDATE command_focus SET "endedAt" = ${now.toISOString()}::text::timestamptz WHERE "userId" = ${userId} AND "id" = ${id} AND "endedAt" IS NULL RETURNING *`
   return row ? toFocus(row) : null
 }
+
+// ——— Overview ———
+
+/** Widget ids on the one overview page. Empty for a new user. */
+export async function overviewWidgets(userId: string): Promise<string[]> {
+  const sql = await db()
+  const [row] = await sql`SELECT "widgets" FROM command_overview WHERE "userId" = ${userId}`
+  const raw = row?.["widgets"]
+  return Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string") : []
+}
+
+export async function saveOverview(userId: string, widgets: string[]) {
+  const sql = await db()
+  await sql`
+    INSERT INTO command_overview ("userId", "widgets")
+    VALUES (${userId}, ${JSON.stringify(widgets)}::text::jsonb)
+    ON CONFLICT ("userId") DO UPDATE SET "widgets" = EXCLUDED."widgets"`
+}
