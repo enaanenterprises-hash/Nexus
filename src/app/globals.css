@@ -1,0 +1,180 @@
+@import "tailwindcss";
+
+:root {
+  --bg-deep: #0b1218;
+  --bg-mid: #121c26;
+  --bg-lift: #182430;
+  --ink: #e7eef5;
+  --ink-soft: #a8b7c7;
+  --ink-faint: #6d7f92;
+  --line: rgba(168, 198, 214, 0.18);
+  --line-strong: rgba(125, 211, 210, 0.45);
+  --accent: #3ecfbe;
+  --accent-dim: #1f8f86;
+  --signal: #e2a93b;
+  --pro: #c4a574;
+  --danger: #d9776c;
+  --radial-a: rgba(62, 207, 190, 0.14);
+  --radial-b: rgba(56, 140, 180, 0.1);
+  --font-display: var(--font-syne), "Segoe UI", sans-serif;
+  --font-body: var(--font-figtree), "Segoe UI", sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), ui-monospace, monospace;
+}
+
+@theme inline {
+  --color-background: var(--bg-deep);
+  --color-foreground: var(--ink);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-mono);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100%;
+  color: var(--ink);
+  background: var(--bg-deep);
+  font-family: var(--font-body);
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgba(62, 207, 190, 0.28);
+  color: var(--ink);
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+/* Atmospheric field */
+.nexus-field {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    radial-gradient(1200px 700px at 50% -10%, var(--radial-a), transparent 60%),
+    radial-gradient(900px 600px at 85% 30%, var(--radial-b), transparent 55%),
+    radial-gradient(800px 500px at 10% 70%, rgba(226, 169, 59, 0.06), transparent 50%),
+    linear-gradient(165deg, #0b1218 0%, #101820 42%, #0d151c 100%);
+}
+
+.nexus-field::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image:
+    linear-gradient(rgba(168, 198, 214, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(168, 198, 214, 0.05) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at center, black 20%, transparent 75%);
+}
+
+.nexus-field > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Motions */
+@keyframes nexus-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.88;
+  }
+  50% {
+    transform: scale(1.045);
+    opacity: 1;
+  }
+}
+
+@keyframes nexus-orbit {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -220;
+  }
+}
+
+@keyframes nexus-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes nexus-pulse-ring {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.55;
+  }
+  70% {
+    transform: scale(1.25);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.25);
+    opacity: 0;
+  }
+}
+
+@keyframes nexus-scan {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.motion-breathe {
+  animation: nexus-breathe 4.8s ease-in-out infinite;
+}
+
+.motion-orbit {
+  animation: nexus-orbit 14s linear infinite;
+}
+
+.motion-rise {
+  animation: nexus-rise 0.65s ease-out both;
+}
+
+.motion-pulse-ring {
+  animation: nexus-pulse-ring 3.2s ease-out infinite;
+}
+
+.motion-scan {
+  animation: nexus-scan 2.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-breathe,
+  .motion-orbit,
+  .motion-rise,
+  .motion-pulse-ring,
+  .motion-scan {
+    animation: none;
+  }
+}
