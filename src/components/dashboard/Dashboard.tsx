@@ -4,9 +4,11 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { NexusMark } from "@/components/landing/NexusLogo";
 import { SubmitButton } from "@/components/landing/SubmitButton";
+import { CommandView, type CommandTab } from "@/components/command/CommandView";
 import { ResearchView } from "@/components/research/ResearchView";
 import { signOutAction } from "@/lib/auth/actions";
 import type { Viewer } from "@/lib/auth/types";
+import { COMMAND_NODE_ID } from "@/extensions/command/node";
 import { RESEARCH_NODE_ID } from "@/extensions/research/node";
 import { SAMPLE_EXTENSIONS } from "@/extensions/samples";
 import {
@@ -18,6 +20,7 @@ import {
   type SlotId,
 } from "@/lib/extensions";
 import { useExtensionHub } from "@/lib/extensions/use-extension-hub";
+import { getConnector } from "@/lib/connectors/catalog";
 import { researchIntent } from "@/lib/nexus/brain";
 import { ExtensionHub } from "./ExtensionHub";
 import { ExtensionPanel } from "./ExtensionPanel";
@@ -28,12 +31,25 @@ import { NexusInput, NexusVoice } from "./NexusVoice";
 import { TodayPanel } from "./TodayPanel";
 import { useNexusSession } from "./use-nexus-session";
 
+/** Research is hidden from navigation for now; its node, routes and tables stay in place. */
+const RESEARCH_VISIBLE = false;
+
+const OAUTH_ERRORS: Record<string, string> = {
+  config: "That service isn't set up on the server yet.",
+  denied: "Access was not granted.",
+  state: "The sign-in expired. Try connecting again.",
+  exchange: "The service didn't accept the sign-in. Try again.",
+  unknown: "Unknown service.",
+};
+
 export function Dashboard({ viewer }: { viewer: Viewer }) {
   const session = useNexusSession();
   const hub = useExtensionHub();
   const [surface, setSurface] = useState<Surface>({ view: "home", panel: null });
   const [researchMounted, setResearchMounted] = useState(false);
   const [researchRequest, setResearchRequest] = useState<{ input: string; serial: number } | null>(null);
+  const [commandMounted, setCommandMounted] = useState(false);
+  const [commandRequest, setCommandRequest] = useState<{ tab: CommandTab; service: string | null; notice: string | null; serial: number } | null>(null);
   const [selected, setSelected] = useState<SlotId | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const noticeTimer = useRef<number | undefined>(undefined);
@@ -48,11 +64,23 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
   useEffect(
     () =>
       nexusBus.subscribe("nexus:open-node", (event) => {
-        if (event.payload.nodeId === RESEARCH_NODE_ID) openResearch(event.payload.input);
+        if (event.payload.nodeId === COMMAND_NODE_ID) openCommand();
+        else if (event.payload.nodeId === RESEARCH_NODE_ID && RESEARCH_VISIBLE) openResearch(event.payload.input);
         else if (extensionRegistry.get(event.payload.nodeId)) openPanel({ extension: event.payload.nodeId });
       }),
     [],
   );
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const outcome = params.get("command");
+    if (!outcome) return;
+    const service = params.get("service");
+    const name = service ? (getConnector(service)?.name ?? service) : "The service";
+    const notice = outcome === "connected" ? `${name} is connected.` : `${name} couldn't connect. ${OAUTH_ERRORS[params.get("reason") ?? ""] ?? ""}`.trim();
+    window.history.replaceState(null, "", window.location.pathname);
+    openCommand({ tab: "connections", service, notice });
+  }, []);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -74,7 +102,7 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
       brain: session.brain,
       sockets: visuals,
       snap: hub.lastSnapped && snapIndex >= 0 ? { index: snapIndex, serial: hub.lastSnapped.serial } : null,
-      paused: surface.view === "research",
+      paused: surface.view !== "home",
     };
   }, [session.brain, visuals, hub.lastSnapped, hub.slots, surface.view]);
 
@@ -90,6 +118,12 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
     if (input !== undefined) setResearchRequest((r) => ({ input, serial: (r?.serial ?? 0) + 1 }));
   }
 
+  function openCommand(request?: { tab: CommandTab; service: string | null; notice: string | null }) {
+    setCommandMounted(true);
+    setSurface({ view: "command", panel: null });
+    if (request) setCommandRequest((r) => ({ ...request, serial: (r?.serial ?? 0) + 1 }));
+  }
+
   function openPanel(panel: PanelId) {
     setSurface((s) => {
       const same = typeof panel === "string" ? s.panel === panel : typeof s.panel === "object" && s.panel?.extension === panel.extension;
@@ -98,7 +132,7 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
   }
 
   function chat(text: string) {
-    const query = researchIntent(text);
+    const query = RESEARCH_VISIBLE ? researchIntent(text) : null;
     if (query) {
       session.announce(`Opening Research for “${query}”.`);
       openResearch(query);
@@ -169,8 +203,8 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
         </div>
       </header>
 
-      <NodeMenu hub={hub} surface={surface} onHome={() => setSurface({ view: "home", panel: null })} onResearch={() => openResearch()} onPanel={openPanel} />
-      <NodeRail hub={hub} surface={surface} onResearch={() => openResearch()} onSlot={selectSlot} />
+      <NodeMenu hub={hub} surface={surface} onHome={() => setSurface({ view: "home", panel: null })} onCommand={() => openCommand()} onPanel={openPanel} />
+      <NodeRail hub={hub} surface={surface} onCommand={() => openCommand()} onSlot={selectSlot} />
 
       {surface.view === "home" ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-6 z-10 flex justify-center pl-[84px] pr-3 sm:bottom-9 sm:pr-[76px]">
@@ -184,7 +218,7 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
             followUps={[]}
             onAsk={chat}
           />
-          <NexusInput disabled={session.brain === "thinking"} onAsk={chat} onResearch={(text) => openResearch(text)} />
+          <NexusInput disabled={session.brain === "thinking"} onAsk={chat} onResearch={RESEARCH_VISIBLE ? (text) => openResearch(text) : undefined} />
           </div>
         </div>
       ) : null}
@@ -192,6 +226,12 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
       {researchMounted ? (
         <div className="node-full" hidden={surface.view !== "research"}>
           <ResearchView request={researchRequest} onClose={() => setSurface({ view: "home", panel: null })} />
+        </div>
+      ) : null}
+
+      {commandMounted ? (
+        <div className="node-full" hidden={surface.view !== "command"}>
+          <CommandView request={commandRequest} onClose={() => setSurface({ view: "home", panel: null })} />
         </div>
       ) : null}
 

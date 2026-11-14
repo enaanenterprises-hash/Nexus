@@ -85,4 +85,41 @@ export const quickCapture = defineExtension({
   },
 });
 
-export const SAMPLE_EXTENSIONS = [dailyBrief, focusGuard, quickCapture];
+/** Builds on Nexus Command: picks up purchases it records, with only `content:command.purchase:read`. */
+export const ledger = defineExtension({
+  manifest: {
+    id: "dev.nexus.sample.ledger",
+    apiVersion: NEXUS_EXTENSION_API_VERSION,
+    name: "Ledger",
+    version: "0.1.0",
+    description: "Keeps a running total of purchases Command finds in your receipts.",
+    capabilities: ["content:command.purchase:read"],
+    monogram: "Lg",
+    author: "Nexus samples",
+  },
+  handlers: {
+    onActivate: async (runtime) => {
+      const purchases = await runtime.content.list("command.purchase").catch(() => []);
+      const month = new Date().toISOString().slice(0, 7);
+      const thisMonth = purchases.filter((p) => p.data.purchasedAt.startsWith(month));
+      const total = thisMonth.reduce((sum, p) => sum + (p.data.currency === "USD" ? p.data.total : 0), 0);
+      runtime.emit("nexus:proactive", {
+        suggestion: thisMonth.length
+          ? `Ledger: ${thisMonth.length} purchases this month, $${total.toFixed(2)} in USD.`
+          : "Ledger is listening for receipts Command records.",
+        at: at(),
+      });
+    },
+    onEvent: (event, runtime) => {
+      if (event.type !== "command:item-published") return;
+      const { item } = event.payload as { item: { kind: string; data: { merchant?: string; total?: number; currency?: string } } };
+      if (item.kind !== "command.purchase") return;
+      runtime.emit("nexus:proactive", {
+        suggestion: `Ledger logged ${item.data.currency} ${item.data.total?.toFixed(2)} at ${item.data.merchant}.`,
+        at: at(),
+      });
+    },
+  },
+});
+
+export const SAMPLE_EXTENSIONS = [dailyBrief, focusGuard, quickCapture, ledger];

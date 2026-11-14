@@ -9,11 +9,11 @@ import {
   type ExtensionId,
   type SlotId,
 } from "@/lib/extensions";
-import { LockIcon, NetworkIcon, NodesIcon, PlusIcon, ResearchIcon, TodayIcon } from "./icons";
+import { CommandIcon, LockIcon, NetworkIcon, NodesIcon, PlusIcon, TodayIcon } from "./icons";
 
 export type PanelId = "today" | "nodes" | { extension: ExtensionId };
 
-export type Surface = { view: "home" | "research"; panel: PanelId | null };
+export type Surface = { view: "home" | "research" | "command"; panel: PanelId | null };
 
 const isPanel = (panel: PanelId | null, id: PanelId) =>
   typeof id === "string" ? panel === id : typeof panel === "object" && panel?.extension === id.extension;
@@ -42,13 +42,13 @@ export function NodeMenu({
   hub,
   surface,
   onHome,
-  onResearch,
+  onCommand,
   onPanel,
 }: {
   hub: ExtensionHubSnapshot;
   surface: Surface;
   onHome: () => void;
-  onResearch: () => void;
+  onCommand: () => void;
   onPanel: (panel: PanelId) => void;
 }) {
   const live = hub.slots.flatMap((slot) => {
@@ -63,8 +63,8 @@ export function NodeMenu({
       <MenuItem label="Network" active={surface.view === "home" && !surface.panel} onClick={onHome}>
         <NetworkIcon />
       </MenuItem>
-      <MenuItem label="Research" active={surface.view === "research"} onClick={onResearch}>
-        <ResearchIcon />
+      <MenuItem label="Command" active={surface.view === "command"} onClick={onCommand}>
+        <CommandIcon />
       </MenuItem>
       <MenuItem label="Today" active={isPanel(surface.panel, "today")} onClick={() => onPanel("today")}>
         <TodayIcon />
@@ -96,28 +96,28 @@ export function NodeMenu({
   );
 }
 
-/** Right rail: one-tap access to Research and every hub socket. */
+/** Right rail: one-tap access to Command and every hub socket. */
 export function NodeRail({
   hub,
   surface,
-  onResearch,
+  onCommand,
   onSlot,
 }: {
   hub: ExtensionHubSnapshot;
   surface: Surface;
-  onResearch: () => void;
+  onCommand: () => void;
   onSlot: (slotId: SlotId) => void;
 }) {
   return (
     <nav aria-label="Quick access" className="node-rail">
       <button
         type="button"
-        onClick={onResearch}
-        className={`node-rail-button node-rail-button--core ${surface.view === "research" ? "node-rail-button--on" : ""}`}
-        title="Research"
-        aria-label="Research"
+        onClick={onCommand}
+        className={`node-rail-button node-rail-button--core ${surface.view === "command" ? "node-rail-button--on" : ""}`}
+        title="Command"
+        aria-label="Command"
       >
-        <ResearchIcon size={17} />
+        <CommandIcon size={17} />
       </button>
       <span className="node-menu-divider" aria-hidden />
       {hub.slots.map((slot) => {

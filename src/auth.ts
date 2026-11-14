@@ -3,6 +3,7 @@ import NextAuth from "next-auth"
 import Google from "next-auth/providers/google"
 import Resend from "next-auth/providers/resend"
 import { createAuthAdapter } from "@/lib/auth/adapter"
+import { storeGoogleGrant } from "@/lib/command/google-grant"
 import {
   authSecret,
   emailFrom,
@@ -27,6 +28,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => ({
   callbacks: {
     // The default callback drops the id; per-user data (Research) needs it.
     session: ({ session, user }) => ({ ...session, user: { ...session.user, id: user.id } }),
+  },
+  events: {
+    // Google sign-in doubles as incremental authorization for Command's Google services.
+    async signIn({ user, account }) {
+      if (account?.provider !== "google" || !user.id) return
+      try {
+        await storeGoogleGrant(user.id, account)
+      } catch (error) {
+        console.error("[command] storing the Google grant failed", error instanceof Error ? error.message : error)
+      }
+    },
   },
   pages: {
     signIn: "/signup",

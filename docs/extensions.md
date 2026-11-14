@@ -137,7 +137,7 @@ Every event carries `source` (extension id, `"nexus"`, or `"system"`) and an ISO
 
 Core nodes ship with Nexus and use the same manifest contract, but they are always available: they never take a hub socket and do not count toward the free plan's two active extensions. They are declared with `defineCoreNode({ extension, presentation })`, where `presentation` is `"full"` (takes over the stage) or `"panel"`.
 
-On the dashboard the default view is only the network and the chat box. The **left menu** opens nodes: core nodes as full views, and Today, Nodes (the hub and slot manager), and each wired-in extension as panels. The **right rail** gives one-tap access to Research and to every socket (live, open, or locked). Socket and Pro rules are unchanged. They live in the registry, and only the UI moved.
+On the dashboard the default view is only the network and the chat box. The **left menu** opens nodes: core nodes as full views, and Today, Nodes (the hub and slot manager), and each wired-in extension as panels. The **right rail** gives one-tap access to Command and to every socket (live, open, or locked). Research is hidden from navigation for now (`RESEARCH_VISIBLE` in `Dashboard.tsx`); its node, routes and tables are unchanged. Socket and Pro rules are unchanged. They live in the registry, and only the UI moved.
 
 ### Research (`dev.nexus.core.research`)
 
@@ -327,6 +327,27 @@ A finance extension that wants receipts declares `content:command.purchase:read`
 - The first sync of a new connection is a baseline: automations react to what changes after it, not to history.
 
 Built-in recipes (`recipes.ts`): **Deep work** and **Deep work wrap-up**, **Receipts → tracker + ledger** (deterministic receipt and tracking-number parser in `parsers/receipt.ts`), **Run → goal + recovery**, **Failed deploy alert**, **Due-soon guard**, **F1 session reminder**.
+
+### Drivers shipped
+
+`src/lib/command/drivers/index.ts` registers the real drivers: `weather`, `sky`, `markets`, `f1`, `uptime` (keyless), `google-calendar`, `gmail`, `google-tasks` (Google incremental scopes), `github`, `vercel`, `telegram` (tokens), `strava`, `spotify` (OAuth through `drivers/oauth.ts`). Connectors without a driver stay `planned` and cannot be connected. Setup for each is in the README.
+
+### HTTP API
+
+All routes need the user's session and Postgres. Mutations return the full Command snapshot plus `created` items and `newRuns`, which the dashboard publishes on the bus as `command:item-published` and `command:automation-ran`.
+
+| Route | Purpose |
+| --- | --- |
+| `GET /api/command/state` | Connections (no secrets), recent items, runs, recipes with enablement, active focus, per-connector availability |
+| `POST /api/command/sync` | Pull every connected service, then run automations |
+| `POST /api/command/connections` | Connect a keyless or token service (`connectorId`, `credentials`, `settings`), or update settings. Verified before saving |
+| `DELETE /api/command/connections/:id` | Disconnect and drop its synced items |
+| `POST` / `DELETE /api/command/focus` | Start (`title`, `minutes`, `targetItemId`) or end a Deep work session |
+| `PUT /api/command/recipes/:id` | `{ enabled }` |
+| `POST /api/command/goals` | Daily goal, e.g. `{ type: "run", target: 5 }` |
+| `GET /api/command/oauth/:connector/start` · `/callback` | OAuth for Strava and Spotify (state cookie, code exchange, sealed tokens) |
+
+Google services authorize through the Auth.js Google provider with extra scopes (`connectGoogleService`); the Auth.js `signIn` event stores the grant only for the service the user asked to connect, and refreshes tokens for Google services already connected.
 
 ### Timeline
 

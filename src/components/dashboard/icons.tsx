@@ -135,3 +135,23 @@ export const TrashIcon = (p: IconProps) => (
     <path d="M5 7h14M10 7V5h4v2M7 7l.8 12h8.4L17 7" />
   </Icon>
 );
+
+export const CommandIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="8.5" />
+    <circle cx="12" cy="12" r="2.4" />
+    <path d="M12 3.5v3M12 17.5v3M3.5 12h3M17.5 12h3" />
+  </Icon>
+);
+
+export const SyncIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M19.5 12a7.5 7.5 0 0 1-13.1 5M4.5 12a7.5 7.5 0 0 1 13.1-5M17.6 3.5V7h-3.5M6.4 20.5V17h3.5" />
+  </Icon>
+);
+
+export const BoltIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M13 3.5 5.5 13.5h6l-1 7 7.5-10h-6l1-7Z" />
+  </Icon>
+);
