@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { NexusLogo } from "@/components/landing/NexusLogo";
+import { NexusMark } from "@/components/landing/NexusLogo";
 import { SubmitButton } from "@/components/landing/SubmitButton";
 import { ResearchView } from "@/components/research/ResearchView";
 import { signOutAction } from "@/lib/auth/actions";
@@ -152,9 +152,9 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
         <div className="dash-scrim--home pointer-events-none absolute inset-0" />
       </section>
 
-      <header className="landing-enter absolute inset-x-0 top-0 z-30 flex h-16 items-center justify-between gap-3 pl-5 pr-4 sm:pl-6 sm:pr-6">
-        <Link href="/" aria-label="Nexus home" className="inline-flex shrink-0">
-          <NexusLogo className="h-[13px] w-auto sm:h-[15px]" />
+      <header className="landing-enter absolute inset-x-0 top-0 z-30 flex h-16 items-center justify-between gap-3 pr-4 sm:pr-6">
+        <Link href="/" aria-label="Nexus home" className="inline-flex w-[76px] shrink-0 justify-center">
+          <NexusMark className="h-7 w-auto" />
         </Link>
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           <p className="min-w-0 max-w-[34vw] truncate text-[13px] text-[color:var(--land-muted)] sm:max-w-[220px]">
