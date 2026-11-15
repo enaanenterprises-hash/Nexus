@@ -70,7 +70,7 @@ export function ExtensionHub({ hub, selected, notice, onSnap, onRelease, onToggl
           <p className="mt-3 text-[12px] leading-snug text-[color:var(--land-muted)]">{selectedSlot.description}.</p>
         ) : null}
         {notice ? (
-          <p role="status" className="mt-3 text-[12.5px] leading-snug text-[color:var(--land-gold-soft)]">
+          <p role="status" className="mt-3 text-[12.5px] leading-snug text-[color:var(--land-ink)]">
             {notice}
           </p>
         ) : null}
@@ -141,15 +141,15 @@ export function ExtensionHub({ hub, selected, notice, onSnap, onRelease, onToggl
       <div>
         <p className="dash-eyebrow">Build a node</p>
         <pre className="dash-code dash-card-subtle mt-3 overflow-x-auto rounded-xl border border-[color:var(--land-hair)] p-3">
-          <span className="text-[color:var(--land-gold-soft)]">const</span> node = defineExtension({"{"} manifest, handlers {"}"});{"\n"}
-          <span className="text-[color:var(--land-gold-soft)]">await</span> extensionRegistry.register(node);{"\n"}
-          <span className="text-[color:var(--land-gold-soft)]">await</span> extensionRegistry.activate(node.manifest.id);
+          <span className="font-semibold text-[color:var(--land-ink)]">const</span> node = defineExtension({"{"} manifest, handlers {"}"});{"\n"}
+          <span className="font-semibold text-[color:var(--land-ink)]">await</span> extensionRegistry.register(node);{"\n"}
+          <span className="font-semibold text-[color:var(--land-ink)]">await</span> extensionRegistry.activate(node.manifest.id);
         </pre>
         <a
           href={CONTRACT_URL}
           target="_blank"
           rel="noreferrer"
-          className="mt-2 inline-block text-[12.5px] font-medium text-[color:var(--land-gold-soft)] hover:underline"
+          className="mt-2 inline-block text-[12.5px] font-medium text-[color:var(--land-ink)] underline decoration-[color:var(--land-line)] underline-offset-4 hover:decoration-current"
         >
           Read the extension contract
         </a>
@@ -176,8 +176,8 @@ function ExtensionRow({
       <span
         className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-[11px] font-semibold ${
           live
-            ? "dash-monogram--live border border-[color:var(--land-gold-soft)] bg-[rgba(240,181,74,0.14)]"
-            : "border border-dashed border-[rgba(240,181,74,0.5)] text-[color:var(--land-gold)]"
+            ? "dash-monogram--live border border-[color:var(--land-line)] bg-[color:var(--land-hair)]"
+            : "border border-dashed border-[color:var(--land-line)] text-[color:var(--land-muted)]"
         }`}
       >
         {monogram}

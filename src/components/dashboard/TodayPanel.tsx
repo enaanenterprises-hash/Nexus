@@ -86,7 +86,7 @@ export function TodayPanel({ tasks, threads, touched, organized, onToggle }: Pro
               key={thread.id}
               className={`-mx-2 rounded-lg px-2 py-1 ${touched.includes(thread.id) ? "row-touched" : ""}`}
             >
-              <p className="text-[12px] font-medium text-[color:var(--land-gold-soft)]">{thread.label}</p>
+              <p className="text-[12px] font-medium text-[color:var(--land-ink)]">{thread.label}</p>
               <p className="text-[13.5px] leading-snug text-[color:var(--land-muted)]">{thread.detail}</p>
             </li>
           ))}
@@ -106,7 +106,9 @@ function TaskRow({ task, touched, onToggle }: { task: NexusTask; touched: boolea
         aria-label={done ? `Mark “${task.title}” as not done` : `Mark “${task.title}” as done`}
         aria-pressed={done}
         className={`mt-0.5 grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full border transition-colors ${
-          done ? "border-[color:var(--land-gold)] bg-[color:var(--land-gold)] text-black" : "border-[color:var(--land-line)] hover:border-[color:var(--land-gold)]"
+          done
+            ? "border-[color:var(--land-ink)] bg-[color:var(--land-ink)] text-[color:var(--color-background)]"
+            : "border-[color:var(--land-line)] hover:border-[color:var(--land-ink)]"
         }`}
       >
         {done ? (
@@ -123,7 +125,7 @@ function TaskRow({ task, touched, onToggle }: { task: NexusTask; touched: boolea
         </p>
       </div>
       {task.block && !done ? (
-        <span className="shrink-0 pt-0.5 text-[12px] font-medium tabular-nums text-[color:var(--land-gold-soft)]">{task.block}</span>
+        <span className="shrink-0 pt-0.5 text-[12px] font-medium tabular-nums text-[color:var(--land-muted)]">{task.block}</span>
       ) : null}
     </li>
   );

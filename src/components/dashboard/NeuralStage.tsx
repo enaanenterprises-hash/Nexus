@@ -499,9 +499,9 @@ export function NeuralStage({ signal, className = "" }: { signal: StageSignal; c
       ctx.globalAlpha = 1;
       const bg = ctx.createRadialGradient(core.x, core.y, 0, core.x, core.y, edgeR * 1.1);
       if (isLight) {
-        bg.addColorStop(0, "#fdfaf2");
-        bg.addColorStop(0.45, "#f5efe3");
-        bg.addColorStop(1, "#e8dfd0");
+        bg.addColorStop(0, "#ffffff");
+        bg.addColorStop(0.48, "#f6f6f8");
+        bg.addColorStop(1, "#eaeaeE");
       } else {
         bg.addColorStop(0, "#0b1430");
         bg.addColorStop(0.42, "#070d20");

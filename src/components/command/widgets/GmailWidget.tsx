@@ -119,7 +119,7 @@ export function GmailWidget({ command, onRemove, style }: { command: CommandCont
           </div>
           <div className="cmd-gmail-read">
             <div className="flex items-center justify-between gap-2">
-              {sent ? <p className="text-[12px] text-[color:var(--land-gold-soft)]">{sent}</p> : <span />}
+              {sent ? <p className="text-[12px] text-[color:var(--land-ink)]">{sent}</p> : <span />}
               <button
                 type="button"
                 className="cmd-link text-[13px]"

@@ -31,11 +31,14 @@ export function ExtensionPanel({
   return (
     <section aria-labelledby="ext-heading" className="flex flex-col gap-6">
       <header className="flex items-center gap-3">
-        <span className="dash-monogram--live grid h-11 w-11 shrink-0 place-items-center rounded-full border border-[color:var(--land-gold-soft)] bg-[rgba(240,181,74,0.14)] text-[12px] font-semibold">
+        <span className="dash-monogram--live grid h-11 w-11 shrink-0 place-items-center rounded-full border border-[color:var(--land-line)] bg-[color:var(--land-hair)] text-[12px] font-semibold">
           {manifest.monogram ?? manifest.name.slice(0, 2)}
         </span>
         <div className="min-w-0">
-          <p className="dash-eyebrow">{slot ? `${slot.tier === "pro" ? "Pro" : "Free"} socket · connected` : "Disconnected"}</p>
+          <p className="dash-eyebrow flex items-center gap-1.5">
+            {slot ? <span className="inline-block h-1.5 w-1.5 rounded-full bg-[color:var(--land-gold)]" aria-hidden /> : null}
+            {slot ? `${slot.tier === "pro" ? "Pro" : "Free"} socket · connected` : "Disconnected"}
+          </p>
           <h2 id="ext-heading" className="dash-heading mt-1 truncate">
             {manifest.name}
           </h2>
@@ -44,8 +47,8 @@ export function ExtensionPanel({
       <p className="text-[14px] leading-relaxed text-[color:var(--land-muted)]">{manifest.description}</p>
 
       {slot && onTransfer ? (
-        <div className="rounded-2xl border border-[rgba(240,181,74,0.28)] bg-[rgba(240,181,74,0.06)] p-4">
-          <p className="dash-eyebrow text-[color:var(--land-gold-soft)]">Send to node</p>
+        <div className="dash-card-subtle rounded-2xl border border-[color:var(--land-hair)] p-4">
+          <p className="dash-eyebrow">Send to node</p>
           <p className="mt-1 text-[12.5px] leading-snug text-[color:var(--land-muted)]">
             Route an output from {manifest.name} across the network to another connected node:
           </p>
@@ -56,7 +59,7 @@ export function ExtensionPanel({
                   key={target.ext.manifest.id}
                   type="button"
                   onClick={() => onTransfer(id, target.ext.manifest.id)}
-                  className="dash-button dash-button--gold inline-flex items-center gap-1.5"
+                  className="dash-button inline-flex items-center gap-1.5"
                 >
                   <BoltIcon size={13} />
                   <span>Send → {target.ext.manifest.name}</span>
@@ -66,7 +69,7 @@ export function ExtensionPanel({
               <button
                 type="button"
                 onClick={() => onTransfer(id)}
-                className="dash-button dash-button--gold inline-flex items-center gap-1.5"
+                className="dash-button inline-flex items-center gap-1.5"
               >
                 <BoltIcon size={13} />
                 <span>Send → Command</span>

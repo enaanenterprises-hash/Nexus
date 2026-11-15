@@ -156,7 +156,7 @@ export function TasksWidget({ command, onRemove, onConnections, style }: WidgetP
         {tasks.length === 0 ? <p className="cmd-empty">No open tasks.</p> : null}
         {tasks.map((task) => (
           <div key={task.id} className="cmd-task-row">
-            <span aria-hidden className="mt-0.5 h-3 w-3 flex-none rounded-full border border-[color:var(--land-gold-soft)]" />
+            <span aria-hidden className="mt-0.5 h-3 w-3 flex-none rounded-full border border-[color:var(--land-line)]" />
             <span className="min-w-0 flex-1 truncate">{task.title}</span>
           </div>
         ))}
@@ -226,7 +226,7 @@ export function F1Widget({ command, onRemove, onConnections, style }: WidgetProp
         {sessions.map((session) => (
           <div key={session.id} className="cmd-f1-row">
             <span className="truncate">{session.title}</span>
-            <span className="text-[color:var(--land-gold-soft)]">{relative(session.data.startsAt, now)}</span>
+            <span className="text-[color:var(--land-muted)]">{relative(session.data.startsAt, now)}</span>
           </div>
         ))}
       </Gate>
@@ -310,7 +310,7 @@ export function VercelWidget({ command, onRemove, onConnections, style }: Widget
         {deploys.length === 0 ? <p className="cmd-empty">No recent deployments.</p> : null}
         {deploys.map((deploy) => (
           <div key={deploy.id} className="cmd-deploy-row">
-            <span className={`text-[11px] uppercase tracking-wide ${deploy.data.status === "failed" ? "cmd-down" : "text-[color:var(--land-gold-soft)]"}`}>{deploy.data.status.replace("_", " ")}</span>
+            <span className={`text-[11px] uppercase tracking-wide ${deploy.data.status === "failed" ? "cmd-down" : "text-[color:var(--land-muted)]"}`}>{deploy.data.status.replace("_", " ")}</span>
             <span className="min-w-0 flex-1 truncate">{deploy.title}</span>
           </div>
         ))}

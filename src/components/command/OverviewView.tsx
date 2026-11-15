@@ -268,7 +268,7 @@ function WidgetVisualPreview({ id }: { id: string }) {
             "Prep weekly engineering notes",
           ].map((title, idx) => (
             <div key={title} className={`cmd-task-row ${idx === 3 ? "border-b-0" : ""}`}>
-              <span aria-hidden className="mt-0.5 h-3 w-3 flex-none rounded-full border border-[color:var(--land-gold-soft)]" />
+              <span aria-hidden className="mt-0.5 h-3 w-3 flex-none rounded-full border border-[color:var(--land-line)]" />
               <span className="min-w-0 flex-1 truncate">{title}</span>
             </div>
           ))}
@@ -308,11 +308,11 @@ function WidgetVisualPreview({ id }: { id: string }) {
         <div className="pt-0.5">
           <div className="cmd-f1-row">
             <span className="truncate">Monaco · Qualifying</span>
-            <span className="text-[color:var(--land-gold-soft)]">in 2d</span>
+            <span className="text-[color:var(--land-muted)]">in 2d</span>
           </div>
           <div className="cmd-f1-row border-b-0">
             <span className="truncate">Monaco · Grand Prix</span>
-            <span className="text-[color:var(--land-gold-soft)]">in 3d</span>
+            <span className="text-[color:var(--land-muted)]">in 3d</span>
           </div>
         </div>
       );
@@ -363,11 +363,11 @@ function WidgetVisualPreview({ id }: { id: string }) {
       return (
         <div className="pt-0.5">
           <div className="cmd-deploy-row">
-            <span className="text-[11px] uppercase tracking-wide text-[color:var(--land-gold-soft)]">ready</span>
+            <span className="text-[11px] uppercase tracking-wide text-[color:var(--land-muted)]">ready</span>
             <span className="min-w-0 flex-1 truncate">Complete Laniakea stage</span>
           </div>
           <div className="cmd-deploy-row border-b-0">
-            <span className="text-[11px] uppercase tracking-wide text-[color:var(--land-gold-soft)]">ready</span>
+            <span className="text-[11px] uppercase tracking-wide text-[color:var(--land-muted)]">ready</span>
             <span className="min-w-0 flex-1 truncate">Add Light Mode system</span>
           </div>
         </div>
