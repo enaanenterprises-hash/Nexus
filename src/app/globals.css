@@ -4931,3 +4931,415 @@ select.research-field option {
   line-height: 1.65;
   color: var(--land-muted);
 }
+
+
+/* ——— CHAPTERS 02–05: FULL LANDING STAGES ——— */
+.land-section--stage {
+  position: relative;
+  padding-top: 6rem;
+  padding-bottom: 4.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    radial-gradient(60% 38% at 50% 0%, rgba(240, 181, 74, 0.055), transparent 72%),
+    #000;
+}
+
+/* Chapter 02: Network & Research Stage */
+.nx-net-stage {
+  position: relative;
+  overflow: hidden;
+  border-radius: 26px;
+  border: 1px solid rgba(240, 181, 74, 0.24);
+  background: #000;
+  box-shadow:
+    0 36px 96px rgba(0, 0, 0, 0.9),
+    0 0 60px rgba(240, 181, 74, 0.07);
+}
+
+.nx-net-columns {
+  position: relative;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.35rem;
+  padding: 1.35rem;
+}
+
+@media (min-width: 1024px) {
+  .nx-net-columns {
+    grid-template-columns: 1.08fr 1fr;
+    gap: 1.5rem;
+    padding: 1.65rem;
+  }
+}
+
+.nx-net-voice-wing,
+.nx-net-reader-wing {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.nx-voice-orb-badge {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  width: fit-content;
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid rgba(240, 181, 74, 0.35);
+  background: rgba(10, 8, 5, 0.72);
+  backdrop-filter: blur(14px);
+}
+
+.nx-net-utterance-box {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 1.5rem;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background: rgba(8, 7, 5, 0.74);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.nx-prov-card {
+  padding: 0.7rem 0.8rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.52);
+}
+
+.nx-prov-mono {
+  display: inline-grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(240, 181, 74, 0.5);
+  background: rgba(240, 181, 74, 0.14);
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #fff4dc;
+}
+
+.nx-reader-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background: rgba(8, 7, 5, 0.82);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.nx-reader-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.nx-reader-content {
+  padding: 1.35rem 1.45rem;
+  flex: 1;
+}
+
+.nx-reader-highlight {
+  margin-top: 1rem;
+  padding: 0.95rem 1.1rem;
+  border-radius: 14px;
+  border: 1px solid rgba(240, 181, 74, 0.42);
+  background:
+    radial-gradient(90% 80% at 0% 0%, rgba(240, 181, 74, 0.14), transparent 72%),
+    rgba(16, 12, 6, 0.8);
+  cursor: pointer;
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.nx-reader-highlight:hover {
+  border-color: rgba(240, 181, 74, 0.72);
+  box-shadow: 0 0 24px rgba(240, 181, 74, 0.14);
+}
+
+/* Chapter 03: Command Horizon & Bento Stage */
+.nx-cmd-horizon {
+  position: relative;
+  min-height: 290px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.nx-horizon-scrubber {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1.75rem;
+  padding: 1.5rem 1.5rem 1.35rem;
+  min-height: 235px;
+}
+
+.nx-horizon-readout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.nx-moment-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+@media (min-width: 860px) {
+  .nx-moment-buttons {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+.nx-moment-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(8, 7, 5, 0.72);
+  backdrop-filter: blur(14px);
+  color: var(--land-muted);
+  text-align: left;
+  cursor: pointer;
+  transition: all 200ms ease;
+}
+
+.nx-moment-btn:hover {
+  border-color: rgba(240, 181, 74, 0.45);
+  color: var(--land-ink);
+}
+
+.nx-moment-btn--active {
+  border-color: rgba(240, 181, 74, 0.75);
+  background: rgba(240, 181, 74, 0.14);
+  color: var(--land-ink);
+  box-shadow: 0 0 24px rgba(240, 181, 74, 0.16);
+}
+
+.nx-connector-bar {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1.4rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(5, 4, 3, 0.88);
+}
+
+.nx-conn-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 1.85rem;
+  padding: 0 0.65rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 11.5px;
+  color: var(--land-ink);
+  cursor: pointer;
+  transition: all 180ms ease;
+}
+
+.nx-conn-toggle--lit {
+  border-color: rgba(240, 181, 74, 0.55);
+  background: rgba(240, 181, 74, 0.12);
+}
+
+.nx-conn-toggle--off {
+  opacity: 0.45;
+  border-style: dashed;
+}
+
+.nx-conn-mono {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--land-gold-soft);
+}
+
+.nx-cmd-bento {
+  position: relative;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+  padding: 1.35rem;
+  background: #040302;
+}
+
+@media (min-width: 960px) {
+  .nx-cmd-bento {
+    grid-template-columns: 1.08fr 1fr;
+  }
+}
+
+.nx-cmd-bento-wide {
+  grid-column: 1 / -1;
+}
+
+/* Chapter 04: Modular Socket Bay & Node Workspaces */
+.nx-socket-wire-stage {
+  position: relative;
+  padding: 1.35rem 1.35rem 1.1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  min-height: 220px;
+}
+
+.nx-socket-bay-grid {
+  position: relative;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+@media (min-width: 900px) {
+  .nx-socket-bay-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+.nx-bay-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0.85rem 0.95rem;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(8, 7, 5, 0.74);
+  backdrop-filter: blur(16px);
+  text-align: left;
+  cursor: pointer;
+  transition: all 200ms ease;
+}
+
+.nx-bay-card:hover {
+  border-color: rgba(240, 181, 74, 0.45);
+}
+
+.nx-bay-card--active {
+  border-color: rgba(240, 181, 74, 0.8);
+  background: rgba(240, 181, 74, 0.13);
+  box-shadow: 0 0 28px rgba(240, 181, 74, 0.18);
+}
+
+.nx-bay-card--locked {
+  border-style: dashed;
+  opacity: 0.6;
+}
+
+.nx-bay-mono {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(240, 181, 74, 0.55);
+  background: rgba(240, 181, 74, 0.14);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #fff4dc;
+}
+
+.nx-bus-live-banner {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  margin: 1.2rem auto 0;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.38rem 0.95rem;
+  border-radius: 999px;
+  border: 1px solid rgba(240, 181, 74, 0.38);
+  background: rgba(8, 6, 4, 0.82);
+  backdrop-filter: blur(12px);
+}
+
+.nx-node-app-stage {
+  position: relative;
+  z-index: 10;
+  padding: 1.35rem;
+  background: #040302;
+}
+
+.nx-stem-rack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.9rem;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.nx-stem-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.nx-stem-wave {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 3px;
+  height: 46px;
+  padding: 0 0.6rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+  overflow: hidden;
+}
+
+.nx-stem-wave span {
+  flex: 1;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #ffd99a, #f0b54a);
+}
+
+.nx-stem-playhead {
+  position: absolute !important;
+  top: 0;
+  bottom: 0;
+  width: 2px !important;
+  flex: none !important;
+  background: #fff !important;
+  box-shadow: 0 0 10px #fff;
+}
+
+/* Chapter 05: Closing Convergence Stage */
+.nx-cta-stage {
+  position: relative;
+  overflow: hidden;
+  padding: 7rem 1.5rem 6rem;
+  border-top: 1px solid rgba(240, 181, 74, 0.2);
+  background: #000;
+}

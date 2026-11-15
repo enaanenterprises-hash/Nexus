@@ -7,7 +7,7 @@ import { NodesLivePreview } from "./NodesLivePreview";
 export function LandingScenes() {
   return (
     <div className="landing-content">
-      {/* SECTION 1 (PART 2 OF LANDING PAGE): UNIFIED ARCHITECTURE & GOLDEN NEURAL STAGE */}
+      {/* CHAPTER 01: UNIFIED ARCHITECTURE & GOLDEN NEURAL STAGE */}
       <section className="land-section land-section--hero-continuation" aria-labelledby="bus-section-title">
         <div className="land-container">
           <div className="nx-hero-bridge">
@@ -29,64 +29,71 @@ export function LandingScenes() {
         </div>
       </section>
 
-      {/* SECTION 2: TIER 01 — NETWORK */}
-      <section className="land-section" aria-labelledby="network-section-title">
+      {/* CHAPTER 02: TIER 01 — NETWORK & BIAS-AWARE RESEARCH */}
+      <section className="land-section land-section--stage" aria-labelledby="network-section-title">
         <div className="land-container">
-          <div className="land-section-header">
-            <p className="site-kicker">Tier 01 · Network</p>
-            <h2 id="network-section-title" className="land-section-title">
-              Ambient intelligence &amp; bias-aware research.
-            </h2>
-            <p className="land-section-desc">
-              Network has automatic situational awareness over everything connected into Command. It answers with
-              real context, while Research strips the web of ads and noise for deep, focused reading.
+          <div className="nx-hero-bridge">
+            <div className="nx-hero-bridge-title">
+              <p className="site-kicker">Tier 01 · Network &amp; Research</p>
+              <h2 id="network-section-title" className="landing-line max-w-[20ch]">
+                A calm voice with context. A reader built for truth.
+              </h2>
+            </div>
+            <p className="nx-hero-bridge-lede">
+              Network is the room you arrive in: a single conversational voice with automatic awareness over everything
+              wired into Command and your active Nodes. Beside it, Research strips the web of trackers and noise—turning
+              pages, highlights, and margin notes into typed sources that any permitted Node can read with no model in
+              the path.
             </p>
           </div>
 
-          {/* Real-time Graphical Preview of Network & Research */}
           <NetworkLivePreview />
         </div>
       </section>
 
-      {/* SECTION 3: TIER 02 — COMMAND */}
-      <section className="land-section" aria-labelledby="command-section-title">
+      {/* CHAPTER 03: TIER 02 — COMMAND TELEMETRY & DETERMINISTIC AUTOMATIONS */}
+      <section className="land-section land-section--stage" aria-labelledby="command-section-title">
         <div className="land-container">
-          <div className="land-section-header">
-            <p className="site-kicker">Tier 02 · Command</p>
-            <h2 id="command-section-title" className="land-section-title">
-              Your real-time telemetry cockpit.
-            </h2>
-            <p className="land-section-desc">
-              Connect external services once. Command consolidates your mail receipts, calendar timelines, developer
-              builds, and media into a unified dashboard that executes deterministic cross-API automations.
+          <div className="nx-hero-bridge">
+            <div className="nx-hero-bridge-title">
+              <p className="site-kicker">Tier 02 · Command Cockpit</p>
+              <h2 id="command-section-title" className="landing-line max-w-[20ch]">
+                Every outside signal on one deterministic horizon.
+              </h2>
+            </div>
+            <p className="nx-hero-bridge-lede">
+              Connect Gmail, Google Calendar, GitHub, Spotify, Strava, Plaid, Vercel, and Formula 1 once. Command
+              places live telemetry on a single 24-hour horizon and executes deterministic cross-API recipes—routing
+              email receipts straight into Ledger or locking Deep Work focus blocks—at zero AI compute cost.
             </p>
           </div>
 
-          {/* Full-Scale Graphical Preview of Command Cockpit */}
           <CommandLivePreview />
         </div>
       </section>
 
-      {/* SECTION 4: TIER 03 — NODES */}
-      <section className="land-section" aria-labelledby="nodes-section-title">
+      {/* CHAPTER 04: TIER 03 — MODULAR SOCKET NODES & PUBLIC SDK */}
+      <section className="land-section land-section--stage" aria-labelledby="nodes-section-title">
         <div className="land-container">
-          <div className="land-section-header">
-            <p className="site-kicker">Tier 03 · Nodes</p>
-            <h2 id="nodes-section-title" className="land-section-title">
-              Heavy-duty desktop applications in modular sockets.
-            </h2>
-            <p className="land-section-desc">
-              Like extensions in VS Code or Obsidian, Nodes are standalone deterministic applications that subscribe to
-              Command data streams. Toggle between Studio, Study, Ledger, and Canvas below:
+          <div className="nx-hero-bridge">
+            <div className="nx-hero-bridge-title">
+              <p className="site-kicker">Tier 03 · Modular Socket Ecosystem</p>
+              <h2 id="nodes-section-title" className="landing-line max-w-[20ch]">
+                Standalone workspaces that snap into the core.
+              </h2>
+            </div>
+            <p className="nx-hero-bridge-lede">
+              Like extensions in VS Code or Obsidian, Nodes are full-scale deterministic applications—Studio, Study,
+              Ledger, and Canvas—wired into orbital sockets around the core. They subscribe to Command feeds and pass
+              typed records to one another over the shared event bus.
             </p>
           </div>
 
-          {/* Interactive Switcher Preview of Desktop Nodes */}
           <NodesLivePreview />
         </div>
       </section>
 
-      {/* SECTION 5: CALL TO ACTION */}
+      {/* CHAPTER 05: CONVERGENCE HORIZON & WAITLIST */}
       <LandingCTA />
     </div>
   );
