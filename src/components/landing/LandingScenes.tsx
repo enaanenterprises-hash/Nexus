@@ -7,22 +7,24 @@ import { NodesLivePreview } from "./NodesLivePreview";
 export function LandingScenes() {
   return (
     <div className="landing-content">
-      {/* SECTION 1: THE ANIMATED SHARED EVENT BUS */}
-      <section className="land-section" aria-labelledby="bus-section-title">
+      {/* SECTION 1 (PART 2 OF LANDING PAGE): UNIFIED ARCHITECTURE & GOLDEN NEURAL STAGE */}
+      <section className="land-section land-section--hero-continuation" aria-labelledby="bus-section-title">
         <div className="land-container">
-          <div className="land-section-header">
-            <p className="site-kicker">Architecture · The Shared Event Bus</p>
-            <h2 id="bus-section-title" className="land-section-title">
-              Three tiers. Zero AI lock-in.
-            </h2>
-            <p className="land-section-desc">
-              Watch how Nexus transfers structured data across its central event bus. External feeds ingested into
-              Command flow directly into independent Nodes—allowing your tools to genuinely collaborate without
-              depending on an LLM.
+          <div className="nx-hero-bridge">
+            <div className="nx-hero-bridge-title">
+              <p className="site-kicker">Architecture · Network, Command, Nodes</p>
+              <h2 id="bus-section-title" className="landing-line max-w-[20ch]">
+                One connection, structured across three tiers.
+              </h2>
+            </div>
+            <p className="nx-hero-bridge-lede">
+              Nexus unifies your outside accounts, heavy-duty desktop workspaces, and ambient intelligence onto one
+              deterministic event bus. Command ingests live telemetry and runs cross-API rules; Nodes snap standalone
+              applications into modular sockets; Network sits at the core with full situational awareness—while your
+              daily workflow runs at zero LLM compute cost.
             </p>
           </div>
 
-          {/* Interactive, Animated Visual Circuit Diagram */}
           <EventBusLivePreview />
         </div>
       </section>
