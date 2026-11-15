@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/postgres-js"
 import postgres from "postgres"
-import { AUTH_SCHEMA_STATEMENTS, COMMAND_SCHEMA_STATEMENTS, RESEARCH_SCHEMA_STATEMENTS } from "./statements"
+import { AUTH_SCHEMA_STATEMENTS, COMMAND_SCHEMA_STATEMENTS, RESEARCH_SCHEMA_STATEMENTS, WAITLIST_SCHEMA_STATEMENTS } from "./statements"
 
 type Sql = ReturnType<typeof postgres>
 type Database = ReturnType<typeof drizzle>
@@ -10,6 +10,7 @@ let database: Database | undefined
 let schemaReady: Promise<void> | null = null
 let researchReady: Promise<void> | null = null
 let commandReady: Promise<void> | null = null
+let waitlistReady: Promise<void> | null = null
 
 export function databaseUrl() {
   const url = process.env["DATABASE_URL"]?.trim()
@@ -83,4 +84,19 @@ export function ensureCommandSchema() {
     throw error
   })
   return commandReady
+}
+
+/** Creates the waitlist table if it is missing. */
+export function ensureWaitlistSchema() {
+  if (!databaseUrl()) return Promise.resolve()
+  waitlistReady ??= (async () => {
+    const connection = getSql()
+    for (const statement of WAITLIST_SCHEMA_STATEMENTS) {
+      await connection.unsafe(statement)
+    }
+  })().catch((error: unknown) => {
+    waitlistReady = null
+    throw error
+  })
+  return waitlistReady
 }

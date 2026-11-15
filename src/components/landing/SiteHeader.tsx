@@ -7,8 +7,8 @@ export function SiteHeader() {
       <Link href="/" aria-label="Nexus home" className="inline-flex">
         <NexusWordmark className="h-[14px] w-auto sm:h-[17px]" />
       </Link>
-      <Link href="/signup" className="landing-signup">
-        Sign up
+      <Link href="/waitlist" className="landing-signup">
+        Join waitlist
       </Link>
     </header>
   );

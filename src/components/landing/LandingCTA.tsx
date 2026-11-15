@@ -1,29 +1,26 @@
-import Link from "next/link";
+import { WaitlistForm } from "./WaitlistForm";
 
 export function LandingCTA() {
   return (
-    <section className="land-section land-cta-section" aria-labelledby="cta-title">
+    <section id="waitlist" className="land-section land-cta-section" aria-labelledby="cta-title">
       <div className="land-container text-center">
-        <p className="site-kicker">Get Started</p>
+        <p className="site-kicker">Early Access</p>
         <h2 id="cta-title" className="land-cta-title">
-          Enter the network.
+          Reserve your spot on the network.
         </h2>
         <p className="land-cta-desc">
-          One room for work that usually lives apart. Sign up in seconds with passwordless authentication and start
-          orchestrating your day with complete context.
+          We are rolling out Nexus in measured beta batches. Join the waitlist with your email to receive an early access invite.
         </p>
 
-        <div className="land-cta-actions">
-          <Link href="/signup" className="landing-signup land-cta-btn">
-            Create your account &rarr;
-          </Link>
+        <div className="land-cta-form-wrap max-w-md mx-auto">
+          <WaitlistForm />
         </div>
 
         <div className="land-cta-badges">
           <span>✓ Two sockets free forever</span>
-          <span>✓ Passwordless sign-in</span>
-          <span>✓ AES-256 encrypted connectors</span>
           <span>✓ Zero advertising or trackers</span>
+          <span>✓ AES-256 encrypted connectors</span>
+          <span>✓ No spam ever</span>
         </div>
       </div>
     </section>

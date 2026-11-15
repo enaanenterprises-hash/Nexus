@@ -162,3 +162,14 @@ export const COMMAND_SCHEMA_STATEMENTS = [
     "widgets" jsonb NOT NULL DEFAULT '[]'
   )`,
 ] as const
+
+/** Waitlist storage for prospective users. */
+export const WAITLIST_SCHEMA_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS "waitlist" (
+    "id" text PRIMARY KEY NOT NULL,
+    "email" text NOT NULL,
+    "createdAt" timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT "waitlist_email_unique" UNIQUE ("email")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "waitlist_email_idx" ON "waitlist" ("email")`,
+] as const

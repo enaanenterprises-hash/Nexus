@@ -21,8 +21,8 @@ export function LandingPage() {
               </Link>
               <span className="landing-beta">in beta</span>
             </div>
-            <Link href="/signup" className="landing-signup">
-              Sign up
+            <Link href="/waitlist" className="landing-signup">
+              Join waitlist
             </Link>
           </header>
 
