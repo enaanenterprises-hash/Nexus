@@ -25,59 +25,61 @@ export const WIDE_MIN_WIDTH = 1100;
 
 /**
  * Laniakea Supercluster topology shared by the canvas renderer and the
- * interactive DOM node-pin overlay so both agree on exact coordinates.
+ * interactive DOM node markers so both agree on exact coordinates.
  *
  * Socket indices:
- *   0 — Free Socket 1 (Upper-Right Main Spine Attractor — "You Are Here" ridge)
- *   1 — Free Socket 2 (Lower-Center Golden Basin Stream)
- *   2 — Pro Socket 1  (Upper-Left Arching Watershed Feather)
- *   3 — Pro Socket 2  (Far-Right Outer Filament Wing)
- *   4 — Pro Socket 3  (Lower-Left Deep Cosmic Tributary)
+ *   0 — Free Socket 1 (Right Main Spine Ridge)
+ *   1 — Free Socket 2 (Left Main Watershed)
+ *   2 — Pro Socket 1  (Upper-Left Arching Plume)
+ *   3 — Pro Socket 2  (Upper-Right Arching Plume)
+ *   4 — Pro Socket 3  (Lower-Right Outer Horizon Wing)
  */
 export function computeStageLayout(width: number, height: number, socketCount: number): StageLayout {
   const compact = width < WIDE_MIN_WIDTH;
 
   const core: Vec = compact
-    ? { x: width * 0.42, y: height * 0.36 }
-    : { x: width * 0.39, y: clamp(height * 0.37, 240, height * 0.44) };
+    ? { x: width * 0.5, y: height * 0.33 }
+    : { x: width * 0.5, y: clamp(height * 0.36, 210, height * 0.41) };
 
-  const spineJunction: Vec = compact
-    ? { x: width * 0.62, y: height * 0.39 }
-    : { x: width * 0.58, y: core.y + height * 0.035 };
+  const spineJunction: Vec = {
+    x: width * 0.5,
+    y: core.y - height * 0.02,
+  };
 
   const radius = compact
-    ? Math.min(width * 0.36, height * 0.34)
-    : clamp(Math.min(width * 0.28, height * 0.36), 190, 360);
+    ? Math.min(width * 0.38, height * 0.34)
+    : clamp(Math.min(width * 0.34, height * 0.42), 220, 620);
 
-  // Relative vectors (in units of `radius`) for up to 5 Laniakea arm attractors
+  // Relative vectors (in units of `radius`) balanced symmetrically around the center core,
+  // leaving the bottom-center dialogue stage open and legible.
   const armSpecs: Array<{
     at: Vec;
     elbow: Vec;
     fanAngle: number;
   }> = compact
     ? [
-        // 0: Main bright right ridge ("You Are Here" locus in Laniakea reference)
-        { at: { x: 0.72, y: 0.12 }, elbow: { x: 0.42, y: 0.02 }, fanAngle: 0.18 },
-        // 1: Lower golden basin sweep
-        { at: { x: 0.14, y: 0.68 }, elbow: { x: 0.02, y: 0.36 }, fanAngle: 1.42 },
-        // 2: Upper-left arching plume
-        { at: { x: -0.58, y: -0.44 }, elbow: { x: -0.22, y: -0.34 }, fanAngle: -2.35 },
-        // 3: Upper-right outer wing
-        { at: { x: 0.76, y: -0.46 }, elbow: { x: 0.38, y: -0.24 }, fanAngle: -0.55 },
-        // 4: Lower-left cosmic tributary
-        { at: { x: -0.66, y: 0.38 }, elbow: { x: -0.34, y: 0.18 }, fanAngle: 2.55 },
+        // 0: Right Main Ridge
+        { at: { x: 0.58, y: -0.04 }, elbow: { x: 0.3, y: -0.08 }, fanAngle: 0.06 },
+        // 1: Left Main Watershed
+        { at: { x: -0.58, y: -0.04 }, elbow: { x: -0.3, y: 0.08 }, fanAngle: Math.PI - 0.06 },
+        // 2: Upper-Left Arching Plume
+        { at: { x: -0.44, y: -0.46 }, elbow: { x: -0.17, y: -0.3 }, fanAngle: -2.35 },
+        // 3: Upper-Right Arching Plume
+        { at: { x: 0.44, y: -0.46 }, elbow: { x: 0.17, y: -0.3 }, fanAngle: -0.78 },
+        // 4: Lower-Right Outer Horizon Wing
+        { at: { x: 0.66, y: 0.34 }, elbow: { x: 0.35, y: 0.2 }, fanAngle: 0.48 },
       ]
     : [
-        // 0: Main blazing Laniakea right ridge ("You Are Here" locus)
-        { at: { x: 0.88, y: 0.14 }, elbow: { x: 0.48, y: 0.02 }, fanAngle: 0.16 },
-        // 1: Sweeping lower-center golden basin arm
-        { at: { x: 0.12, y: 0.72 }, elbow: { x: -0.02, y: 0.38 }, fanAngle: 1.45 },
-        // 2: Upper-left arching watershed arm
-        { at: { x: -0.68, y: -0.48 }, elbow: { x: -0.24, y: -0.38 }, fanAngle: -2.42 },
-        // 3: Upper-right feather plume
-        { at: { x: 0.96, y: -0.48 }, elbow: { x: 0.46, y: -0.22 }, fanAngle: -0.52 },
-        // 4: Lower-left deep cosmic arm
-        { at: { x: -0.78, y: 0.42 }, elbow: { x: -0.4, y: 0.18 }, fanAngle: 2.58 },
+        // 0: Right Main Ridge
+        { at: { x: 0.62, y: -0.04 }, elbow: { x: 0.32, y: -0.08 }, fanAngle: 0.06 },
+        // 1: Left Main Watershed
+        { at: { x: -0.62, y: -0.04 }, elbow: { x: -0.32, y: 0.08 }, fanAngle: Math.PI - 0.06 },
+        // 2: Upper-Left Arching Plume
+        { at: { x: -0.46, y: -0.48 }, elbow: { x: -0.18, y: -0.32 }, fanAngle: -2.35 },
+        // 3: Upper-Right Arching Plume
+        { at: { x: 0.46, y: -0.48 }, elbow: { x: 0.18, y: -0.32 }, fanAngle: -0.78 },
+        // 4: Lower-Right Outer Horizon Wing
+        { at: { x: 0.72, y: 0.36 }, elbow: { x: 0.38, y: 0.22 }, fanAngle: 0.48 },
       ];
 
   const sockets: Vec[] = [];
@@ -87,8 +89,12 @@ export function computeStageLayout(width: number, height: number, socketCount: n
   for (let i = 0; i < socketCount; i++) {
     const spec = armSpecs[i % armSpecs.length]!;
     sockets.push({
-      x: clamp(core.x + spec.at.x * radius, 88, width - 88),
-      y: clamp(core.y + spec.at.y * radius, 76, height - 180),
+      x: compact
+        ? clamp(core.x + spec.at.x * radius, 72, width - 72)
+        : clamp(core.x + spec.at.x * radius, 108, width - 108),
+      y: compact
+        ? clamp(core.y + spec.at.y * radius, 72, height * 0.56)
+        : clamp(core.y + spec.at.y * radius, 78, height - 220),
     });
     socketElbows.push({
       x: core.x + spec.elbow.x * radius,
@@ -107,6 +113,6 @@ export function computeStageLayout(width: number, height: number, socketCount: n
     sockets,
     socketElbows,
     socketAngles,
-    scale: compact ? Math.max(width * 0.9, height * 0.72) : Math.max(width * 0.56, height * 0.88),
+    scale: Math.hypot(width, height) * 0.62,
   };
 }

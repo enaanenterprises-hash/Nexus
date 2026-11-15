@@ -15,7 +15,6 @@ import {
   canUseSlot,
   extensionRegistry,
   nexusBus,
-  placeholderName,
   setStubPro,
   type ExtensionId,
   type SlotId,
@@ -25,7 +24,7 @@ import { getConnector } from "@/lib/connectors/catalog";
 import { researchIntent } from "@/lib/nexus/brain";
 import { ExtensionHub } from "./ExtensionHub";
 import { ExtensionPanel } from "./ExtensionPanel";
-import { BoltIcon, CloseIcon } from "./icons";
+import { CloseIcon } from "./icons";
 import {
   NeuralStage,
   type SocketVisual,
@@ -50,10 +49,10 @@ const OAUTH_ERRORS: Record<string, string> = {
 };
 
 const PRODUCT_PAYLOAD_LABELS: Record<string, string> = {
-  "dev.nexus.sample.daily-brief": "daily.brief · priority packet",
-  "dev.nexus.sample.focus-guard": "focus.guard · state vector",
-  "dev.nexus.sample.quick-capture": "capture.note · typed record",
-  "dev.nexus.sample.ledger": "command.purchase · $42.10 USD",
+  "dev.nexus.sample.daily-brief": "Daily Brief",
+  "dev.nexus.sample.focus-guard": "Focus Guard",
+  "dev.nexus.sample.quick-capture": "Quick Capture",
+  "dev.nexus.sample.ledger": "Ledger",
 };
 
 export function Dashboard({ viewer }: { viewer: Viewer }) {
@@ -129,17 +128,19 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
 
   // Automatically visualize bus events as travelling product comets between Laniakea arms
   useEffect(() => {
-    const unsubCommand = nexusBus.subscribe("command:item-published", (event) => {
+    const unsubCommand = nexusBus.subscribe("command:item-published", () => {
       const snap = extensionRegistry.getSnapshot();
       const ledgerIdx = snap.slots.findIndex((s) => s.occupiedBy === "dev.nexus.sample.ledger");
       const targetIdx = ledgerIdx >= 0 ? ledgerIdx : snap.slots.findIndex((s) => s.occupiedBy !== null);
       if (targetIdx >= 0) {
+        const targetId = snap.slots[targetIdx]?.occupiedBy;
+        const targetName = targetId
+          ? (extensionRegistry.get(targetId)?.manifest.name ?? PRODUCT_PAYLOAD_LABELS[targetId] ?? "Node")
+          : "Node";
         setTransfer((prev) => ({
           fromSocket: -1,
           toSocket: targetIdx,
-          label: `command.${event.payload.kind.replace("command.", "")} → ${
-            snap.slots[targetIdx]?.occupiedBy?.split(".").pop() ?? "node"
-          }`,
+          label: `Command → ${targetName}`,
           serial: (prev?.serial ?? 0) + 1,
         }));
       }
@@ -151,10 +152,18 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
       const fromIdx = snap.slots.findIndex((s) => s.occupiedBy === event.source);
       if (fromIdx >= 0) {
         const otherIdx = snap.slots.findIndex((s, idx) => idx !== fromIdx && s.occupiedBy !== null);
+        const fromName =
+          extensionRegistry.get(event.source)?.manifest.name ??
+          PRODUCT_PAYLOAD_LABELS[event.source] ??
+          "Node";
+        const otherId = otherIdx >= 0 ? snap.slots[otherIdx]?.occupiedBy : null;
+        const toName = otherId
+          ? (extensionRegistry.get(otherId)?.manifest.name ?? PRODUCT_PAYLOAD_LABELS[otherId] ?? "Node")
+          : "Core";
         setTransfer((prev) => ({
           fromSocket: fromIdx,
           toSocket: otherIdx >= 0 ? otherIdx : -1,
-          label: PRODUCT_PAYLOAD_LABELS[event.source] ?? `${event.source.split(".").pop()} · packet`,
+          label: `${fromName} → ${toName}`,
           serial: (prev?.serial ?? 0) + 1,
         }));
       }
@@ -203,14 +212,24 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
 
   const signal = useMemo<StageSignal>(() => {
     const snapIndex = hub.lastSnapped ? hub.slots.findIndex((s) => s.id === hub.lastSnapped!.slotId) : -1;
+    const socketLabels = hub.slots.map((slot) => {
+      const ext = slot.occupiedBy ? hub.extensions.find((e) => e.manifest.id === slot.occupiedBy) : undefined;
+      const open = canUseSlot(slot, hub.entitlement);
+      return {
+        monogram: ext ? (ext.manifest.monogram ?? ext.manifest.name.slice(0, 2)) : "",
+        name: ext ? ext.manifest.name : open ? "Open socket" : "Pro socket",
+        status: ext ? "connected" : open ? "open" : "locked",
+      };
+    });
     return {
       brain: session.brain,
       sockets: visuals,
+      socketLabels,
       snap: hub.lastSnapped && snapIndex >= 0 ? { index: snapIndex, serial: hub.lastSnapped.serial } : null,
       transfer,
       paused: surface.view !== "home",
     };
-  }, [session.brain, visuals, hub.lastSnapped, hub.slots, transfer, surface.view]);
+  }, [session.brain, visuals, hub.lastSnapped, hub.slots, hub.extensions, hub.entitlement, transfer, surface.view]);
 
   const stageLayout = useMemo(
     () => computeStageLayout(stageSize.width, stageSize.height, hub.slots.length),
@@ -279,21 +298,6 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
     setSurface((s) => (typeof s.panel === "object" && s.panel?.extension === id ? { ...s, panel: null } : s));
   }
 
-  async function connectIntoSocket(slotId: SlotId) {
-    const slot = hub.slots.find((s) => s.id === slotId);
-    if (!slot) return;
-    if (!canUseSlot(slot, hub.entitlement)) {
-      setStubPro(true);
-    }
-    const available = hub.extensions.find((e) => !hub.slots.some((s) => s.occupiedBy === e.manifest.id));
-    if (available) {
-      await snap(available.manifest.id, slotId);
-    } else {
-      setSelected(slotId);
-      setSurface((s) => ({ ...s, panel: "nodes" }));
-    }
-  }
-
   function triggerNodeTransfer(fromId: ExtensionId, explicitToId?: ExtensionId) {
     const fromIndex = hub.slots.findIndex((s) => s.occupiedBy === fromId);
     if (fromIndex < 0) return;
@@ -310,8 +314,9 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
 
     const fromExt = hub.extensions.find((e) => e.manifest.id === fromId);
     const toExt = toIndex >= 0 ? hub.extensions.find((e) => e.manifest.id === hub.slots[toIndex]?.occupiedBy) : null;
-    const payloadName = PRODUCT_PAYLOAD_LABELS[fromId] ?? "nexus.record · payload";
-    const routeText = `${fromExt?.manifest.monogram ?? "NODE"} → ${toExt?.manifest.monogram ?? "CORE"} · ${payloadName}`;
+    const fromName = fromExt?.manifest.name ?? PRODUCT_PAYLOAD_LABELS[fromId] ?? "Node";
+    const toName = toExt?.manifest.name ?? "Core";
+    const routeText = `${fromName} → ${toName}`;
 
     setTransfer((prev) => ({
       fromSocket: fromIndex,
@@ -320,11 +325,7 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
       serial: (prev?.serial ?? 0) + 1,
     }));
 
-    flash(
-      `Transmitting ${payloadName} from ${fromExt?.manifest.name ?? fromId} to ${
-        toExt?.manifest.name ?? "Great Attractor Core"
-      }.`,
-    );
+    flash(`Routing ${routeText}.`);
   }
 
   function selectSlot(slotId: SlotId) {
@@ -344,7 +345,6 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
   }
 
   const panel = surface.panel;
-  const occupiedCount = hub.slots.filter((s) => s.occupiedBy !== null).length;
 
   return (
     <div className="dash relative h-[100svh] w-full flex-1 overflow-hidden">
@@ -357,46 +357,9 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
         <NeuralStage signal={signal} />
         <div className="dash-scrim--home pointer-events-none absolute inset-0" />
 
-        {/* Interactive Laniakea Supercluster Attractor Pins & Product Transfer HUD */}
+        {/* Minimal Node Indicators anchored on each Laniakea arm */}
         {surface.view === "home" ? (
           <div className="laniakea-hud pointer-events-none absolute inset-0 z-10 overflow-hidden">
-            {/* Top-Center Supercluster Status Pill */}
-            <div className="laniakea-status-bar pointer-events-auto">
-              <span className="laniakea-status-dot" />
-              <span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-[color:var(--land-gold-soft)]">
-                Laniakea Basin
-              </span>
-              <span className="text-[11.5px] text-[color:var(--land-muted)]">
-                {occupiedCount} of {hub.slots.length} arms illuminated
-              </span>
-              {notice ? (
-                <span className="hidden max-w-[340px] truncate border-l border-white/10 pl-2.5 text-[11.5px] text-[color:var(--land-gold-soft)] md:inline">
-                  {notice}
-                </span>
-              ) : null}
-            </div>
-
-            {/* Great Attractor Core Pin ("YOU ARE HERE" Reference Locus) */}
-            <div
-              className="laniakea-core-pin"
-              style={{
-                left: `${stageLayout.core.x}px`,
-                top: `${stageLayout.core.y}px`,
-              }}
-            >
-              <span className="laniakea-core-dot" />
-              <span className="laniakea-core-line" />
-              <div className="laniakea-core-tag">
-                <span className="text-[9.5px] font-semibold uppercase tracking-[0.16em] text-[color:var(--land-gold-soft)]">
-                  Great Attractor · Core
-                </span>
-                <span className="text-[10px] text-[color:var(--land-muted)]">
-                  Network Intelligence
-                </span>
-              </div>
-            </div>
-
-            {/* 5 Laniakea Arm Socket Attractor Pins */}
             {hub.slots.map((slot, idx) => {
               const pos = stageLayout.sockets[idx];
               if (!pos) return null;
@@ -404,77 +367,33 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
                 ? hub.extensions.find((e) => e.manifest.id === slot.occupiedBy)
                 : undefined;
               const open = canUseSlot(slot, hub.entitlement);
-              const ghostName = placeholderName(slot.placeholderKey);
               const isLeftHalf = pos.x < stageLayout.core.x;
+              const stateClass = ext
+                ? "laniakea-node-marker--live"
+                : open
+                  ? "laniakea-node-marker--open"
+                  : "laniakea-node-marker--locked";
 
               return (
-                <div
+                <button
                   key={slot.id}
-                  className={`laniakea-arm-pin ${
-                    ext ? "laniakea-arm-pin--live" : open ? "laniakea-arm-pin--open" : "laniakea-arm-pin--locked"
-                  } ${isLeftHalf ? "laniakea-arm-pin--left" : ""}`}
+                  type="button"
+                  onClick={() => (ext ? openPanel({ extension: ext.manifest.id }) : selectSlot(slot.id))}
+                  className={`laniakea-node-marker pointer-events-auto ${stateClass} ${
+                    isLeftHalf ? "laniakea-node-marker--left" : ""
+                  }`}
                   style={{
                     left: `${pos.x}px`,
                     top: `${pos.y}px`,
                   }}
+                  title={ext ? `Open ${ext.manifest.name}` : open ? "Open Nodes to connect" : "Locked Pro socket"}
                 >
-                  {/* Pinpoint Attractor Marker Dot */}
-                  <span className="laniakea-pin-beacon" aria-hidden />
-                  <span className="laniakea-pin-leader" aria-hidden />
-
-                  {/* Astronomical Callout Card */}
-                  <div className="laniakea-pin-card pointer-events-auto">
-                    <div className="flex items-center gap-2">
-                      <span className="laniakea-pin-mono">
-                        {ext ? (ext.manifest.monogram ?? ext.manifest.name.slice(0, 2)) : `0${idx + 1}`}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate text-[11.5px] font-semibold leading-tight text-[color:var(--land-ink)]">
-                          {ext ? ext.manifest.name : `${ghostName} Arm`}
-                        </p>
-                        <p className="text-[9.5px] uppercase tracking-[0.12em] text-[color:var(--land-faint)]">
-                          {ext
-                            ? `Arm 0${idx + 1} · Illuminated`
-                            : open
-                              ? `Arm 0${idx + 1} · Dark (Disconnected)`
-                              : `Arm 0${idx + 1} · Dark (Pro Socket)`}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-1.5 flex items-center gap-1.5">
-                      {ext ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => triggerNodeTransfer(ext.manifest.id)}
-                            className="laniakea-pin-btn laniakea-pin-btn--gold"
-                            title={`Send product from ${ext.manifest.name} to another node`}
-                          >
-                            <BoltIcon size={11} />
-                            <span>Transfer</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void release(ext.manifest.id)}
-                            className="laniakea-pin-btn"
-                            title={`Disconnect ${ext.manifest.name} and darken this arm`}
-                          >
-                            Disconnect
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => void connectIntoSocket(slot.id)}
-                          className="laniakea-pin-btn laniakea-pin-btn--gold"
-                        >
-                          {open ? "Connect Arm" : "Unlock & Wire"}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                  <span className="laniakea-node-dot" aria-hidden />
+                  <span className="laniakea-node-tick" aria-hidden />
+                  <span className="laniakea-node-label">
+                    {ext ? ext.manifest.name : open ? "Open socket" : "Pro socket"}
+                  </span>
+                </button>
               );
             })}
           </div>
@@ -508,15 +427,15 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
       <NodeRail hub={hub} surface={surface} onCommand={() => openCommand()} onSlot={selectSlot} />
 
       {surface.view === "home" ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-6 z-20 flex justify-center pl-[84px] pr-3 sm:bottom-9 sm:pr-[76px]">
-          <div className="dash-chat pointer-events-auto flex w-full max-w-[600px] flex-col items-center gap-6">
+        <div className="pointer-events-none absolute inset-x-0 bottom-5 z-20 flex justify-center px-4 sm:bottom-8 sm:px-[88px]">
+          <div className="dash-chat pointer-events-auto flex w-full max-w-[620px] flex-col items-center gap-4">
             <NexusVoice
               brain={session.brain}
               current={session.current}
               pendingPrompt={session.pendingPrompt}
               revealed={session.revealed}
               history={session.history}
-              followUps={[]}
+              followUps={session.followUps}
               onAsk={chat}
             />
             <NexusInput

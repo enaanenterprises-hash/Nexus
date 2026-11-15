@@ -885,7 +885,8 @@ button.landing-signup {
   font-weight: 500;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--land-faint);
+  color: rgba(232, 224, 210, 0.72);
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.95);
 }
 
 .dash-heading {
@@ -895,12 +896,38 @@ button.landing-signup {
   color: var(--land-ink);
 }
 
+.dash-voice-stage {
+  padding: 0.85rem 1.35rem;
+  border-radius: 28px;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(1, 2, 5, 0.84) 0%,
+    rgba(1, 2, 5, 0.56) 62%,
+    rgba(1, 2, 5, 0) 100%
+  );
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
 .dash-utterance {
-  font-size: clamp(1.3rem, 1.9vw, 1.85rem);
-  font-weight: 300;
-  line-height: 1.32;
+  font-size: clamp(1.25rem, 1.8vw, 1.75rem);
+  font-weight: 350;
+  line-height: 1.38;
   letter-spacing: -0.02em;
+  color: #faf7f0;
   text-wrap: pretty;
+  text-shadow:
+    0 2px 20px rgba(0, 0, 0, 0.96),
+    0 1px 3px rgba(0, 0, 0, 0.95);
+}
+
+.dash-earlier-list {
+  padding: 0.85rem 1rem;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(6, 7, 10, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 .dash-panel {
@@ -912,18 +939,26 @@ button.landing-signup {
 }
 
 .dash-scrim--home {
-  background: linear-gradient(0deg, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0.45) 22%, transparent 42%);
+  background: linear-gradient(
+    0deg,
+    rgba(1, 2, 5, 0.96) 0%,
+    rgba(1, 2, 5, 0.78) 26%,
+    rgba(1, 2, 5, 0.28) 46%,
+    transparent 64%
+  );
 }
 
 .dash-chip {
   display: inline-flex;
   align-items: center;
-  height: 2.1rem;
-  padding: 0 0.95rem;
+  height: 2.05rem;
+  padding: 0 0.9rem;
   border-radius: 999px;
-  border: 1px solid var(--land-line);
-  background: rgba(255, 255, 255, 0.04);
-  font-size: 13.5px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(8, 8, 10, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-size: 13px;
   font-weight: 500;
   color: var(--land-ink);
   transition:
@@ -934,7 +969,7 @@ button.landing-signup {
 
 .dash-chip:hover {
   border-color: rgba(240, 181, 74, 0.55);
-  background: rgba(240, 181, 74, 0.08);
+  background: rgba(240, 181, 74, 0.12);
 }
 
 .dash-chip:disabled {
@@ -945,22 +980,38 @@ button.landing-signup {
 .dash-input {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  height: 3.5rem;
-  padding: 0 0.5rem 0 1.35rem;
+  gap: 0.65rem;
+  height: 3.65rem;
+  padding: 0 0.55rem 0 1.2rem;
   border-radius: 999px;
-  border: 1px solid var(--land-line);
-  background: rgba(14, 12, 9, 0.72);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(240, 181, 74, 0.36);
+  background: rgba(10, 9, 7, 0.9);
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.9),
+    0 0 28px rgba(240, 181, 74, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
   transition:
     border-color 250ms ease,
     box-shadow 250ms ease;
 }
 
 .dash-input:focus-within {
-  border-color: rgba(240, 181, 74, 0.6);
-  box-shadow: 0 0 0 4px rgba(240, 181, 74, 0.08);
+  border-color: rgba(240, 181, 74, 0.75);
+  box-shadow:
+    0 18px 52px rgba(0, 0, 0, 0.92),
+    0 0 0 4px rgba(240, 181, 74, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.dash-input-dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--land-gold);
+  box-shadow: 0 0 10px rgba(240, 181, 74, 0.85);
 }
 
 .dash-input input {
@@ -969,28 +1020,35 @@ button.landing-signup {
   background: transparent;
   outline: none;
   font-size: 16px;
-  color: var(--land-ink);
+  color: #faf7f0;
 }
 
 .dash-input input::placeholder {
-  color: var(--land-muted);
+  color: rgba(232, 224, 210, 0.58);
 }
 
 .dash-send {
   display: grid;
   place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
+  width: 2.55rem;
+  height: 2.55rem;
+  flex-shrink: 0;
   border-radius: 999px;
-  background: var(--land-ink);
-  color: #000;
+  background: linear-gradient(135deg, #ffe2a8, #f0b54a);
+  color: #050402;
   transition:
     opacity 200ms ease,
-    transform 200ms ease;
+    transform 200ms ease,
+    filter 200ms ease;
+}
+
+.dash-send:hover:not(:disabled) {
+  filter: brightness(1.06);
+  transform: translateY(-0.5px);
 }
 
 .dash-send:disabled {
-  opacity: 0.25;
+  opacity: 0.28;
 }
 
 .dash-button {
@@ -5345,258 +5403,131 @@ select.research-field option {
 }
 
 
-/* ——— DASHBOARD: LANIAKEA SUPERCLUSTER HUD & ATTRACTOR PINS ——— */
+/* ——— DASHBOARD: MINIMAL LANIAKEA NODE MARKERS ——— */
 .laniakea-hud {
   user-select: none;
 }
 
-.laniakea-status-bar {
+.laniakea-node-marker {
   position: absolute;
-  top: 1.15rem;
-  left: 50%;
-  transform: translateX(-50%);
-  display: inline-flex;
+  display: none;
   align-items: center;
-  gap: 0.65rem;
-  height: 2.1rem;
-  padding: 0 0.95rem;
-  border-radius: 999px;
-  border: 1px solid rgba(240, 181, 74, 0.28);
-  background: rgba(6, 5, 4, 0.72);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.65);
-}
-
-.laniakea-status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--land-gold);
-  box-shadow: 0 0 10px var(--land-gold);
-}
-
-.laniakea-core-pin {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  display: none;
+  gap: 0.45rem;
+  padding: 5px 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transform: translate(-5px, -50%);
+  transition:
+    opacity 240ms ease,
+    transform 240ms ease;
 }
 
 @media (min-width: 768px) {
-  .laniakea-core-pin {
-    display: block;
+  .laniakea-node-marker {
+    display: inline-flex;
   }
 }
 
-.laniakea-core-dot {
-  position: absolute;
-  left: -4px;
-  top: -4px;
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: #fffdf5;
-  box-shadow:
-    0 0 0 2px rgba(240, 181, 74, 0.85),
-    0 0 18px rgba(255, 224, 150, 0.95);
+.laniakea-node-marker--left {
+  flex-direction: row-reverse;
+  transform: translate(calc(-100% + 5px), -50%);
 }
 
-.laniakea-core-line {
-  position: absolute;
-  left: 4px;
-  top: 4px;
-  width: 26px;
-  height: 1px;
-  background: linear-gradient(90deg, rgba(255, 232, 175, 0.85), rgba(240, 181, 74, 0.35));
-  transform: rotate(28deg);
-  transform-origin: 0 0;
-}
-
-.laniakea-core-tag {
-  position: absolute;
-  left: 26px;
-  top: 10px;
-  display: flex;
-  flex-direction: column;
-  padding: 0.25rem 0.55rem;
-  border-radius: 8px;
-  border: 1px solid rgba(240, 181, 74, 0.32);
-  background: rgba(6, 5, 3, 0.68);
-  backdrop-filter: blur(10px);
-  white-space: nowrap;
-}
-
-.laniakea-arm-pin {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  display: none;
-}
-
-@media (min-width: 768px) {
-  .laniakea-arm-pin {
-    display: block;
-  }
-}
-
-.laniakea-pin-beacon {
-  position: absolute;
-  left: -5px;
-  top: -5px;
+.laniakea-node-dot {
   width: 10px;
   height: 10px;
-  border-radius: 999px;
-  transition: all 320ms ease;
-}
-
-.laniakea-arm-pin--live .laniakea-pin-beacon {
-  background: #e84838;
-  border: 1.5px solid #fff6e0;
-  box-shadow:
-    0 0 0 3px rgba(240, 181, 74, 0.42),
-    0 0 18px rgba(255, 214, 130, 0.95);
-}
-
-.laniakea-arm-pin--open .laniakea-pin-beacon {
-  background: #0b101b;
-  border: 1.5px solid rgba(152, 178, 222, 0.65);
-  box-shadow: 0 0 10px rgba(130, 158, 205, 0.25);
-}
-
-.laniakea-arm-pin--locked .laniakea-pin-beacon {
-  background: #070a12;
-  border: 1px dashed rgba(125, 145, 180, 0.42);
-}
-
-.laniakea-pin-leader {
-  position: absolute;
-  top: 0;
-  left: 5px;
-  width: 24px;
-  height: 1px;
-  transform: rotate(-18deg);
-  transform-origin: 0 0;
-  transition: background 300ms ease;
-}
-
-.laniakea-arm-pin--left .laniakea-pin-leader {
-  left: auto;
-  right: 5px;
-  transform: rotate(18deg);
-  transform-origin: 100% 0;
-}
-
-.laniakea-arm-pin--live .laniakea-pin-leader {
-  background: linear-gradient(90deg, rgba(232, 72, 56, 0.9), rgba(240, 181, 74, 0.72));
-}
-
-.laniakea-arm-pin--open .laniakea-pin-leader,
-.laniakea-arm-pin--locked .laniakea-pin-leader {
-  background: rgba(138, 162, 204, 0.32);
-}
-
-.laniakea-pin-card {
-  position: absolute;
-  top: -22px;
-  left: 26px;
-  min-width: 162px;
-  padding: 0.48rem 0.65rem;
-  border-radius: 13px;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  transition:
-    border-color 280ms ease,
-    background 280ms ease,
-    box-shadow 280ms ease,
-    opacity 280ms ease;
-}
-
-.laniakea-arm-pin--left .laniakea-pin-card {
-  left: auto;
-  right: 26px;
-}
-
-.laniakea-arm-pin--live .laniakea-pin-card {
-  border: 1px solid rgba(240, 181, 74, 0.52);
-  background: rgba(10, 8, 5, 0.8);
-  box-shadow:
-    0 12px 32px rgba(0, 0, 0, 0.72),
-    0 0 24px rgba(240, 181, 74, 0.14);
-}
-
-.laniakea-arm-pin--open .laniakea-pin-card {
-  border: 1px solid rgba(142, 168, 212, 0.24);
-  background: rgba(6, 9, 15, 0.74);
-  opacity: 0.84;
-}
-
-.laniakea-arm-pin--locked .laniakea-pin-card {
-  border: 1px dashed rgba(130, 150, 188, 0.18);
-  background: rgba(5, 7, 12, 0.66);
-  opacity: 0.68;
-}
-
-.laniakea-arm-pin--open .laniakea-pin-card:hover,
-.laniakea-arm-pin--locked .laniakea-pin-card:hover {
-  opacity: 1;
-  border-color: rgba(240, 181, 74, 0.45);
-}
-
-.laniakea-pin-mono {
-  display: grid;
-  place-items: center;
-  width: 1.5rem;
-  height: 1.5rem;
   flex-shrink: 0;
   border-radius: 999px;
-  font-size: 9.5px;
-  font-weight: 700;
+  transition:
+    transform 220ms ease,
+    box-shadow 240ms ease,
+    border-color 240ms ease,
+    background 240ms ease;
 }
 
-.laniakea-arm-pin--live .laniakea-pin-mono {
-  border: 1px solid rgba(255, 224, 158, 0.75);
-  background: rgba(240, 181, 74, 0.18);
-  color: #fff4dc;
+.laniakea-node-marker--live .laniakea-node-dot {
+  background: #fff4d6;
+  border: 1.5px solid rgba(255, 224, 152, 0.95);
+  box-shadow:
+    0 0 0 3px rgba(240, 181, 74, 0.28),
+    0 0 16px rgba(255, 214, 130, 0.92);
 }
 
-.laniakea-arm-pin--open .laniakea-pin-mono,
-.laniakea-arm-pin--locked .laniakea-pin-mono {
-  border: 1px solid rgba(142, 168, 212, 0.3);
-  background: rgba(142, 168, 212, 0.08);
-  color: #9cb0d4;
+.laniakea-node-marker--open .laniakea-node-dot {
+  background: rgba(10, 15, 26, 0.85);
+  border: 1.5px solid rgba(152, 178, 222, 0.65);
+  box-shadow: 0 0 10px rgba(130, 158, 205, 0.2);
 }
 
-.laniakea-pin-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  height: 1.4rem;
-  padding: 0 0.5rem;
+.laniakea-node-marker--locked .laniakea-node-dot {
+  background: rgba(6, 9, 16, 0.85);
+  border: 1px dashed rgba(132, 152, 188, 0.45);
+}
+
+.laniakea-node-tick {
+  width: 14px;
+  height: 1px;
+  flex-shrink: 0;
+  transition:
+    width 220ms ease,
+    background 220ms ease;
+}
+
+.laniakea-node-marker--live .laniakea-node-tick {
+  background: linear-gradient(90deg, rgba(240, 181, 74, 0.72), rgba(240, 181, 74, 0.18));
+}
+
+.laniakea-node-marker--left.laniakea-node-marker--live .laniakea-node-tick {
+  background: linear-gradient(270deg, rgba(240, 181, 74, 0.72), rgba(240, 181, 74, 0.18));
+}
+
+.laniakea-node-marker--open .laniakea-node-tick,
+.laniakea-node-marker--locked .laniakea-node-tick {
+  width: 10px;
+  background: rgba(142, 168, 212, 0.28);
+}
+
+.laniakea-node-label {
+  padding: 0.2rem 0.55rem;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.04);
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--land-muted);
-  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
   white-space: nowrap;
-  transition: all 160ms ease;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.95);
+  transition:
+    color 200ms ease,
+    background 200ms ease,
+    opacity 200ms ease;
 }
 
-.laniakea-pin-btn:hover {
-  border-color: rgba(255, 255, 255, 0.32);
-  color: var(--land-ink);
-  background: rgba(255, 255, 255, 0.1);
+.laniakea-node-marker--live .laniakea-node-label {
+  color: #faf4e6;
+  background: rgba(8, 7, 5, 0.52);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
-.laniakea-pin-btn--gold {
-  border-color: rgba(240, 181, 74, 0.55);
-  background: rgba(240, 181, 74, 0.14);
+.laniakea-node-marker--open .laniakea-node-label,
+.laniakea-node-marker--locked .laniakea-node-label {
+  font-size: 11px;
+  color: rgba(176, 194, 224, 0.85);
+  opacity: 0.42;
+}
+
+.laniakea-node-marker:hover .laniakea-node-dot {
+  transform: scale(1.22);
+}
+
+.laniakea-node-marker--live:hover .laniakea-node-label {
   color: var(--land-gold-soft);
+  background: rgba(16, 13, 8, 0.8);
 }
 
-.laniakea-pin-btn--gold:hover {
-  border-color: rgba(240, 181, 74, 0.85);
-  background: rgba(240, 181, 74, 0.24);
-  color: #fff;
+.laniakea-node-marker--open:hover .laniakea-node-label,
+.laniakea-node-marker--locked:hover .laniakea-node-label {
+  opacity: 0.92;
+  color: #e6eefc;
+  background: rgba(10, 14, 24, 0.65);
 }
