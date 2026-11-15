@@ -159,7 +159,7 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
         const otherId = otherIdx >= 0 ? snap.slots[otherIdx]?.occupiedBy : null;
         const toName = otherId
           ? (extensionRegistry.get(otherId)?.manifest.name ?? PRODUCT_PAYLOAD_LABELS[otherId] ?? "Node")
-          : "Core";
+          : "Command";
         setTransfer((prev) => ({
           fromSocket: fromIdx,
           toSocket: otherIdx >= 0 ? otherIdx : -1,
@@ -281,7 +281,7 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
     const name = extensionRegistry.get(id)?.manifest.name ?? id;
     if (result.ok) {
       const slot = hub.slots.find((s) => s.id === result.slotId);
-      flash(`${name} wired into ${slot?.tier === "pro" ? "Pro" : "free"} arm — Laniakea filament illuminated.`);
+      flash(`${name} connected to a ${slot?.tier === "pro" ? "Pro" : "free"} socket.`);
       setSelected(null);
     } else {
       flash(result.message);
@@ -294,7 +294,7 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
   async function release(id: ExtensionId) {
     const name = extensionRegistry.get(id)?.manifest.name ?? id;
     await extensionRegistry.deactivate(id);
-    flash(`${name} disconnected. Its Laniakea network arm has gone dark.`);
+    flash(`${name} disconnected.`);
     setSurface((s) => (typeof s.panel === "object" && s.panel?.extension === id ? { ...s, panel: null } : s));
   }
 
@@ -315,7 +315,7 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
     const fromExt = hub.extensions.find((e) => e.manifest.id === fromId);
     const toExt = toIndex >= 0 ? hub.extensions.find((e) => e.manifest.id === hub.slots[toIndex]?.occupiedBy) : null;
     const fromName = fromExt?.manifest.name ?? PRODUCT_PAYLOAD_LABELS[fromId] ?? "Node";
-    const toName = toExt?.manifest.name ?? "Core";
+    const toName = toExt?.manifest.name ?? "Command";
     const routeText = `${fromName} → ${toName}`;
 
     setTransfer((prev) => ({

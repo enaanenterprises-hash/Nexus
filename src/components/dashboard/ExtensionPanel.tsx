@@ -35,7 +35,7 @@ export function ExtensionPanel({
           {manifest.monogram ?? manifest.name.slice(0, 2)}
         </span>
         <div className="min-w-0">
-          <p className="dash-eyebrow">{slot ? `${slot.tier === "pro" ? "Pro" : "Free"} arm · illuminated` : "Arm dark · disconnected"}</p>
+          <p className="dash-eyebrow">{slot ? `${slot.tier === "pro" ? "Pro" : "Free"} socket · connected` : "Disconnected"}</p>
           <h2 id="ext-heading" className="dash-heading mt-1 truncate">
             {manifest.name}
           </h2>
@@ -45,9 +45,9 @@ export function ExtensionPanel({
 
       {slot && onTransfer ? (
         <div className="rounded-2xl border border-[rgba(240,181,74,0.28)] bg-[rgba(240,181,74,0.06)] p-4">
-          <p className="dash-eyebrow text-[color:var(--land-gold-soft)]">Laniakea Supercluster Routing</p>
+          <p className="dash-eyebrow text-[color:var(--land-gold-soft)]">Send to node</p>
           <p className="mt-1 text-[12.5px] leading-snug text-[color:var(--land-muted)]">
-            Transmit a typed product from {manifest.name} across its golden filament arm into another wired node:
+            Route an output from {manifest.name} across the network to another connected node:
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             {otherLive.length > 0 ? (
@@ -69,7 +69,7 @@ export function ExtensionPanel({
                 className="dash-button dash-button--gold inline-flex items-center gap-1.5"
               >
                 <BoltIcon size={13} />
-                <span>Send → Great Attractor Core</span>
+                <span>Send → Command</span>
               </button>
             )}
           </div>
@@ -94,7 +94,7 @@ export function ExtensionPanel({
       </dl>
       {slot ? (
         <button type="button" className="dash-button self-start" onClick={() => onRelease(id)}>
-          Disconnect node (darken arm)
+          Disconnect
         </button>
       ) : null}
     </section>
