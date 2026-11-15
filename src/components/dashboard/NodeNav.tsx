@@ -9,7 +9,8 @@ import {
   type ExtensionId,
   type SlotId,
 } from "@/lib/extensions";
-import { CommandIcon, LockIcon, NetworkIcon, NodesIcon, PlusIcon, TodayIcon } from "./icons";
+import { useTheme } from "@/lib/theme";
+import { CommandIcon, LockIcon, MoonIcon, NetworkIcon, NodesIcon, PlusIcon, SunIcon, TodayIcon } from "./icons";
 
 export type PanelId = "today" | "nodes" | { extension: ExtensionId };
 
@@ -51,6 +52,7 @@ export function NodeMenu({
   onCommand: () => void;
   onPanel: (panel: PanelId) => void;
 }) {
+  const { theme, toggleTheme } = useTheme();
   const live = hub.slots.flatMap((slot) => {
     const ext = slot.occupiedBy ? hub.extensions.find((e) => e.manifest.id === slot.occupiedBy) : undefined;
     return ext ? [ext] : [];
@@ -84,10 +86,13 @@ export function NodeMenu({
         </MenuItem>
       ))}
       <div className="flex-1" />
+      <MenuItem label={theme === "dark" ? "Light" : "Dark"} active={false} onClick={toggleTheme}>
+        {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+      </MenuItem>
       <button type="button" onClick={() => onPanel("nodes")} className="node-menu-plan" title={`${used} of ${cap} sockets in use`}>
         <span className="flex gap-[3px]" aria-hidden>
           {Array.from({ length: cap }, (_, i) => (
-            <span key={i} className={`h-1 w-1.5 rounded-full ${i < used ? "bg-[color:var(--land-gold)]" : "bg-white/20"}`} />
+            <span key={i} className={`h-1 w-1.5 rounded-full ${i < used ? "bg-[color:var(--land-gold)]" : "bg-[color:var(--land-line)]"}`} />
           ))}
         </span>
         <span>{hub.entitlement.isPro ? "Pro" : "Free"}</span>

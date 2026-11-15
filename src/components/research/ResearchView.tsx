@@ -211,7 +211,7 @@ export function ResearchView({ request, onClose }: Props) {
         </button>
       </div>
 
-      <div className="flex items-center gap-1.5 border-y border-[color:var(--land-hair)] bg-[rgba(10,9,7,0.9)] px-3 py-2">
+      <div className="research-toolbar flex items-center gap-1.5 border-y border-[color:var(--land-hair)] px-3 py-2">
         <button type="button" className="research-icon-button" onClick={browser.back} disabled={!browser.canBack} aria-label="Back">
           <ChevronLeft />
         </button>
@@ -286,7 +286,7 @@ export function ResearchView({ request, onClose }: Props) {
         </div>
         {showLibrary || libraryOverlay ? (
           <aside
-            className={`shrink-0 border-l border-[color:var(--land-hair)] bg-[rgba(8,7,5,0.97)] md:static md:w-[300px] md:bg-[rgba(8,7,5,0.92)] ${
+            className={`research-library-aside shrink-0 border-l border-[color:var(--land-hair)] md:static md:w-[300px] ${
               libraryOverlay ? "absolute inset-y-0 right-0 z-10 w-[min(320px,100%)]" : "hidden"
             } ${showLibrary ? "md:block" : "md:hidden"}`}
             aria-label="Collections"

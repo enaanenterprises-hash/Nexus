@@ -42,7 +42,7 @@ export function ExtensionHub({ hub, selected, notice, onSnap, onRelease, onToggl
         </p>
       </header>
 
-      <div className="rounded-2xl border border-[color:var(--land-hair)] bg-white/[0.025] p-4">
+      <div className="dash-card-subtle rounded-2xl border border-[color:var(--land-hair)] p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-[13.5px] font-medium">{entitlement.isPro ? "Nexus Pro · preview" : "Free plan"}</p>
@@ -61,7 +61,7 @@ export function ExtensionHub({ hub, selected, notice, onSnap, onRelease, onToggl
             <span
               key={s.id}
               className={`h-1 flex-1 rounded-full ${
-                s.occupiedBy ? "bg-[color:var(--land-gold)]" : canUseSlot(s, entitlement) ? "bg-white/25" : "bg-white/[0.07]"
+                s.occupiedBy ? "bg-[color:var(--land-gold)]" : canUseSlot(s, entitlement) ? "bg-[color:var(--land-line)]" : "bg-[color:var(--land-hair)]"
               }`}
             />
           ))}
@@ -130,7 +130,7 @@ export function ExtensionHub({ hub, selected, notice, onSnap, onRelease, onToggl
         <p className="dash-eyebrow">Coming soon</p>
         <ul className="mt-2 grid grid-cols-2 gap-2">
           {PLANNED_EXTENSIONS.map((p) => (
-            <li key={p.key} className="rounded-xl border border-dashed border-white/10 px-3 py-2.5">
+            <li key={p.key} className="rounded-xl border border-dashed border-[color:var(--land-line)] px-3 py-2.5">
               <p className="text-[13.5px] font-medium text-[color:var(--land-muted)]">{p.name}</p>
               <p className="text-[11.5px] text-[color:var(--land-faint)]">{p.tagline}</p>
             </li>
@@ -140,7 +140,7 @@ export function ExtensionHub({ hub, selected, notice, onSnap, onRelease, onToggl
 
       <div>
         <p className="dash-eyebrow">Build a node</p>
-        <pre className="dash-code mt-3 overflow-x-auto rounded-xl border border-[color:var(--land-hair)] bg-white/[0.02] p-3">
+        <pre className="dash-code dash-card-subtle mt-3 overflow-x-auto rounded-xl border border-[color:var(--land-hair)] p-3">
           <span className="text-[color:var(--land-gold-soft)]">const</span> node = defineExtension({"{"} manifest, handlers {"}"});{"\n"}
           <span className="text-[color:var(--land-gold-soft)]">await</span> extensionRegistry.register(node);{"\n"}
           <span className="text-[color:var(--land-gold-soft)]">await</span> extensionRegistry.activate(node.manifest.id);
@@ -176,7 +176,7 @@ function ExtensionRow({
       <span
         className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-[11px] font-semibold ${
           live
-            ? "border border-[color:var(--land-gold-soft)] bg-[rgba(240,181,74,0.14)] text-[#fff4dc]"
+            ? "dash-monogram--live border border-[color:var(--land-gold-soft)] bg-[rgba(240,181,74,0.14)]"
             : "border border-dashed border-[rgba(240,181,74,0.5)] text-[color:var(--land-gold)]"
         }`}
       >

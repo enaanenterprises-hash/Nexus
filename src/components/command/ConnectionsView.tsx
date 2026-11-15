@@ -239,7 +239,7 @@ export function LocationInput({ field, value, onChange }: { field: Pick<SettingF
             <li key={p.value}>
               <button
                 type="button"
-                className="block w-full truncate px-3 py-2 text-left text-[13px] hover:bg-white/5"
+                className="block w-full truncate px-3 py-2 text-left text-[13px] hover:bg-[color:var(--land-hair)]"
                 onClick={() => {
                   onChange(p.value);
                   setQuery("");

@@ -24,7 +24,7 @@ import { getConnector } from "@/lib/connectors/catalog";
 import { researchIntent } from "@/lib/nexus/brain";
 import { ExtensionHub } from "./ExtensionHub";
 import { ExtensionPanel } from "./ExtensionPanel";
-import { CloseIcon } from "./icons";
+import { CloseIcon, MoonIcon, SunIcon } from "./icons";
 import {
   NeuralStage,
   type SocketVisual,
@@ -36,6 +36,7 @@ import { NexusInput, NexusVoice } from "./NexusVoice";
 import { computeStageLayout } from "./stage-layout";
 import { TodayPanel } from "./TodayPanel";
 import { useNexusSession } from "./use-nexus-session";
+import { useTheme } from "@/lib/theme";
 
 /** Research is hidden from navigation for now; its node, routes and tables stay in place. */
 const RESEARCH_VISIBLE = false;
@@ -58,6 +59,7 @@ const PRODUCT_PAYLOAD_LABELS: Record<string, string> = {
 export function Dashboard({ viewer }: { viewer: Viewer }) {
   const session = useNexusSession();
   const hub = useExtensionHub();
+  const { theme, toggleTheme } = useTheme();
   const [surface, setSurface] = useState<Surface>({ view: "home", panel: null });
   const [researchMounted, setResearchMounted] = useState(false);
   const [researchRequest, setResearchRequest] = useState<{ input: string; serial: number } | null>(null);
@@ -224,12 +226,13 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
     return {
       brain: session.brain,
       sockets: visuals,
+      theme,
       socketLabels,
       snap: hub.lastSnapped && snapIndex >= 0 ? { index: snapIndex, serial: hub.lastSnapped.serial } : null,
       transfer,
       paused: surface.view !== "home",
     };
-  }, [session.brain, visuals, hub.lastSnapped, hub.slots, hub.extensions, hub.entitlement, transfer, surface.view]);
+  }, [session.brain, visuals, theme, hub.lastSnapped, hub.slots, hub.extensions, hub.entitlement, transfer, surface.view]);
 
   const stageLayout = useMemo(
     () => computeStageLayout(stageSize.width, stageSize.height, hub.slots.length),
@@ -347,7 +350,7 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
   const panel = surface.panel;
 
   return (
-    <div className="dash relative h-[100svh] w-full flex-1 overflow-hidden">
+    <div className="dash relative h-[100svh] w-full flex-1 overflow-hidden" data-theme={theme}>
       <section
         ref={stageWrapRef}
         aria-label="Nexus Laniakea network"
@@ -402,9 +405,19 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
 
       <header className="landing-enter absolute inset-x-0 top-0 z-30 flex h-16 items-center justify-between gap-3 pr-4 sm:pr-6">
         <Link href="/" aria-label="Nexus home" className="inline-flex w-[76px] shrink-0 justify-center">
-          <NexusMark className="h-7 w-auto" />
+          <NexusMark className="dash-brand-mark h-7 w-auto" />
         </Link>
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="dash-theme-toggle"
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {theme === "dark" ? <SunIcon size={14} /> : <MoonIcon size={14} />}
+            <span className="max-sm:hidden">{theme === "dark" ? "Light" : "Dark"}</span>
+          </button>
           <p className="min-w-0 max-w-[34vw] truncate text-[13px] text-[color:var(--land-muted)] sm:max-w-[220px]">
             <span className="sr-only">Signed in as </span>
             {viewer.name || viewer.email || "Signed in"}

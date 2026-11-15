@@ -34,7 +34,7 @@ export function TodayPanel({ tasks, threads, touched, organized, onToggle }: Pro
           Today
         </h2>
         <p className="mt-1 flex items-center gap-2 text-[13px] text-[color:var(--land-muted)]">
-          <span className={`inline-block h-1.5 w-1.5 rounded-full ${nexusIsUpdating ? "bg-[color:var(--land-gold)]" : "bg-white/25"}`} />
+          <span className={`inline-block h-1.5 w-1.5 rounded-full ${nexusIsUpdating ? "bg-[color:var(--land-gold)]" : "bg-[color:var(--land-line)]"}`} />
           {nexusIsUpdating ? "Nexus is updating your plan" : organized ? "Organized by Nexus" : "Nexus keeps this current"}
         </p>
       </header>
@@ -106,7 +106,7 @@ function TaskRow({ task, touched, onToggle }: { task: NexusTask; touched: boolea
         aria-label={done ? `Mark “${task.title}” as not done` : `Mark “${task.title}” as done`}
         aria-pressed={done}
         className={`mt-0.5 grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full border transition-colors ${
-          done ? "border-[color:var(--land-gold)] bg-[color:var(--land-gold)] text-black" : "border-white/30 hover:border-[color:var(--land-gold)]"
+          done ? "border-[color:var(--land-gold)] bg-[color:var(--land-gold)] text-black" : "border-[color:var(--land-line)] hover:border-[color:var(--land-gold)]"
         }`}
       >
         {done ? (
@@ -132,5 +132,5 @@ function TaskRow({ task, touched, onToggle }: { task: NexusTask; touched: boolea
 function PriorityMark({ priority }: { priority: TaskPriority }) {
   if (priority === "critical") return <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--land-gold)]" />;
   if (priority === "high") return <span className="h-1.5 w-1.5 rounded-full border border-[color:var(--land-gold)]" />;
-  return <span className="h-1.5 w-1.5 rounded-full bg-white/20" />;
+  return <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--land-line)]" />;
 }

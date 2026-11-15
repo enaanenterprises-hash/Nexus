@@ -31,7 +31,7 @@ export function ExtensionPanel({
   return (
     <section aria-labelledby="ext-heading" className="flex flex-col gap-6">
       <header className="flex items-center gap-3">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-[color:var(--land-gold-soft)] bg-[rgba(240,181,74,0.14)] text-[12px] font-semibold text-[#fff4dc]">
+        <span className="dash-monogram--live grid h-11 w-11 shrink-0 place-items-center rounded-full border border-[color:var(--land-gold-soft)] bg-[rgba(240,181,74,0.14)] text-[12px] font-semibold">
           {manifest.monogram ?? manifest.name.slice(0, 2)}
         </span>
         <div className="min-w-0">

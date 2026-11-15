@@ -32,6 +32,8 @@ export type StageTransfer = {
 export type StageSignal = {
   brain: NexusBrainState;
   sockets: SocketVisual[];
+  /** Active color theme so the golden Laniakea supercluster adapts its blending and palette. */
+  theme?: "dark" | "light";
   /** Display names for each socket, used for automatic transfer labels. */
   socketLabels?: Array<{ monogram: string; name: string; status: string }>;
   /** Increments each time an extension snaps in; `index` is the socket. */
@@ -49,6 +51,13 @@ const GOLD: Rgb = [255, 196, 104];
 const GOLD_HOT: Rgb = [255, 240, 206];
 const VOID: Rgb = [104, 140, 212];
 const VOID_HOT: Rgb = [184, 206, 252];
+
+// Light-mode palette: burnished 24k gold, antique bronze-gold, and architectural slate-silver
+// calibrated for high chroma & luminance contrast against warm alabaster parchment.
+const GOLD_LIGHT: Rgb = [196, 126, 16];
+const GOLD_HOT_LIGHT: Rgb = [148, 86, 6];
+const VOID_LIGHT: Rgb = [122, 132, 150];
+const VOID_HOT_LIGHT: Rgb = [86, 98, 120];
 
 const mix = (a: Rgb, b: Rgb, t: number) =>
   `${Math.round(lerp(a[0], b[0], t))}, ${Math.round(lerp(a[1], b[1], t))}, ${Math.round(lerp(a[2], b[2], t))}`;
@@ -403,7 +412,16 @@ export function NeuralStage({ signal, className = "" }: { signal: StageSignal; c
     };
 
     const draw = (time: number, dt: number) => {
-      const { brain, sockets, snap, transfer, socketLabels } = signalRef.current;
+      const { brain, sockets, snap, transfer, socketLabels, theme } = signalRef.current;
+      const isLight = (theme ?? "dark") === "light";
+      const goldRgb = isLight ? GOLD_LIGHT : GOLD;
+      const goldHotRgb = isLight ? GOLD_HOT_LIGHT : GOLD_HOT;
+      const voidRgb = isLight ? VOID_LIGHT : VOID;
+      const voidHotRgb = isLight ? VOID_HOT_LIGHT : VOID_HOT;
+      const blendMode: GlobalCompositeOperation = isLight ? "source-over" : "lighter";
+      const strandAlphaMul = isLight ? 1.42 : 1;
+      const strandWidthMul = isLight ? 1.15 : 1;
+
       const L = layout;
       const { width, height, core, radius: R } = L;
       const intro = reduceMotion ? 1 : Math.min(1, time / INTRO_SECONDS);
@@ -476,32 +494,39 @@ export function NeuralStage({ signal, className = "" }: { signal: StageSignal; c
         return radialCurve(r, phantomCenter(-2 - r.owner), 0, R, time);
       });
 
-      // ——— 1. Deep space ———
+      // ——— 1. Deep space / Celestial alabaster parchment ———
       ctx.globalCompositeOperation = "source-over";
       ctx.globalAlpha = 1;
       const bg = ctx.createRadialGradient(core.x, core.y, 0, core.x, core.y, edgeR * 1.1);
-      bg.addColorStop(0, "#0b1430");
-      bg.addColorStop(0.42, "#070d20");
-      bg.addColorStop(1, "#02040a");
+      if (isLight) {
+        bg.addColorStop(0, "#fdfaf2");
+        bg.addColorStop(0.45, "#f5efe3");
+        bg.addColorStop(1, "#e8dfd0");
+      } else {
+        bg.addColorStop(0, "#0b1430");
+        bg.addColorStop(0.42, "#070d20");
+        bg.addColorStop(1, "#02040a");
+      }
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, width, height);
 
-      ctx.globalCompositeOperation = "lighter";
+      ctx.globalCompositeOperation = blendMode;
       PHANTOMS.forEach((_, k) => {
         radialGlow(ctx, phantomCenter(k), R * 0.9, [
-          [0, "rgba(70, 104, 178, 0.1)"],
+          [0, isLight ? "rgba(116, 130, 156, 0.075)" : "rgba(70, 104, 178, 0.1)"],
           [1, "rgba(0, 0, 0, 0)"],
         ]);
       });
 
-      ctx.fillStyle = "rgb(206, 220, 255)";
+      ctx.fillStyle = isLight ? "rgb(148, 118, 66)" : "rgb(206, 220, 255)";
+      const starMul = isLight ? 0.44 : 1;
       for (const s of field.stars) {
-        ctx.globalAlpha = s.alpha * (0.6 + 0.4 * Math.sin(time * 0.9 + s.phase)) * (0.4 + 0.6 * ease);
+        ctx.globalAlpha = s.alpha * starMul * (0.6 + 0.4 * Math.sin(time * 0.9 + s.phase)) * (0.4 + 0.6 * ease);
         ctx.fillRect(s.x * width, s.y * height, s.size, s.size);
       }
       ctx.globalAlpha = ease;
 
-      // ——— 2. Outer-void superclusters (decorative, cool blue) ———
+      // ——— 2. Outer-void superclusters (decorative, cool blue / architectural slate) ———
       PHANTOMS.forEach((_, k) => {
         const batches = field.radialBatches.get(-2 - k);
         if (!batches) return;
@@ -509,22 +534,22 @@ export function NeuralStage({ signal, className = "" }: { signal: StageSignal; c
         batches.forEach((idxs, strand) => {
           if (!idxs.length) return;
           const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, R * 1.25);
-          const a = STRANDS[strand]!.alpha * 0.32;
-          g.addColorStop(0, `rgba(${VOID_HOT.join(", ")}, ${a * 1.4})`);
-          g.addColorStop(0.5, `rgba(${VOID.join(", ")}, ${a * 0.6})`);
-          g.addColorStop(1, `rgba(${VOID.join(", ")}, 0)`);
+          const a = STRANDS[strand]!.alpha * (isLight ? 0.38 : 0.32);
+          g.addColorStop(0, `rgba(${voidHotRgb.join(", ")}, ${a * 1.4})`);
+          g.addColorStop(0.5, `rgba(${voidRgb.join(", ")}, ${a * 0.6})`);
+          g.addColorStop(1, `rgba(${voidRgb.join(", ")}, 0)`);
           ctx.beginPath();
           for (const i of idxs) {
             const [p0, p1, p2, p3] = radialCurves[i]!;
             ctx.moveTo(p0.x, p0.y);
             ctx.bezierCurveTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
           }
-          ctx.lineWidth = STRANDS[strand]!.width;
+          ctx.lineWidth = STRANDS[strand]!.width * strandWidthMul;
           ctx.strokeStyle = g;
           ctx.stroke();
         });
         radialGlow(ctx, c, R * 0.08, [
-          [0, "rgba(200, 220, 255, 0.5)"],
+          [0, isLight ? "rgba(96, 110, 138, 0.26)" : "rgba(200, 220, 255, 0.5)"],
           [1, "rgba(0, 0, 0, 0)"],
         ]);
       });
@@ -540,7 +565,7 @@ export function NeuralStage({ signal, className = "" }: { signal: StageSignal; c
         shadeCtx.setTransform(ENV_SCALE, 0, 0, ENV_SCALE, 0, 0);
         shadeCtx.filter = "blur(16px)";
         traceClosed(shadeCtx, outline.map((p) => add(core, { x: (p.x - core.x) * 1.16, y: (p.y - core.y) * 1.16 })));
-        shadeCtx.fillStyle = "rgba(0, 1, 4, 0.62)";
+        shadeCtx.fillStyle = isLight ? "rgba(156, 102, 18, 0.14)" : "rgba(0, 1, 4, 0.62)";
         shadeCtx.fill();
         shadeCtx.filter = "none";
 
@@ -550,9 +575,15 @@ export function NeuralStage({ signal, className = "" }: { signal: StageSignal; c
         envCtx.filter = "blur(7px)";
         traceClosed(envCtx, outline);
         const fill = envCtx.createRadialGradient(core.x, core.y, 0, core.x, core.y, maxR);
-        fill.addColorStop(0, `rgba(255, 206, 122, ${0.36 + 0.08 * energy})`);
-        fill.addColorStop(0.45, "rgba(234, 162, 62, 0.24)");
-        fill.addColorStop(1, "rgba(196, 124, 36, 0.17)");
+        if (isLight) {
+          fill.addColorStop(0, `rgba(226, 162, 42, ${0.34 + 0.08 * energy})`);
+          fill.addColorStop(0.45, "rgba(204, 138, 28, 0.22)");
+          fill.addColorStop(1, "rgba(178, 114, 18, 0.11)");
+        } else {
+          fill.addColorStop(0, `rgba(255, 206, 122, ${0.36 + 0.08 * energy})`);
+          fill.addColorStop(0.45, "rgba(234, 162, 62, 0.24)");
+          fill.addColorStop(1, "rgba(196, 124, 36, 0.17)");
+        }
         envCtx.fillStyle = fill;
         envCtx.fill();
         envCtx.filter = "none";
@@ -560,19 +591,19 @@ export function NeuralStage({ signal, className = "" }: { signal: StageSignal; c
         ctx.globalCompositeOperation = "source-over";
         ctx.globalAlpha = ease;
         ctx.drawImage(shade, 0, 0, width, height);
-        ctx.globalCompositeOperation = "lighter";
+        ctx.globalCompositeOperation = blendMode;
         ctx.drawImage(env, 0, 0, width, height);
       }
-      ctx.globalCompositeOperation = "lighter";
+      ctx.globalCompositeOperation = blendMode;
       ctx.globalAlpha = ease;
 
       // ——— 4. Streams converging on the core (always online) ———
       const coreBatches = field.radialBatches.get(-1);
       coreBatches?.forEach((idxs, strand) => {
         const s = STRANDS[strand]!;
-        const a = s.alpha * (0.85 + 0.35 * energy);
+        const a = s.alpha * strandAlphaMul * (0.85 + 0.35 * energy);
         const g = ctx.createRadialGradient(core.x, core.y, 0, core.x, core.y, R * 0.8);
-        const rgb = mix(GOLD, GOLD_HOT, s.hot ? 1 : 0);
+        const rgb = mix(goldRgb, goldHotRgb, s.hot ? 1 : 0);
         g.addColorStop(0, `rgba(${rgb}, ${Math.min(1, a * 1.6)})`);
         g.addColorStop(0.55, `rgba(${rgb}, ${a * 0.6})`);
         g.addColorStop(1, `rgba(${rgb}, 0)`);
@@ -582,7 +613,7 @@ export function NeuralStage({ signal, className = "" }: { signal: StageSignal; c
           ctx.moveTo(p0.x, p0.y);
           ctx.bezierCurveTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
         }
-        ctx.lineWidth = s.width;
+        ctx.lineWidth = s.width * strandWidthMul;
         ctx.strokeStyle = g;
         ctx.stroke();
       });
@@ -597,8 +628,8 @@ export function NeuralStage({ signal, className = "" }: { signal: StageSignal; c
           inten: lerp(dormant, 1.12, lvl) * (1 + 0.75 * (surge[a] ?? 0)) * (0.92 + 0.2 * energy),
           innerK: lerp(0.1, 1, lvl),
           outerK: lerp(0.6, 1, lvl),
-          rgb: mix(VOID, GOLD, lvl),
-          hot: mix(VOID_HOT, GOLD_HOT, lvl),
+          rgb: mix(voidRgb, goldRgb, lvl),
+          hot: mix(voidHotRgb, goldHotRgb, lvl),
         };
       };
 
@@ -613,7 +644,7 @@ export function NeuralStage({ signal, className = "" }: { signal: StageSignal; c
           byStrand.forEach((idxs, strand) => {
             if (!idxs.length) return;
             const s = STRANDS[strand]!;
-            const alpha = s.alpha * look.inten * regionK;
+            const alpha = s.alpha * strandAlphaMul * look.inten * regionK;
             if (alpha < 0.004) return;
             const rgb = s.hot ? look.hot : look.rgb;
             const g = ctx.createRadialGradient(core.x, core.y, 0, core.x, core.y, edgeR);
@@ -636,7 +667,7 @@ export function NeuralStage({ signal, className = "" }: { signal: StageSignal; c
                 ctx.lineTo(p.x - t.y * o, p.y + t.x * o);
               }
             }
-            ctx.lineWidth = s.width * (0.9 + 0.35 * look.lvl);
+            ctx.lineWidth = s.width * strandWidthMul * (0.9 + 0.35 * look.lvl);
             ctx.strokeStyle = g;
             ctx.stroke();
           });
@@ -646,7 +677,7 @@ export function NeuralStage({ signal, className = "" }: { signal: StageSignal; c
         field.radialBatches.get(a)?.forEach((idxs, strand) => {
           if (!idxs.length) return;
           const s = STRANDS[strand]!;
-          const alpha = s.alpha * look.inten * 0.85;
+          const alpha = s.alpha * strandAlphaMul * look.inten * 0.85;
           const rgb = s.hot ? look.hot : look.rgb;
           const g = ctx.createRadialGradient(socket.x, socket.y, 0, socket.x, socket.y, R * 0.65);
           g.addColorStop(0, `rgba(${rgb}, ${Math.min(1, alpha * 1.6)})`);
@@ -658,17 +689,23 @@ export function NeuralStage({ signal, className = "" }: { signal: StageSignal; c
             ctx.moveTo(p0.x, p0.y);
             ctx.bezierCurveTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
           }
-          ctx.lineWidth = s.width;
+          ctx.lineWidth = s.width * strandWidthMul;
           ctx.strokeStyle = g;
           ctx.stroke();
         });
 
-        // 5c. The trunk: haze, body, then a white-hot core line.
-        const passes = [
-          { w: 8, a: 0.04 },
-          { w: 2.8, a: 0.18 },
-          { w: 1.1, a: 0.62 },
-        ];
+        // 5c. The trunk: haze, body, then a white-hot / molten-gold core line.
+        const passes = isLight
+          ? [
+              { w: 9, a: 0.09 },
+              { w: 3.1, a: 0.32 },
+              { w: 1.25, a: 0.78 },
+            ]
+          : [
+              { w: 8, a: 0.04 },
+              { w: 2.8, a: 0.18 },
+              { w: 1.1, a: 0.62 },
+            ];
         for (const [regionStart, regionEnd, k] of [
           [0, sp.sockIdx, look.innerK],
           [sp.sockIdx, sp.pts.length - 1, look.outerK],
@@ -687,6 +724,17 @@ export function NeuralStage({ signal, className = "" }: { signal: StageSignal; c
             ctx.strokeStyle = g;
             ctx.stroke();
           }
+          // In light mode, add a fine sunlit champagne specular thread down the center of connected gold trunks
+          if (isLight && look.lvl > 0.25) {
+            const specAlpha = 0.65 * look.lvl * k;
+            const sg = ctx.createRadialGradient(core.x, core.y, 0, core.x, core.y, edgeR * 0.75);
+            sg.addColorStop(0, `rgba(255, 248, 224, ${specAlpha})`);
+            sg.addColorStop(0.45, `rgba(248, 212, 128, ${specAlpha * 0.7})`);
+            sg.addColorStop(1, "rgba(248, 212, 128, 0)");
+            ctx.lineWidth = 0.7;
+            ctx.strokeStyle = sg;
+            ctx.stroke();
+          }
         }
       }
 
@@ -700,7 +748,7 @@ export function NeuralStage({ signal, className = "" }: { signal: StageSignal; c
             dustLook = armLook(d.owner);
             ctx.fillStyle = `rgb(${dustLook.hot})`;
           } else {
-            ctx.fillStyle = `rgb(${VOID_HOT.join(", ")})`;
+            ctx.fillStyle = `rgb(${voidHotRgb.join(", ")})`;
           }
         }
         const curve = d.source === "trib" ? tribCurves[d.idx]! : radialCurves[d.idx]!;
@@ -746,7 +794,7 @@ export function NeuralStage({ signal, className = "" }: { signal: StageSignal; c
         ctx.fill();
       }
 
-      ctx.fillStyle = `rgb(${GOLD_HOT.join(", ")})`;
+      ctx.fillStyle = `rgb(${goldHotRgb.join(", ")})`;
       for (const cp of field.coreParticles) {
         if (!reduceMotion) cp.u = (cp.u + cp.speed * dt * speedMul) % 1;
         const c = radialCurves[cp.radial]!;
@@ -770,8 +818,22 @@ export function NeuralStage({ signal, className = "" }: { signal: StageSignal; c
         const u = w.mode === "ignite" ? lerp(0, 0.82, e) : lerp(0.82, 0, e);
         const pos = spineAt(spines[w.arm]!, u).p;
         const fade = w.t > 1 ? 1 - (w.t - 1) / 0.25 : Math.min(1, w.t * 6);
-        const hotStop = w.mode === "ignite" ? `rgba(255, 250, 232, ${0.95 * fade})` : `rgba(176, 202, 255, ${0.6 * fade})`;
-        const midStop = w.mode === "ignite" ? `rgba(255, 196, 96, ${0.38 * fade})` : `rgba(90, 120, 190, ${0.2 * fade})`;
+        const hotStop =
+          w.mode === "ignite"
+            ? isLight
+              ? `rgba(212, 138, 16, ${0.85 * fade})`
+              : `rgba(255, 250, 232, ${0.95 * fade})`
+            : isLight
+              ? `rgba(92, 108, 136, ${0.55 * fade})`
+              : `rgba(176, 202, 255, ${0.6 * fade})`;
+        const midStop =
+          w.mode === "ignite"
+            ? isLight
+              ? `rgba(176, 108, 10, ${0.34 * fade})`
+              : `rgba(255, 196, 96, ${0.38 * fade})`
+            : isLight
+              ? `rgba(116, 130, 156, ${0.2 * fade})`
+              : `rgba(90, 120, 190, ${0.2 * fade})`;
         radialGlow(ctx, pos, R * 0.26, [
           [0, hotStop],
           [0.3, midStop],
@@ -802,7 +864,9 @@ export function NeuralStage({ signal, className = "" }: { signal: StageSignal; c
           ripples.splice(i, 1);
           continue;
         }
-        ctx.strokeStyle = `rgba(255, 224, 166, ${0.22 * (1 - r) * (1 - r)})`;
+        ctx.strokeStyle = isLight
+          ? `rgba(180, 112, 12, ${0.32 * (1 - r) * (1 - r)})`
+          : `rgba(255, 224, 166, ${0.22 * (1 - r) * (1 - r)})`;
         ctx.beginPath();
         ctx.arc(core.x, core.y, R * (0.12 + r * 0.8), 0, TAU);
         ctx.stroke();
@@ -818,13 +882,19 @@ export function NeuralStage({ signal, className = "" }: { signal: StageSignal; c
         const at = ring.arm >= 0 ? L.sockets[ring.arm]! : core;
         const k = 1 - ring.t;
         ctx.lineWidth = 1.2;
-        ctx.strokeStyle = ring.cool ? `rgba(170, 196, 250, ${0.5 * k * k})` : `rgba(255, 226, 168, ${0.6 * k * k})`;
+        ctx.strokeStyle = ring.cool
+          ? isLight
+            ? `rgba(98, 114, 142, ${0.5 * k * k})`
+            : `rgba(170, 196, 250, ${0.5 * k * k})`
+          : isLight
+            ? `rgba(184, 116, 14, ${0.65 * k * k})`
+            : `rgba(255, 226, 168, ${0.6 * k * k})`;
         ctx.beginPath();
         ctx.arc(at.x, at.y, R * (0.04 + ease3(ring.t) * 0.42), 0, TAU);
         ctx.stroke();
       }
 
-      ctx.fillStyle = "rgb(255, 240, 210)";
+      ctx.fillStyle = isLight ? "rgb(168, 102, 10)" : "rgb(255, 240, 210)";
       for (let i = sparks.length - 1; i >= 0; i--) {
         const s = sparks[i]!;
         s.t += dt * s.speed;
@@ -846,32 +916,63 @@ export function NeuralStage({ signal, className = "" }: { signal: StageSignal; c
         const at = L.sockets[a]!;
         const sg = 1 + 0.4 * (surge[a] ?? 0);
         if (look.lvl > 0.02) {
-          radialGlow(ctx, at, R * 0.17 * (0.6 + 0.4 * look.lvl) * sg, [
-            [0, `rgba(255, 251, 238, ${0.95 * look.lvl})`],
-            [0.18, `rgba(255, 220, 150, ${0.5 * look.lvl})`],
-            [0.55, `rgba(240, 168, 64, ${0.12 * look.lvl})`],
-            [1, "rgba(0, 0, 0, 0)"],
-          ]);
-          drawSpikes(at, R * 0.2 * look.lvl * sg, "255, 236, 196", 0.28 * look.lvl);
+          if (isLight) {
+            radialGlow(ctx, at, R * 0.18 * (0.6 + 0.4 * look.lvl) * sg, [
+              [0, `rgba(208, 138, 18, ${0.72 * look.lvl})`],
+              [0.24, `rgba(192, 122, 14, ${0.34 * look.lvl})`],
+              [0.6, `rgba(176, 108, 12, ${0.1 * look.lvl})`],
+              [1, "rgba(0, 0, 0, 0)"],
+            ]);
+            drawSpikes(at, R * 0.2 * look.lvl * sg, "156, 94, 8", 0.42 * look.lvl);
+            // Crisp jewel center so the golden star gleams on ivory
+            radialGlow(ctx, at, 6.5 * sg, [
+              [0, `rgba(255, 250, 236, ${0.98 * look.lvl})`],
+              [0.5, `rgba(218, 148, 22, ${0.92 * look.lvl})`],
+              [1, "rgba(176, 108, 10, 0)"],
+            ]);
+          } else {
+            radialGlow(ctx, at, R * 0.17 * (0.6 + 0.4 * look.lvl) * sg, [
+              [0, `rgba(255, 251, 238, ${0.95 * look.lvl})`],
+              [0.18, `rgba(255, 220, 150, ${0.5 * look.lvl})`],
+              [0.55, `rgba(240, 168, 64, ${0.12 * look.lvl})`],
+              [1, "rgba(0, 0, 0, 0)"],
+            ]);
+            drawSpikes(at, R * 0.2 * look.lvl * sg, "255, 236, 196", 0.28 * look.lvl);
+          }
         }
         if (look.lvl < 0.98) {
           const k = (1 - look.lvl) * (sockets[a] === "open" ? 1 : 0.6);
           radialGlow(ctx, at, R * 0.11, [
-            [0, `rgba(190, 212, 255, ${0.55 * k})`],
-            [0.3, `rgba(110, 146, 220, ${0.16 * k})`],
+            [0, isLight ? `rgba(96, 110, 138, ${0.42 * k})` : `rgba(190, 212, 255, ${0.55 * k})`],
+            [0.3, isLight ? `rgba(116, 130, 156, ${0.14 * k})` : `rgba(110, 146, 220, ${0.16 * k})`],
             [1, "rgba(0, 0, 0, 0)"],
           ]);
         }
       }
 
       const coreR = R * 0.32 * breathe;
-      radialGlow(ctx, core, coreR, [
-        [0, "rgba(255, 254, 248, 1)"],
-        [0.1, `rgba(255, 240, 204, ${0.88 + 0.1 * energy})`],
-        [0.3, "rgba(250, 190, 92, 0.3)"],
-        [1, "rgba(0, 0, 0, 0)"],
-      ]);
-      drawSpikes(core, R * (0.42 + 0.1 * beat), "255, 240, 210", 0.32 + 0.15 * energy);
+      if (isLight) {
+        radialGlow(ctx, core, coreR, [
+          [0, "rgba(218, 148, 22, 0.85)"],
+          [0.14, `rgba(198, 128, 16, ${0.58 + 0.1 * energy})`],
+          [0.38, "rgba(182, 114, 14, 0.2)"],
+          [1, "rgba(0, 0, 0, 0)"],
+        ]);
+        drawSpikes(core, R * (0.42 + 0.1 * beat), "156, 94, 8", 0.44 + 0.15 * energy);
+        radialGlow(ctx, core, R * 0.055 * breathe, [
+          [0, "rgba(255, 252, 242, 1)"],
+          [0.55, "rgba(236, 174, 48, 0.92)"],
+          [1, "rgba(196, 126, 16, 0)"],
+        ]);
+      } else {
+        radialGlow(ctx, core, coreR, [
+          [0, "rgba(255, 254, 248, 1)"],
+          [0.1, `rgba(255, 240, 204, ${0.88 + 0.1 * energy})`],
+          [0.3, "rgba(250, 190, 92, 0.3)"],
+          [1, "rgba(0, 0, 0, 0)"],
+        ]);
+        drawSpikes(core, R * (0.42 + 0.1 * beat), "255, 240, 210", 0.32 + 0.15 * energy);
+      }
 
       // ——— 11. Products travelling between nodes ———
       for (let i = transfers.length - 1; i >= 0; i--) {
@@ -932,22 +1033,52 @@ export function NeuralStage({ signal, className = "" }: { signal: StageSignal; c
           for (let j = 1; j <= TRAIL; j++) {
             const next = routeAt(e - j * 0.0042);
             const k = 1 - j / TRAIL;
-            ctx.strokeStyle = `rgba(255, 228, 168, ${0.85 * Math.pow(k, 1.6) * fade})`;
-            ctx.lineWidth = 0.4 + 3 * k;
-            ctx.beginPath();
-            ctx.moveTo(prev.x, prev.y);
-            ctx.lineTo(next.x, next.y);
-            ctx.stroke();
+            if (isLight) {
+              ctx.strokeStyle = `rgba(184, 114, 10, ${0.85 * Math.pow(k, 1.5) * fade})`;
+              ctx.lineWidth = 0.7 + 3.6 * k;
+              ctx.beginPath();
+              ctx.moveTo(prev.x, prev.y);
+              ctx.lineTo(next.x, next.y);
+              ctx.stroke();
+              ctx.strokeStyle = `rgba(255, 242, 200, ${0.9 * Math.pow(k, 1.4) * fade})`;
+              ctx.lineWidth = 0.3 + 1.4 * k;
+              ctx.beginPath();
+              ctx.moveTo(prev.x, prev.y);
+              ctx.lineTo(next.x, next.y);
+              ctx.stroke();
+            } else {
+              ctx.strokeStyle = `rgba(255, 228, 168, ${0.85 * Math.pow(k, 1.6) * fade})`;
+              ctx.lineWidth = 0.4 + 3 * k;
+              ctx.beginPath();
+              ctx.moveTo(prev.x, prev.y);
+              ctx.lineTo(next.x, next.y);
+              ctx.stroke();
+            }
             prev = next;
           }
           const head = routeAt(e);
-          radialGlow(ctx, head, R * 0.2, [
-            [0, `rgba(255, 255, 250, ${fade})`],
-            [0.16, `rgba(255, 230, 170, ${0.7 * fade})`],
-            [0.5, `rgba(240, 170, 70, ${0.16 * fade})`],
-            [1, "rgba(0, 0, 0, 0)"],
-          ]);
-          drawSpikes(head, R * 0.1, "255, 246, 224", 0.45 * fade);
+          if (isLight) {
+            radialGlow(ctx, head, R * 0.2, [
+              [0, `rgba(214, 142, 18, ${0.82 * fade})`],
+              [0.22, `rgba(192, 122, 14, ${0.38 * fade})`],
+              [0.55, `rgba(176, 108, 10, ${0.1 * fade})`],
+              [1, "rgba(0, 0, 0, 0)"],
+            ]);
+            drawSpikes(head, R * 0.11, "148, 86, 6", 0.55 * fade);
+            radialGlow(ctx, head, 6, [
+              [0, `rgba(255, 252, 240, ${fade})`],
+              [0.6, `rgba(224, 152, 22, ${0.9 * fade})`],
+              [1, "rgba(184, 114, 10, 0)"],
+            ]);
+          } else {
+            radialGlow(ctx, head, R * 0.2, [
+              [0, `rgba(255, 255, 250, ${fade})`],
+              [0.16, `rgba(255, 230, 170, ${0.7 * fade})`],
+              [0.5, `rgba(240, 170, 70, ${0.16 * fade})`],
+              [1, "rgba(0, 0, 0, 0)"],
+            ]);
+            drawSpikes(head, R * 0.1, "255, 246, 224", 0.45 * fade);
+          }
 
           // Label, fading in and out with the journey.
           const labelA = clamp(Math.min((p - 0.06) / 0.12, (0.94 - p) / 0.12), 0, 1) * fade;
@@ -961,16 +1092,16 @@ export function NeuralStage({ signal, className = "" }: { signal: StageSignal; c
             const ly = clamp(head.y - 20, 24, height - 24);
             const tw = ctx.measureText(tr.label).width;
             const halo = ctx.createRadialGradient(lx, ly - 4, 2, lx, ly - 4, tw * 0.7 + 18);
-            halo.addColorStop(0, "rgba(2, 4, 10, 0.8)");
-            halo.addColorStop(1, "rgba(2, 4, 10, 0)");
+            halo.addColorStop(0, isLight ? "rgba(252, 248, 238, 0.94)" : "rgba(2, 4, 10, 0.8)");
+            halo.addColorStop(1, isLight ? "rgba(252, 248, 238, 0)" : "rgba(2, 4, 10, 0)");
             ctx.fillStyle = halo;
             ctx.fillRect(lx - tw, ly - 24, tw * 2, 36);
-            ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
+            ctx.shadowColor = isLight ? "rgba(255, 252, 245, 0.95)" : "rgba(0, 0, 0, 0.9)";
             ctx.shadowBlur = 8;
-            ctx.fillStyle = "rgba(255, 238, 206, 0.95)";
+            ctx.fillStyle = isLight ? "rgba(28, 22, 12, 0.95)" : "rgba(255, 238, 206, 0.95)";
             ctx.fillText(tr.label, lx, ly);
             ctx.restore();
-            ctx.globalCompositeOperation = "lighter";
+            ctx.globalCompositeOperation = blendMode;
             ctx.globalAlpha = ease;
           }
         }

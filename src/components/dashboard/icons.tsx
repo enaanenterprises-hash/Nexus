@@ -155,3 +155,17 @@ export const BoltIcon = (p: IconProps) => (
     <path d="M13 3.5 5.5 13.5h6l-1 7 7.5-10h-6l1-7Z" />
   </Icon>
 );
+
+export const SunIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="4.2" />
+    <path d="M12 2.5v2.3M12 19.2v2.3M4.22 4.22l1.62 1.62M18.16 18.16l1.62 1.62M2.5 12h2.3M19.2 12h2.3M4.22 19.78l1.62-1.62M18.16 5.84l1.62-1.62" />
+  </Icon>
+);
+
+export const MoonIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M20.2 14.4A8.2 8.2 0 0 1 9.6 3.8a8.2 8.2 0 1 0 10.6 10.6Z" />
+  </Icon>
+);
+
