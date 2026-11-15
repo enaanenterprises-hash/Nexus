@@ -169,3 +169,11 @@ export const MoonIcon = (p: IconProps) => (
   </Icon>
 );
 
+export const SignOutIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M9 20H5.5A1.5 1.5 0 0 1 4 18.5v-13A1.5 1.5 0 0 1 5.5 4H9" />
+    <path d="M16 16.5 20.5 12 16 7.5M20.5 12H9" />
+  </Icon>
+);
+
+

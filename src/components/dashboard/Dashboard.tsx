@@ -3,10 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { NexusMark } from "@/components/landing/NexusLogo";
-import { SubmitButton } from "@/components/landing/SubmitButton";
 import { CommandView, type CommandTab } from "@/components/command/CommandView";
 import { ResearchView } from "@/components/research/ResearchView";
-import { signOutAction } from "@/lib/auth/actions";
 import type { Viewer } from "@/lib/auth/types";
 import { COMMAND_NODE_ID } from "@/extensions/command/node";
 import { RESEARCH_NODE_ID } from "@/extensions/research/node";
@@ -239,6 +237,19 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
     [stageSize.width, stageSize.height, hub.slots.length],
   );
 
+  const firstName = useMemo(() => {
+    const rawName = viewer.name?.trim();
+    if (rawName) {
+      const first = rawName.split(/\s+/)[0];
+      if (first) return first;
+    }
+    const emailPrefix = viewer.email?.split("@")[0]?.split(/[._+-]/)[0]?.trim();
+    if (emailPrefix) {
+      return emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
+    }
+    return "Friend";
+  }, [viewer.name, viewer.email]);
+
   function flash(message: string) {
     setNotice(message);
     window.clearTimeout(noticeTimer.current);
@@ -403,11 +414,11 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
         ) : null}
       </section>
 
-      <header className="landing-enter absolute inset-x-0 top-0 z-30 flex h-16 items-center justify-between gap-3 pr-4 sm:pr-6">
-        <Link href="/" aria-label="Nexus home" className="inline-flex w-[76px] shrink-0 justify-center">
+      <header className="landing-enter pointer-events-none absolute inset-x-0 top-0 z-30 flex h-16 items-center justify-between gap-3 pr-4 sm:pr-6">
+        <Link href="/" aria-label="Nexus home" className="pointer-events-auto inline-flex w-[76px] shrink-0 justify-center">
           <NexusMark className="dash-brand-mark h-7 w-auto" />
         </Link>
-        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+        <div className="pointer-events-auto flex min-w-0 items-center gap-2 sm:gap-3">
           <button
             type="button"
             onClick={toggleTheme}
@@ -418,15 +429,6 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
             {theme === "dark" ? <SunIcon size={14} /> : <MoonIcon size={14} />}
             <span className="max-sm:hidden">{theme === "dark" ? "Light" : "Dark"}</span>
           </button>
-          <p className="min-w-0 max-w-[34vw] truncate text-[13px] text-[color:var(--land-muted)] sm:max-w-[220px]">
-            <span className="sr-only">Signed in as </span>
-            {viewer.name || viewer.email || "Signed in"}
-          </p>
-          <form action={signOutAction} className="shrink-0">
-            <SubmitButton className="landing-signup" pendingLabel="Signing out…">
-              Sign out
-            </SubmitButton>
-          </form>
         </div>
       </header>
 
@@ -437,12 +439,15 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
         onCommand={() => openCommand()}
         onPanel={openPanel}
       />
-      <NodeRail hub={hub} surface={surface} onCommand={() => openCommand()} onSlot={selectSlot} />
+      {surface.view === "home" ? (
+        <NodeRail hub={hub} surface={surface} onCommand={() => openCommand()} onSlot={selectSlot} />
+      ) : null}
 
       {surface.view === "home" ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-5 z-20 flex justify-center px-4 sm:bottom-8 sm:px-[88px]">
           <div className="dash-chat pointer-events-auto flex w-full max-w-[620px] flex-col items-center gap-4">
             <NexusVoice
+              firstName={firstName}
               brain={session.brain}
               current={session.current}
               pendingPrompt={session.pendingPrompt}

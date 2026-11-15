@@ -6,6 +6,7 @@ import { ResearchIcon } from "./icons";
 import type { Utterance } from "./use-nexus-session";
 
 type Props = {
+  firstName: string;
   brain: NexusBrainState;
   current: Utterance | null;
   pendingPrompt: string | null;
@@ -22,7 +23,7 @@ const STATE_LABEL: Record<NexusBrainState, string> = {
 };
 
 /** Nexus speaks in one calm voice beneath the core rather than a message thread. */
-export function NexusVoice({ brain, current, pendingPrompt, revealed, history, followUps, onAsk }: Props) {
+export function NexusVoice({ firstName, brain, current, pendingPrompt, revealed, history, followUps, onAsk }: Props) {
   const [showEarlier, setShowEarlier] = useState(false);
   const prompt = pendingPrompt ?? current?.prompt ?? null;
   const fromExtension = current && current.source !== "nexus" ? current.source : null;
@@ -35,7 +36,9 @@ export function NexusVoice({ brain, current, pendingPrompt, revealed, history, f
           {fromExtension ? `${fromExtension} · via Nexus` : `Nexus · ${STATE_LABEL[brain]}`}
         </p>
 
-        <div className="mt-3 flex min-h-[4.75rem] w-full flex-col items-center justify-center sm:min-h-[6.25rem]">
+        <p className="dash-welcome mt-1.5">Hello {firstName}</p>
+
+        <div className="mt-2 flex min-h-[4.25rem] w-full flex-col items-center justify-center sm:min-h-[5.5rem]">
           {prompt ? (
             <p key={`p-${prompt}`} className="dash-fade-in mb-2 max-w-full truncate text-[14px] text-[color:var(--land-muted)]">
               <span className="text-[color:var(--land-faint)]">You — </span>

@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { signOutAction } from "@/lib/auth/actions";
 import {
   FREE_ACTIVE_EXTENSION_SLOTS,
   canUseSlot,
@@ -10,7 +11,7 @@ import {
   type SlotId,
 } from "@/lib/extensions";
 import { useTheme } from "@/lib/theme";
-import { CommandIcon, LockIcon, MoonIcon, NetworkIcon, NodesIcon, PlusIcon, SunIcon, TodayIcon } from "./icons";
+import { CommandIcon, LockIcon, MoonIcon, NetworkIcon, NodesIcon, PlusIcon, SignOutIcon, SunIcon, TodayIcon } from "./icons";
 
 export type PanelId = "today" | "nodes" | { extension: ExtensionId };
 
@@ -97,6 +98,14 @@ export function NodeMenu({
         </span>
         <span>{hub.entitlement.isPro ? "Pro" : "Free"}</span>
       </button>
+      <form action={signOutAction} className="w-full flex justify-center">
+        <button type="submit" className="node-menu-item node-menu-item--signout" title="Sign out">
+          <span className="node-menu-icon">
+            <SignOutIcon />
+          </span>
+          <span className="node-menu-label">Sign out</span>
+        </button>
+      </form>
     </nav>
   );
 }
