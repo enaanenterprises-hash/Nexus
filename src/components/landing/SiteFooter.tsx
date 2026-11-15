@@ -3,8 +3,12 @@ import { NexusWordmark } from "./NexusLogo";
 
 const LINKS = [
   { href: "/about", label: "About" },
+  { href: "/faq", label: "FAQ" },
+  { href: "/security", label: "Security" },
   { href: "/privacy", label: "Privacy" },
   { href: "/terms", label: "Terms" },
+  { href: "/accessibility", label: "Accessibility" },
+  { href: "/contact", label: "Contact" },
 ] as const;
 
 export function SiteFooter() {
@@ -14,7 +18,7 @@ export function SiteFooter() {
         <Link href="/" aria-label="Nexus home" className="inline-flex">
           <NexusWordmark className="h-[14px] w-auto sm:h-[17px]" preload={false} />
         </Link>
-        <nav aria-label="Site" className="site-footer-nav">
+        <nav aria-label="Site navigation" className="site-footer-nav">
           {LINKS.map((link) => (
             <Link key={link.href} href={link.href}>
               {link.label}

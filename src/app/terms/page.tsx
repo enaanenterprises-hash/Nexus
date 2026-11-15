@@ -4,7 +4,8 @@ import { POLICY_DATE, SiteDocument } from "@/components/landing/SiteDocument";
 
 export const metadata: Metadata = {
   title: "Terms — Nexus",
-  description: "The terms for using Nexus, a personal AI operating environment made by Muhtasim Mohammad in Toronto.",
+  description:
+    "Terms of use for Nexus, the personal AI operating environment made by Muhtasim Mohammad in Toronto.",
 };
 
 export default function TermsPage() {
@@ -15,9 +16,9 @@ export default function TermsPage() {
       lede={
         <>
           <p>
-            These terms cover your use of Nexus, the personal AI operating environment made by Muhtasim Mohammad in
-            Toronto. Signing in, or using the product, means you agree to them. The{" "}
-            <Link href="/privacy">privacy policy</Link> is part of this agreement.
+            These terms govern your access to and use of Nexus, the personal AI operating environment built by Muhtasim
+            Mohammad in Toronto. By signing in or using the application, you agree to be bound by these terms.
+            Our <Link href="/privacy">privacy policy</Link> forms an integral part of this agreement.
           </p>
           <p>
             <time dateTime="2026-11-14">Effective {POLICY_DATE}</time>
@@ -25,91 +26,129 @@ export default function TermsPage() {
         </>
       }
     >
-      <h2>The product</h2>
+      <h2>1. The product &amp; scope</h2>
       <p>
-        Nexus gives you a network and a chat, extension sockets on that network, Research, and Command. Extensions are
-        built to work without the intelligence. Research reads and files pages. Command connects outside services and
-        runs automations by rule.
+        Nexus provides a unified personal computing environment comprising the central neural network and chat interface,
+        modular extension sockets, the Research web reader, and the Command integration cockpit.
       </p>
       <p>
-        Names reserved on empty sockets — Studio, Study, Call, and Calendar — are not available yet. Two sockets are
-        free. Further sockets are marked Pro. Pro on the dashboard is a preview: Nexus does not charge a fee today, and
-        it does not collect payment information.
+        Extension sockets allow background services to interoperate under explicit capability grants. The first two
+        sockets are provided free of charge. Pro sockets are offered as an early preview; Nexus does not charge fees or
+        collect payment information at this time. Sockets with reserved designations (such as Studio, Study, Call, and
+        Calendar) are upcoming releases and are not yet active.
       </p>
       <p>
-        The voice on the network can arrange the day in front of you. It can be wrong. It is not a lawyer, a physician,
-        or a financial adviser. Decisions stay with you.
-      </p>
-
-      <h2>Your account</h2>
-      <p>
-        You sign in with Google or with an email magic link. You need the right to use that Google account or that
-        email address. You are responsible for what happens under your sign-in, including the services you choose to
-        connect.
+        The central intelligence assists in organizing, synthesizing, and displaying contextual information across your
+        day. AI outputs can be incomplete or inaccurate. Nexus is not a licensed attorney, medical practitioner,
+        financial consultant, or fiduciary. Final decisions and actions always remain your sole responsibility.
       </p>
 
-      <h2>Your material</h2>
+      <h2>2. Eligibility &amp; account responsibility</h2>
       <p>
-        You keep the rights in what you bring: pages you save, notes, highlights, and the content of the accounts you
-        connect. You let Nexus store that material, fetch pages you open, and call the services you connect, so the
-        product can show it to you and share it among your own extensions.
+        You must be at least sixteen years old to access or create an account on Nexus. By using the platform, you
+        warrant that you have full legal capacity to enter into these terms.
       </p>
       <p>
-        Nexus does not take ownership of that material. Nexus does not sell it. The{" "}
-        <Link href="/privacy">privacy policy</Link> describes what is stored and how to ask for it to be removed.
-      </p>
-
-      <h2>Connected services</h2>
-      <p>
-        Google, Resend, Neon, Brave, Vercel, and every service you connect in Command have their own terms. Nexus is
-        not those companies. A connector can fail, change, or be revoked on the other side. Automations do what their
-        rules say, and a step is skipped when its service is not connected.
-      </p>
-      <p>Connect only accounts you are allowed to connect. Tokens you provide are stored encrypted, as the privacy policy describes.</p>
-
-      <h2>Acceptable use</h2>
-      <p>
-        Use Nexus for your own life and work. Do not use it to break the law, to probe or disrupt systems you do not
-        have permission to touch, to send abuse through a connected account, or to interfere with the service for
-        anyone else. Do not attempt to read another person&apos;s data.
+        Authentication is managed through Google OAuth or email-delivered magic links; passwords are not used. You are
+        responsible for safeguarding access to your email and Google credentials, and for all activities that occur
+        under your session. Each verified email corresponds to a single distinct user account.
       </p>
 
-      <h2>Availability</h2>
+      <h2>3. Your content &amp; intellectual property</h2>
       <p>
-        Nexus is offered as it stands. It may change, pause, or drop a connector when a provider changes. Access may be
-        suspended if a use harms the service or other people. There is no promised uptime.
+        You retain full ownership and intellectual property rights in all data, documents, highlights, personal notes,
+        and third-party content you bring into Nexus.
+      </p>
+      <p>
+        You grant Nexus a limited, non-exclusive license to process, store, index, and transmit your content solely to the
+        extent necessary to provide, protect, and operate the platform for you. Nexus never claims ownership of your
+        materials, does not sell your data to third parties, and does not use your private content to train public AI models.
       </p>
 
-      <h2>Liability</h2>
+      <h2>4. Connected services &amp; third-party APIs</h2>
       <p>
-        To the extent the law allows, Nexus is provided without warranties of any kind, and Muhtasim Mohammad is not
-        liable for indirect, incidental, or consequential loss, or for what a connected service does under its own
-        terms. Where a limit of that kind is not allowed, the limit is the smallest the law does allow.
+        Command allows you to link external accounts including Gmail, Google Calendar, Google Tasks, GitHub, Vercel,
+        Strava, Spotify, and Telegram. Each third-party service is governed by its own independent terms and privacy
+        agreements. Nexus is independent of these providers.
       </p>
-      <p>Nothing in these terms limits liability that cannot legally be limited.</p>
-
-      <h2>Ending</h2>
       <p>
-        You may stop at any time and sign out. Disconnecting a service removes that connection. Asking for the account
-        to be removed is described in the <Link href="/privacy">privacy policy</Link>. Access may end if these terms
-        are broken.
+        You must connect only accounts and resources that you have lawful authorization to access. Connectors may fail,
+        change, or be revoked by the respective third-party provider without notice. Automation workflows execute strictly
+        according to deterministic rules, skipping steps whose underlying connectors are unlinked or unauthorized.
       </p>
-
-      <h2>Law</h2>
       <p>
-        These terms are governed by the laws of Ontario and the federal laws of Canada that apply in Ontario. Disputes
-        are handled in the courts of Toronto, Ontario, unless the law requires another forum.
+        Credentials, tokens, and OAuth keys provided for connectors are encrypted with AES-256-GCM prior to storage in
+        Neon Postgres. Disconnecting a service immediately purges the connector credential and its synced cache.
       </p>
 
-      <h2>Changes</h2>
+      <h2>5. Acceptable use</h2>
       <p>
-        If these terms change, the date on this page changes. This version is {POLICY_DATE}. Continuing to use Nexus
-        after the date changes means you accept the updated terms.
+        You agree to use Nexus strictly for lawful, personal, or professional productivity purposes. You shall not:
+      </p>
+      <ul>
+        <li>Use Nexus to violate any applicable municipal, provincial, federal, or international law.</li>
+        <li>Probe, scan, reverse-engineer, or attempt to compromise the integrity or security of Nexus infrastructure.</li>
+        <li>Transmit spam, unauthorized promotional messages, or abusive communications through connected integrations.</li>
+        <li>Attempt to intercept, access, or decrypt data belonging to other users.</li>
+        <li>Abuse automated rate limits or disrupt network availability for other members of the community.</li>
+      </ul>
+
+      <h2>6. Intellectual property of Nexus</h2>
+      <p>
+        The Nexus name, logo marks, visual interfaces, graphic assets, typography, design systems, and source code are
+        the exclusive intellectual property of Muhtasim Mohammad. Nothing in these terms confers any title or licensing
+        rights beyond the limited right to use the web application in accordance with this agreement.
       </p>
 
-      <h2>Contact</h2>
+      <h2>7. Service availability &amp; modifications</h2>
       <p>
-        To reach Muhtasim Mohammad about these terms, <Link href="/signup">sign in on this site</Link>.
+        Nexus is provided on an &ldquo;as is&rdquo; and &ldquo;as available&rdquo; basis during its beta development cycle.
+        Features may be modified, updated, temporarily paused, or retired at any time. We make reasonable efforts to
+        maintain dependable uptime, but we do not guarantee uninterrupted availability.
+      </p>
+
+      <h2>8. Limitation of liability</h2>
+      <p>
+        To the maximum extent permitted by applicable law, Nexus and Muhtasim Mohammad disclaim all warranties, whether
+        express, statutory, or implied, including warranties of merchantability, fitness for a particular purpose, and
+        non-infringement.
+      </p>
+      <p>
+        In no event shall Muhtasim Mohammad be liable for indirect, incidental, special, exemplary, or consequential
+        damages, including loss of profits, data, goodwill, or service interruptions resulting from your use of the
+        application or third-party connectors. Where jurisdictions prohibit certain liability waivers, liability shall
+        be limited to the lowest amount permitted under governing law.
+      </p>
+
+      <h2>9. Termination</h2>
+      <p>
+        You may cease using Nexus at any time. Disconnecting third-party services removes their associated records, and
+        you may request permanent account deletion via our <Link href="/contact">contact page</Link>.
+      </p>
+      <p>
+        Nexus reserves the right to suspend or terminate accounts that breach these terms or threaten the stability and
+        security of the platform. Clauses regarding ownership, intellectual property, liability limits, and dispute
+        resolution survive termination.
+      </p>
+
+      <h2>10. Governing law &amp; jurisdiction</h2>
+      <p>
+        These terms shall be governed by and construed in accordance with the laws of the Province of Ontario and the
+        federal laws of Canada applicable therein, without regard to conflict of law principles. Any legal proceeding
+        arising under these terms shall be instituted exclusively in the competent courts located in Toronto, Ontario.
+      </p>
+
+      <h2>11. Amendments</h2>
+      <p>
+        We may update these terms periodically to reflect product changes, new features, or statutory requirements.
+        When updates are published, the effective date at the top of this document will be amended accordingly.
+        Continued use of Nexus following updates constitutes acceptance of the revised terms.
+      </p>
+
+      <h2>12. Contact</h2>
+      <p>
+        If you have questions or require clarification regarding these terms, please visit our{" "}
+        <Link href="/contact">contact page</Link> or reach out directly to Muhtasim Mohammad.
       </p>
     </SiteDocument>
   );

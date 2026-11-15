@@ -699,6 +699,21 @@ button.landing-signup {
   background: var(--land-gold);
 }
 
+.site-prose strong {
+  color: var(--land-ink);
+  font-weight: 600;
+}
+
+.site-prose code {
+  padding: 0.15em 0.35em;
+  font-size: 0.88em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--land-gold-soft);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 4px;
+}
+
 .site-prose a {
   color: var(--land-gold-soft);
   text-decoration: underline;
