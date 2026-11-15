@@ -15,6 +15,7 @@ import {
   canUseSlot,
   extensionRegistry,
   nexusBus,
+  placeholderName,
   setStubPro,
   type ExtensionId,
   type SlotId,
@@ -24,10 +25,16 @@ import { getConnector } from "@/lib/connectors/catalog";
 import { researchIntent } from "@/lib/nexus/brain";
 import { ExtensionHub } from "./ExtensionHub";
 import { ExtensionPanel } from "./ExtensionPanel";
-import { CloseIcon } from "./icons";
-import { NeuralStage, type SocketVisual, type StageSignal } from "./NeuralStage";
+import { BoltIcon, CloseIcon } from "./icons";
+import {
+  NeuralStage,
+  type SocketVisual,
+  type StageSignal,
+  type StageTransfer,
+} from "./NeuralStage";
 import { NodeMenu, NodeRail, type PanelId, type Surface } from "./NodeNav";
 import { NexusInput, NexusVoice } from "./NexusVoice";
+import { computeStageLayout } from "./stage-layout";
 import { TodayPanel } from "./TodayPanel";
 import { useNexusSession } from "./use-nexus-session";
 
@@ -42,6 +49,13 @@ const OAUTH_ERRORS: Record<string, string> = {
   unknown: "Unknown service.",
 };
 
+const PRODUCT_PAYLOAD_LABELS: Record<string, string> = {
+  "dev.nexus.sample.daily-brief": "daily.brief · priority packet",
+  "dev.nexus.sample.focus-guard": "focus.guard · state vector",
+  "dev.nexus.sample.quick-capture": "capture.note · typed record",
+  "dev.nexus.sample.ledger": "command.purchase · $42.10 USD",
+};
+
 export function Dashboard({ viewer }: { viewer: Viewer }) {
   const session = useNexusSession();
   const hub = useExtensionHub();
@@ -49,16 +63,58 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
   const [researchMounted, setResearchMounted] = useState(false);
   const [researchRequest, setResearchRequest] = useState<{ input: string; serial: number } | null>(null);
   const [commandMounted, setCommandMounted] = useState(false);
-  const [commandRequest, setCommandRequest] = useState<{ tab: CommandTab; service: string | null; notice: string | null; serial: number } | null>(null);
+  const [commandRequest, setCommandRequest] = useState<{
+    tab: CommandTab;
+    service: string | null;
+    notice: string | null;
+    serial: number;
+  } | null>(null);
   const [selected, setSelected] = useState<SlotId | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const noticeTimer = useRef<number | undefined>(undefined);
+  const [transfer, setTransfer] = useState<StageTransfer | null>(null);
+  const [stageSize, setStageSize] = useState<{ width: number; height: number }>({ width: 1280, height: 800 });
 
+  const stageWrapRef = useRef<HTMLElement>(null);
+  const noticeTimer = useRef<number | undefined>(undefined);
+  const bootedRef = useRef(false);
+
+  // Register sample extensions and wire the first two free Laniakea arms on initial boot
   useEffect(() => {
-    for (const extension of SAMPLE_EXTENSIONS) {
-      if (!extensionRegistry.get(extension.manifest.id)) void extensionRegistry.register(extension);
+    const timer = noticeTimer.current;
+    async function bootExtensions() {
+      for (const extension of SAMPLE_EXTENSIONS) {
+        if (!extensionRegistry.get(extension.manifest.id)) {
+          await extensionRegistry.register(extension);
+        }
+      }
+      if (!bootedRef.current) {
+        bootedRef.current = true;
+        const snap = extensionRegistry.getSnapshot();
+        const anyOccupied = snap.slots.some((s) => s.occupiedBy !== null);
+        if (!anyOccupied) {
+          await extensionRegistry.activate("dev.nexus.sample.daily-brief");
+          await extensionRegistry.activate("dev.nexus.sample.focus-guard");
+        }
+      }
     }
-    return () => window.clearTimeout(noticeTimer.current);
+    void bootExtensions();
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  // Track stage dimensions so DOM attractor callout pins align 1:1 with the Laniakea canvas
+  useEffect(() => {
+    const el = stageWrapRef.current;
+    if (!el) return;
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setStageSize({ width: rect.width, height: rect.height });
+      }
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
   }, []);
 
   useEffect(
@@ -71,15 +127,61 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
     [],
   );
 
+  // Automatically visualize bus events as travelling product comets between Laniakea arms
+  useEffect(() => {
+    const unsubCommand = nexusBus.subscribe("command:item-published", (event) => {
+      const snap = extensionRegistry.getSnapshot();
+      const ledgerIdx = snap.slots.findIndex((s) => s.occupiedBy === "dev.nexus.sample.ledger");
+      const targetIdx = ledgerIdx >= 0 ? ledgerIdx : snap.slots.findIndex((s) => s.occupiedBy !== null);
+      if (targetIdx >= 0) {
+        setTransfer((prev) => ({
+          fromSocket: -1,
+          toSocket: targetIdx,
+          label: `command.${event.payload.kind.replace("command.", "")} → ${
+            snap.slots[targetIdx]?.occupiedBy?.split(".").pop() ?? "node"
+          }`,
+          serial: (prev?.serial ?? 0) + 1,
+        }));
+      }
+    });
+
+    const unsubProactive = nexusBus.subscribe("nexus:proactive", (event) => {
+      if (event.source === "nexus" || event.source === "system") return;
+      const snap = extensionRegistry.getSnapshot();
+      const fromIdx = snap.slots.findIndex((s) => s.occupiedBy === event.source);
+      if (fromIdx >= 0) {
+        const otherIdx = snap.slots.findIndex((s, idx) => idx !== fromIdx && s.occupiedBy !== null);
+        setTransfer((prev) => ({
+          fromSocket: fromIdx,
+          toSocket: otherIdx >= 0 ? otherIdx : -1,
+          label: PRODUCT_PAYLOAD_LABELS[event.source] ?? `${event.source.split(".").pop()} · packet`,
+          serial: (prev?.serial ?? 0) + 1,
+        }));
+      }
+    });
+
+    return () => {
+      unsubCommand();
+      unsubProactive();
+    };
+  }, []);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const outcome = params.get("command");
     if (!outcome) return;
     const ids = (params.get("service") ?? "").split(",").filter(Boolean);
     const name = ids.length ? ids.map((id) => getConnector(id)?.name ?? id).join(" and ") : "The service";
-    const notice = outcome === "connected" ? `${name} is connected.` : `${name} couldn't connect. ${OAUTH_ERRORS[params.get("reason") ?? ""] ?? ""}`.trim();
+    const notice =
+      outcome === "connected"
+        ? `${name} is connected.`
+        : `${name} couldn't connect. ${OAUTH_ERRORS[params.get("reason") ?? ""] ?? ""}`.trim();
     window.history.replaceState(null, "", window.location.pathname);
-    openCommand({ tab: outcome === "connected" ? "overview" : "connections", service: ids[0] ?? null, notice });
+    openCommand({
+      tab: outcome === "connected" ? "overview" : "connections",
+      service: ids[0] ?? null,
+      notice,
+    });
   }, []);
 
   useEffect(() => {
@@ -92,7 +194,10 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
   }, []);
 
   const visuals = useMemo<SocketVisual[]>(
-    () => hub.slots.map((slot) => (slot.occupiedBy ? "occupied" : canUseSlot(slot, hub.entitlement) ? "open" : "locked")),
+    () =>
+      hub.slots.map((slot) =>
+        slot.occupiedBy ? "occupied" : canUseSlot(slot, hub.entitlement) ? "open" : "locked",
+      ),
     [hub.slots, hub.entitlement],
   );
 
@@ -102,9 +207,15 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
       brain: session.brain,
       sockets: visuals,
       snap: hub.lastSnapped && snapIndex >= 0 ? { index: snapIndex, serial: hub.lastSnapped.serial } : null,
+      transfer,
       paused: surface.view !== "home",
     };
-  }, [session.brain, visuals, hub.lastSnapped, hub.slots, surface.view]);
+  }, [session.brain, visuals, hub.lastSnapped, hub.slots, transfer, surface.view]);
+
+  const stageLayout = useMemo(
+    () => computeStageLayout(stageSize.width, stageSize.height, hub.slots.length),
+    [stageSize.width, stageSize.height, hub.slots.length],
+  );
 
   function flash(message: string) {
     setNotice(message);
@@ -126,7 +237,10 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
 
   function openPanel(panel: PanelId) {
     setSurface((s) => {
-      const same = typeof panel === "string" ? s.panel === panel : typeof s.panel === "object" && s.panel?.extension === panel.extension;
+      const same =
+        typeof panel === "string"
+          ? s.panel === panel
+          : typeof s.panel === "object" && s.panel?.extension === panel.extension;
       return { view: s.view, panel: same ? null : panel };
     });
   }
@@ -141,14 +255,14 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
     session.ask(text);
   }
 
-  async function snap(id: ExtensionId) {
-    const target = hub.slots.find((s) => s.id === selected);
+  async function snap(id: ExtensionId, explicitSlotId?: SlotId) {
+    const target = hub.slots.find((s) => s.id === (explicitSlotId ?? selected));
     const slotId = target && !target.occupiedBy && canUseSlot(target, hub.entitlement) ? target.id : undefined;
     const result = await extensionRegistry.activate(id, { slotId });
     const name = extensionRegistry.get(id)?.manifest.name ?? id;
     if (result.ok) {
       const slot = hub.slots.find((s) => s.id === result.slotId);
-      flash(`${name} snapped into a ${slot?.tier === "pro" ? "Pro" : "free"} socket and is wired to the core.`);
+      flash(`${name} wired into ${slot?.tier === "pro" ? "Pro" : "free"} arm — Laniakea filament illuminated.`);
       setSelected(null);
     } else {
       flash(result.message);
@@ -161,8 +275,56 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
   async function release(id: ExtensionId) {
     const name = extensionRegistry.get(id)?.manifest.name ?? id;
     await extensionRegistry.deactivate(id);
-    flash(`${name} released. Its socket is open again.`);
-    setSurface((s) => (typeof s.panel === "object" && s.panel?.extension === id ? { ...s, panel: "nodes" } : s));
+    flash(`${name} disconnected. Its Laniakea network arm has gone dark.`);
+    setSurface((s) => (typeof s.panel === "object" && s.panel?.extension === id ? { ...s, panel: null } : s));
+  }
+
+  async function connectIntoSocket(slotId: SlotId) {
+    const slot = hub.slots.find((s) => s.id === slotId);
+    if (!slot) return;
+    if (!canUseSlot(slot, hub.entitlement)) {
+      setStubPro(true);
+    }
+    const available = hub.extensions.find((e) => !hub.slots.some((s) => s.occupiedBy === e.manifest.id));
+    if (available) {
+      await snap(available.manifest.id, slotId);
+    } else {
+      setSelected(slotId);
+      setSurface((s) => ({ ...s, panel: "nodes" }));
+    }
+  }
+
+  function triggerNodeTransfer(fromId: ExtensionId, explicitToId?: ExtensionId) {
+    const fromIndex = hub.slots.findIndex((s) => s.occupiedBy === fromId);
+    if (fromIndex < 0) return;
+
+    let toIndex = -1;
+    if (explicitToId) {
+      toIndex = hub.slots.findIndex((s) => s.occupiedBy === explicitToId);
+    } else {
+      const candidates = hub.slots
+        .map((s, idx) => (s.occupiedBy && idx !== fromIndex ? idx : -1))
+        .filter((idx) => idx >= 0);
+      toIndex = candidates.length > 0 ? candidates[0]! : -1;
+    }
+
+    const fromExt = hub.extensions.find((e) => e.manifest.id === fromId);
+    const toExt = toIndex >= 0 ? hub.extensions.find((e) => e.manifest.id === hub.slots[toIndex]?.occupiedBy) : null;
+    const payloadName = PRODUCT_PAYLOAD_LABELS[fromId] ?? "nexus.record · payload";
+    const routeText = `${fromExt?.manifest.monogram ?? "NODE"} → ${toExt?.manifest.monogram ?? "CORE"} · ${payloadName}`;
+
+    setTransfer((prev) => ({
+      fromSocket: fromIndex,
+      toSocket: toIndex,
+      label: routeText,
+      serial: (prev?.serial ?? 0) + 1,
+    }));
+
+    flash(
+      `Transmitting ${payloadName} from ${fromExt?.manifest.name ?? fromId} to ${
+        toExt?.manifest.name ?? "Great Attractor Core"
+      }.`,
+    );
   }
 
   function selectSlot(slotId: SlotId) {
@@ -174,16 +336,149 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
     }
     setSelected(slotId);
     setSurface((s) => ({ ...s, panel: "nodes" }));
-    flash(canUseSlot(slot, hub.entitlement) ? "Socket selected. Choose an extension to snap into it." : "Pro sockets unlock with Nexus Pro. Try “Preview Pro” to open them.");
+    flash(
+      canUseSlot(slot, hub.entitlement)
+        ? "Socket selected. Choose an extension to snap into it."
+        : "Pro sockets unlock with Nexus Pro. Try “Preview Pro” to open them.",
+    );
   }
 
   const panel = surface.panel;
+  const occupiedCount = hub.slots.filter((s) => s.occupiedBy !== null).length;
 
   return (
     <div className="dash relative h-[100svh] w-full flex-1 overflow-hidden">
-      <section aria-label="Nexus network" className="absolute inset-0" hidden={surface.view === "command"}>
+      <section
+        ref={stageWrapRef}
+        aria-label="Nexus Laniakea network"
+        className="absolute inset-0"
+        hidden={surface.view === "command"}
+      >
         <NeuralStage signal={signal} />
         <div className="dash-scrim--home pointer-events-none absolute inset-0" />
+
+        {/* Interactive Laniakea Supercluster Attractor Pins & Product Transfer HUD */}
+        {surface.view === "home" ? (
+          <div className="laniakea-hud pointer-events-none absolute inset-0 z-10 overflow-hidden">
+            {/* Top-Center Supercluster Status Pill */}
+            <div className="laniakea-status-bar pointer-events-auto">
+              <span className="laniakea-status-dot" />
+              <span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-[color:var(--land-gold-soft)]">
+                Laniakea Basin
+              </span>
+              <span className="text-[11.5px] text-[color:var(--land-muted)]">
+                {occupiedCount} of {hub.slots.length} arms illuminated
+              </span>
+              {notice ? (
+                <span className="hidden max-w-[340px] truncate border-l border-white/10 pl-2.5 text-[11.5px] text-[color:var(--land-gold-soft)] md:inline">
+                  {notice}
+                </span>
+              ) : null}
+            </div>
+
+            {/* Great Attractor Core Pin ("YOU ARE HERE" Reference Locus) */}
+            <div
+              className="laniakea-core-pin"
+              style={{
+                left: `${stageLayout.core.x}px`,
+                top: `${stageLayout.core.y}px`,
+              }}
+            >
+              <span className="laniakea-core-dot" />
+              <span className="laniakea-core-line" />
+              <div className="laniakea-core-tag">
+                <span className="text-[9.5px] font-semibold uppercase tracking-[0.16em] text-[color:var(--land-gold-soft)]">
+                  Great Attractor · Core
+                </span>
+                <span className="text-[10px] text-[color:var(--land-muted)]">
+                  Network Intelligence
+                </span>
+              </div>
+            </div>
+
+            {/* 5 Laniakea Arm Socket Attractor Pins */}
+            {hub.slots.map((slot, idx) => {
+              const pos = stageLayout.sockets[idx];
+              if (!pos) return null;
+              const ext = slot.occupiedBy
+                ? hub.extensions.find((e) => e.manifest.id === slot.occupiedBy)
+                : undefined;
+              const open = canUseSlot(slot, hub.entitlement);
+              const ghostName = placeholderName(slot.placeholderKey);
+              const isLeftHalf = pos.x < stageLayout.core.x;
+
+              return (
+                <div
+                  key={slot.id}
+                  className={`laniakea-arm-pin ${
+                    ext ? "laniakea-arm-pin--live" : open ? "laniakea-arm-pin--open" : "laniakea-arm-pin--locked"
+                  } ${isLeftHalf ? "laniakea-arm-pin--left" : ""}`}
+                  style={{
+                    left: `${pos.x}px`,
+                    top: `${pos.y}px`,
+                  }}
+                >
+                  {/* Pinpoint Attractor Marker Dot */}
+                  <span className="laniakea-pin-beacon" aria-hidden />
+                  <span className="laniakea-pin-leader" aria-hidden />
+
+                  {/* Astronomical Callout Card */}
+                  <div className="laniakea-pin-card pointer-events-auto">
+                    <div className="flex items-center gap-2">
+                      <span className="laniakea-pin-mono">
+                        {ext ? (ext.manifest.monogram ?? ext.manifest.name.slice(0, 2)) : `0${idx + 1}`}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-[11.5px] font-semibold leading-tight text-[color:var(--land-ink)]">
+                          {ext ? ext.manifest.name : `${ghostName} Arm`}
+                        </p>
+                        <p className="text-[9.5px] uppercase tracking-[0.12em] text-[color:var(--land-faint)]">
+                          {ext
+                            ? `Arm 0${idx + 1} · Illuminated`
+                            : open
+                              ? `Arm 0${idx + 1} · Dark (Disconnected)`
+                              : `Arm 0${idx + 1} · Dark (Pro Socket)`}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-1.5 flex items-center gap-1.5">
+                      {ext ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => triggerNodeTransfer(ext.manifest.id)}
+                            className="laniakea-pin-btn laniakea-pin-btn--gold"
+                            title={`Send product from ${ext.manifest.name} to another node`}
+                          >
+                            <BoltIcon size={11} />
+                            <span>Transfer</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void release(ext.manifest.id)}
+                            className="laniakea-pin-btn"
+                            title={`Disconnect ${ext.manifest.name} and darken this arm`}
+                          >
+                            Disconnect
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void connectIntoSocket(slot.id)}
+                          className="laniakea-pin-btn laniakea-pin-btn--gold"
+                        >
+                          {open ? "Connect Arm" : "Unlock & Wire"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
       </section>
 
       <header className="landing-enter absolute inset-x-0 top-0 z-30 flex h-16 items-center justify-between gap-3 pr-4 sm:pr-6">
@@ -203,22 +498,32 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
         </div>
       </header>
 
-      <NodeMenu hub={hub} surface={surface} onHome={() => setSurface({ view: "home", panel: null })} onCommand={() => openCommand()} onPanel={openPanel} />
+      <NodeMenu
+        hub={hub}
+        surface={surface}
+        onHome={() => setSurface({ view: "home", panel: null })}
+        onCommand={() => openCommand()}
+        onPanel={openPanel}
+      />
       <NodeRail hub={hub} surface={surface} onCommand={() => openCommand()} onSlot={selectSlot} />
 
       {surface.view === "home" ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-6 z-10 flex justify-center pl-[84px] pr-3 sm:bottom-9 sm:pr-[76px]">
+        <div className="pointer-events-none absolute inset-x-0 bottom-6 z-20 flex justify-center pl-[84px] pr-3 sm:bottom-9 sm:pr-[76px]">
           <div className="dash-chat pointer-events-auto flex w-full max-w-[600px] flex-col items-center gap-6">
-          <NexusVoice
-            brain={session.brain}
-            current={session.current}
-            pendingPrompt={session.pendingPrompt}
-            revealed={session.revealed}
-            history={session.history}
-            followUps={[]}
-            onAsk={chat}
-          />
-          <NexusInput disabled={session.brain === "thinking"} onAsk={chat} onResearch={RESEARCH_VISIBLE ? (text) => openResearch(text) : undefined} />
+            <NexusVoice
+              brain={session.brain}
+              current={session.current}
+              pendingPrompt={session.pendingPrompt}
+              revealed={session.revealed}
+              history={session.history}
+              followUps={[]}
+              onAsk={chat}
+            />
+            <NexusInput
+              disabled={session.brain === "thinking"}
+              onAsk={chat}
+              onResearch={RESEARCH_VISIBLE ? (text) => openResearch(text) : undefined}
+            />
           </div>
         </div>
       ) : null}
@@ -237,16 +542,39 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
 
       {panel ? (
         <aside className="node-panel" aria-label="Node panel">
-          <button type="button" className="research-icon-button absolute right-3 top-3 z-10" onClick={() => setSurface((s) => ({ ...s, panel: null }))} aria-label="Close panel">
+          <button
+            type="button"
+            className="research-icon-button absolute right-3 top-3 z-10"
+            onClick={() => setSurface((s) => ({ ...s, panel: null }))}
+            aria-label="Close panel"
+          >
             <CloseIcon size={15} />
           </button>
           <div className="dash-panel h-full overflow-y-auto p-6 pt-7">
             {panel === "today" ? (
-              <TodayPanel tasks={session.tasks} threads={session.threads} touched={session.touched} organized={session.organized} onToggle={session.toggleTask} />
+              <TodayPanel
+                tasks={session.tasks}
+                threads={session.threads}
+                touched={session.touched}
+                organized={session.organized}
+                onToggle={session.toggleTask}
+              />
             ) : panel === "nodes" ? (
-              <ExtensionHub hub={hub} selected={selected} notice={notice} onSnap={snap} onRelease={release} onTogglePro={() => setStubPro(!hub.entitlement.isPro)} />
+              <ExtensionHub
+                hub={hub}
+                selected={selected}
+                notice={notice}
+                onSnap={snap}
+                onRelease={release}
+                onTogglePro={() => setStubPro(!hub.entitlement.isPro)}
+              />
             ) : (
-              <ExtensionPanel hub={hub} id={panel.extension} onRelease={release} />
+              <ExtensionPanel
+                hub={hub}
+                id={panel.extension}
+                onRelease={release}
+                onTransfer={(fromId, toId) => triggerNodeTransfer(fromId, toId)}
+              />
             )}
           </div>
         </aside>
