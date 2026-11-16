@@ -65,13 +65,20 @@ const GOLD_MID: Rgb = [246, 182, 74];
 const GOLD_DEEP: Rgb = [212, 128, 34];
 const DORMANT_BRONZE: Rgb = [118, 84, 38];
 
-const GOLD_LIGHT_CORE: Rgb = [176, 108, 10];
-const GOLD_LIGHT_MID: Rgb = [198, 128, 18];
-const GOLD_LIGHT_DEEP: Rgb = [146, 86, 8];
+// Light-mode 24k burnished gold palette: high-chroma champagne -> sovereign 24k gold -> deep imperial bronze-gold
+const GOLD_LIGHT_SPECULAR: Rgb = [142, 78, 4];
+const GOLD_LIGHT_BRIGHT: Rgb = [184, 112, 10];
+const GOLD_LIGHT_MID: Rgb = [212, 144, 22];
+const GOLD_LIGHT_DEEP: Rgb = [232, 174, 52];
+const DORMANT_LIGHT_PLATINUM: Rgb = [158, 150, 138];
 
 const CRIMSON_HOT: Rgb = [255, 104, 82];
 const CRIMSON_PURE: Rgb = [252, 48, 44];
 const CRIMSON_DEEP: Rgb = [196, 20, 30];
+
+const CRIMSON_LIGHT_HOT: Rgb = [228, 68, 36];
+const CRIMSON_LIGHT_PURE: Rgb = [204, 22, 28];
+const CRIMSON_LIGHT_DEEP: Rgb = [154, 12, 20];
 
 /**
  * Connected ('occupied') nodes blaze at 1.0.
@@ -721,10 +728,18 @@ export function NeuralStage({
       const L = layout;
       const { width, height, core, radius: R, scale: S } = L;
 
-      // ——— 1. Pure Pitch-Black Background (or Warm Alabaster in Light Mode) ———
+      // ——— 1. Pure Pitch-Black Background (or Warm Gallery Alabaster in Light Mode) ———
       ctx.globalCompositeOperation = "source-over";
       ctx.globalAlpha = 1;
-      ctx.fillStyle = isLight ? "#f7f7f8" : "#000000";
+      if (isLight) {
+        const bgGrad = ctx.createRadialGradient(core.x, core.y, 0, core.x, core.y, Math.hypot(width, height) * 0.75);
+        bgGrad.addColorStop(0, "#fdfcfa");
+        bgGrad.addColorStop(0.55, "#f7f6f2");
+        bgGrad.addColorStop(1, "#efede7");
+        ctx.fillStyle = bgGrad;
+      } else {
+        ctx.fillStyle = "#000000";
+      }
       ctx.fillRect(0, 0, width, height);
 
       // ——— 2. Phase I Opening Silence (t < 1.60s): Only "Waking up Nexus…" is on screen ———
@@ -862,12 +877,15 @@ export function NeuralStage({
         rippleClock = 0;
       }
 
-      const goldCore = isLight ? GOLD_LIGHT_CORE : GOLD_CORE;
-      const goldBright = isLight ? GOLD_LIGHT_MID : GOLD_BRIGHT;
+      const goldCore = isLight ? GOLD_LIGHT_SPECULAR : GOLD_CORE;
+      const goldBright = isLight ? GOLD_LIGHT_BRIGHT : GOLD_BRIGHT;
       const goldMid = isLight ? GOLD_LIGHT_MID : GOLD_MID;
       const goldDeep = isLight ? GOLD_LIGHT_DEEP : GOLD_DEEP;
+      const crimsonHot = isLight ? CRIMSON_LIGHT_HOT : CRIMSON_HOT;
+      const crimsonPure = isLight ? CRIMSON_LIGHT_PURE : CRIMSON_PURE;
+      const crimsonDeep = isLight ? CRIMSON_LIGHT_DEEP : CRIMSON_DEEP;
       const blendOp: GlobalCompositeOperation = isLight ? "source-over" : "lighter";
-      const alphaScale = isLight ? 1.45 : 1.0;
+      const alphaScale = isLight ? 1.65 : 1.0;
 
       const thinkingBeat = brain === "thinking" ? 0.5 + 0.5 * Math.sin(time * 6.5) : 0;
       const breathe = 1 + 0.045 * Math.sin(time * (0.6 + energy)) + 0.08 * energy + 0.04 * thinkingBeat;
@@ -877,11 +895,19 @@ export function NeuralStage({
 
       // ——— 3. Deep Atmospheric Singularity Halo ———
       const fieldRadius = S * 1.25 * (0.18 + 0.82 * introEase) * (1 + 0.1 * energy);
-      radialGlow(ctx, core, S * 0.46 * breathe * (0.2 + 0.8 * introEase), [
-        [0, `rgba(${mixRgb(goldBright, goldCore, 0.4)}, ${(isLight ? 0.18 : 0.12) + 0.05 * energy})`],
-        [0.48, `rgba(${goldDeep.join(", ")}, ${isLight ? 0.05 : 0.035})`],
-        [1, "rgba(0, 0, 0, 0)"],
-      ]);
+      if (isLight) {
+        radialGlow(ctx, core, S * 0.44 * breathe * (0.2 + 0.8 * introEase), [
+          [0, `rgba(236, 180, 62, ${0.22 + 0.06 * energy})`],
+          [0.42, "rgba(218, 152, 34, 0.08)"],
+          [1, "rgba(218, 152, 34, 0)"],
+        ]);
+      } else {
+        radialGlow(ctx, core, S * 0.46 * breathe * (0.2 + 0.8 * introEase), [
+          [0, `rgba(${mixRgb(goldBright, goldCore, 0.4)}, ${0.12 + 0.05 * energy})`],
+          [0.48, `rgba(${goldDeep.join(", ")}, 0.035)`],
+          [1, "rgba(0, 0, 0, 0)"],
+        ]);
+      }
 
       // ——— 4. Pre-sample C2 Spine Frames for the 5 Functional Node Arms ———
       const spines = L.arms.map((arm) =>
@@ -901,17 +927,17 @@ export function NeuralStage({
         const layer = DEPTH_LAYERS[layerIdx]!;
         const baseRgb = mixRgbTuple(goldMid, goldBright, layer.hot);
         const coreColor = `${baseRgb[0]}, ${baseRgb[1]}, ${baseRgb[2]}`;
-        const midTrailColor = mixRgb(baseRgb, CRIMSON_HOT, horizonEdgeRed * 0.78);
-        const outerTrailColor = mixRgb(goldDeep, CRIMSON_PURE, horizonEdgeRed * 0.96);
-        const a = layer.alpha * 0.52 * alphaScale * (0.75 + 0.35 * energy);
+        const midTrailColor = mixRgb(baseRgb, crimsonHot, horizonEdgeRed * 0.78);
+        const outerTrailColor = mixRgb(goldDeep, crimsonPure, horizonEdgeRed * 0.96);
+        const a = layer.alpha * (isLight ? 0.68 : 0.52) * alphaScale * (0.75 + 0.35 * energy);
 
         const g = ctx.createRadialGradient(core.x, core.y, 0, core.x, core.y, fieldRadius);
         g.addColorStop(0, `rgba(${coreColor}, ${Math.min(1, a * 2.1)})`);
-        g.addColorStop(0.28, `rgba(${coreColor}, ${Math.min(1, a * 1.1)})`);
-        g.addColorStop(0.56, `rgba(${coreColor}, ${a * 0.52})`);
+        g.addColorStop(0.28, `rgba(${coreColor}, ${Math.min(1, a * 1.15)})`);
+        g.addColorStop(0.56, `rgba(${coreColor}, ${a * 0.56})`);
         // Near the outer edges, the flowing lines transition toward crimson red
-        g.addColorStop(0.74, `rgba(${midTrailColor}, ${a * (0.3 + 0.32 * horizonEdgeRed)})`);
-        g.addColorStop(0.9, `rgba(${outerTrailColor}, ${a * (0.16 + 0.28 * horizonEdgeRed)})`);
+        g.addColorStop(0.74, `rgba(${midTrailColor}, ${a * (0.34 + 0.34 * horizonEdgeRed)})`);
+        g.addColorStop(0.9, `rgba(${outerTrailColor}, ${a * (0.18 + 0.3 * horizonEdgeRed)})`);
         g.addColorStop(1, `rgba(${outerTrailColor}, 0)`);
 
         ctx.beginPath();
@@ -921,7 +947,7 @@ export function NeuralStage({
           ctx.bezierCurveTo(c[1].x, c[1].y, c[2].x, c[2].y, c[3].x, c[3].y);
           ctx.bezierCurveTo(c[4].x, c[4].y, c[5].x, c[5].y, c[6].x, c[6].y);
         }
-        ctx.lineWidth = layer.width * 0.85 * (isLight ? 1.12 : 1);
+        ctx.lineWidth = layer.width * (isLight ? 0.98 : 0.85);
         ctx.strokeStyle = g;
         ctx.stroke();
       });
@@ -934,10 +960,10 @@ export function NeuralStage({
         const tip = { x: lerp(core.x, wing.tip.x, reach), y: lerp(core.y, wing.tip.y, reach) };
         const wg = ctx.createLinearGradient(core.x, core.y, tip.x, tip.y);
         const goldStr = `${goldMid[0]}, ${goldMid[1]}, ${goldMid[2]}`;
-        const edgeStr = mixRgb(goldDeep, CRIMSON_PURE, horizonEdgeRed * 0.92);
-        wg.addColorStop(0, `rgba(${goldStr}, ${0.2 * alphaScale})`);
-        wg.addColorStop(0.55, `rgba(${goldStr}, ${0.08 * alphaScale})`);
-        wg.addColorStop(0.82, `rgba(${edgeStr}, ${(0.04 + 0.08 * horizonEdgeRed) * alphaScale})`);
+        const edgeStr = mixRgb(goldDeep, crimsonPure, horizonEdgeRed * 0.92);
+        wg.addColorStop(0, `rgba(${goldStr}, ${0.22 * alphaScale})`);
+        wg.addColorStop(0.55, `rgba(${goldStr}, ${0.09 * alphaScale})`);
+        wg.addColorStop(0.82, `rgba(${edgeStr}, ${(0.05 + 0.09 * horizonEdgeRed) * alphaScale})`);
         wg.addColorStop(1, `rgba(${edgeStr}, 0)`);
         ctx.beginPath();
         ctx.moveTo(core.x, core.y);
@@ -964,15 +990,15 @@ export function NeuralStage({
         ctx.beginPath();
         ctx.moveTo(pA.x, pA.y);
         ctx.quadraticCurveTo(ctrl.x, ctrl.y, pB.x, pB.y);
-        ctx.lineWidth = 0.45;
-        ctx.strokeStyle = `rgba(${goldMid.join(", ")}, ${0.075 * bridgeStrength * alphaScale * introEase})`;
+        ctx.lineWidth = 0.5;
+        ctx.strokeStyle = `rgba(${goldBright.join(", ")}, ${0.09 * bridgeStrength * alphaScale * introEase})`;
         ctx.stroke();
       }
 
       // ——— 7. The 5 Primary Functional Node Arms (Continuous C2 Venturi-Caustic Flowing Wave Bundles) ———
       // - Zero artificial radialGlow circles at the nodes!
       // - Connected nodes are lit up in rich molten gold, transitioning near the outer edges to crimson red.
-      // - Disconnected nodes go dark (muted dim bronze).
+      // - Disconnected nodes go dark (muted dim bronze in dark mode, subtle warm platinum in light mode).
       // - When sending information between nodes, a crimson wave flows directly along the lines!
       const CURVE_STEPS = 22;
       const sampleUs = Array.from({ length: CURVE_STEPS + 1 }, (_, k) => k / CURVE_STEPS);
@@ -1004,17 +1030,18 @@ export function NeuralStage({
           const batch = field.armLayerBatches[armIdx]![layerIdx]!;
           if (!batch.length) continue;
 
-          // Connected arms use full molten gold; disconnected arms use dark dormant bronze
+          // Connected arms use full molten 24k gold; disconnected arms use dormant bronze (dark) or warm platinum (light)
           const activeGold = mixRgbTuple(goldMid, goldCore, layer.hot);
+          const dormantColor = isLight ? DORMANT_LIGHT_PLATINUM : DORMANT_BRONZE;
           const baseRgb = isConnected
             ? activeGold
-            : mixRgbTuple(DORMANT_BRONZE, activeGold, clamp((level - 0.08) * 1.5, 0, 1));
+            : mixRgbTuple(dormantColor, activeGold, clamp((level - 0.08) * 1.5, 0, 1));
           const baseRgbStr = `${baseRgb[0]}, ${baseRgb[1]}, ${baseRgb[2]}`;
 
           const baseAlpha =
             layer.alpha *
             alphaScale *
-            (isConnected ? 0.32 + 1.02 * level : level * 0.65) *
+            (isConnected ? 0.36 + 1.04 * level : level * (isLight ? 0.85 : 0.65)) *
             (1 + 0.25 * energy + 0.38 * waveStrength);
 
           const armGrad = ctx.createLinearGradient(
@@ -1038,7 +1065,7 @@ export function NeuralStage({
             const trailingEdgeRed = smoothstep(0.64, 0.9, u) * edgeRed;
             const redMix = clamp(Math.max(infoWaveRed * 0.96, trailingEdgeRed), 0, 1);
 
-            const targetCrimson = u > 0.82 ? CRIMSON_PURE : CRIMSON_HOT;
+            const targetCrimson = u > 0.82 ? crimsonPure : crimsonHot;
             const stopColor =
               redMix > 0.02
                 ? mixRgb(baseRgb, targetCrimson, redMix)
@@ -1049,17 +1076,17 @@ export function NeuralStage({
               u === 0
                 ? 1.85
                 : u <= 0.36
-                  ? 1.35
+                  ? 1.38
                   : u <= 0.64
-                    ? 0.95
+                    ? 0.96
                     : u <= 0.88
-                      ? 0.48 + 0.35 * redMix
+                      ? 0.5 + 0.36 * redMix
                       : 0;
             const waveBoost = 1 + 0.55 * infoWaveRed;
             const stopAlpha = clamp(baseAlpha * uProfile * waveBoost, 0, 1);
 
             if (u === 1.0) {
-              armGrad.addColorStop(1.0, `rgba(${mixRgb(goldDeep, CRIMSON_DEEP, edgeRed)}, 0)`);
+              armGrad.addColorStop(1.0, `rgba(${mixRgb(goldDeep, crimsonDeep, edgeRed)}, 0)`);
             } else {
               armGrad.addColorStop(u, `rgba(${stopColor}, ${stopAlpha})`);
             }
@@ -1086,9 +1113,21 @@ export function NeuralStage({
             traceSmoothPolyline(ctx, pts);
           }
 
-          ctx.lineWidth = layer.width * (0.85 + 0.45 * level + 0.2 * waveStrength) * (isLight ? 1.15 : 1);
+          ctx.lineWidth = layer.width * (0.85 + 0.45 * level + 0.2 * waveStrength) * (isLight ? 1.18 : 1);
           ctx.strokeStyle = armGrad;
           ctx.stroke();
+
+          // In Light Mode, add a fine sunlit 24k champagne-gold lustre thread along the inner core strands of connected arms
+          if (isLight && isConnected && layerIdx === 3) {
+            const lustreGrad = ctx.createLinearGradient(core.x, core.y, spine.tipPt.x, spine.tipPt.y);
+            lustreGrad.addColorStop(0, "rgba(255, 226, 138, 0.85)");
+            lustreGrad.addColorStop(0.34, "rgba(244, 192, 72, 0.72)");
+            lustreGrad.addColorStop(0.64, "rgba(232, 168, 42, 0.35)");
+            lustreGrad.addColorStop(1, "rgba(232, 168, 42, 0)");
+            ctx.lineWidth = 0.32;
+            ctx.strokeStyle = lustreGrad;
+            ctx.stroke();
+          }
         }
       }
 
@@ -1103,7 +1142,7 @@ export function NeuralStage({
         }
         const fade = Math.pow(1 - rp.u, 2) * rp.strength;
         const rpColor = rp.crimson
-          ? mixRgb(goldBright, CRIMSON_PURE, clamp(rp.u * 1.35, 0, 1))
+          ? mixRgb(goldBright, crimsonPure, clamp(rp.u * 1.35, 0, 1))
           : `${goldBright[0]}, ${goldBright[1]}, ${goldBright[2]}`;
         ctx.strokeStyle = `rgba(${rpColor}, ${0.3 * fade * alphaScale})`;
         ctx.beginPath();
@@ -1132,9 +1171,10 @@ export function NeuralStage({
 
         const edgeFade = Math.sin(pt.u * Math.PI);
         const isCrimsonTail = edgeRed > 0.05 && pt.u > 0.66;
+        const photonBase = isLight ? GOLD_LIGHT_BRIGHT : goldCore;
         ctx.fillStyle = isCrimsonTail
-          ? `rgb(${mixRgb(goldCore, CRIMSON_PURE, clamp((pt.u - 0.66) * 2.8 * edgeRed, 0, 1))})`
-          : `rgb(${goldCore[0]}, ${goldCore[1]}, ${goldCore[2]})`;
+          ? `rgb(${mixRgb(photonBase, crimsonPure, clamp((pt.u - 0.66) * 2.8 * edgeRed, 0, 1))})`
+          : `rgb(${photonBase[0]}, ${photonBase[1]}, ${photonBase[2]})`;
 
         ctx.globalAlpha = introEase * pt.alpha * edgeFade * level;
         ctx.beginPath();
@@ -1150,39 +1190,59 @@ export function NeuralStage({
         const pos = pointOnHorizonCurve(curve, hp.u);
         const edgeDist = Math.abs(hp.u - 0.5) * 2;
         const edgeFade = Math.sin(hp.u * Math.PI);
+        const hPhotonBase = isLight ? GOLD_LIGHT_MID : goldBright;
         ctx.fillStyle =
           horizonEdgeRed > 0.05 && edgeDist > 0.64
-            ? `rgb(${mixRgb(goldBright, CRIMSON_PURE, (edgeDist - 0.64) * 2.6 * horizonEdgeRed)})`
-            : `rgb(${goldBright[0]}, ${goldBright[1]}, ${goldBright[2]})`;
+            ? `rgb(${mixRgb(hPhotonBase, crimsonPure, (edgeDist - 0.64) * 2.6 * horizonEdgeRed)})`
+            : `rgb(${hPhotonBase[0]}, ${hPhotonBase[1]}, ${hPhotonBase[2]})`;
         ctx.globalAlpha = introEase * hp.alpha * edgeFade;
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, hp.size, 0, TAU);
         ctx.fill();
       }
 
-      // ——— 10. The Singularity Nucleus (Always Pure White-Hot & Molten 24k Gold) ———
+      // ——— 10. The Singularity Nucleus (Molten 24k Gold Jewel in Both Dark & Light Mode) ———
       ctx.globalAlpha = 1;
       const coreScale = intro < 0.28 ? 0.38 + intro * 2.2 : 1;
       const coreGlowR = S * 0.082 * breathe * coreScale;
 
-      radialGlow(ctx, core, coreGlowR, [
-        [0, isLight ? "rgba(255, 252, 240, 1)" : "rgba(255, 254, 246, 1)"],
-        [0.18, `rgba(${goldBright.join(", ")}, ${0.84 + 0.14 * energy})`],
-        [0.48, `rgba(${goldMid.join(", ")}, 0.26)`],
-        [1, "rgba(0, 0, 0, 0)"],
-      ]);
+      if (isLight) {
+        // In Light Mode, render a rich burnished 24k gold corona & jewel center instead of an opaque white blob
+        radialGlow(ctx, core, coreGlowR, [
+          [0, `rgba(218, 148, 20, ${0.88 + 0.1 * energy})`],
+          [0.24, `rgba(232, 172, 46, ${0.52 + 0.12 * energy})`],
+          [0.58, "rgba(238, 186, 68, 0.16)"],
+          [1, "rgba(238, 186, 68, 0)"],
+        ]);
+        radialGlow(ctx, core, R * 0.032 * breathe * coreScale, [
+          [0, "rgba(255, 251, 235, 0.98)"],
+          [0.55, "rgba(236, 174, 38, 0.92)"],
+          [1, "rgba(184, 112, 10, 0)"],
+        ]);
+      } else {
+        radialGlow(ctx, core, coreGlowR, [
+          [0, "rgba(255, 254, 246, 1)"],
+          [0.18, `rgba(${goldBright.join(", ")}, ${0.84 + 0.14 * energy})`],
+          [0.48, `rgba(${goldMid.join(", ")}, 0.26)`],
+          [1, "rgba(0, 0, 0, 0)"],
+        ]);
+      }
 
       // ——— 11. Soft Left-Sidebar Readability Scrim (Keeps Left Sidebar Crisp Without Clipping Arms) ———
-      if (!isLight) {
-        ctx.globalCompositeOperation = "source-over";
-        ctx.globalAlpha = 1;
-        const leftScrim = ctx.createLinearGradient(0, 0, 92, 0);
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = 1;
+      const leftScrim = ctx.createLinearGradient(0, 0, 92, 0);
+      if (isLight) {
+        leftScrim.addColorStop(0, "rgba(247, 246, 242, 0.86)");
+        leftScrim.addColorStop(0.65, "rgba(247, 246, 242, 0.45)");
+        leftScrim.addColorStop(1, "rgba(247, 246, 242, 0)");
+      } else {
         leftScrim.addColorStop(0, "rgba(0, 0, 0, 0.86)");
         leftScrim.addColorStop(0.65, "rgba(0, 0, 0, 0.45)");
         leftScrim.addColorStop(1, "rgba(0, 0, 0, 0)");
-        ctx.fillStyle = leftScrim;
-        ctx.fillRect(0, 0, 92, height);
       }
+      ctx.fillStyle = leftScrim;
+      ctx.fillRect(0, 0, 92, height);
     };
 
     const resize = () => {
