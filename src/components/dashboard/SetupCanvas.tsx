@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useEffect, useRef } from "react";
-import { clamp, fitCanvas, lerp, observeCanvasActivity, seededHelpers, type Vec } from "@/lib/network/geometry";
+import { clamp, lerp, observeCanvasActivity, seededHelpers, type Vec } from "@/lib/network/geometry";
 import { computeCoreCenter } from "./stage-layout";
 
 export type SetupStagePhase = "singularity" | "exploding" | "modal" | "finale";
@@ -19,10 +19,8 @@ const FINALE_COLLAPSE_END = 1.92;
 const FINALE_EXPLODE_AT = 2.72;
 const FINALE_COMPLETE_AT = 2.88;
 
-const CONSTELLATION_DARK_COOL: Rgb = [245, 245, 247]; // #f5f5f7
-const CONSTELLATION_DARK_WARM: Rgb = [255, 224, 156]; // #ffe09c
-const CONSTELLATION_LIGHT_STONE: Rgb = [108, 100, 88];
-const CONSTELLATION_LIGHT_AMBER: Rgb = [176, 108, 18];
+const CONSTELLATION_DARK_WHITE: Rgb = [255, 255, 255];
+const CONSTELLATION_LIGHT_INK: Rgb = [17, 17, 19];
 
 const GOLD_CORE: Rgb = [255, 250, 232];
 const GOLD_BRIGHT: Rgb = [255, 224, 156];
@@ -89,12 +87,12 @@ type ShockRing = {
 };
 
 type ConstellationStar = {
-  x: number;
-  y: number;
+  rx: number;
+  ry: number;
   radius: number;
   alpha: number;
-  warmth: number;
   twinkleSpeed: number;
+  twinkleRatio: number;
   phase: number;
   isAnchor: boolean;
 };
@@ -103,14 +101,43 @@ type ConstellationEdge = {
   a: number;
   b: number;
   alpha: number;
-  warmth: number;
   phase: number;
 };
 
-type ConstellationField = {
+type ConstellationGroup = {
+  cx: number;
+  cy: number;
+  driftAmpX: number;
+  driftAmpY: number;
+  driftFreqX: number;
+  driftFreqY: number;
+  driftPhase: number;
+  rotAmp: number;
+  rotFreq: number;
+  rotPhase: number;
   stars: ConstellationStar[];
   edges: ConstellationEdge[];
-  ambientStars: ConstellationStar[];
+};
+
+type AmbientStar = {
+  x: number;
+  y: number;
+  driftAmpX: number;
+  driftAmpY: number;
+  driftFreqX: number;
+  driftFreqY: number;
+  driftPhase: number;
+  radius: number;
+  alpha: number;
+  twinkleSpeed: number;
+  twinkleRatio: number;
+  phase: number;
+  hasFlare: boolean;
+};
+
+type ConstellationField = {
+  groups: ConstellationGroup[];
+  ambientStars: AmbientStar[];
 };
 
 type AsterismTemplate = {
@@ -263,58 +290,73 @@ function segmentIntersectsConstellationExclusion(
   return my >= promptTop && Math.abs(mx - cx) < promptHalfW;
 }
 
-/** Seeds deterministic outer-sky constellations strictly clear of the singularity and lower prompt negative space. */
+/** Fits canvas up to 3x native DPR so high-density star points and constellation lines stay razor-sharp. */
+function fitHighResCanvas(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
+  const rect = canvas.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const w = Math.max(1, Math.round(rect.width * dpr));
+  const h = Math.max(1, Math.round(rect.height * dpr));
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w;
+    canvas.height = h;
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { width: rect.width, height: rect.height };
+}
+
+/** Seeds prominent floating white constellations in outer sky, clear of singularity & lower prompt negative space. */
 function createConstellationField(width: number, height: number): ConstellationField {
   if (width < 40 || height < 40) {
-    return { stars: [], edges: [], ambientStars: [] };
+    return { groups: [], ambientStars: [] };
   }
 
-  const { rnd, between } = seededHelpers(20261123);
+  const { rnd, between } = seededHelpers(20261129);
   const core = computeCoreCenter(width, height);
   const cx = core.x;
   const cy = core.y;
   const minDim = Math.min(width, height);
   const coreBaseR = clamp(minDim * 0.14, 58, 118);
 
-  // Pad slightly past the mathematical exclusion boundary so star halos and strokes stay cleanly outside
-  const clearR = coreBaseR * 1.55 + 5;
-  const promptTop = cy + coreBaseR * 0.35 - 5;
-  const promptHalfW = Math.min(width * 0.38, 360) + 5;
+  // Reserve extra excursion margin so floating drift never enters the singularity halo or lower prompt band
+  const maxDrift = 22;
+  const clearR = coreBaseR * 1.58 + maxDrift;
+  const promptTop = cy + coreBaseR * 0.30 - maxDrift;
+  const promptHalfW = Math.min(width * 0.39, 370) + maxDrift;
 
-  const pad = clamp(minDim * 0.045, 20, 42);
-  const span = clamp(Math.min(width * 0.068, height * 0.078), 26, 60);
+  const pad = clamp(minDim * 0.055, 28, 52);
+  const span = clamp(Math.min(width * 0.115, height * 0.145), 58, 122);
   const lateralSpace = cx - promptHalfW - pad;
 
-  const upperSkyBottom = Math.max(pad + span, cy - clearR - span * 0.45);
-  const upperHighY = lerp(pad, upperSkyBottom, 0.36);
+  const upperSkyBottom = Math.max(pad + span, cy - clearR - span * 0.32);
+  const upperHighY = lerp(pad, upperSkyBottom, 0.34);
   const upperLowY = lerp(pad, upperSkyBottom, 0.72);
 
   const anchors: Vec[] = [
-    { x: lerp(pad, cx - clearR * 0.75, 0.36), y: upperLowY },
-    { x: lerp(pad, cx, 0.62), y: upperHighY },
-    { x: lerp(cx, width - pad, 0.38), y: upperHighY * 1.08 },
-    { x: lerp(cx + clearR * 0.75, width - pad, 0.64), y: upperLowY * 0.94 },
+    { x: lerp(pad + span * 0.5, cx - clearR * 0.72, 0.38), y: upperLowY },
+    { x: lerp(pad + span * 0.5, cx, 0.58), y: upperHighY },
+    { x: lerp(cx, width - pad - span * 0.5, 0.42), y: upperHighY * 1.06 },
+    { x: lerp(cx + clearR * 0.72, width - pad - span * 0.5, 0.62), y: upperLowY * 0.94 },
   ];
 
-  if (width >= 560) {
+  if (width >= 600) {
     anchors.push(
-      { x: pad + (cx - pad) * 0.2, y: Math.min(cy - clearR * 0.48, upperSkyBottom + span * 0.9) },
-      { x: width - pad - (width - pad - cx) * 0.2, y: Math.min(cy - clearR * 0.48, upperSkyBottom + span * 0.85) },
+      { x: pad + (cx - pad) * 0.18, y: Math.min(cy - clearR * 0.42, upperSkyBottom + span * 0.75) },
+      { x: width - pad - (width - pad - cx) * 0.18, y: Math.min(cy - clearR * 0.42, upperSkyBottom + span * 0.72) },
     );
   }
 
-  if (lateralSpace >= 90) {
+  if (lateralSpace >= 105) {
     anchors.push(
-      { x: pad + lateralSpace * 0.48, y: lerp(cy + 18, height - pad, 0.56) },
-      { x: width - pad - lateralSpace * 0.48, y: lerp(cy + 18, height - pad, 0.54) },
+      { x: pad + lateralSpace * 0.46, y: lerp(cy + 22, height - pad, 0.54) },
+      { x: width - pad - lateralSpace * 0.46, y: lerp(cy + 22, height - pad, 0.52) },
     );
   }
 
-  const stars: ConstellationStar[] = [];
-  const edges: ConstellationEdge[] = [];
-  const minCrossStarSep = Math.max(20, span * 0.45);
+  const placedStarPositions: Vec[] = [];
+  const groups: ConstellationGroup[] = [];
+  const minCrossStarSep = Math.max(28, span * 0.36);
 
-  const isInsideCanvas = (x: number, y: number) =>
+  const isInsideSafeCanvas = (x: number, y: number) =>
     x >= pad && x <= width - pad && y >= pad && y <= height - pad;
 
   for (let aIdx = 0; aIdx < anchors.length; aIdx++) {
@@ -324,19 +366,19 @@ function createConstellationField(width: number, height: number): ConstellationF
     const rot = rnd() * TAU;
     const cosR = Math.cos(rot);
     const sinR = Math.sin(rot);
-    const localScale = span * between(0.84, 1.14);
-    const offsetX = between(-span * 0.22, span * 0.22);
-    const offsetY = between(-span * 0.18, span * 0.18);
+    const localScale = span * between(0.86, 1.15);
+    const offsetX = between(-span * 0.16, span * 0.16);
+    const offsetY = between(-span * 0.14, span * 0.14);
 
     const candidates = tpl.points.map(([lx, ly]) => {
-      const jx = lx + between(-0.12, 0.12);
-      const jy = ly + between(-0.12, 0.12);
+      const jx = lx + between(-0.1, 0.1);
+      const jy = ly + between(-0.1, 0.1);
       const x = anchor.x + offsetX + (jx * cosR - jy * sinR) * localScale;
       const y = anchor.y + offsetY + (jx * sinR + jy * cosR) * localScale;
       const valid =
-        isInsideCanvas(x, y) &&
+        isInsideSafeCanvas(x, y) &&
         !isPointInConstellationExclusion(x, y, cx, cy, clearR, promptTop, promptHalfW) &&
-        stars.every((s) => Math.hypot(x - s.x, y - s.y) >= minCrossStarSep);
+        placedStarPositions.every((s) => Math.hypot(x - s.x, y - s.y) >= minCrossStarSep);
       return { x, y, valid };
     });
 
@@ -365,68 +407,144 @@ function createConstellationField(width: number, height: number): ConstellationF
 
     if (validEdges.length < 2) continue;
 
-    const localToGlobal = new Map<number, number>();
-    const usedIndices = new Set<number>();
-    for (const [ia, ib] of validEdges) {
-      usedIndices.add(ia);
-      usedIndices.add(ib);
-    }
+    const usedIndices = Array.from(new Set(validEdges.flat()));
+    const groupCx =
+      usedIndices.reduce((sum, idx) => sum + candidates[idx]!.x, 0) / usedIndices.length;
+    const groupCy =
+      usedIndices.reduce((sum, idx) => sum + candidates[idx]!.y, 0) / usedIndices.length;
 
-    let anchorAssigned = false;
-    for (const localIdx of usedIndices) {
+    const localToGroup = new Map<number, number>();
+    const groupStars: ConstellationStar[] = [];
+
+    for (let uIdx = 0; uIdx < usedIndices.length; uIdx++) {
+      const localIdx = usedIndices[uIdx]!;
       const pt = candidates[localIdx]!;
-      const isAnchor = !anchorAssigned || (localIdx === 1 && rnd() < 0.45);
-      if (!anchorAssigned) anchorAssigned = true;
-      localToGlobal.set(localIdx, stars.length);
-      stars.push({
-        x: pt.x,
-        y: pt.y,
-        radius: isAnchor ? between(1.35, 1.72) : between(0.88, 1.28),
-        alpha: isAnchor ? between(0.68, 0.86) : between(0.46, 0.68),
-        warmth: isAnchor ? between(0.7, 1.0) : rnd() < 0.35 ? between(0.45, 0.85) : between(0.0, 0.18),
-        twinkleSpeed: between(0.48, 1.02),
+      const isAnchor = uIdx === 0 || (uIdx === 2 && rnd() < 0.65);
+      localToGroup.set(localIdx, groupStars.length);
+      placedStarPositions.push({ x: pt.x, y: pt.y });
+      groupStars.push({
+        rx: pt.x - groupCx,
+        ry: pt.y - groupCy,
+        radius: isAnchor ? between(3.1, 4.35) : between(2.05, 3.0),
+        alpha: isAnchor ? between(0.92, 1.0) : between(0.76, 0.94),
+        twinkleSpeed: between(1.35, 2.75),
+        twinkleRatio: between(1.55, 2.35),
         phase: rnd() * TAU,
         isAnchor,
       });
     }
 
-    for (const [ia, ib] of validEdges) {
-      const gA = localToGlobal.get(ia)!;
-      const gB = localToGlobal.get(ib)!;
-      edges.push({
-        a: gA,
-        b: gB,
-        alpha: between(0.11, 0.17),
-        warmth: (stars[gA]!.warmth + stars[gB]!.warmth) * 0.42,
-        phase: rnd() * TAU,
-      });
-    }
-  }
-
-  const targetAmbient = clamp(Math.round((width * height) / 52000), 12, 30);
-  const ambientStars: ConstellationStar[] = [];
-  let attempts = 0;
-  while (ambientStars.length < targetAmbient && attempts < targetAmbient * 8) {
-    attempts++;
-    const x = between(pad * 0.75, width - pad * 0.75);
-    const y = between(pad * 0.75, height - pad * 0.75);
-    if (isPointInConstellationExclusion(x, y, cx, cy, clearR, promptTop, promptHalfW)) continue;
-    if (stars.some((s) => Math.hypot(x - s.x, y - s.y) < 18)) continue;
-    if (ambientStars.some((s) => Math.hypot(x - s.x, y - s.y) < 22)) continue;
-    const warm = rnd() < 0.28;
-    ambientStars.push({
-      x,
-      y,
-      radius: between(0.52, 0.92),
-      alpha: between(0.22, 0.44),
-      warmth: warm ? between(0.6, 0.95) : between(0.0, 0.14),
-      twinkleSpeed: between(0.42, 0.95),
+    const groupEdges: ConstellationEdge[] = validEdges.map(([ia, ib]) => ({
+      a: localToGroup.get(ia)!,
+      b: localToGroup.get(ib)!,
+      alpha: between(0.42, 0.62),
       phase: rnd() * TAU,
-      isAnchor: false,
+    }));
+
+    groups.push({
+      cx: groupCx,
+      cy: groupCy,
+      driftAmpX: between(8, 17),
+      driftAmpY: between(6, 14),
+      driftFreqX: between(0.16, 0.28),
+      driftFreqY: between(0.14, 0.25),
+      driftPhase: rnd() * TAU,
+      rotAmp: between(0.025, 0.055),
+      rotFreq: between(0.12, 0.22),
+      rotPhase: rnd() * TAU,
+      stars: groupStars,
+      edges: groupEdges,
     });
   }
 
-  return { stars, edges, ambientStars };
+  const targetAmbient = clamp(Math.round((width * height) / 28000), 26, 62);
+  const ambientStars: AmbientStar[] = [];
+  let attempts = 0;
+  while (ambientStars.length < targetAmbient && attempts < targetAmbient * 10) {
+    attempts++;
+    const x = between(pad * 0.6, width - pad * 0.6);
+    const y = between(pad * 0.6, height - pad * 0.6);
+    if (isPointInConstellationExclusion(x, y, cx, cy, clearR, promptTop, promptHalfW)) continue;
+    if (placedStarPositions.some((s) => Math.hypot(x - s.x, y - s.y) < 20)) continue;
+    if (ambientStars.some((s) => Math.hypot(x - s.x, y - s.y) < 22)) continue;
+    const bright = rnd() < 0.28;
+    ambientStars.push({
+      x,
+      y,
+      driftAmpX: between(5, 13),
+      driftAmpY: between(4, 11),
+      driftFreqX: between(0.18, 0.34),
+      driftFreqY: between(0.15, 0.3),
+      driftPhase: rnd() * TAU,
+      radius: bright ? between(1.8, 2.55) : between(1.05, 1.75),
+      alpha: bright ? between(0.72, 0.94) : between(0.44, 0.72),
+      twinkleSpeed: between(1.4, 3.1),
+      twinkleRatio: between(1.5, 2.4),
+      phase: rnd() * TAU,
+      hasFlare: bright,
+    });
+  }
+
+  return { groups, ambientStars };
+}
+
+function drawCrispStar(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+  alpha: number,
+  rgb: string,
+  withFlare: boolean,
+  isAnchor: boolean,
+) {
+  const haloR = radius * (isAnchor ? 4.8 : withFlare ? 3.8 : 2.8);
+  const haloAlpha = alpha * (isAnchor ? 0.42 : 0.28);
+  const g = ctx.createRadialGradient(x, y, 0, x, y, haloR);
+  g.addColorStop(0, `rgba(${rgb}, ${haloAlpha})`);
+  g.addColorStop(0.45, `rgba(${rgb}, ${haloAlpha * 0.32})`);
+  g.addColorStop(1, `rgba(${rgb}, 0)`);
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, y, haloR, 0, TAU);
+  ctx.fill();
+
+  if (withFlare) {
+    const spikeLen = radius * (isAnchor ? 4.4 : 3.1);
+    const spikeAlpha = alpha * (isAnchor ? 0.78 : 0.56);
+    const hg = ctx.createLinearGradient(x - spikeLen, y, x + spikeLen, y);
+    hg.addColorStop(0, `rgba(${rgb}, 0)`);
+    hg.addColorStop(0.5, `rgba(${rgb}, ${spikeAlpha})`);
+    hg.addColorStop(1, `rgba(${rgb}, 0)`);
+    ctx.strokeStyle = hg;
+    ctx.lineWidth = isAnchor ? 1.1 : 0.85;
+    ctx.beginPath();
+    ctx.moveTo(x - spikeLen, y);
+    ctx.lineTo(x + spikeLen, y);
+    ctx.stroke();
+
+    const vg = ctx.createLinearGradient(x, y - spikeLen, x, y + spikeLen);
+    vg.addColorStop(0, `rgba(${rgb}, 0)`);
+    vg.addColorStop(0.5, `rgba(${rgb}, ${spikeAlpha})`);
+    vg.addColorStop(1, `rgba(${rgb}, 0)`);
+    ctx.strokeStyle = vg;
+    ctx.beginPath();
+    ctx.moveTo(x, y - spikeLen);
+    ctx.lineTo(x, y + spikeLen);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, TAU);
+  ctx.fill();
+}
+
+function twinkleWave(time: number, speed: number, ratio: number, phase: number, reduceMotion: boolean) {
+  if (reduceMotion) return 1;
+  const w1 = 0.5 + 0.5 * Math.sin(time * speed + phase);
+  const w2 = 0.5 + 0.5 * Math.sin(time * speed * ratio + phase * 1.63);
+  return 0.34 + 0.66 * Math.pow(w1 * 0.65 + w2 * 0.35, 1.35);
 }
 
 function renderConstellations(
@@ -437,69 +555,75 @@ function renderConstellations(
   isLight: boolean,
   reduceMotion: boolean,
 ) {
-  if (fade <= 0.005 || (field.stars.length === 0 && field.ambientStars.length === 0)) return;
+  if (fade <= 0.005 || (field.groups.length === 0 && field.ambientStars.length === 0)) return;
 
-  const starCool = isLight ? CONSTELLATION_LIGHT_STONE : CONSTELLATION_DARK_COOL;
-  const starWarm = isLight ? CONSTELLATION_LIGHT_AMBER : CONSTELLATION_DARK_WARM;
+  const baseRgb = isLight ? CONSTELLATION_LIGHT_INK : CONSTELLATION_DARK_WHITE;
+  const rgb = `${baseRgb[0]}, ${baseRgb[1]}, ${baseRgb[2]}`;
 
   ctx.save();
-  ctx.globalCompositeOperation = "source-over";
+  ctx.globalCompositeOperation = isLight ? "source-over" : "lighter";
   ctx.globalAlpha = 1;
   ctx.lineCap = "round";
 
-  ctx.lineWidth = isLight ? 0.68 : 0.65;
-  for (const edge of field.edges) {
-    const sA = field.stars[edge.a]!;
-    const sB = field.stars[edge.b]!;
-    const dx = sB.x - sA.x;
-    const dy = sB.y - sA.y;
-    const dist = Math.hypot(dx, dy);
-    if (dist < 4) continue;
-    const trim = Math.min(4.2, dist * 0.18);
-    const ux = dx / dist;
-    const uy = dy / dist;
-    const pulse = reduceMotion ? 1 : 0.86 + 0.14 * Math.sin(time * 0.55 + edge.phase);
-    const a = clamp(edge.alpha * (isLight ? 1.05 : 1) * pulse * fade, 0, 1);
-    if (a <= 0.003) continue;
-
-    ctx.strokeStyle = `rgba(${mixRgb(starCool, starWarm, edge.warmth)}, ${a})`;
-    ctx.beginPath();
-    ctx.moveTo(sA.x + ux * trim, sA.y + uy * trim);
-    ctx.lineTo(sB.x - ux * trim, sB.y - uy * trim);
-    ctx.stroke();
+  for (const star of field.ambientStars) {
+    const dx = reduceMotion ? 0 : Math.sin(time * star.driftFreqX + star.driftPhase) * star.driftAmpX;
+    const dy = reduceMotion ? 0 : Math.cos(time * star.driftFreqY + star.driftPhase * 1.3) * star.driftAmpY;
+    const tw = twinkleWave(time, star.twinkleSpeed, star.twinkleRatio, star.phase, reduceMotion);
+    const a = clamp(star.alpha * tw * fade * (isLight ? 0.85 : 1), 0, 1);
+    if (a <= 0.01) continue;
+    const r = star.radius * (0.85 + 0.3 * tw);
+    drawCrispStar(ctx, star.x + dx, star.y + dy, r, a, rgb, star.hasFlare, false);
   }
 
-  const drawStarList = (list: readonly ConstellationStar[], withHalo: boolean) => {
-    for (const star of list) {
-      const twinkle = reduceMotion
-        ? 1
-        : 0.78 + 0.22 * Math.sin(time * star.twinkleSpeed + star.phase);
-      const a = clamp(star.alpha * twinkle * fade, 0, 1);
-      if (a <= 0.004) continue;
-      const rgb = mixRgb(starCool, starWarm, star.warmth);
+  for (const group of field.groups) {
+    const gdx = reduceMotion ? 0 : Math.sin(time * group.driftFreqX + group.driftPhase) * group.driftAmpX;
+    const gdy = reduceMotion ? 0 : Math.cos(time * group.driftFreqY + group.driftPhase * 1.25) * group.driftAmpY;
+    const rot = reduceMotion ? 0 : Math.sin(time * group.rotFreq + group.rotPhase) * group.rotAmp;
+    const cosR = Math.cos(rot);
+    const sinR = Math.sin(rot);
+    const cx = group.cx + gdx;
+    const cy = group.cy + gdy;
 
-      if (withHalo) {
-        const haloR = star.radius * (star.isAnchor ? 3.8 : 2.9);
-        const haloAlpha = a * (isLight ? 0.22 : 0.34);
-        const g = ctx.createRadialGradient(star.x, star.y, 0, star.x, star.y, haloR);
-        g.addColorStop(0, `rgba(${rgb}, ${haloAlpha})`);
-        g.addColorStop(0.5, `rgba(${rgb}, ${haloAlpha * 0.32})`);
-        g.addColorStop(1, `rgba(${rgb}, 0)`);
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(star.x, star.y, haloR, 0, TAU);
-        ctx.fill();
-      }
+    const livePts = group.stars.map((s) => {
+      const tw = twinkleWave(time, s.twinkleSpeed, s.twinkleRatio, s.phase, reduceMotion);
+      return {
+        x: cx + s.rx * cosR - s.ry * sinR,
+        y: cy + s.rx * sinR + s.ry * cosR,
+        radius: s.radius * (0.88 + 0.24 * tw),
+        alpha: clamp(s.alpha * tw * fade * (isLight ? 0.88 : 1), 0, 1),
+        isAnchor: s.isAnchor,
+      };
+    });
 
-      ctx.fillStyle = `rgba(${rgb}, ${a})`;
+    ctx.lineWidth = isLight ? 1.15 : 1.25;
+    for (const edge of group.edges) {
+      const pA = livePts[edge.a]!;
+      const pB = livePts[edge.b]!;
+      const dx = pB.x - pA.x;
+      const dy = pB.y - pA.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < 10) continue;
+      const ux = dx / dist;
+      const uy = dy / dist;
+      const trimA = pA.radius + 3.2;
+      const trimB = pB.radius + 3.2;
+      if (trimA + trimB >= dist) continue;
+      const linePulse = reduceMotion ? 1 : 0.78 + 0.22 * Math.sin(time * 0.9 + edge.phase);
+      const a = clamp(edge.alpha * linePulse * fade * (isLight ? 0.75 : 1), 0, 1);
+      if (a <= 0.008) continue;
+
+      ctx.strokeStyle = `rgba(${rgb}, ${a})`;
       ctx.beginPath();
-      ctx.arc(star.x, star.y, star.radius, 0, TAU);
-      ctx.fill();
+      ctx.moveTo(pA.x + ux * trimA, pA.y + uy * trimA);
+      ctx.lineTo(pB.x - ux * trimB, pB.y - uy * trimB);
+      ctx.stroke();
     }
-  };
 
-  drawStarList(field.ambientStars, false);
-  drawStarList(field.stars, true);
+    for (const pt of livePts) {
+      if (pt.alpha <= 0.01) continue;
+      drawCrispStar(ctx, pt.x, pt.y, pt.radius, pt.alpha, rgb, true, pt.isAnchor);
+    }
+  }
 
   ctx.restore();
 }
@@ -664,7 +788,7 @@ export const SetupCanvas = memo(function SetupCanvas({
     let width = 1;
     let height = 1;
     let diag = 1;
-    let constellations: ConstellationField = { stars: [], edges: [], ambientStars: [] };
+    let constellations: ConstellationField = { groups: [], ambientStars: [] };
     let frame = 0;
     let last = 0;
     let smoothDt = 1 / 60;
@@ -1296,7 +1420,7 @@ export const SetupCanvas = memo(function SetupCanvas({
     };
 
     const resize = () => {
-      const fitted = fitCanvas(canvas, ctx);
+      const fitted = fitHighResCanvas(canvas, ctx);
       width = fitted.width;
       height = fitted.height;
       diag = Math.hypot(width, height);

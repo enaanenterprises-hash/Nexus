@@ -455,7 +455,7 @@ export function SetupExperience({
               onClick={handleStart}
               className="setup-start-button pointer-events-auto"
             >
-              Press singularity to Continue
+              Press Singularity to Continue
             </button>
           </div>
         </div>
