@@ -13,11 +13,11 @@ const BASE_RAY_COUNT = 168;
 const EXTRA_RAY_COUNT = 290;
 const RAY_STEPS = 22;
 
-const FINALE_FILL_END = 1.35;
-const FINALE_COLLAPSE_START = 2.25;
-const FINALE_COLLAPSE_END = 2.90;
-const FINALE_EXPLODE_AT = 3.95;
-const FINALE_COMPLETE_AT = 4.11;
+const FINALE_FILL_END = 1.00;
+const FINALE_COLLAPSE_START = 1.32;
+const FINALE_COLLAPSE_END = 1.92;
+const FINALE_EXPLODE_AT = 3.02;
+const FINALE_COMPLETE_AT = 3.18;
 
 const GOLD_CORE: Rgb = [255, 250, 232];
 const GOLD_BRIGHT: Rgb = [255, 224, 156];
@@ -156,7 +156,7 @@ function createBurstField() {
       freqMul: between(0.84, 1.24),
       phase: rnd() * TAU,
       stagger: 0,
-      staggerFinale: between(0.02, 0.82),
+      staggerFinale: between(0.02, 0.56),
       reachMul: between(0.88, 1.26),
       twistDir: i % 2 === 0 ? 1 : -1,
       layer,
@@ -173,7 +173,7 @@ function createBurstField() {
       rayA,
       rayB: (rayA + stepOffset) % totalRays,
       u: between(0.16, 0.92),
-      stagger: between(0.18, 1.05),
+      stagger: between(0.12, 0.76),
       curve: between(-0.18, 0.18),
     };
   });
@@ -252,7 +252,7 @@ export const SetupCanvas = memo(function SetupCanvas({
 
     let trackedPhase: SetupStagePhase = phaseRef.current;
     let explodeStartTime = trackedPhase === "singularity" ? -1 : -10;
-    let finaleStartTime = trackedPhase === "finale" ? 0 : -1;
+    let finaleAge = 0;
     let burstLaunched = trackedPhase !== "singularity";
     let finaleBoomLaunched = false;
     let finaleDispatched = false;
@@ -366,7 +366,7 @@ export const SetupCanvas = memo(function SetupCanvas({
       scratchYs[outIdx] = py;
     };
 
-    const draw = (time: number, dt: number) => {
+    const draw = (time: number, dt: number, wallDt = dt) => {
       const curPhase = phaseRef.current;
       const isLight = themeRef.current === "light";
 
@@ -376,11 +376,14 @@ export const SetupCanvas = memo(function SetupCanvas({
           burstLaunched = false;
         }
         if (curPhase === "finale") {
-          finaleStartTime = time;
+          finaleAge = 0;
+          shockRings.length = 0;
           finaleBoomLaunched = false;
           finaleDispatched = false;
         }
         trackedPhase = curPhase;
+      } else if (curPhase === "finale") {
+        finaleAge += wallDt;
       }
 
       if (impulseRef.current !== lastImpulse) {
@@ -413,16 +416,15 @@ export const SetupCanvas = memo(function SetupCanvas({
       }
       hoverFocus = lerp(hoverFocus, targetHover, reduceMotion ? 1 : 1 - Math.exp(-dt * 4.5));
 
-      // Finale choreography phases: fill screen -> hold expanded -> collapse to point -> hold pinched point -> explode
+      // Finale choreography phases: fill screen -> brief expanded hold -> collapse to point -> hold pinched point -> explode
       const isFinale = curPhase === "finale";
-      const finaleAge = isFinale && finaleStartTime >= 0 ? Math.max(0, time - finaleStartTime) : 0;
       const fillU = isFinale ? clamp(finaleAge / FINALE_FILL_END, 0, 1) : 0;
-      const fillEase = 1 - Math.pow(1 - fillU, 1.9);
+      const fillEase = 1 - Math.pow(1 - fillU, 2.1);
       const collapseU =
         isFinale && finaleAge > FINALE_COLLAPSE_START
           ? clamp((finaleAge - FINALE_COLLAPSE_START) / (FINALE_COLLAPSE_END - FINALE_COLLAPSE_START), 0, 1)
           : 0;
-      const implode = Math.pow(collapseU, 2.25);
+      const implode = Math.pow(collapseU, 1.45);
       const compressHoldU =
         isFinale && finaleAge > FINALE_COLLAPSE_END
           ? clamp((finaleAge - FINALE_COLLAPSE_END) / (FINALE_EXPLODE_AT - FINALE_COLLAPSE_END), 0, 1)
@@ -493,21 +495,22 @@ export const SetupCanvas = memo(function SetupCanvas({
 
       if (isFinale) {
         if (!raysCollapsed) {
-          const holdBreath =
+          const holdU =
             finaleAge > FINALE_FILL_END && finaleAge < FINALE_COLLAPSE_START
-              ? 0.06 * Math.sin((finaleAge - FINALE_FILL_END) * 5.2)
+              ? (finaleAge - FINALE_FILL_END) / (FINALE_COLLAPSE_START - FINALE_FILL_END)
               : 0;
-          const expandedScale = lerp(1.0, 1.38, fillEase) + holdBreath;
+          const holdBreath = holdU > 0 ? 0.045 * Math.sin(holdU * Math.PI) : 0;
+          const expandedScale = lerp(1.0, 1.34, fillEase) + holdBreath;
           const expandedFlash = lerp(0.18, 1.15, fillEase) + holdBreath;
-          coreScale = lerp(expandedScale, 0.24, implode);
-          coreFlash = lerp(Math.max(coreFlash, expandedFlash), 1.48, implode);
+          coreScale = lerp(expandedScale, 0.085, implode);
+          coreFlash = lerp(Math.max(coreFlash, expandedFlash), 1.55, implode);
         } else if (isCollapsedHold) {
-          const brace = Math.pow(compressHoldU, 2.8) * 0.04;
-          const tensionPulse = 0.024 * Math.sin(compressHoldU * Math.PI * 5);
-          coreScale = 0.24 + tensionPulse - brace;
-          coreFlash = 1.48 + 0.42 * compressHoldU;
+          const charge = compressHoldU > 0.78 ? Math.pow((compressHoldU - 0.78) / 0.22, 2) : 0;
+          const tensionPulse = 0.008 * Math.sin(compressHoldU * Math.PI * 3) * (1 - charge);
+          coreScale = 0.085 + tensionPulse - charge * 0.012;
+          coreFlash = 1.55 + charge * 0.65;
         } else {
-          coreScale = 0.25 + blastEase * 2.4;
+          coreScale = 0.09 + blastEase * 2.55;
           coreFlash = 2.4 * (1 - blastU * 0.45);
         }
       }
@@ -798,10 +801,10 @@ export const SetupCanvas = memo(function SetupCanvas({
           ? 0
           : isFinale
             ? isCollapsedHold
-              ? lerp(0.32, 0.56, Math.pow(compressHoldU, 2))
+              ? lerp(0.1, 0.26, Math.pow(compressHoldU, 3))
               : isBlasting
                 ? 1
-                : clamp(1 - implode * 0.68, 0.32, 1)
+                : clamp(1 - implode * 0.9, 0.1, 1)
             : clamp(explodeAge / 0.28, 0, 1);
       if (glowHaloIn > 0.01) {
         const haloR = Math.max(2, coreBaseR * (1.28 + 0.35 * coreFlash) * coreScale);
@@ -855,11 +858,12 @@ export const SetupCanvas = memo(function SetupCanvas({
         return;
       }
       if (!last) last = now;
-      const rawDt = Math.min(0.033, Math.max(0.001, (now - last) / 1000));
+      const wallDt = Math.min(0.25, Math.max(0.001, (now - last) / 1000));
+      const rawDt = Math.min(0.033, wallDt);
       last = now;
       smoothDt = lerp(smoothDt, rawDt, 0.16);
       smoothTime += smoothDt;
-      draw(smoothTime, smoothDt);
+      draw(smoothTime, smoothDt, wallDt);
       frame = requestAnimationFrame(loop);
     };
 

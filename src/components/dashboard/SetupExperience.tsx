@@ -319,7 +319,7 @@ export function SetupExperience({
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     finaleFallbackRef.current = window.setTimeout(
       () => void finalizeAfterAnimation(),
-      reduceMotion ? 260 : 5000,
+      reduceMotion ? 260 : 7500,
     );
   }
 
