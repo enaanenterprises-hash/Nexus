@@ -112,6 +112,7 @@ export function Dashboard({
   const [setupDone, setSetupDone] = useState(initialSetupDone);
   const [setupResumeStep, setSetupResumeStep] = useState<SetupStep | null>(initialSetupStep);
   const [setupNotice, setSetupNotice] = useState<{ ok: boolean; text: string } | null>(initialOauthNotice);
+  const [setupReveal, setSetupReveal] = useState(false);
 
   const [surface, setSurface] = useState<Surface>({ view: "home", panel: null });
   const [researchMounted, setResearchMounted] = useState(false);
@@ -131,6 +132,7 @@ export function Dashboard({
   const noticeTimer = useRef<number | undefined>(undefined);
   const bootedRef = useRef(false);
   const bootCompleteRef = useRef(false);
+  const persistedNodesRef = useRef(false);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
   const menuNavRef = useRef<HTMLElement>(null);
   const panelRef = useRef<HTMLElement>(null);
@@ -388,7 +390,9 @@ export function Dashboard({
     saveInstalledNodes(extensionRegistry.listActive());
   }
 
-  async function completeSetup(nodeIds: ExtensionId[]) {
+  async function persistSetup(nodeIds: ExtensionId[]) {
+    if (persistedNodesRef.current) return;
+    persistedNodesRef.current = true;
     await applySetupNodes(nodeIds);
     bootedRef.current = true;
     clearResumeSetupStep();
@@ -398,8 +402,13 @@ export function Dashboard({
       // Ignore storage access errors
     }
     await fetch("/api/setup", { method: "POST" }).catch(() => null);
+  }
+
+  async function completeSetup(nodeIds: ExtensionId[], options?: { fromFinale?: boolean }) {
+    await persistSetup(nodeIds);
     setSetupNotice(null);
     setSetupResumeStep(null);
+    if (options?.fromFinale) setSetupReveal(true);
     setSetupDone(true);
   }
 
@@ -411,6 +420,8 @@ export function Dashboard({
 
   async function replaySetup() {
     clearResumeSetupStep();
+    persistedNodesRef.current = false;
+    setSetupReveal(false);
     try {
       window.localStorage.removeItem(SETUP_DONE_KEY);
     } catch {
@@ -423,6 +434,12 @@ export function Dashboard({
     setSetupResumeStep(null);
     setSetupDone(false);
   }
+
+  useEffect(() => {
+    if (!setupReveal) return;
+    const t = window.setTimeout(() => setSetupReveal(false), 950);
+    return () => window.clearTimeout(t);
+  }, [setupReveal]);
 
   async function snap(id: ExtensionId, explicitSlotId?: SlotId) {
     const target = hub.slots.find((s) => s.id === (explicitSlotId ?? selected));
@@ -509,6 +526,7 @@ export function Dashboard({
         oauthNotice={setupNotice}
         onDismissNotice={() => setSetupNotice(null)}
         onNameSaved={(name) => setViewerName(name)}
+        onPersistSetup={persistSetup}
         onComplete={completeSetup}
         onSkip={skipSetup}
       />
@@ -517,10 +535,17 @@ export function Dashboard({
 
   return (
     <div
-      className="dash relative h-[100svh] w-full flex-1 overflow-hidden"
+      className={`dash relative h-[100svh] w-full flex-1 overflow-hidden${setupReveal ? " dash--finale-enter" : ""}`}
       data-theme={theme}
       data-nav-open={isNetworkHome ? (menuOpen ? "true" : "false") : "true"}
     >
+      {setupReveal ? (
+        <div
+          className="dash-finale-reveal pointer-events-none fixed inset-0 z-50"
+          aria-hidden
+          onAnimationEnd={() => setSetupReveal(false)}
+        />
+      ) : null}
       <section
         aria-label="Nexus Laniakea network"
         className="absolute inset-0"

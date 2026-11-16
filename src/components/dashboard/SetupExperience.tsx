@@ -82,6 +82,7 @@ export function SetupExperience({
   oauthNotice,
   onDismissNotice,
   onNameSaved,
+  onPersistSetup,
   onComplete,
   onSkip,
 }: {
@@ -92,7 +93,8 @@ export function SetupExperience({
   oauthNotice: { ok: boolean; text: string } | null;
   onDismissNotice: () => void;
   onNameSaved: (name: string) => void;
-  onComplete: (nodeIds: ExtensionId[]) => Promise<void>;
+  onPersistSetup?: (nodeIds: ExtensionId[]) => Promise<void>;
+  onComplete: (nodeIds: ExtensionId[], options?: { fromFinale?: boolean }) => Promise<void>;
   onSkip: () => Promise<void>;
 }) {
   const command = useCommand();
@@ -115,7 +117,16 @@ export function SetupExperience({
   });
 
   const modalTimerRef = useRef<number | undefined>(undefined);
-  useEffect(() => () => window.clearTimeout(modalTimerRef.current), []);
+  const finaleFallbackRef = useRef<number | undefined>(undefined);
+  const persistPromiseRef = useRef<Promise<void> | null>(null);
+  const finaleHandledRef = useRef(false);
+  useEffect(
+    () => () => {
+      window.clearTimeout(modalTimerRef.current);
+      window.clearTimeout(finaleFallbackRef.current);
+    },
+    [],
+  );
 
   const connectionsList = command.state?.connections;
   const connections = useMemo(
@@ -202,18 +213,41 @@ export function SetupExperience({
     }
   }
 
+  async function finalizeAfterAnimation() {
+    if (finaleHandledRef.current) return;
+    finaleHandledRef.current = true;
+    window.clearTimeout(finaleFallbackRef.current);
+    try {
+      if (persistPromiseRef.current) {
+        await persistPromiseRef.current;
+      }
+      await onComplete(selectedNodes, { fromFinale: true });
+    } catch {
+      finaleHandledRef.current = false;
+      setFinishing(false);
+      setStage("modal");
+    }
+  }
+
   async function handleFinish() {
     if (finishing) return;
     setFinishing(true);
-    try {
+    finaleHandledRef.current = false;
+
+    persistPromiseRef.current = (async () => {
       if (command.state) {
         const finalWidgets = placeWidgets(effectiveWidgetIds).map((p) => p.id);
         await command.setOverview(finalWidgets);
       }
-      await onComplete(selectedNodes);
-    } finally {
-      setFinishing(false);
-    }
+      await onPersistSetup?.(selectedNodes);
+    })();
+
+    setStage("finale");
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    finaleFallbackRef.current = window.setTimeout(
+      () => void finalizeAfterAnimation(),
+      reduceMotion ? 260 : 3200,
+    );
   }
 
   async function handleSkip() {
@@ -239,6 +273,7 @@ export function SetupExperience({
           theme={theme}
           impulseSerial={impulseSerial}
           onClickSingularity={handleStart}
+          onFinaleComplete={() => void finalizeAfterAnimation()}
         />
       </div>
 
