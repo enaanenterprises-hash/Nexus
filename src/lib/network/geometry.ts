@@ -61,10 +61,10 @@ export function radialGlow(
   ctx.fillRect(at.x - radius, at.y - radius, radius * 2, radius * 2);
 }
 
-/** Fits a canvas to its CSS box at a balanced device pixel ratio for 60fps rendering. */
+/** Fits a canvas to its CSS box without reallocating its backing store if size is unchanged. */
 export function fitCanvas(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
   const rect = canvas.getBoundingClientRect();
-  const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const w = Math.max(1, Math.round(rect.width * dpr));
   const h = Math.max(1, Math.round(rect.height * dpr));
   if (canvas.width !== w || canvas.height !== h) {

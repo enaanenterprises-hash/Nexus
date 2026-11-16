@@ -1,13 +1,7 @@
 "use client";
 
 import { memo, useEffect, useRef } from "react";
-import {
-  clamp,
-  fitCanvas,
-  lerp,
-  observeCanvasActivity,
-  seededHelpers,
-} from "@/lib/network/geometry";
+import { clamp, fitCanvas, lerp, observeCanvasActivity, seededHelpers, type Vec } from "@/lib/network/geometry";
 import { computeCoreCenter } from "./stage-layout";
 
 export type SetupStagePhase = "singularity" | "exploding" | "modal" | "finale";
@@ -15,9 +9,9 @@ export type SetupStagePhase = "singularity" | "exploding" | "modal" | "finale";
 type Rgb = readonly [number, number, number];
 
 const TAU = Math.PI * 2;
-const BASE_RAY_COUNT = 128;
-const EXTRA_RAY_COUNT = 200;
-const RAY_STEPS = 16;
+const BASE_RAY_COUNT = 168;
+const EXTRA_RAY_COUNT = 290;
+const RAY_STEPS = 22;
 
 const FINALE_FILL_END = 1.40;
 const FINALE_EXPLODE_AT = 2.02;
@@ -36,10 +30,10 @@ const GOLD_LIGHT_DEEP: Rgb = [232, 174, 52];
 const CRIMSON_ACCENT: Rgb = [252, 64, 56];
 
 const DEPTH_LAYERS = [
-  { width: 3.0, alpha: 0.055, hot: 0.08 },
-  { width: 1.55, alpha: 0.145, hot: 0.34 },
-  { width: 0.85, alpha: 0.32, hot: 0.68 },
-  { width: 0.45, alpha: 0.62, hot: 0.96 },
+  { width: 3.1, alpha: 0.048, hot: 0.08 },
+  { width: 1.55, alpha: 0.135, hot: 0.34 },
+  { width: 0.85, alpha: 0.3, hot: 0.68 },
+  { width: 0.42, alpha: 0.62, hot: 0.96 },
 ] as const;
 
 type RayFilament = {
@@ -69,12 +63,15 @@ type BurstPhoton = {
   u: number;
   speed: number;
   size: number;
+  alpha: number;
 };
 
 type BlastSpark = {
   angle: number;
   speedMul: number;
   lengthMul: number;
+  size: number;
+  alpha: number;
 };
 
 type ShockRing = {
@@ -89,7 +86,7 @@ function mixRgb(a: Rgb, b: Rgb, t: number): string {
   return `${Math.round(lerp(a[0], b[0], k))}, ${Math.round(lerp(a[1], b[1], k))}, ${Math.round(lerp(a[2], b[2], k))}`;
 }
 
-function traceQuadScratch(
+function traceSmoothPolylineScratch(
   ctx: CanvasRenderingContext2D,
   xs: Float64Array,
   ys: Float64Array,
@@ -97,48 +94,24 @@ function traceQuadScratch(
 ) {
   if (len < 2) return;
   ctx.moveTo(xs[0]!, ys[0]!);
-  for (let i = 1; i < len - 1; i++) {
-    const x = xs[i]!;
-    const y = ys[i]!;
-    ctx.quadraticCurveTo(x, y, (x + xs[i + 1]!) * 0.5, (y + ys[i + 1]!) * 0.5);
+  for (let i = 0; i < len - 1; i++) {
+    const i0 = i > 0 ? i - 1 : 0;
+    const i1 = i;
+    const i2 = i + 1;
+    const i3 = i + 2 < len ? i + 2 : len - 1;
+    const p1x = xs[i1]!;
+    const p1y = ys[i1]!;
+    const p2x = xs[i2]!;
+    const p2y = ys[i2]!;
+    ctx.bezierCurveTo(
+      p1x + (p2x - xs[i0]!) / 6,
+      p1y + (p2y - ys[i0]!) / 6,
+      p2x - (xs[i3]! - p1x) / 6,
+      p2y - (ys[i3]! - p1y) / 6,
+      p2x,
+      p2y,
+    );
   }
-  ctx.lineTo(xs[len - 1]!, ys[len - 1]!);
-}
-
-/** Pre-bakes a 16-stop analytical Moffat PSF texture once so frames only blit with drawImage(). */
-function bakeMoffatSprite(
-  coreFrac: number,
-  beta: number,
-  peakAlpha: number,
-  inner: Rgb,
-  mid: Rgb,
-  outer: Rgb,
-): HTMLCanvasElement {
-  const size = 192;
-  const off = document.createElement("canvas");
-  off.width = size;
-  off.height = size;
-  const octx = off.getContext("2d");
-  if (!octx) return off;
-
-  const r = size * 0.5;
-  const coreR = r * coreFrac;
-  const g = octx.createRadialGradient(r, r, 0, r, r, r);
-  const stops = 16;
-  for (let i = 0; i <= stops; i++) {
-    const u = i / stops;
-    const rn = (u * r) / coreR;
-    const moffat = Math.pow(1 + rn * rn, -beta);
-    const edgeWindow = 1 - u * u * (3 - 2 * u);
-    const a = clamp(peakAlpha * moffat * edgeWindow, 0, 1);
-    const rgb = u < 0.35 ? mixRgb(inner, mid, u / 0.35) : mixRgb(mid, outer, (u - 0.35) / 0.65);
-    g.addColorStop(u, `rgba(${rgb}, ${a})`);
-  }
-  octx.fillStyle = g;
-  octx.beginPath();
-  octx.arc(r, r, r, 0, TAU);
-  octx.fill();
-  return off;
 }
 
 function createBurstField() {
@@ -191,7 +164,7 @@ function createBurstField() {
   }
 
   const totalRays = rays.length;
-  const synapses: SynapseArc[] = Array.from({ length: 110 }, (_, i) => {
+  const synapses: SynapseArc[] = Array.from({ length: 150 }, (_, i) => {
     const rayA = Math.floor(rnd() * totalRays);
     const stepOffset = (Math.floor(between(1, 5)) * (i % 2 === 0 ? 1 : -1) + totalRays) % totalRays;
     return {
@@ -203,17 +176,20 @@ function createBurstField() {
     };
   });
 
-  const photons: BurstPhoton[] = Array.from({ length: 280 }, (_, i) => ({
-    rayIdx: i < 140 ? i % BASE_RAY_COUNT : BASE_RAY_COUNT + ((i - 140) % EXTRA_RAY_COUNT),
+  const photons: BurstPhoton[] = Array.from({ length: 420 }, (_, i) => ({
+    rayIdx: i < 200 ? i % BASE_RAY_COUNT : BASE_RAY_COUNT + ((i - 200) % EXTRA_RAY_COUNT),
     u: rnd(),
     speed: between(0.09, 0.24),
-    size: between(0.6, 1.65),
+    size: between(0.55, 1.7),
+    alpha: between(0.38, 0.94),
   }));
 
-  const blastSparks: BlastSpark[] = Array.from({ length: 160 }, () => ({
+  const blastSparks: BlastSpark[] = Array.from({ length: 220 }, () => ({
     angle: rnd() * TAU,
     speedMul: between(0.45, 1.32),
     lengthMul: between(0.06, 0.18),
+    size: between(0.8, 2.3),
+    alpha: between(0.55, 1.0),
   }));
 
   return { rays, baseLayerBatches, extraLayerBatches, synapses, photons, blastSparks };
@@ -262,11 +238,6 @@ export const SetupCanvas = memo(function SetupCanvas({
     const scratchXs = new Float64Array(RAY_STEPS + 1);
     const scratchYs = new Float64Array(RAY_STEPS + 1);
 
-    const haloDark = bakeMoffatSprite(0.22, 1.85, 0.48, [255, 226, 154], [242, 172, 56], [188, 102, 20]);
-    const haloLight = bakeMoffatSprite(0.22, 1.85, 0.42, [228, 168, 42], [204, 134, 14], [174, 102, 6]);
-    const orbDark = bakeMoffatSprite(0.28, 2.35, 0.98, [255, 252, 238], [255, 218, 124], [236, 158, 44]);
-    const orbLight = bakeMoffatSprite(0.28, 2.35, 0.92, [156, 88, 6], [198, 128, 16], [228, 168, 42]);
-
     let width = 1;
     let height = 1;
     let diag = 1;
@@ -287,8 +258,8 @@ export const SetupCanvas = memo(function SetupCanvas({
     let hoverFocus = 0;
 
     const shockRings: ShockRing[] = [];
-    const pointerPos = { x: -9999, y: -9999 };
-    const pointerSmooth = { x: -9999, y: -9999 };
+    const pointerPos: Vec = { x: -9999, y: -9999 };
+    const pointerSmooth: Vec = { x: -9999, y: -9999 };
     let pointerActive = false;
     let pointerPresence = 0;
 
@@ -325,6 +296,31 @@ export const SetupCanvas = memo(function SetupCanvas({
     window.addEventListener("pointerleave", onPointerLeave);
     canvas.addEventListener("click", onClick);
 
+    const createMoffat = (
+      radius: number,
+      coreR: number,
+      beta: number,
+      peakAlpha: number,
+      inner: Rgb,
+      mid: Rgb,
+      outer: Rgb,
+    ) => {
+      const safeRadius = Math.max(0.5, radius);
+      const safeCoreR = Math.max(0.25, coreR);
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, safeRadius);
+      const stops = 16;
+      for (let i = 0; i <= stops; i++) {
+        const u = i / stops;
+        const rn = (u * safeRadius) / safeCoreR;
+        const moffat = Math.pow(1 + rn * rn, -beta);
+        const edgeWindow = 1 - u * u * (3 - 2 * u);
+        const a = clamp(peakAlpha * moffat * edgeWindow, 0, 1);
+        const rgb = u < 0.35 ? mixRgb(inner, mid, u / 0.35) : mixRgb(mid, outer, (u - 0.35) / 0.65);
+        g.addColorStop(u, `rgba(${rgb}, ${a})`);
+      }
+      return g;
+    };
+
     const writeRayPoint = (
       ray: RayFilament,
       u: number,
@@ -334,10 +330,7 @@ export const SetupCanvas = memo(function SetupCanvas({
       burstFrac: number,
       waveTime: number,
       implode: number,
-      hasPointer: boolean,
-      invTwoSigmaSq: number,
-      maxDistSq: number,
-      idx: number,
+      outIdx: number,
     ) => {
       const uShape = implode > 0 ? Math.pow(u, 1 + 1.15 * implode) : u;
       const r = uShape * maxLen * burstFrac;
@@ -352,12 +345,14 @@ export const SetupCanvas = memo(function SetupCanvas({
       let px = cx + Math.cos(theta) * r;
       let py = cy + Math.sin(theta) * r;
 
-      if (hasPointer && u > 0.04 && implode < 0.35) {
+      if (pointerPresence > 0.005 && u > 0.04 && implode < 0.35) {
         const dx = px - pointerSmooth.x;
         const dy = py - pointerSmooth.y;
         const distSq = dx * dx + dy * dy;
-        if (distSq < maxDistSq) {
-          const k = pointerPresence * Math.exp(-distSq * invTwoSigmaSq) * (1 - Math.exp(-u * 8));
+        const sigma = Math.min(width, height) * 0.16;
+        const twoSigmaSq = 2 * sigma * sigma;
+        if (distSq < twoSigmaSq * 3.2) {
+          const k = pointerPresence * Math.exp(-distSq / twoSigmaSq) * (1 - Math.exp(-u * 8));
           const dist = Math.sqrt(distSq) + 28;
           const part = 8.5 * k * (1 - implode);
           px += (dx / dist) * part;
@@ -365,8 +360,8 @@ export const SetupCanvas = memo(function SetupCanvas({
         }
       }
 
-      scratchXs[idx] = px;
-      scratchYs[idx] = py;
+      scratchXs[outIdx] = px;
+      scratchYs[outIdx] = py;
     };
 
     const draw = (time: number, dt: number) => {
@@ -405,13 +400,9 @@ export const SetupCanvas = memo(function SetupCanvas({
       const cx = core.x;
       const cy = core.y;
       const explodeAge = curPhase === "singularity" ? 0 : Math.max(0, time - explodeStartTime);
+
       const minDim = Math.min(width, height);
       const coreBaseR = clamp(minDim * 0.14, 58, 118);
-
-      const hasPointer = pointerPresence > 0.005;
-      const sigma = minDim * 0.16;
-      const invTwoSigmaSq = 1 / (2 * sigma * sigma);
-      const maxDistSq = (1 / invTwoSigmaSq) * 3.2;
 
       let targetHover = 0;
       if (pointerActive && curPhase === "singularity") {
@@ -420,6 +411,7 @@ export const SetupCanvas = memo(function SetupCanvas({
       }
       hoverFocus = lerp(hoverFocus, targetHover, reduceMotion ? 1 : 1 - Math.exp(-dt * 4.5));
 
+      // Finale choreography phases
       const isFinale = curPhase === "finale";
       const finaleAge = isFinale && finaleStartTime >= 0 ? Math.max(0, time - finaleStartTime) : 0;
       const fillU = isFinale ? clamp(finaleAge / FINALE_FILL_END, 0, 1) : 0;
@@ -447,6 +439,7 @@ export const SetupCanvas = memo(function SetupCanvas({
         finaleCbRef.current?.();
       }
 
+      // Background
       ctx.globalCompositeOperation = "source-over";
       ctx.globalAlpha = 1;
       if (isLight) {
@@ -467,6 +460,7 @@ export const SetupCanvas = memo(function SetupCanvas({
       const blendOp: GlobalCompositeOperation = isLight ? "source-over" : "lighter";
       const alphaScale = isLight ? 1.55 : 1.0;
 
+      // Substage energy parameters
       let coreScale = 1 + 0.045 * Math.sin(time * 0.85) + 0.14 * hoverFocus;
       let coreFlash = 0;
       let burstTime = 0;
@@ -510,6 +504,7 @@ export const SetupCanvas = memo(function SetupCanvas({
         wavePhase += dt * waveRate;
       }
 
+      // Finale saturation veil under dense neural web as the screen fills
       if (isFinale && !raysCollapsed) {
         const veilAlpha = clamp(Math.pow(fillEase, 1.6) * 0.38 * (1 - implode), 0, 0.42);
         if (veilAlpha > 0.005) {
@@ -523,6 +518,7 @@ export const SetupCanvas = memo(function SetupCanvas({
         }
       }
 
+      // 1. Omnidirectional flowing neural lines + finale overgrowth & collapse
       if (curPhase !== "singularity" && !raysCollapsed && (burstTime > 0 || reduceMotion)) {
         const outerReach = diag * lerp(0.82, 1.24, fillEase) * (1 - implode);
         const speedBoost = 1 + 2.4 * Math.exp(-burstTime * 1.5) + fillEase * 2.1 + implode * 2.6;
@@ -530,17 +526,7 @@ export const SetupCanvas = memo(function SetupCanvas({
         const edgeStopAlpha = lerp(0, 0.78, Math.pow(fillEase, 1.35)) * (1 - implode);
 
         ctx.globalCompositeOperation = blendOp;
-
-        const rgb = mixRgb(goldMid, goldCore, 0.55 + coreFlash * 0.25);
-        const edgeRgb = mixRgb(goldDeep, goldBright, 0.35 + fillEase * 0.35);
-        const rg = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(1, outerReach));
-        rg.addColorStop(0, `rgba(${rgb}, 0.95)`);
-        rg.addColorStop(0.28, `rgba(${rgb}, 0.62)`);
-        rg.addColorStop(0.68, `rgba(${edgeRgb}, ${clamp(0.26 + 0.32 * fillEase, 0, 1)})`);
-        rg.addColorStop(1, `rgba(${edgeRgb}, ${clamp(edgeStopAlpha * 0.65, 0, 1)})`);
-        ctx.strokeStyle = rg;
-
-        const fieldAlphaScale = alphaScale * (0.85 + 0.35 * coreFlash + 0.9 * fillEase);
+        ctx.globalAlpha = 1;
 
         for (let layerIdx = 0; layerIdx < DEPTH_LAYERS.length; layerIdx++) {
           const layer = DEPTH_LAYERS[layerIdx]!;
@@ -548,7 +534,16 @@ export const SetupCanvas = memo(function SetupCanvas({
           const extraBatch = isFinale ? field.extraLayerBatches[layerIdx]! : [];
           if (!baseBatch.length && !extraBatch.length) continue;
 
-          ctx.globalAlpha = clamp(layer.alpha * fieldAlphaScale * 1.65, 0, 1);
+          const rgb = mixRgb(goldMid, goldCore, layer.hot + coreFlash * 0.25);
+          const edgeRgb = mixRgb(goldDeep, goldBright, layer.hot * 0.5 + fillEase * 0.35);
+          const a = layer.alpha * alphaScale * (0.85 + 0.35 * coreFlash + 0.9 * fillEase);
+
+          const rg = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(1, outerReach));
+          rg.addColorStop(0, `rgba(${rgb}, ${clamp(a * 1.9, 0, 1)})`);
+          rg.addColorStop(0.28, `rgba(${rgb}, ${clamp(a * 1.2, 0, 1)})`);
+          rg.addColorStop(0.68, `rgba(${edgeRgb}, ${clamp(a * (0.48 + 0.55 * fillEase), 0, 1)})`);
+          rg.addColorStop(1, `rgba(${edgeRgb}, ${clamp(a * edgeStopAlpha, 0, 1)})`);
+
           ctx.beginPath();
 
           for (const rayIdx of baseBatch) {
@@ -569,13 +564,10 @@ export const SetupCanvas = memo(function SetupCanvas({
                 expand,
                 wavePhase,
                 implode,
-                hasPointer,
-                invTwoSigmaSq,
-                maxDistSq,
                 k,
               );
             }
-            traceQuadScratch(ctx, scratchXs, scratchYs, RAY_STEPS + 1);
+            traceSmoothPolylineScratch(ctx, scratchXs, scratchYs, RAY_STEPS + 1);
           }
 
           if (isFinale && extraBatch.length > 0) {
@@ -595,22 +587,20 @@ export const SetupCanvas = memo(function SetupCanvas({
                   grow,
                   wavePhase,
                   implode,
-                  hasPointer,
-                  invTwoSigmaSq,
-                  maxDistSq,
                   k,
                 );
               }
-              traceQuadScratch(ctx, scratchXs, scratchYs, RAY_STEPS + 1);
+              traceSmoothPolylineScratch(ctx, scratchXs, scratchYs, RAY_STEPS + 1);
             }
           }
 
           ctx.lineWidth = layer.width * (isLight ? 1.08 : 0.96) * widthBoost;
+          ctx.strokeStyle = rg;
           ctx.stroke();
         }
 
+        // Branching cross-web synapses during Finale fill & inward collapse
         if (isFinale && outerReach > 2 && fillEase > 0.08) {
-          ctx.globalAlpha = 1;
           ctx.beginPath();
           for (const syn of field.synapses) {
             const synAge = Math.max(0, finaleAge - syn.stagger);
@@ -631,9 +621,6 @@ export const SetupCanvas = memo(function SetupCanvas({
               growA,
               wavePhase,
               implode,
-              hasPointer,
-              invTwoSigmaSq,
-              maxDistSq,
               0,
             );
             writeRayPoint(
@@ -645,32 +632,23 @@ export const SetupCanvas = memo(function SetupCanvas({
               growB,
               wavePhase,
               implode,
-              hasPointer,
-              invTwoSigmaSq,
-              maxDistSq,
               1,
             );
             const pAx = scratchXs[0]!;
             const pAy = scratchYs[0]!;
             const pBx = scratchXs[1]!;
             const pBy = scratchYs[1]!;
+            const midX = (pAx + pBx) * 0.5 + (pBy - pAy) * syn.curve;
+            const midY = (pAy + pBy) * 0.5 - (pBx - pAx) * syn.curve;
             ctx.moveTo(pAx, pAy);
-            ctx.quadraticCurveTo(
-              (pAx + pBx) * 0.5 + (pBy - pAy) * syn.curve,
-              (pAy + pBy) * 0.5 - (pBx - pAx) * syn.curve,
-              pBx,
-              pBy,
-            );
+            ctx.quadraticCurveTo(midX, midY, pBx, pBy);
           }
           ctx.lineWidth = lerp(0.55, 1.1, fillEase);
           ctx.strokeStyle = `rgba(${goldBright[0]}, ${goldBright[1]}, ${goldBright[2]}, ${clamp(0.45 * fillEase * (1 - implode * 0.5) * alphaScale, 0, 0.9)})`;
           ctx.stroke();
         }
 
-        // Batched photons (single fill pass instead of 280+ draw calls)
-        ctx.fillStyle = `rgb(${goldCore[0]}, ${goldCore[1]}, ${goldCore[2]})`;
-        ctx.globalAlpha = clamp((isLight ? 0.72 : 0.84) * (1 + fillEase * 0.25), 0, 1);
-        ctx.beginPath();
+        // Flowing golden photons along active rays
         for (const pt of field.photons) {
           const ray = field.rays[pt.rayIdx]!;
           if (ray.isExtra && !isFinale) continue;
@@ -686,8 +664,12 @@ export const SetupCanvas = memo(function SetupCanvas({
               ? clamp(1 - Math.exp(-3.4 * tau), 0, 1.04)
               : clamp(1 - Math.exp(-2.8 * tau) * Math.cos(1.8 * tau), 0, 1.03);
           if (!reduceMotion) {
-            if (collapseU > 0) pt.u = (pt.u - dt * (0.45 + implode * 1.8) + 1) % 1;
-            else pt.u = (pt.u + pt.speed * speedBoost * dt) % 1;
+            if (collapseU > 0) {
+              // Photons whip rapidly backward toward the center during collapse
+              pt.u = (pt.u - dt * (0.45 + implode * 1.8) + 1) % 1;
+            } else {
+              pt.u = (pt.u + pt.speed * speedBoost * dt) % 1;
+            }
           }
           writeRayPoint(
             ray,
@@ -698,22 +680,19 @@ export const SetupCanvas = memo(function SetupCanvas({
             expand,
             wavePhase,
             implode,
-            hasPointer,
-            invTwoSigmaSq,
-            maxDistSq,
             0,
           );
-          const rad = pt.size * Math.sin(pt.u * Math.PI) * (1 + fillEase * 0.4);
-          if (rad > 0.2) {
-            const px = scratchXs[0]!;
-            const py = scratchYs[0]!;
-            ctx.moveTo(px + rad, py);
-            ctx.arc(px, py, rad, 0, TAU);
-          }
+          const fade = Math.sin(pt.u * Math.PI);
+          ctx.fillStyle = `rgb(${goldCore[0]}, ${goldCore[1]}, ${goldCore[2]})`;
+          ctx.globalAlpha = pt.alpha * fade * (isLight ? 0.85 : 1) * (1 + fillEase * 0.35);
+          ctx.beginPath();
+          ctx.arc(scratchXs[0]!, scratchYs[0]!, pt.size * (1 + fillEase * 0.45), 0, TAU);
+          ctx.fill();
         }
-        ctx.fill();
 
+        // Inward gravitational collapse ring focusing lines back into the singularity
         if (implode > 0.01) {
+          ctx.globalCompositeOperation = blendOp;
           ctx.globalAlpha = 1;
           ctx.lineWidth = lerp(1.1, 2.4, implode);
           ctx.strokeStyle = `rgba(${goldCore[0]}, ${goldCore[1]}, ${goldCore[2]}, ${clamp(0.75 * Math.sin(collapseU * Math.PI) * alphaScale, 0, 1)})`;
@@ -723,25 +702,29 @@ export const SetupCanvas = memo(function SetupCanvas({
         }
       }
 
+      // 2. Terminal Supernova Explosion & Nova Wash (Substage 3: after collapse -> regular dashboard)
       if (isFinale && raysCollapsed) {
         ctx.globalCompositeOperation = blendOp;
-        ctx.globalAlpha = clamp((1 - blastU * 0.35) * alphaScale * 0.85, 0, 1);
-        ctx.strokeStyle = `rgb(${goldCore[0]}, ${goldCore[1]}, ${goldCore[2]})`;
-        ctx.lineWidth = 1.45;
-        ctx.beginPath();
+        ctx.globalAlpha = 1;
+
+        // High-velocity golden debris / ray streaks tearing outward
         for (const spark of field.blastSparks) {
           const travel = blastEase * diag * 0.96 * spark.speedMul;
           const tail = Math.max(0, travel - spark.lengthMul * diag * (1 - blastU * 0.5));
           const cos = Math.cos(spark.angle);
           const sin = Math.sin(spark.angle);
+          ctx.strokeStyle = `rgba(${goldCore[0]}, ${goldCore[1]}, ${goldCore[2]}, ${clamp(spark.alpha * (1 - blastU * 0.35) * alphaScale, 0, 1)})`;
+          ctx.lineWidth = spark.size;
+          ctx.beginPath();
           ctx.moveTo(cx + cos * tail, cy + sin * tail);
           ctx.lineTo(cx + cos * travel, cy + sin * travel);
+          ctx.stroke();
         }
-        ctx.stroke();
 
+        // Expanding golden blast wave racing out from the exact dashboard core
         const novaR = Math.max(8, diag * 0.72 * blastEase);
         const novaAlpha = clamp(Math.pow(blastEase, 0.72) * 0.62, 0, 0.65);
-        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = blendOp;
         const ng = ctx.createRadialGradient(cx, cy, 0, cx, cy, novaR);
         if (isLight) {
           ng.addColorStop(0, `rgba(255, 250, 236, ${novaAlpha})`);
@@ -760,8 +743,8 @@ export const SetupCanvas = memo(function SetupCanvas({
         ctx.fill();
       }
 
+      // 3. Shockwave Rings expanding across viewport
       ctx.globalCompositeOperation = blendOp;
-      ctx.globalAlpha = 1;
       ctx.lineWidth = raysCollapsed ? 2.1 : 1.25;
       for (let i = shockRings.length - 1; i >= 0; i--) {
         const ring = shockRings[i]!;
@@ -781,22 +764,50 @@ export const SetupCanvas = memo(function SetupCanvas({
         ctx.stroke();
       }
 
-      // Blit pre-baked Moffat singularity orb (omitting outer halo at "singularity")
+      // 4. Center Singularity Core (same golden Moffat orb at start, without outer halo)
       ctx.save();
       ctx.translate(cx, cy);
       ctx.globalCompositeOperation = blendOp;
+      ctx.globalAlpha = 1;
 
-      const glowHaloIn =
-        curPhase === "singularity" ? 0 : isFinale ? 1 : clamp(explodeAge / 0.28, 0, 1);
+      const haloOuter: Rgb = isLight ? [174, 102, 6] : [188, 102, 20];
+      const haloMid: Rgb = isLight ? [204, 134, 14] : [242, 172, 56];
+      const haloInner: Rgb = isLight ? [228, 168, 42] : [255, 226, 154];
+
+      // Omit outer atmospheric halo at start ("singularity"), fading it in smoothly upon explosion
+      const glowHaloIn = curPhase === "singularity" ? 0 : isFinale ? 1 : clamp(explodeAge / 0.28, 0, 1);
       if (glowHaloIn > 0.01) {
         const haloR = Math.max(2, coreBaseR * (1.28 + 0.35 * coreFlash) * coreScale);
-        ctx.globalAlpha = clamp((0.88 + 0.2 * coreFlash) * glowHaloIn, 0, 1);
-        ctx.drawImage(isLight ? haloLight : haloDark, -haloR, -haloR, haloR * 2, haloR * 2);
+        ctx.fillStyle = createMoffat(
+          haloR,
+          haloR * 0.22,
+          1.85,
+          clamp(((isLight ? 0.36 : 0.42) + 0.25 * coreFlash) * glowHaloIn, 0, 1),
+          haloInner,
+          haloMid,
+          haloOuter,
+        );
+        ctx.beginPath();
+        ctx.arc(0, 0, haloR, 0, TAU);
+        ctx.fill();
       }
 
-      const orbR = Math.max(3, coreBaseR * (0.34 + 0.05 * hoverFocus + 0.15 * coreFlash) * coreScale);
-      ctx.globalAlpha = clamp(0.94 + 0.06 * hoverFocus + 0.15 * coreFlash, 0, 1);
-      ctx.drawImage(isLight ? orbLight : orbDark, -orbR, -orbR, orbR * 2, orbR * 2);
+      const orbR = Math.max(
+        3,
+        coreBaseR * (0.34 + 0.05 * hoverFocus + 0.15 * coreFlash) * coreScale,
+      );
+      ctx.fillStyle = createMoffat(
+        orbR,
+        orbR * 0.28,
+        2.35,
+        clamp((isLight ? 0.88 : 0.96) + 0.1 * hoverFocus + 0.15 * coreFlash, 0, 1),
+        isLight ? [156, 88, 6] : [255, 252, 238],
+        isLight ? [198, 128, 16] : [255, 218, 124],
+        isLight ? [228, 168, 42] : [236, 158, 44],
+      );
+      ctx.beginPath();
+      ctx.arc(0, 0, orbR, 0, TAU);
+      ctx.fill();
 
       ctx.restore();
     };

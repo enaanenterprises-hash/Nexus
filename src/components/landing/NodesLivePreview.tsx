@@ -175,7 +175,7 @@ export function NodesLivePreview() {
     const timer = window.setInterval(() => {
       if (!activeViewRef.current) return;
       setPlayhead((p) => (p >= 92 ? 12 : Number((p + 0.9).toFixed(1))));
-    }, 180);
+    }, 140);
     return () => window.clearInterval(timer);
   }, []);
 
