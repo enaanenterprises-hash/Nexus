@@ -16,8 +16,13 @@ const RAY_STEPS = 22;
 const FINALE_FILL_END = 1.00;
 const FINALE_COLLAPSE_START = 1.32;
 const FINALE_COLLAPSE_END = 1.92;
-const FINALE_EXPLODE_AT = 3.02;
-const FINALE_COMPLETE_AT = 3.18;
+const FINALE_EXPLODE_AT = 2.72;
+const FINALE_COMPLETE_AT = 2.88;
+
+const CONSTELLATION_DARK_COOL: Rgb = [245, 245, 247]; // #f5f5f7
+const CONSTELLATION_DARK_WARM: Rgb = [255, 224, 156]; // #ffe09c
+const CONSTELLATION_LIGHT_STONE: Rgb = [108, 100, 88];
+const CONSTELLATION_LIGHT_AMBER: Rgb = [176, 108, 18];
 
 const GOLD_CORE: Rgb = [255, 250, 232];
 const GOLD_BRIGHT: Rgb = [255, 224, 156];
@@ -82,6 +87,422 @@ type ShockRing = {
   strength: number;
   crimson: boolean;
 };
+
+type ConstellationStar = {
+  x: number;
+  y: number;
+  radius: number;
+  alpha: number;
+  warmth: number;
+  twinkleSpeed: number;
+  phase: number;
+  isAnchor: boolean;
+};
+
+type ConstellationEdge = {
+  a: number;
+  b: number;
+  alpha: number;
+  warmth: number;
+  phase: number;
+};
+
+type ConstellationField = {
+  stars: ConstellationStar[];
+  edges: ConstellationEdge[];
+  ambientStars: ConstellationStar[];
+};
+
+type AsterismTemplate = {
+  points: ReadonlyArray<readonly [number, number]>;
+  edges: ReadonlyArray<readonly [number, number]>;
+};
+
+const ASTERISM_TEMPLATES: readonly AsterismTemplate[] = [
+  {
+    points: [
+      [-1.0, 0.25],
+      [-0.45, -0.32],
+      [0.12, -0.42],
+      [0.68, -0.15],
+      [1.05, 0.35],
+    ],
+    edges: [
+      [0, 1],
+      [1, 2],
+      [2, 3],
+      [3, 4],
+    ],
+  },
+  {
+    points: [
+      [-0.55, -0.45],
+      [0.18, -0.72],
+      [0.52, -0.05],
+      [-0.12, 0.32],
+      [0.98, 0.62],
+    ],
+    edges: [
+      [0, 1],
+      [1, 2],
+      [2, 3],
+      [3, 0],
+      [2, 4],
+    ],
+  },
+  {
+    points: [
+      [-0.85, 0.35],
+      [-0.22, 0.02],
+      [0.42, -0.28],
+      [0.98, -0.48],
+      [0.05, 0.72],
+    ],
+    edges: [
+      [0, 1],
+      [1, 2],
+      [2, 3],
+      [1, 4],
+    ],
+  },
+  {
+    points: [
+      [-0.65, -0.22],
+      [0.32, -0.64],
+      [0.64, 0.18],
+      [-0.98, 0.56],
+    ],
+    edges: [
+      [0, 1],
+      [1, 2],
+      [2, 0],
+      [0, 3],
+    ],
+  },
+  {
+    points: [
+      [-0.95, -0.18],
+      [-0.36, 0.38],
+      [0.18, -0.28],
+      [0.74, 0.32],
+      [1.08, -0.16],
+    ],
+    edges: [
+      [0, 1],
+      [1, 2],
+      [2, 3],
+      [3, 4],
+    ],
+  },
+];
+
+function isPointInConstellationExclusion(
+  x: number,
+  y: number,
+  cx: number,
+  cy: number,
+  clearR: number,
+  promptTop: number,
+  promptHalfW: number,
+): boolean {
+  if (Math.hypot(x - cx, y - cy) < clearR) return true;
+  return y >= promptTop && Math.abs(x - cx) < promptHalfW;
+}
+
+function segmentIntersectsConstellationExclusion(
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  cx: number,
+  cy: number,
+  clearR: number,
+  promptTop: number,
+  promptHalfW: number,
+): boolean {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lenSq = dx * dx + dy * dy;
+  const tClosest = lenSq > 1e-6 ? clamp(((cx - ax) * dx + (cy - ay) * dy) / lenSq, 0, 1) : 0;
+  if (Math.hypot(ax + tClosest * dx - cx, ay + tClosest * dy - cy) < clearR) {
+    return true;
+  }
+
+  const minX = cx - promptHalfW;
+  const maxX = cx + promptHalfW;
+  let tMinX = 0;
+  let tMaxX = 1;
+  if (Math.abs(dx) < 1e-9) {
+    if (ax <= minX || ax >= maxX) return false;
+  } else {
+    const tx1 = (minX - ax) / dx;
+    const tx2 = (maxX - ax) / dx;
+    tMinX = Math.min(tx1, tx2);
+    tMaxX = Math.max(tx1, tx2);
+  }
+
+  let tMinY = 0;
+  let tMaxY = 1;
+  if (Math.abs(dy) < 1e-9) {
+    if (ay < promptTop) return false;
+  } else {
+    const ty = (promptTop - ay) / dy;
+    if (dy > 0) {
+      tMinY = ty;
+    } else {
+      tMaxY = ty;
+    }
+  }
+
+  const tEnter = Math.max(0, tMinX, tMinY);
+  const tExit = Math.min(1, tMaxX, tMaxY);
+  if (tEnter > tExit) return false;
+  const tMid = (tEnter + tExit) * 0.5;
+  const mx = ax + tMid * dx;
+  const my = ay + tMid * dy;
+  return my >= promptTop && Math.abs(mx - cx) < promptHalfW;
+}
+
+/** Seeds deterministic outer-sky constellations strictly clear of the singularity and lower prompt negative space. */
+function createConstellationField(width: number, height: number): ConstellationField {
+  if (width < 40 || height < 40) {
+    return { stars: [], edges: [], ambientStars: [] };
+  }
+
+  const { rnd, between } = seededHelpers(20261123);
+  const core = computeCoreCenter(width, height);
+  const cx = core.x;
+  const cy = core.y;
+  const minDim = Math.min(width, height);
+  const coreBaseR = clamp(minDim * 0.14, 58, 118);
+
+  // Pad slightly past the mathematical exclusion boundary so star halos and strokes stay cleanly outside
+  const clearR = coreBaseR * 1.55 + 5;
+  const promptTop = cy + coreBaseR * 0.35 - 5;
+  const promptHalfW = Math.min(width * 0.38, 360) + 5;
+
+  const pad = clamp(minDim * 0.045, 20, 42);
+  const span = clamp(Math.min(width * 0.068, height * 0.078), 26, 60);
+  const lateralSpace = cx - promptHalfW - pad;
+
+  const upperSkyBottom = Math.max(pad + span, cy - clearR - span * 0.45);
+  const upperHighY = lerp(pad, upperSkyBottom, 0.36);
+  const upperLowY = lerp(pad, upperSkyBottom, 0.72);
+
+  const anchors: Vec[] = [
+    { x: lerp(pad, cx - clearR * 0.75, 0.36), y: upperLowY },
+    { x: lerp(pad, cx, 0.62), y: upperHighY },
+    { x: lerp(cx, width - pad, 0.38), y: upperHighY * 1.08 },
+    { x: lerp(cx + clearR * 0.75, width - pad, 0.64), y: upperLowY * 0.94 },
+  ];
+
+  if (width >= 560) {
+    anchors.push(
+      { x: pad + (cx - pad) * 0.2, y: Math.min(cy - clearR * 0.48, upperSkyBottom + span * 0.9) },
+      { x: width - pad - (width - pad - cx) * 0.2, y: Math.min(cy - clearR * 0.48, upperSkyBottom + span * 0.85) },
+    );
+  }
+
+  if (lateralSpace >= 90) {
+    anchors.push(
+      { x: pad + lateralSpace * 0.48, y: lerp(cy + 18, height - pad, 0.56) },
+      { x: width - pad - lateralSpace * 0.48, y: lerp(cy + 18, height - pad, 0.54) },
+    );
+  }
+
+  const stars: ConstellationStar[] = [];
+  const edges: ConstellationEdge[] = [];
+  const minCrossStarSep = Math.max(20, span * 0.45);
+
+  const isInsideCanvas = (x: number, y: number) =>
+    x >= pad && x <= width - pad && y >= pad && y <= height - pad;
+
+  for (let aIdx = 0; aIdx < anchors.length; aIdx++) {
+    const anchor = anchors[aIdx]!;
+    const tpl =
+      ASTERISM_TEMPLATES[(aIdx + Math.floor(rnd() * ASTERISM_TEMPLATES.length)) % ASTERISM_TEMPLATES.length]!;
+    const rot = rnd() * TAU;
+    const cosR = Math.cos(rot);
+    const sinR = Math.sin(rot);
+    const localScale = span * between(0.84, 1.14);
+    const offsetX = between(-span * 0.22, span * 0.22);
+    const offsetY = between(-span * 0.18, span * 0.18);
+
+    const candidates = tpl.points.map(([lx, ly]) => {
+      const jx = lx + between(-0.12, 0.12);
+      const jy = ly + between(-0.12, 0.12);
+      const x = anchor.x + offsetX + (jx * cosR - jy * sinR) * localScale;
+      const y = anchor.y + offsetY + (jx * sinR + jy * cosR) * localScale;
+      const valid =
+        isInsideCanvas(x, y) &&
+        !isPointInConstellationExclusion(x, y, cx, cy, clearR, promptTop, promptHalfW) &&
+        stars.every((s) => Math.hypot(x - s.x, y - s.y) >= minCrossStarSep);
+      return { x, y, valid };
+    });
+
+    const validEdges: Array<[number, number]> = [];
+    for (const [ia, ib] of tpl.edges) {
+      const pA = candidates[ia]!;
+      const pB = candidates[ib]!;
+      if (!pA.valid || !pB.valid) continue;
+      if (
+        segmentIntersectsConstellationExclusion(
+          pA.x,
+          pA.y,
+          pB.x,
+          pB.y,
+          cx,
+          cy,
+          clearR,
+          promptTop,
+          promptHalfW,
+        )
+      ) {
+        continue;
+      }
+      validEdges.push([ia, ib]);
+    }
+
+    if (validEdges.length < 2) continue;
+
+    const localToGlobal = new Map<number, number>();
+    const usedIndices = new Set<number>();
+    for (const [ia, ib] of validEdges) {
+      usedIndices.add(ia);
+      usedIndices.add(ib);
+    }
+
+    let anchorAssigned = false;
+    for (const localIdx of usedIndices) {
+      const pt = candidates[localIdx]!;
+      const isAnchor = !anchorAssigned || (localIdx === 1 && rnd() < 0.45);
+      if (!anchorAssigned) anchorAssigned = true;
+      localToGlobal.set(localIdx, stars.length);
+      stars.push({
+        x: pt.x,
+        y: pt.y,
+        radius: isAnchor ? between(1.35, 1.72) : between(0.88, 1.28),
+        alpha: isAnchor ? between(0.68, 0.86) : between(0.46, 0.68),
+        warmth: isAnchor ? between(0.7, 1.0) : rnd() < 0.35 ? between(0.45, 0.85) : between(0.0, 0.18),
+        twinkleSpeed: between(0.48, 1.02),
+        phase: rnd() * TAU,
+        isAnchor,
+      });
+    }
+
+    for (const [ia, ib] of validEdges) {
+      const gA = localToGlobal.get(ia)!;
+      const gB = localToGlobal.get(ib)!;
+      edges.push({
+        a: gA,
+        b: gB,
+        alpha: between(0.11, 0.17),
+        warmth: (stars[gA]!.warmth + stars[gB]!.warmth) * 0.42,
+        phase: rnd() * TAU,
+      });
+    }
+  }
+
+  const targetAmbient = clamp(Math.round((width * height) / 52000), 12, 30);
+  const ambientStars: ConstellationStar[] = [];
+  let attempts = 0;
+  while (ambientStars.length < targetAmbient && attempts < targetAmbient * 8) {
+    attempts++;
+    const x = between(pad * 0.75, width - pad * 0.75);
+    const y = between(pad * 0.75, height - pad * 0.75);
+    if (isPointInConstellationExclusion(x, y, cx, cy, clearR, promptTop, promptHalfW)) continue;
+    if (stars.some((s) => Math.hypot(x - s.x, y - s.y) < 18)) continue;
+    if (ambientStars.some((s) => Math.hypot(x - s.x, y - s.y) < 22)) continue;
+    const warm = rnd() < 0.28;
+    ambientStars.push({
+      x,
+      y,
+      radius: between(0.52, 0.92),
+      alpha: between(0.22, 0.44),
+      warmth: warm ? between(0.6, 0.95) : between(0.0, 0.14),
+      twinkleSpeed: between(0.42, 0.95),
+      phase: rnd() * TAU,
+      isAnchor: false,
+    });
+  }
+
+  return { stars, edges, ambientStars };
+}
+
+function renderConstellations(
+  ctx: CanvasRenderingContext2D,
+  field: ConstellationField,
+  time: number,
+  fade: number,
+  isLight: boolean,
+  reduceMotion: boolean,
+) {
+  if (fade <= 0.005 || (field.stars.length === 0 && field.ambientStars.length === 0)) return;
+
+  const starCool = isLight ? CONSTELLATION_LIGHT_STONE : CONSTELLATION_DARK_COOL;
+  const starWarm = isLight ? CONSTELLATION_LIGHT_AMBER : CONSTELLATION_DARK_WARM;
+
+  ctx.save();
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = 1;
+  ctx.lineCap = "round";
+
+  ctx.lineWidth = isLight ? 0.68 : 0.65;
+  for (const edge of field.edges) {
+    const sA = field.stars[edge.a]!;
+    const sB = field.stars[edge.b]!;
+    const dx = sB.x - sA.x;
+    const dy = sB.y - sA.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 4) continue;
+    const trim = Math.min(4.2, dist * 0.18);
+    const ux = dx / dist;
+    const uy = dy / dist;
+    const pulse = reduceMotion ? 1 : 0.86 + 0.14 * Math.sin(time * 0.55 + edge.phase);
+    const a = clamp(edge.alpha * (isLight ? 1.05 : 1) * pulse * fade, 0, 1);
+    if (a <= 0.003) continue;
+
+    ctx.strokeStyle = `rgba(${mixRgb(starCool, starWarm, edge.warmth)}, ${a})`;
+    ctx.beginPath();
+    ctx.moveTo(sA.x + ux * trim, sA.y + uy * trim);
+    ctx.lineTo(sB.x - ux * trim, sB.y - uy * trim);
+    ctx.stroke();
+  }
+
+  const drawStarList = (list: readonly ConstellationStar[], withHalo: boolean) => {
+    for (const star of list) {
+      const twinkle = reduceMotion
+        ? 1
+        : 0.78 + 0.22 * Math.sin(time * star.twinkleSpeed + star.phase);
+      const a = clamp(star.alpha * twinkle * fade, 0, 1);
+      if (a <= 0.004) continue;
+      const rgb = mixRgb(starCool, starWarm, star.warmth);
+
+      if (withHalo) {
+        const haloR = star.radius * (star.isAnchor ? 3.8 : 2.9);
+        const haloAlpha = a * (isLight ? 0.22 : 0.34);
+        const g = ctx.createRadialGradient(star.x, star.y, 0, star.x, star.y, haloR);
+        g.addColorStop(0, `rgba(${rgb}, ${haloAlpha})`);
+        g.addColorStop(0.5, `rgba(${rgb}, ${haloAlpha * 0.32})`);
+        g.addColorStop(1, `rgba(${rgb}, 0)`);
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(star.x, star.y, haloR, 0, TAU);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = `rgba(${rgb}, ${a})`;
+      ctx.beginPath();
+      ctx.arc(star.x, star.y, star.radius, 0, TAU);
+      ctx.fill();
+    }
+  };
+
+  drawStarList(field.ambientStars, false);
+  drawStarList(field.stars, true);
+
+  ctx.restore();
+}
 
 function mixRgb(a: Rgb, b: Rgb, t: number): string {
   const k = clamp(t, 0, 1);
@@ -243,6 +664,7 @@ export const SetupCanvas = memo(function SetupCanvas({
     let width = 1;
     let height = 1;
     let diag = 1;
+    let constellations: ConstellationField = { stars: [], edges: [], ambientStars: [] };
     let frame = 0;
     let last = 0;
     let smoothDt = 1 / 60;
@@ -463,6 +885,17 @@ export const SetupCanvas = memo(function SetupCanvas({
       }
       ctx.fillRect(0, 0, width, height);
 
+      // 0. Delicate background constellations in outer sky during "singularity", fading gently on early "exploding"
+      const constellationFade =
+        curPhase === "singularity"
+          ? 1
+          : curPhase === "exploding" && !reduceMotion
+            ? Math.pow(clamp(1 - explodeAge / 0.56, 0, 1), 1.65)
+            : 0;
+      if (constellationFade > 0.005) {
+        renderConstellations(ctx, constellations, time, constellationFade, isLight, reduceMotion);
+      }
+
       const goldCore = isLight ? GOLD_LIGHT_SPECULAR : GOLD_CORE;
       const goldBright = isLight ? GOLD_LIGHT_BRIGHT : GOLD_BRIGHT;
       const goldMid = isLight ? GOLD_LIGHT_MID : GOLD_MID;
@@ -470,8 +903,20 @@ export const SetupCanvas = memo(function SetupCanvas({
       const blendOp: GlobalCompositeOperation = isLight ? "source-over" : "lighter";
       const alphaScale = isLight ? 1.55 : 1.0;
 
-      // Substage energy parameters
-      let coreScale = 1 + 0.045 * Math.sin(time * 0.85) + 0.14 * hoverFocus;
+      // Substage energy parameters — dual-harmonic living pulse during initial "singularity"
+      const singPulse =
+        curPhase === "singularity" && !reduceMotion
+          ? 0.64 * Math.sin(time * 1.48) + 0.36 * Math.sin(time * 2.72 + 0.85)
+          : 0;
+      const singRipple =
+        curPhase === "singularity" && !reduceMotion
+          ? 0.6 * Math.sin(time * 1.48 + 0.35) + 0.4 * Math.cos(time * 2.96 - 0.45)
+          : 0;
+
+      let coreScale =
+        curPhase === "singularity"
+          ? 1 + 0.14 * singPulse + 0.15 * hoverFocus
+          : 1 + 0.045 * Math.sin(time * 0.85) + 0.14 * hoverFocus;
       let coreFlash = 0;
       let burstTime = 0;
 
@@ -822,15 +1267,23 @@ export const SetupCanvas = memo(function SetupCanvas({
         ctx.fill();
       }
 
-      const orbR = Math.max(
-        3,
-        coreBaseR * (0.34 + 0.05 * hoverFocus + 0.15 * coreFlash) * coreScale,
-      );
+      const orbRadiusMul =
+        curPhase === "singularity"
+          ? 0.365 + 0.068 * singPulse + 0.055 * hoverFocus
+          : 0.34 + 0.05 * hoverFocus + 0.15 * coreFlash;
+      const orbR = Math.max(3, coreBaseR * orbRadiusMul * coreScale);
+      const orbCoreRatio = curPhase === "singularity" ? 0.295 + 0.055 * singPulse : 0.28;
+      const orbBeta = curPhase === "singularity" ? 2.2 - 0.48 * singRipple : 2.35;
+      const orbPeakAlpha =
+        curPhase === "singularity"
+          ? clamp((isLight ? 0.79 : 0.84) + 0.15 * singRipple + 0.12 * hoverFocus, 0, 1)
+          : clamp((isLight ? 0.88 : 0.96) + 0.1 * hoverFocus + 0.15 * coreFlash, 0, 1);
+
       ctx.fillStyle = createMoffat(
         orbR,
-        orbR * 0.28,
-        2.35,
-        clamp((isLight ? 0.88 : 0.96) + 0.1 * hoverFocus + 0.15 * coreFlash, 0, 1),
+        orbR * orbCoreRatio,
+        orbBeta,
+        orbPeakAlpha,
         isLight ? [156, 88, 6] : [255, 252, 238],
         isLight ? [198, 128, 16] : [255, 218, 124],
         isLight ? [228, 168, 42] : [236, 158, 44],
@@ -847,6 +1300,7 @@ export const SetupCanvas = memo(function SetupCanvas({
       width = fitted.width;
       height = fitted.height;
       diag = Math.hypot(width, height);
+      constellations = createConstellationField(width, height);
       coreLayoutCbRef.current?.(computeCoreCenter(width, height).y);
       if (reduceMotion) draw(6, 0);
     };
