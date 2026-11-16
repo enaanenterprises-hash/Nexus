@@ -7,8 +7,8 @@ import { readViewer } from "@/lib/auth/viewer"
 function DashboardFallback() {
   return (
     <div className="dash flex min-h-[100svh] flex-1 flex-col">
-      <header className="flex h-16 w-[76px] items-center justify-center">
-        <NexusMark className="h-7 w-auto" />
+      <header className="flex h-14 w-[52px] items-center justify-center">
+        <NexusMark className="h-5 w-auto" />
       </header>
     </div>
   )

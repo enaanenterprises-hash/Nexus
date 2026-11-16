@@ -350,9 +350,9 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
         <div className="dash-scrim--home pointer-events-none absolute inset-0" />
       </section>
 
-      <header className="landing-enter pointer-events-none absolute inset-x-0 top-0 z-40 flex h-16 items-center">
-        <Link href="/" aria-label="Nexus home" className="pointer-events-auto inline-flex w-[76px] shrink-0 justify-center">
-          <NexusMark className="dash-brand-mark h-7 w-auto" />
+      <header className="landing-enter pointer-events-none absolute inset-x-0 top-0 z-40 flex h-14 items-center">
+        <Link href="/" aria-label="Nexus home" className="pointer-events-auto inline-flex w-[52px] shrink-0 justify-center">
+          <NexusMark className="dash-brand-mark h-5 w-auto" />
         </Link>
       </header>
 
