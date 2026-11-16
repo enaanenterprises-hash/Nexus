@@ -1,13 +1,34 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type RefObject } from "react";
-import { ArrowRight, Check, ChevronLeft, Moon, Sun, X } from "lucide-react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+  type FormEvent,
+  type KeyboardEvent,
+  type RefObject,
+} from "react";
+import {
+  ArrowRight,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  CornerDownLeft,
+  Moon,
+  Sun,
+  X,
+} from "lucide-react";
 import { LocationInput } from "@/components/command/ConnectionsView";
+import { WidgetVisualPreview } from "@/components/command/WidgetVisualPreview";
 import { SourceGlyph } from "@/components/command/parts";
 import { useCommand, type CommandController } from "@/components/command/use-command";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -44,30 +65,55 @@ export type SetupStep = "name" | "theme" | "apps" | "widgets" | "nodes";
 
 export const SETUP_RESUME_KEY = "nexus:setup-resume.v1";
 
+const NAME_PROMPTS = [
+  "What should Nexus call you?",
+  "What is your name?",
+  "How should Nexus address you?",
+  "Who is stepping into Nexus?",
+  "By what name do you work?",
+  "How may Nexus greet you?",
+  "Before we begin — what is your name?",
+  "Tell Nexus who is here.",
+] as const;
+
+let clientPromptIndex: number | null = null;
+const subscribePromptNoop = () => () => {};
+
+function getClientPromptIndex(): number {
+  if (clientPromptIndex === null) {
+    clientPromptIndex = Math.floor(Math.random() * NAME_PROMPTS.length);
+  }
+  return clientPromptIndex;
+}
+
+function getServerPromptIndex(): number {
+  return 0;
+}
+
 const STEPS: { id: SetupStep; label: string; title: string; subtitle: string }[] = [
   {
     id: "name",
     label: "Name",
-    title: "What should Nexus call you?",
-    subtitle: "Your workspace greets you by this name across every view.",
+    title: NAME_PROMPTS[0],
+    subtitle: "",
   },
   {
     id: "theme",
     label: "Theme",
-    title: "Choose your appearance",
-    subtitle: "Sets both the neural canvas backdrop and monochrome surfaces.",
+    title: "Pick a system theme color",
+    subtitle: "Choose dark or light across Nexus.",
   },
   {
     id: "apps",
     label: "Apps",
-    title: "Connect apps",
-    subtitle: "Enable live feeds or link accounts to power Command.",
+    title: "Which applications should Nexus sync with?",
+    subtitle: "Link your accounts or enable live feeds anytime.",
   },
   {
     id: "widgets",
     label: "Widgets",
     title: "Organize widgets",
-    subtitle: "Drag tiles on the 4×2 board, use arrow keys when focused, or toggle below.",
+    subtitle: "Live preview of your 4×2 Command board. Drag tiles or use arrow keys to arrange.",
   },
   {
     id: "nodes",
@@ -75,6 +121,26 @@ const STEPS: { id: SetupStep; label: string; title: string; subtitle: string }[]
     title: "Install starter nodes",
     subtitle: `Activate up to ${FREE_ACTIVE_EXTENSION_SLOTS} starter nodes to share context in your network.`,
   },
+];
+
+const GOOGLE_APP_CHIPS: { id: string; label: string }[] = [
+  { id: "gmail", label: "Gmail" },
+  { id: "google-calendar", label: "Calendar" },
+  { id: "google-tasks", label: "Tasks" },
+  { id: "gmail-send", label: "Send" },
+];
+
+const OTHER_APP_ORDER: readonly string[] = [
+  "weather",
+  "sky",
+  "markets",
+  "f1",
+  "uptime",
+  "github",
+  "vercel",
+  "strava",
+  "spotify",
+  "telegram",
 ];
 
 const DEFAULT_SAMPLE_NODES: ExtensionId[] = [
@@ -115,6 +181,7 @@ function rememberSetupResume() {
 }
 
 type ConnectionRecord = NonNullable<CommandController["state"]>["connections"][number];
+type NameTransitionPhase = "idle" | "launching" | "arrived";
 
 export function SetupExperience({
   initialName,
@@ -141,6 +208,13 @@ export function SetupExperience({
 }) {
   const command = useCommand();
   const { setTheme } = useTheme();
+  const promptIndex = useSyncExternalStore(
+    subscribePromptNoop,
+    getClientPromptIndex,
+    getServerPromptIndex,
+  );
+  const activeNamePrompt = NAME_PROMPTS[promptIndex] ?? NAME_PROMPTS[0];
+
   const [stage, setStage] = useState<SetupStagePhase>(initialStep ? "modal" : "singularity");
   const [step, setStep] = useState<SetupStep>(initialStep ?? "name");
   const [impulseSerial, setImpulseSerial] = useState(0);
@@ -149,6 +223,7 @@ export function SetupExperience({
   const [nameInput, setNameInput] = useState(initialName);
   const [nameSaving, setNameSaving] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
+  const [nameTransition, setNameTransition] = useState<NameTransitionPhase>("idle");
 
   const [widgetIds, setWidgetIds] = useState<string[] | null>(null);
   const [widgetsTouched, setWidgetsTouched] = useState(false);
@@ -163,6 +238,7 @@ export function SetupExperience({
   const nameInputRef = useRef<HTMLInputElement>(null);
   const shouldFocusNameOnModalOpen = useRef(true);
   const modalTimerRef = useRef<number | undefined>(undefined);
+  const nameTransitionTimerRef = useRef<number | undefined>(undefined);
   const finaleFallbackRef = useRef<number | undefined>(undefined);
   const persistPromiseRef = useRef<Promise<void> | null>(null);
   const finaleHandledRef = useRef(false);
@@ -170,6 +246,7 @@ export function SetupExperience({
   useEffect(
     () => () => {
       window.clearTimeout(modalTimerRef.current);
+      window.clearTimeout(nameTransitionTimerRef.current);
       window.clearTimeout(finaleFallbackRef.current);
     },
     [],
@@ -219,13 +296,15 @@ export function SetupExperience({
     );
   }
 
-  function goToStep(next: SetupStep) {
+  function goToStep(next: SetupStep, transitionPhase: NameTransitionPhase = "idle") {
+    window.clearTimeout(nameTransitionTimerRef.current);
     if (step === "widgets" && widgetsTouched && command.state) {
       const normalized = placeWidgets(effectiveWidgetIds).map((p) => p.id);
       void command.setOverview(normalized);
       setWidgetsTouched(false);
     }
     setNameError(null);
+    setNameTransition(transitionPhase);
     setStep(next);
     pulse();
   }
@@ -234,7 +313,7 @@ export function SetupExperience({
     if (next === step) return;
     if (step === "name" && next !== "name") {
       const trimmed = nameInput.trim();
-      if (trimmed && trimmed !== initialName.trim()) {
+      if (trimmed) {
         void saveNameAndContinue(next);
         return;
       }
@@ -242,8 +321,21 @@ export function SetupExperience({
     goToStep(next);
   }
 
+  function transitionFromName(target: SetupStep) {
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (target === "theme" && !reduceMotion) {
+      setNameTransition("launching");
+      window.clearTimeout(nameTransitionTimerRef.current);
+      nameTransitionTimerRef.current = window.setTimeout(() => {
+        goToStep("theme", "arrived");
+      }, 175);
+      return;
+    }
+    goToStep(target, target === "theme" ? "arrived" : "idle");
+  }
+
   async function saveNameAndContinue(target: SetupStep = "theme") {
-    if (nameSaving) return;
+    if (nameSaving || nameTransition === "launching") return;
     const trimmed = nameInput.trim();
     if (!trimmed) {
       setNameError("Enter a name to continue, or skip setup.");
@@ -257,7 +349,7 @@ export function SetupExperience({
 
     if (trimmed === initialName.trim()) {
       onNameSaved(trimmed);
-      goToStep(target);
+      transitionFromName(target);
       return;
     }
 
@@ -278,7 +370,7 @@ export function SetupExperience({
       const saved = body?.name?.trim() || trimmed;
       setNameInput(saved);
       onNameSaved(saved);
-      goToStep(target);
+      transitionFromName(target);
     } catch {
       setNameError("Network error while saving your name.");
     } finally {
@@ -335,6 +427,8 @@ export function SetupExperience({
 
   const currentStepIndex = STEPS.findIndex((s) => s.id === step);
   const stepMeta = STEPS[currentStepIndex]!;
+  const trimmedName = nameInput.trim();
+  const displayTitle = step === "name" ? activeNamePrompt : stepMeta.title;
 
   return (
     <div
@@ -361,7 +455,7 @@ export function SetupExperience({
               onClick={handleStart}
               className="setup-start-button pointer-events-auto"
             >
-              Press to get Started
+              Press singularity to Continue
             </button>
           </div>
         </div>
@@ -415,9 +509,34 @@ export function SetupExperience({
               </button>
             </header>
 
+            {step === "theme" && trimmedName ? (
+              <div
+                className="setup-welcome-band px-4 sm:px-8"
+                data-animate={nameTransition === "arrived" ? "true" : "false"}
+                onAnimationEnd={() => {
+                  if (nameTransition === "arrived") setNameTransition("idle");
+                }}
+              >
+                <p className="setup-welcome-text">
+                  Welcome, <span className="setup-welcome-name">{trimmedName}</span>
+                </p>
+              </div>
+            ) : null}
+
             <DialogHeader className="gap-1.5 px-4 pt-5 pb-3 text-left sm:px-8 sm:pt-7">
-              <DialogTitle className="setup-title font-normal">{stepMeta.title}</DialogTitle>
-              <DialogDescription className="setup-subtitle">{stepMeta.subtitle}</DialogDescription>
+              <DialogTitle
+                className="setup-title font-normal"
+                data-launching={step === "name" && nameTransition === "launching" ? "true" : "false"}
+              >
+                {displayTitle}
+              </DialogTitle>
+              {step === "name" ? (
+                <DialogDescription className="sr-only">
+                  Enter your name to personalize your Nexus workspace.
+                </DialogDescription>
+              ) : (
+                <DialogDescription className="setup-subtitle">{stepMeta.subtitle}</DialogDescription>
+              )}
             </DialogHeader>
 
             {oauthNotice ? (
@@ -445,13 +564,15 @@ export function SetupExperience({
             ) : null}
 
             <ScrollArea className="setup-card-body min-h-0 flex-1">
-              <div className="px-4 pt-2 pb-5 sm:px-8">
+              <div key={step} className="setup-step-stage px-4 pt-2 pb-5 sm:px-8">
                 {step === "name" ? (
                   <SetupNameStep
                     inputRef={nameInputRef}
+                    prompt={activeNamePrompt}
                     value={nameInput}
                     error={nameError}
                     busy={nameSaving}
+                    launching={nameTransition === "launching"}
                     onChange={(v) => {
                       setNameInput(v);
                       if (nameError) setNameError(null);
@@ -475,6 +596,7 @@ export function SetupExperience({
                   />
                 ) : step === "widgets" ? (
                   <SetupWidgetsStep
+                    theme={theme}
                     widgetIds={effectiveWidgetIds}
                     connectedIds={connectedIds}
                     onChange={(next) => {
@@ -516,7 +638,7 @@ export function SetupExperience({
                 {step === "name" ? (
                   <Button
                     type="button"
-                    disabled={nameSaving}
+                    disabled={nameSaving || nameTransition === "launching"}
                     onClick={() => void saveNameAndContinue("theme")}
                     className="setup-btn setup-btn--primary shadow-none"
                   >
@@ -558,16 +680,20 @@ export function SetupExperience({
 
 function SetupNameStep({
   inputRef,
+  prompt,
   value,
   error,
   busy,
+  launching,
   onChange,
   onSubmit,
 }: {
   inputRef: RefObject<HTMLInputElement | null>;
+  prompt: string;
   value: string;
   error: string | null;
   busy: boolean;
+  launching: boolean;
   onChange: (value: string) => void;
   onSubmit: () => void;
 }) {
@@ -576,50 +702,43 @@ function SetupNameStep({
     onSubmit();
   }
 
-  const trimmed = value.trim();
-
   return (
-    <form onSubmit={handleFormSubmit} className="space-y-6 pt-3 pb-2">
-      <div>
-        <Label htmlFor="setup-name-input" className="setup-label block">
-          Display name
-        </Label>
-        <div className="setup-name-field mt-2">
-          <Input
-            ref={inputRef}
-            id="setup-name-input"
-            type="text"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder="Your name"
-            maxLength={80}
-            disabled={busy}
-            autoComplete="given-name"
-            className="setup-name-input rounded-none border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
-          />
-          <Kbd className="setup-kbd hidden h-auto shadow-none sm:inline-flex" aria-hidden>
-            Enter
-          </Kbd>
-        </div>
-        {error ? (
-          <p className="setup-error mt-2.5" role="alert">
-            {error}
-          </p>
-        ) : null}
+    <form
+      onSubmit={handleFormSubmit}
+      className="setup-name-form pt-2 pb-3"
+      data-launching={launching ? "true" : "false"}
+    >
+      <Label htmlFor="setup-name-input" className="sr-only">
+        {prompt}
+      </Label>
+      <div
+        className="setup-name-field"
+        data-invalid={error ? "true" : "false"}
+      >
+        <Input
+          ref={inputRef}
+          id="setup-name-input"
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Type your name…"
+          maxLength={80}
+          disabled={busy || launching}
+          autoComplete="given-name"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? "setup-name-error" : undefined}
+          className="setup-name-input rounded-none border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
+        />
+        <Kbd className="setup-kbd hidden h-auto gap-1 shadow-none sm:inline-flex" aria-hidden>
+          <CornerDownLeft className="size-3" />
+          <span>Enter</span>
+        </Kbd>
       </div>
-
-      <div className="setup-name-preview" aria-live="polite">
-        <span className="setup-name-preview-label">Preview</span>
-        <p className="setup-name-specimen">
-          {trimmed ? (
-            <>
-              Welcome to Nexus, <span className="setup-name-specimen-val">{trimmed}</span>.
-            </>
-          ) : (
-            <span className="setup-name-specimen-empty">Your workspace will greet you here.</span>
-          )}
+      {error ? (
+        <p id="setup-name-error" className="setup-error mt-2.5" role="alert">
+          {error}
         </p>
-      </div>
+      ) : null}
     </form>
   );
 }
@@ -744,7 +863,7 @@ function SetupThemeStep({
 }
 
 /* ============================================================================
-   STEP 3: CONNECT APPS (HAIRLINE ARCHITECTURAL LIST + COLLAPSIBLE FORMS)
+   STEP 3: CONNECT APPS (UNIFIED GOOGLE WORKSPACE CARD + 2-COLUMN APP GRID)
    ============================================================================ */
 
 function SetupAppsStep({
@@ -759,23 +878,37 @@ function SetupAppsStep({
   onPulse: () => void;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [googleManageOpen, setGoogleManageOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   const available = useMemo(
     () => CONNECTOR_CATALOG.filter((m) => m.live.status === "available"),
     [],
   );
-  const instantApps = available.filter((m) => m.auth.type === "none");
-  const accountApps = available.filter((m) => m.auth.type !== "none");
-  const googleApps = available.filter(
-    (m) => m.auth.type === "oauth" && m.auth.provider === "google",
-  );
+
+  const googleApps = useMemo(() => {
+    const raw = available.filter((m) => m.auth.type === "oauth" && m.auth.provider === "google");
+    const orderMap = new Map(GOOGLE_APP_CHIPS.map((c, idx) => [c.id, idx]));
+    return [...raw].sort(
+      (a, b) => (orderMap.get(a.id) ?? 99) - (orderMap.get(b.id) ?? 99),
+    );
+  }, [available]);
+
+  const otherApps = useMemo(() => {
+    const raw = available.filter((m) => !(m.auth.type === "oauth" && m.auth.provider === "google"));
+    const orderMap = new Map(OTHER_APP_ORDER.map((id, idx) => [id, idx]));
+    return [...raw].sort(
+      (a, b) => (orderMap.get(a.id) ?? 99) - (orderMap.get(b.id) ?? 99),
+    );
+  }, [available]);
+
   const availability = command.state?.availability ?? {};
   const googleConnectable = googleApps.some((m) => availability[m.id]?.connectable);
   const unconnectedGoogleIds = googleApps
     .filter((m) => !connectedIds.has(m.id))
     .map((m) => m.id);
-  const activeInstantCount = instantApps.filter((m) => connectedIds.has(m.id)).length;
+  const connectedGoogleCount = googleApps.length - unconnectedGoogleIds.length;
+  const allGoogleConnected = googleApps.length > 0 && unconnectedGoogleIds.length === 0;
 
   async function toggleInstant(m: ConnectorManifest) {
     setFormError(null);
@@ -794,145 +927,275 @@ function SetupAppsStep({
     else onPulse();
   }
 
+  async function disconnectApp(id: string) {
+    setFormError(null);
+    const err = await command.disconnect(id);
+    if (err) setFormError(err);
+    else onPulse();
+  }
+
   return (
-    <div className="space-y-6 py-1">
+    <div className="space-y-4 py-1">
       {formError ? (
         <Alert variant="destructive" className="rounded-xl py-2" role="alert">
           <AlertDescription className="text-xs">{formError}</AlertDescription>
         </Alert>
       ) : null}
 
-      <section aria-label="Instant feeds">
-        <div className="setup-section-head mb-1 flex items-center justify-between gap-2 pb-2">
-          <span className="setup-label">Instant feeds</span>
-          <span className="setup-count-meta">
-            {activeInstantCount} / {instantApps.length} active
-          </span>
-        </div>
-
-        <div className="setup-hairline-list">
-          {instantApps.map((m) => {
-            const isConnected = connectedIds.has(m.id);
-            const isExpanded = expandedId === m.id;
-            const busy =
-              command.pending === `connect:${m.id}` ||
-              command.pending === `disconnect:${m.id}`;
-            const hasSettings = (m.settings?.length ?? 0) > 0;
-
-            return (
-              <Collapsible
-                key={m.id}
-                open={isExpanded}
-                onOpenChange={(open) => setExpandedId(open ? m.id : null)}
-                className="setup-row"
-                data-selected={isConnected ? "true" : "false"}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <SourceGlyph connectorId={m.id} />
-                    <div className="min-w-0">
-                      <div className="setup-row-title truncate">{m.name}</div>
-                      <div className="setup-row-sub truncate">{m.description}</div>
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {isConnected && hasSettings ? (
-                      <button
-                        type="button"
-                        onClick={() => setExpandedId(isExpanded ? null : m.id)}
-                        className="setup-text-btn"
-                      >
-                        {isExpanded ? "Close" : "Edit"}
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      disabled={busy || !command.state}
-                      onClick={() => void toggleInstant(m)}
-                      className="setup-pill-btn"
-                      data-active={isConnected ? "true" : "false"}
-                    >
-                      {busy ? "…" : isConnected ? "Connected" : "Connect"}
-                    </button>
-                  </div>
+      <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
+        <div
+          className="setup-app-card setup-app-card--google sm:col-span-2"
+          data-selected={connectedGoogleCount > 0 ? "true" : "false"}
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="setup-google-badge" aria-hidden>
+                GW
+              </span>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="setup-row-title">Google Workspace</span>
+                  <span
+                    className="setup-status-badge"
+                    data-tone={
+                      !command.state
+                        ? "idle"
+                        : connectedGoogleCount > 0
+                          ? "synced"
+                          : googleConnectable
+                            ? "ready"
+                            : "idle"
+                    }
+                  >
+                    {!command.state
+                      ? "Loading…"
+                      : !googleConnectable && connectedGoogleCount === 0
+                        ? "Unconfigured"
+                        : `${connectedGoogleCount} of ${googleApps.length} synced`}
+                  </span>
                 </div>
+                <p className="setup-row-sub mt-0.5">
+                  Authorize once to sync your Gmail, Calendar, Tasks, and sending permissions.
+                </p>
+              </div>
+            </div>
 
-                <CollapsibleContent>
-                  <SetupConnectorInlineForm
-                    manifest={m}
-                    connection={connections.get(m.id) ?? null}
-                    command={command}
-                    onSaved={() => {
-                      setExpandedId(null);
-                      onPulse();
-                    }}
+            <div className="flex shrink-0 items-center gap-2">
+              {!command.state ? (
+                <span className="setup-status-note">Loading…</span>
+              ) : allGoogleConnected ? (
+                <span className="setup-pill-btn pointer-events-none" data-active="true">
+                  <Check className="mr-1 size-3" strokeWidth={2.4} />
+                  Synced
+                </span>
+              ) : googleConnectable ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    rememberSetupResume();
+                    void connectGoogleServices(unconnectedGoogleIds);
+                  }}
+                  className="setup-pill-btn"
+                  data-active={connectedGoogleCount === 0 ? "true" : "false"}
+                >
+                  {connectedGoogleCount > 0 ? "Add remaining" : "Connect Google"}
+                </button>
+              ) : (
+                <span className="setup-status-note">Setup needed</span>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            {GOOGLE_APP_CHIPS.map((chip) => {
+              const synced = connectedIds.has(chip.id);
+              return (
+                <span
+                  key={chip.id}
+                  className="setup-google-chip"
+                  data-synced={synced ? "true" : "false"}
+                >
+                  {synced ? <Check className="size-3" strokeWidth={2.5} /> : null}
+                  <span>{chip.label}</span>
+                </span>
+              );
+            })}
+          </div>
+
+          <Collapsible
+            open={googleManageOpen}
+            onOpenChange={setGoogleManageOpen}
+            className="setup-google-manage mt-3 pt-2.5"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <CollapsibleTrigger
+                render={
+                  <button
+                    type="button"
+                    className="setup-text-btn inline-flex items-center gap-1.5"
                   />
-                </CollapsibleContent>
-              </Collapsible>
-            );
-          })}
-        </div>
-      </section>
-
-      <section aria-label="Accounts and APIs">
-        <div className="setup-section-head mb-1 flex items-center justify-between gap-2 pb-2">
-          <span className="setup-label">Accounts &amp; APIs</span>
-          {googleConnectable && unconnectedGoogleIds.length > 0 ? (
-            <button
-              type="button"
-              onClick={() => {
-                rememberSetupResume();
-                void connectGoogleServices(unconnectedGoogleIds);
-              }}
-              className="setup-text-btn"
-            >
-              Connect all Google ({unconnectedGoogleIds.length})
-            </button>
-          ) : null}
-        </div>
-
-        <div className="setup-hairline-list">
-          {accountApps.map((m) => {
-            const isConnected = connectedIds.has(m.id);
-            const isExpanded = expandedId === m.id;
-            const busy =
-              command.pending === `connect:${m.id}` ||
-              command.pending === `disconnect:${m.id}`;
-            const connectable = availability[m.id]?.connectable ?? false;
-            const conn = connections.get(m.id) ?? null;
-            const authMeta =
-              m.auth.type === "oauth"
-                ? m.auth.provider === "google"
-                  ? "Google OAuth"
-                  : "OAuth"
-                : "API token";
-
-            return (
-              <Collapsible
-                key={m.id}
-                open={isExpanded}
-                onOpenChange={(open) => setExpandedId(open ? m.id : null)}
-                className="setup-row"
-                data-selected={isConnected ? "true" : "false"}
+                }
               >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <SourceGlyph connectorId={m.id} />
-                    <div className="min-w-0">
-                      <div className="setup-row-title truncate">{m.name}</div>
-                      <div className="setup-row-sub truncate">
-                        {authMeta} · {m.description}
+                <span>Manage individual apps</span>
+                <ChevronDown
+                  className={`size-3.5 transition-transform duration-150 ${
+                    googleManageOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </CollapsibleTrigger>
+              <span className="setup-count-meta">
+                {connectedGoogleCount} / {googleApps.length} active
+              </span>
+            </div>
+
+            <CollapsibleContent>
+              <div className="setup-hairline-list mt-2">
+                {googleApps.map((m) => {
+                  const isConnected = connectedIds.has(m.id);
+                  const connectable = availability[m.id]?.connectable ?? false;
+                  const busy =
+                    command.pending === `connect:${m.id}` ||
+                    command.pending === `disconnect:${m.id}`;
+
+                  return (
+                    <div
+                      key={m.id}
+                      className="setup-row flex items-center justify-between gap-3"
+                      data-selected={isConnected ? "true" : "false"}
+                    >
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <SourceGlyph connectorId={m.id} />
+                        <div className="min-w-0">
+                          <div className="setup-row-title truncate">{m.name}</div>
+                          <div className="setup-row-sub truncate">{m.description}</div>
+                        </div>
+                      </div>
+                      <div className="shrink-0">
+                        {!command.state ? (
+                          <span className="setup-status-note">Loading…</span>
+                        ) : isConnected ? (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void disconnectApp(m.id)}
+                            className="setup-pill-btn"
+                            data-active="true"
+                          >
+                            {busy ? "…" : "Connected"}
+                          </button>
+                        ) : connectable ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              rememberSetupResume();
+                              void connectGoogleServices([m.id]);
+                            }}
+                            className="setup-pill-btn"
+                          >
+                            Connect
+                          </button>
+                        ) : (
+                          <span className="setup-status-note">Unconfigured</span>
+                        )}
                       </div>
                     </div>
+                  );
+                })}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        </div>
+
+        {otherApps.map((m) => {
+          const isConnected = connectedIds.has(m.id);
+          const isExpanded = expandedId === m.id;
+          const busy =
+            command.pending === `connect:${m.id}` ||
+            command.pending === `disconnect:${m.id}`;
+          const connectable = availability[m.id]?.connectable ?? false;
+          const conn = connections.get(m.id) ?? null;
+          const hasSettings = (m.settings?.length ?? 0) > 0;
+          const isInstant = m.auth.type === "none";
+
+          const statusLabel = !command.state
+            ? "Loading"
+            : isConnected
+              ? "Synced"
+              : isInstant
+                ? "Instant"
+                : !connectable
+                  ? "Unconfigured"
+                  : m.auth.type === "oauth"
+                    ? "OAuth"
+                    : "API key";
+
+          const statusTone = !command.state
+            ? "idle"
+            : isConnected
+              ? "synced"
+              : isInstant || connectable
+                ? "ready"
+                : "idle";
+
+          const authMeta = isInstant
+            ? "No key required"
+            : m.auth.type === "oauth"
+              ? "OAuth account"
+              : "API token";
+
+          return (
+            <Collapsible
+              key={m.id}
+              open={isExpanded}
+              onOpenChange={(open) => setExpandedId(open ? m.id : null)}
+              className="setup-app-card"
+              data-selected={isConnected ? "true" : "false"}
+              data-expanded={isExpanded ? "true" : "false"}
+            >
+              <div className="setup-app-card-main">
+                <div className="flex items-start justify-between gap-2.5">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <SourceGlyph connectorId={m.id} />
+                    <div className="min-w-0">
+                      <div className="setup-row-title truncate">{m.name}</div>
+                    </div>
                   </div>
+                  <span className="setup-status-badge shrink-0" data-tone={statusTone}>
+                    {statusLabel}
+                  </span>
+                </div>
+
+                <p className="setup-app-desc mt-2 line-clamp-2">{m.description}</p>
+
+                <div className="mt-auto flex items-center justify-between gap-2 pt-3">
+                  <span className="setup-app-meta">{authMeta}</span>
                   <div className="flex shrink-0 items-center gap-2">
-                    {!command.state ? (
+                    {isInstant ? (
+                      <>
+                        {isConnected && hasSettings ? (
+                          <button
+                            type="button"
+                            onClick={() => setExpandedId(isExpanded ? null : m.id)}
+                            className="setup-text-btn"
+                          >
+                            {isExpanded ? "Close" : "Edit"}
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          disabled={busy || !command.state}
+                          onClick={() => void toggleInstant(m)}
+                          className="setup-pill-btn"
+                          data-active={isConnected ? "true" : "false"}
+                        >
+                          {busy ? "…" : isConnected ? "Connected" : "Connect"}
+                        </button>
+                      </>
+                    ) : !command.state ? (
                       <span className="setup-status-note">Loading…</span>
-                    ) : !connectable && !isConnected ? (
-                      <span className="setup-status-note">Unconfigured</span>
                     ) : isConnected ? (
                       <>
-                        {(m.settings?.length ?? 0) > 0 ? (
+                        {hasSettings || m.auth.type === "api_key" ? (
                           <button
                             type="button"
                             onClick={() => setExpandedId(isExpanded ? null : m.id)}
@@ -944,38 +1207,23 @@ function SetupAppsStep({
                         <button
                           type="button"
                           disabled={busy}
-                          onClick={async () => {
-                            const err = await command.disconnect(m.id);
-                            if (err) setFormError(err);
-                            else onPulse();
-                          }}
+                          onClick={() => void disconnectApp(m.id)}
                           className="setup-pill-btn"
                           data-active="true"
                         >
                           {busy ? "…" : "Connected"}
                         </button>
                       </>
+                    ) : !connectable ? (
+                      <span className="setup-status-note">Setup needed</span>
                     ) : m.auth.type === "oauth" ? (
-                      m.auth.provider === "google" ? (
-                        <button
-                          type="button"
-                          className="setup-pill-btn"
-                          onClick={() => {
-                            rememberSetupResume();
-                            void connectGoogleServices([m.id]);
-                          }}
-                        >
-                          Connect
-                        </button>
-                      ) : (
-                        <a
-                          href={`/api/command/oauth/${m.id}/start`}
-                          onClick={rememberSetupResume}
-                          className="setup-pill-btn"
-                        >
-                          Connect
-                        </a>
-                      )
+                      <a
+                        href={`/api/command/oauth/${m.id}/start`}
+                        onClick={rememberSetupResume}
+                        className="setup-pill-btn"
+                      >
+                        Connect
+                      </a>
                     ) : (
                       <button
                         type="button"
@@ -987,23 +1235,23 @@ function SetupAppsStep({
                     )}
                   </div>
                 </div>
+              </div>
 
-                <CollapsibleContent>
-                  <SetupConnectorInlineForm
-                    manifest={m}
-                    connection={conn}
-                    command={command}
-                    onSaved={() => {
-                      setExpandedId(null);
-                      onPulse();
-                    }}
-                  />
-                </CollapsibleContent>
-              </Collapsible>
-            );
-          })}
-        </div>
-      </section>
+              <CollapsibleContent>
+                <SetupConnectorInlineForm
+                  manifest={m}
+                  connection={conn}
+                  command={command}
+                  onSaved={() => {
+                    setExpandedId(null);
+                    onPulse();
+                  }}
+                />
+              </CollapsibleContent>
+            </Collapsible>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -1031,6 +1279,7 @@ function SetupConnectorInlineForm({
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    setError(null);
     const err = await command.connect(m.id, {
       settings,
       credentials: m.auth.type === "api_key" ? credentials : undefined,
@@ -1050,7 +1299,10 @@ function SetupConnectorInlineForm({
             const fieldId = `${formId}-cred-${f.key}`;
             return (
               <div key={f.key} className="space-y-1">
-                <Label htmlFor={fieldId} className="setup-label">{f.label}</Label>
+                <Label htmlFor={fieldId} className="setup-label">
+                  {f.label}
+                  {f.optional ? " · optional" : ""}
+                </Label>
                 <Input
                   id={fieldId}
                   type={f.secret ? "password" : "text"}
@@ -1061,6 +1313,7 @@ function SetupConnectorInlineForm({
                   autoComplete="off"
                   spellCheck={false}
                 />
+                {f.help ? <p className="setup-field-help">{f.help}</p> : null}
               </div>
             );
           })
@@ -1090,10 +1343,15 @@ function SetupConnectorInlineForm({
               autoComplete="off"
               spellCheck={false}
             />
+            {s.help ? <p className="setup-field-help">{s.help}</p> : null}
           </div>
         );
       })}
-      {error ? <p className="setup-error">{error}</p> : null}
+      {error ? (
+        <p className="setup-error" role="alert">
+          {error}
+        </p>
+      ) : null}
       <div className="flex justify-end pt-0.5">
         <button type="submit" disabled={busy} className="setup-pill-btn" data-active="true">
           {busy ? "Saving…" : "Save"}
@@ -1104,7 +1362,7 @@ function SetupConnectorInlineForm({
 }
 
 /* ============================================================================
-   STEP 4: ORGANIZE WIDGETS (INTERACTIVE 4x2 BOARD + TOGGLE CHIPS)
+   STEP 4: ORGANIZE WIDGETS (LIVE MINIATURE 4x2 DASHBOARD PREVIEW + CHIPS)
    ============================================================================ */
 
 function buildEmptyGridCells(placed: readonly { x: number; y: number; w: number; h: number }[]) {
@@ -1128,10 +1386,12 @@ function buildEmptyGridCells(placed: readonly { x: number; y: number; w: number;
 }
 
 function SetupWidgetsStep({
+  theme,
   widgetIds,
   connectedIds,
   onChange,
 }: {
+  theme: ThemeMode;
   widgetIds: string[];
   connectedIds: Set<string>;
   onChange: (next: string[]) => void;
@@ -1192,10 +1452,10 @@ function SetupWidgetsStep({
   }
 
   return (
-    <div className="space-y-5 py-1">
+    <div className="space-y-4 py-1">
       <div className="setup-section-head flex items-center justify-between gap-2 pb-2">
         <div className="flex items-center gap-3">
-          <span className="setup-label">Board layout (4×2)</span>
+          <span className="setup-label">Dashboard preview (4×2)</span>
           <span className="setup-count-meta">
             {usedSlots}/{totalSlots} slots
           </span>
@@ -1214,71 +1474,100 @@ function SetupWidgetsStep({
         </div>
       </div>
 
-      <div className="setup-board" role="region" aria-label="4 by 2 Command widget board">
-        {stablePlaced.map((p) => {
-          const def = widgetDef(p.id);
-          return (
-            <div
-              key={p.id}
-              role="group"
-              draggable
-              tabIndex={0}
-              aria-label={`${def?.name ?? p.id} widget (${p.w} by ${p.h}). Use arrow keys to reorder or Delete to remove.`}
-              onKeyDown={(e) => handleTileKeyDown(e, p.id)}
-              onDragStart={() => setDraggingId(p.id)}
-              onDragEnd={() => {
-                setDraggingId(null);
-                setDragOverId(null);
-              }}
-              onDragOver={(e) => {
-                e.preventDefault();
-                if (dragOverId !== p.id) setDragOverId(p.id);
-              }}
-              onDragLeave={() => {
-                if (dragOverId === p.id) setDragOverId(null);
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (draggingId) swapOrReorder(draggingId, p.id);
-                setDraggingId(null);
-                setDragOverId(null);
-              }}
-              className="setup-board-tile"
-              data-dragging={draggingId === p.id ? "true" : "false"}
-              data-drop-target={dragOverId === p.id && draggingId !== p.id ? "true" : "false"}
-              style={{
-                gridColumn: `${p.x + 1} / span ${p.w}`,
-                gridRow: `${p.y + 1} / span ${p.h}`,
-              }}
-            >
-              <div className="flex items-center justify-between gap-1 sm:gap-2">
-                <span className="setup-row-title truncate">{def?.name ?? p.id}</span>
-                <button
-                  type="button"
-                  onClick={() => removeWidget(p.id)}
-                  className="setup-icon-btn"
-                  aria-label={`Remove ${def?.name ?? p.id}`}
-                >
-                  <X className="size-3" />
-                </button>
-              </div>
-              <span className="setup-row-sub">
-                {p.w}×{p.h}
-              </span>
-            </div>
-          );
-        })}
+      <div
+        className={`setup-preview-frame ${theme === "dark" ? "dark" : "light"}`}
+        data-theme={theme}
+      >
+        <div className="setup-preview-chrome">
+          <span className="setup-preview-chrome-title">Command · Overview</span>
+          <span className="setup-preview-chrome-theme">
+            {theme === "dark" ? "Obsidian Dark" : "Gallery Light"}
+          </span>
+        </div>
 
-        {openCells.map((cell) => (
-          <div
-            key={`empty-${cell.x}-${cell.y}`}
-            className="setup-board-empty"
-            style={{
-              gridColumn: `${cell.x + 1} / span 1`,
-              gridRow: `${cell.y + 1} / span 1`,
-            }}
-          />
-        ))}
+        <div className="setup-board-viewport">
+          <div className="setup-board" role="region" aria-label="4 by 2 Command widget board">
+            {stablePlaced.map((p) => {
+              const def = widgetDef(p.id);
+              return (
+                <div
+                  key={p.id}
+                  role="group"
+                  draggable
+                  tabIndex={0}
+                  aria-label={`${def?.name ?? p.id} widget (${p.w} by ${p.h}). Use arrow keys to reorder or Delete to remove.`}
+                  onKeyDown={(e) => handleTileKeyDown(e, p.id)}
+                  onDragStart={() => setDraggingId(p.id)}
+                  onDragEnd={() => {
+                    setDraggingId(null);
+                    setDragOverId(null);
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    if (dragOverId !== p.id) setDragOverId(p.id);
+                  }}
+                  onDragLeave={() => {
+                    if (dragOverId === p.id) setDragOverId(null);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (draggingId) swapOrReorder(draggingId, p.id);
+                    setDraggingId(null);
+                    setDragOverId(null);
+                  }}
+                  className="setup-board-tile"
+                  data-dragging={draggingId === p.id ? "true" : "false"}
+                  data-drop-target={dragOverId === p.id && draggingId !== p.id ? "true" : "false"}
+                  style={{
+                    gridColumn: `${p.x + 1} / span ${p.w}`,
+                    gridRow: `${p.y + 1} / span ${p.h}`,
+                  }}
+                >
+                  <div className="setup-board-tile-head">
+                    <span className="setup-board-tile-title truncate">{def?.name ?? p.id}</span>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <span className="setup-board-tile-size">
+                        {p.w}×{p.h}
+                      </span>
+                      <button
+                        type="button"
+                        draggable={false}
+                        onClick={() => removeWidget(p.id)}
+                        className="setup-board-tile-remove"
+                        aria-label={`Remove ${def?.name ?? p.id}`}
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="setup-board-tile-body" aria-hidden>
+                    <div
+                      className="setup-board-preview-scale"
+                      style={{ "--preview-scale": 0.66 } as CSSProperties}
+                    >
+                      <WidgetVisualPreview id={p.id} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {openCells.map((cell) => (
+              <div
+                key={`empty-${cell.x}-${cell.y}`}
+                className="setup-board-empty"
+                style={{
+                  gridColumn: `${cell.x + 1} / span 1`,
+                  gridRow: `${cell.y + 1} / span 1`,
+                }}
+              >
+                <span className="setup-board-empty-label" aria-hidden>
+                  Open slot
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div>
