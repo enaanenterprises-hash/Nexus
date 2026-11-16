@@ -57,11 +57,23 @@ const TAU = Math.PI * 2;
 const WAKE_SILENCE_SECONDS = 1.6;
 const INTRO_SPRING_SECONDS = 1.65;
 const SOCKET_U = 0.33; // Parametric position of the node socket waist along each arm (0 = core, 1 = beyond screen corner)
-const SPINE_SAMPLES = 72;
-const FILAMENTS_PER_ARM = 76;
-const HORIZON_STRANDS = 124;
-const CURVE_STEPS = 40;
+const SPINE_SAMPLES = 48;
+const FILAMENTS_PER_ARM = 48;
+const HORIZON_STRANDS = 80;
+const CURVE_STEPS = 22;
 const SAMPLE_US = Array.from({ length: CURVE_STEPS + 1 }, (_, k) => k / CURVE_STEPS);
+
+const POW_LUT_SIZE = 256;
+const POW084_LUT = Float64Array.from({ length: POW_LUT_SIZE }, (_, i) => Math.pow(i / 255, 0.84));
+const POW124_LUT = Float64Array.from({ length: POW_LUT_SIZE }, (_, i) => Math.pow(i / 255, 1.24));
+const POW115_LUT = Float64Array.from({ length: POW_LUT_SIZE }, (_, i) => Math.pow(i / 255, 1.15));
+
+function sampleLut(lut: Float64Array, x: number): number {
+  const scaled = clamp(x, 0, 1) * 255;
+  const idx = scaled | 0;
+  if (idx >= 255) return lut[255]!;
+  return lut[idx]! + (lut[idx + 1]! - lut[idx]!) * (scaled - idx);
+}
 
 const GOLD_CORE: Rgb = [255, 250, 232];
 const GOLD_BRIGHT: Rgb = [255, 224, 156];
@@ -103,10 +115,10 @@ const BRAIN_TARGET_ENERGY: Record<NexusBrainState, number> = {
 
 /** Four optical depth layers per arm: wide atmospheric bloom -> medium silk -> crisp filament -> specular core hair. */
 const DEPTH_LAYERS = [
-  { width: 2.8, alpha: 0.075, hot: 0.0 },
-  { width: 1.25, alpha: 0.19, hot: 0.35 },
-  { width: 0.72, alpha: 0.34, hot: 0.7 },
-  { width: 0.44, alpha: 0.56, hot: 1.0 },
+  { width: 2.8, alpha: 0.088, hot: 0.0 },
+  { width: 1.25, alpha: 0.22, hot: 0.35 },
+  { width: 0.72, alpha: 0.4, hot: 0.7 },
+  { width: 0.44, alpha: 0.65, hot: 1.0 },
 ] as const;
 
 const mixRgb = (a: Rgb, b: Rgb, t: number): string => {
@@ -258,7 +270,7 @@ function createNeuralField(armCount: number) {
         // Coherent phase across xi with gentle variation so lines flow as a lush, unified wave
         phase: arm * 1.25 + xi * 1.35 + gauss() * 0.2,
         freqMul: between(0.94, 1.08),
-        stagger: clamp(Math.abs(xi) * 0.26 + rnd() * 0.14, 0, 0.52),
+        stagger: clamp(Math.abs(xi) * 0.18 + rnd() * 0.34, 0, 0.56),
       });
       armLayerBatches[arm]![layer]!.push(idx);
     }
@@ -304,7 +316,7 @@ function createNeuralField(armCount: number) {
   }
 
   // Photons flowing along the 5 functional node arms
-  const armPhotons: FlowPhoton[] = Array.from({ length: 380 }, (_, i) => {
+  const armPhotons: FlowPhoton[] = Array.from({ length: 220 }, (_, i) => {
     const filamentIdx = i % armFilaments.length;
     const f = armFilaments[filamentIdx]!;
     return {
@@ -312,17 +324,17 @@ function createNeuralField(armCount: number) {
       filamentIdx,
       u: rnd(),
       speed: between(0.055, 0.13),
-      size: between(0.6, 1.75),
+      size: between(0.65, 1.8),
       alpha: between(0.48, 0.98),
     };
   });
 
   // Photons gliding along the horizon corner wings
-  const horizonPhotons: HorizonPhoton[] = Array.from({ length: 130 }, () => ({
+  const horizonPhotons: HorizonPhoton[] = Array.from({ length: 75 }, () => ({
     strandIdx: Math.floor(rnd() * horizonFilaments.length),
     u: rnd(),
     speed: between(0.038, 0.085),
-    size: between(0.5, 1.4),
+    size: between(0.55, 1.45),
     alpha: between(0.35, 0.82),
   }));
 
@@ -521,7 +533,7 @@ function writeArmFilamentPoint(
 
   if (u <= SOCKET_U) {
     const s = u / SOCKET_U;
-    const spindleBell = Math.sin(Math.PI * Math.pow(s, 0.84));
+    const spindleBell = Math.sin(Math.PI * sampleLut(POW084_LUT, s));
     const bellyWidth = R * (0.24 + 0.035 * (1 - armLevel));
     const crossoverBlend = lerp(1, f.crossover, 0.5 - 0.5 * Math.cos(Math.PI * s));
     braidSign = f.xi * crossoverBlend;
@@ -530,7 +542,7 @@ function writeArmFilamentPoint(
     const s = (u - SOCKET_U) / (1 - SOCKET_U);
     braidSign = f.xi * f.crossover;
     const smoothStart = s * s * (3 - 2 * s);
-    const powerFlare = Math.pow(s, 1.24);
+    const powerFlare = sampleLut(POW124_LUT, s);
     const flare = (smoothStart * 0.28 + powerFlare * 0.72) * R * 2.55 * f.flareSpread;
     envelope = waistRadius + flare;
   }
@@ -541,7 +553,7 @@ function writeArmFilamentPoint(
   const wave2 = Math.cos(uWave * 6.8 - phase * 1.18 - f.phase * 0.9);
   const waveAmp =
     R *
-    (0.011 + 0.042 * Math.pow(u, 1.15)) *
+    (0.011 + 0.042 * sampleLut(POW115_LUT, u)) *
     (1 + 0.16 * callHeat + 0.14 * solitonBoost);
 
   const offset = braidSign * envelope + (wave1 * 0.76 + wave2 * 0.24) * waveAmp;
@@ -665,12 +677,101 @@ function pointOnHorizonCurve(
   return bezier(curve[3], curve[4], curve[5], curve[6], (u - 0.5) * 2);
 }
 
+type StageSpriteAtlas = {
+  fieldDark: HTMLCanvasElement | null;
+  fieldCallDark: HTMLCanvasElement | null;
+  fieldLight: HTMLCanvasElement | null;
+  anaDark: HTMLCanvasElement | null;
+  anaLight: HTMLCanvasElement | null;
+  heartDark: HTMLCanvasElement | null;
+  heartLight: HTMLCanvasElement | null;
+  photonGoldDark: HTMLCanvasElement | null;
+  photonHorizonGoldDark: HTMLCanvasElement | null;
+  photonCrimsonDark: HTMLCanvasElement | null;
+  photonGoldLight: HTMLCanvasElement | null;
+  photonHorizonGoldLight: HTMLCanvasElement | null;
+  photonCrimsonLight: HTMLCanvasElement | null;
+};
+
+function buildMoffatSprite(
+  size: number,
+  coreScaleRatio: number,
+  beta: number,
+  innerRgb: Rgb,
+  midRgb: Rgb,
+  outerRgb: Rgb,
+): HTMLCanvasElement | null {
+  if (typeof document === "undefined") return null;
+  const off = document.createElement("canvas");
+  off.width = size;
+  off.height = size;
+  const octx = off.getContext("2d");
+  if (!octx) return null;
+  const half = size * 0.5;
+  const g = octx.createRadialGradient(half, half, 0, half, half, half);
+  const stops = 16;
+  for (let i = 0; i <= stops; i++) {
+    const u = i / stops;
+    const rNorm = u / coreScaleRatio;
+    const moffat = Math.pow(1 + rNorm * rNorm, -beta);
+    const windowFade = 1 - u * u * (3 - 2 * u);
+    const a = clamp(moffat * windowFade, 0, 1);
+    const rgb =
+      u < 0.35
+        ? mixRgb(innerRgb, midRgb, u / 0.35)
+        : mixRgb(midRgb, outerRgb, (u - 0.35) / 0.65);
+    g.addColorStop(u, `rgba(${rgb}, ${a})`);
+  }
+  octx.fillStyle = g;
+  octx.fillRect(0, 0, size, size);
+  return off;
+}
+
+function buildPhotonSprite(size: number, rgb: Rgb): HTMLCanvasElement | null {
+  if (typeof document === "undefined") return null;
+  const off = document.createElement("canvas");
+  off.width = size;
+  off.height = size;
+  const octx = off.getContext("2d");
+  if (!octx) return null;
+  const half = size * 0.5;
+  const g = octx.createRadialGradient(half, half, 0, half, half, half);
+  const col = `${rgb[0]}, ${rgb[1]}, ${rgb[2]}`;
+  g.addColorStop(0, `rgba(${col}, 1)`);
+  g.addColorStop(0.36, `rgba(${col}, 0.92)`);
+  g.addColorStop(0.62, `rgba(${col}, 0.28)`);
+  g.addColorStop(1, `rgba(${col}, 0)`);
+  octx.fillStyle = g;
+  octx.fillRect(0, 0, size, size);
+  return off;
+}
+
+function createStageSpriteAtlas(): StageSpriteAtlas {
+  const darkFieldOuter: Rgb = [198, 116, 28];
+  const darkFieldCallOuter = mixRgbTuple(darkFieldOuter, [238, 48, 42], 0.35);
+  const lightFieldOuter: Rgb = [184, 112, 10];
+  return {
+    fieldDark: buildMoffatSprite(256, 0.24, 1.85, [255, 224, 152], [242, 174, 62], darkFieldOuter),
+    fieldCallDark: buildMoffatSprite(256, 0.24, 1.85, [255, 224, 152], [242, 174, 62], darkFieldCallOuter),
+    fieldLight: buildMoffatSprite(256, 0.24, 1.85, [226, 166, 38], [208, 138, 18], lightFieldOuter),
+    anaDark: buildMoffatSprite(256, 0.22, 2.2, [255, 242, 206], [248, 192, 86], darkFieldOuter),
+    anaLight: buildMoffatSprite(256, 0.22, 2.2, [196, 124, 12], [218, 152, 28], lightFieldOuter),
+    heartDark: buildMoffatSprite(256, 0.2, 2.45, [255, 248, 228], [252, 212, 124], [236, 162, 52]),
+    heartLight: buildMoffatSprite(256, 0.2, 2.45, [156, 88, 6], [198, 128, 16], [228, 168, 42]),
+    photonGoldDark: buildPhotonSprite(24, GOLD_CORE),
+    photonHorizonGoldDark: buildPhotonSprite(24, GOLD_BRIGHT),
+    photonCrimsonDark: buildPhotonSprite(24, CRIMSON_PURE),
+    photonGoldLight: buildPhotonSprite(24, GOLD_LIGHT_BRIGHT),
+    photonHorizonGoldLight: buildPhotonSprite(24, GOLD_LIGHT_MID),
+    photonCrimsonLight: buildPhotonSprite(24, CRIMSON_LIGHT_PURE),
+  };
+}
+
 /**
  * Mathematically engineered Optical Singularity Core using:
- * 1) A 16-stop analytical Moffat Point-Spread Function (PSF):
+ * 1) Pre-baked 16-stop analytical Moffat Point-Spread Function (PSF) sprites:
  *      I(r) = (1 + (r / r_0)^2)^(-beta)
- *    which is C^infinity smooth (eliminating Mach-band rings from 3-stop gradients)
- *    paired with a continuous Planckian blackbody color-temperature shift.
+ *    which are C^infinity smooth (eliminating Mach-band rings) with zero per-frame gradient allocations.
  * 2) An anisotropic elliptical caustic lens (aligned with the filament waist) so the
  *    luminance emerges organically from the converging strands rather than sitting
  *    on top like a round sticker.
@@ -686,82 +787,50 @@ function renderOpticalSingularityCore(
   introEase: number,
   globalCallHeat: number,
   isLight: boolean,
+  atlas: StageSpriteAtlas,
+  invCache: { grad: CanvasGradient | null; reach: number; isLight: boolean },
   explosionAfterglow = 0,
 ) {
   if (introEase <= 0.005) return;
 
   const breathe = 1 + 0.032 * Math.sin(time * 0.65) + 0.05 * energy + 0.08 * explosionAfterglow;
 
-  // Helper to build a 16-stop Moffat PSF gradient with zero Mach banding
-  const createMoffatGradient = (
-    radius: number,
-    coreScaleR: number,
-    beta: number,
-    peakAlpha: number,
-    innerRgb: Rgb,
-    midRgb: Rgb,
-    outerRgb: Rgb,
-  ) => {
-    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
-    const stops = 16;
-    for (let i = 0; i <= stops; i++) {
-      const u = i / stops; // 0 .. 1
-      const rNorm = (u * radius) / coreScaleR;
-      // Analytical Moffat PSF: I(r) = (1 + r^2)^(-beta)
-      const moffat = Math.pow(1 + rNorm * rNorm, -beta);
-      // Smooth window at u = 1 so the outer boundary is 100% imperceptible
-      const windowFade = 1 - u * u * (3 - 2 * u);
-      const a = clamp(peakAlpha * moffat * windowFade, 0, 1);
-
-      // Continuous Planckian-like spectral shift from inner -> mid -> outer
-      const rgb =
-        u < 0.35
-          ? mixRgb(innerRgb, midRgb, u / 0.35)
-          : mixRgb(midRgb, outerRgb, (u - 0.35) / 0.65);
-      g.addColorStop(u, `rgba(${rgb}, ${a})`);
-    }
-    return g;
-  };
-
   ctx.save();
   ctx.translate(core.x, core.y);
   ctx.globalCompositeOperation = isLight ? "source-over" : "lighter";
 
   // 1. Wide Anisotropic Elliptical Atmospheric Caustic Field (hugs the filament waist)
-  ctx.save();
-  ctx.scale(1.38, 0.82);
   const fieldR = S * 0.36 * breathe * introEase;
-  const fieldInner: Rgb = isLight ? [226, 166, 38] : [255, 224, 152];
-  const fieldMid: Rgb = isLight ? [208, 138, 18] : [242, 174, 62];
-  const fieldOuter: Rgb = isLight
-    ? [184, 112, 10]
-    : globalCallHeat > 0.05
-      ? mixRgbTuple([198, 116, 28], [238, 48, 42], globalCallHeat * 0.35)
-      : [198, 116, 28];
-
-  ctx.fillStyle = createMoffatGradient(
-    fieldR,
-    fieldR * 0.24,
-    1.85,
-    (isLight ? 0.26 : 0.22) * (1 + 0.18 * energy) * introEase,
-    fieldInner,
-    fieldMid,
-    fieldOuter,
-  );
-  ctx.beginPath();
-  ctx.arc(0, 0, fieldR, 0, TAU);
-  ctx.fill();
-  ctx.restore();
+  const fieldAlpha = clamp((isLight ? 0.26 : 0.22) * (1 + 0.18 * energy) * introEase, 0, 1);
+  const fieldSprite = isLight ? atlas.fieldLight : atlas.fieldDark;
+  if (fieldSprite && fieldAlpha > 0.005) {
+    ctx.save();
+    ctx.scale(1.38, 0.82);
+    ctx.globalAlpha = !isLight && globalCallHeat > 0.05 ? fieldAlpha * (1 - globalCallHeat * 0.6) : fieldAlpha;
+    ctx.drawImage(fieldSprite, -fieldR, -fieldR, fieldR * 2, fieldR * 2);
+    if (!isLight && globalCallHeat > 0.05 && atlas.fieldCallDark) {
+      ctx.globalAlpha = fieldAlpha * globalCallHeat;
+      ctx.drawImage(atlas.fieldCallDark, -fieldR, -fieldR, fieldR * 2, fieldR * 2);
+    }
+    ctx.restore();
+  }
 
   // 2. Logarithmic-Spiral Caustic Micro-Involutes Woven Into the Core Waist
   const involuteCount = 36;
   const involuteReach = R * 0.22 * breathe * introEase;
-  const invColor = isLight ? "184, 112, 10" : "255, 228, 162";
-  const invGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, involuteReach);
-  invGrad.addColorStop(0, `rgba(${invColor}, ${(isLight ? 0.28 : 0.22) * introEase})`);
-  invGrad.addColorStop(0.45, `rgba(${invColor}, ${(isLight ? 0.11 : 0.08) * introEase})`);
-  invGrad.addColorStop(1, `rgba(${invColor}, 0)`);
+  if (!invCache.grad || invCache.isLight !== isLight || Math.abs(invCache.reach - involuteReach) > 2) {
+    const invColor = isLight ? "184, 112, 10" : "255, 228, 162";
+    const invGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.max(1, involuteReach));
+    invGrad.addColorStop(0, `rgba(${invColor}, ${isLight ? 0.28 : 0.22})`);
+    invGrad.addColorStop(0.45, `rgba(${invColor}, ${isLight ? 0.11 : 0.08})`);
+    invGrad.addColorStop(1, `rgba(${invColor}, 0)`);
+    invCache.grad = invGrad;
+    invCache.reach = involuteReach;
+    invCache.isLight = isLight;
+  }
 
+  ctx.save();
+  ctx.globalAlpha = introEase;
   ctx.beginPath();
   for (let i = 0; i < involuteCount; i++) {
     const baseTheta = (i / involuteCount) * TAU + time * 0.08 * (i % 2 === 0 ? 1 : -1);
@@ -778,50 +847,33 @@ function renderOpticalSingularityCore(
     ctx.bezierCurveTo(c1x, c1y, c2x, c2y, ex, ey);
   }
   ctx.lineWidth = isLight ? 0.65 : 0.5;
-  ctx.strokeStyle = invGrad;
+  ctx.strokeStyle = invCache.grad;
   ctx.stroke();
+  ctx.restore();
 
   // 3. Subtle Anamorphic Horizontal Caustic Whisper (stretches cleanly from setup explosion tail)
-  ctx.save();
-  ctx.scale(2.65 + 2.4 * explosionAfterglow, 0.22 - 0.05 * explosionAfterglow);
   const anamorphicR = R * (0.28 + 0.14 * explosionAfterglow) * breathe * introEase;
-  const anaInner: Rgb = isLight ? [196, 124, 12] : [255, 242, 206];
-  const anaMid: Rgb = isLight ? [218, 152, 28] : [248, 192, 86];
-  ctx.fillStyle = createMoffatGradient(
-    anamorphicR,
-    anamorphicR * 0.22,
-    2.2,
-    clamp((isLight ? 0.32 : 0.28) * (1 + 0.22 * energy) * introEase + 0.38 * explosionAfterglow, 0, 1),
-    anaInner,
-    anaMid,
-    fieldOuter,
-  );
-  ctx.beginPath();
-  ctx.arc(0, 0, anamorphicR, 0, TAU);
-  ctx.fill();
-  ctx.restore();
+  const anaAlpha = clamp((isLight ? 0.32 : 0.28) * (1 + 0.22 * energy) * introEase + 0.38 * explosionAfterglow, 0, 1);
+  const anaSprite = isLight ? atlas.anaLight : atlas.anaDark;
+  if (anaSprite && anaAlpha > 0.005) {
+    ctx.save();
+    ctx.scale(2.65 + 2.4 * explosionAfterglow, 0.22 - 0.05 * explosionAfterglow);
+    ctx.globalAlpha = anaAlpha;
+    ctx.drawImage(anaSprite, -anamorphicR, -anamorphicR, anamorphicR * 2, anamorphicR * 2);
+    ctx.restore();
+  }
 
   // 4. Inner Moffat Caustic Core (Soft, Silk-Blended Singularity Heart — No Hard White Sticker)
-  ctx.save();
-  ctx.scale(1.18, 0.9);
   const heartR = R * 0.19 * breathe * introEase;
-  const heartInner: Rgb = isLight ? [156, 88, 6] : [255, 248, 228];
-  const heartMid: Rgb = isLight ? [198, 128, 16] : [252, 212, 124];
-  const heartOuter: Rgb = isLight ? [228, 168, 42] : [236, 162, 52];
-
-  ctx.fillStyle = createMoffatGradient(
-    heartR,
-    heartR * 0.2,
-    2.45,
-    (isLight ? 0.62 : 0.56) * (1 + 0.16 * energy) * introEase,
-    heartInner,
-    heartMid,
-    heartOuter,
-  );
-  ctx.beginPath();
-  ctx.arc(0, 0, heartR, 0, TAU);
-  ctx.fill();
-  ctx.restore();
+  const heartAlpha = clamp((isLight ? 0.62 : 0.56) * (1 + 0.16 * energy) * introEase, 0, 1);
+  const heartSprite = isLight ? atlas.heartLight : atlas.heartDark;
+  if (heartSprite && heartAlpha > 0.005) {
+    ctx.save();
+    ctx.scale(1.18, 0.9);
+    ctx.globalAlpha = heartAlpha;
+    ctx.drawImage(heartSprite, -heartR, -heartR, heartR * 2, heartR * 2);
+    ctx.restore();
+  }
 
   ctx.restore();
 }
@@ -859,6 +911,15 @@ export const NeuralStage = memo(function NeuralStage({
     if (!canvas || !ctx) return;
 
     const field = createNeuralField(socketCount);
+    const atlas = createStageSpriteAtlas();
+    const invCache: { grad: CanvasGradient | null; reach: number; isLight: boolean } = {
+      grad: null,
+      reach: 0,
+      isLight: false,
+    };
+    let cachedBgW = 0;
+    let cachedBgH = 0;
+    let cachedBgGrad: CanvasGradient | null = null;
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const scratchXs = new Float64Array(CURVE_STEPS + 1);
     const scratchYs = new Float64Array(CURVE_STEPS + 1);
@@ -1008,11 +1069,16 @@ export const NeuralStage = memo(function NeuralStage({
       ctx.globalCompositeOperation = "source-over";
       ctx.globalAlpha = 1;
       if (isLight) {
-        const bgGrad = ctx.createRadialGradient(core.x, core.y, 0, core.x, core.y, Math.hypot(width, height) * 0.75);
-        bgGrad.addColorStop(0, "#fdfcfa");
-        bgGrad.addColorStop(0.55, "#f7f6f2");
-        bgGrad.addColorStop(1, "#efede7");
-        ctx.fillStyle = bgGrad;
+        if (!cachedBgGrad || cachedBgW !== width || cachedBgH !== height) {
+          const bgGrad = ctx.createRadialGradient(core.x, core.y, 0, core.x, core.y, Math.hypot(width, height) * 0.75);
+          bgGrad.addColorStop(0, "#fdfcfa");
+          bgGrad.addColorStop(0.55, "#f7f6f2");
+          bgGrad.addColorStop(1, "#efede7");
+          cachedBgGrad = bgGrad;
+          cachedBgW = width;
+          cachedBgH = height;
+        }
+        ctx.fillStyle = cachedBgGrad;
       } else {
         ctx.fillStyle = "#000000";
       }
@@ -1310,6 +1376,9 @@ export const NeuralStage = memo(function NeuralStage({
       // - Connected nodes are lit up in rich molten gold, transitioning near the outer edges to crimson red.
       // - Disconnected nodes go dark (muted dim bronze in dark mode, subtle warm platinum in light mode).
       // - When sending information between nodes, a crimson wave flows directly along the lines!
+      const steadyBlend = smoothstep(0.62, 1.0, intro);
+      const ARM_STOPS = [0, 0.16, 0.34, 0.5, 0.64, 0.74, 0.84, 1.0] as const;
+
       for (let armIdx = 0; armIdx < socketCount; armIdx++) {
         const spine = spines[armIdx]!;
         const level = armLevels[armIdx] ?? 0.1;
@@ -1341,6 +1410,21 @@ export const NeuralStage = memo(function NeuralStage({
         );
         const smoothWaveHeat = armWaveHeat[armIdx]!;
 
+        // Precompute arm stop profiles once across all 4 depth layers
+        const armStopRedMix = ARM_STOPS.map((u) => {
+          let infoWaveRed = 0;
+          if (waveCenterU >= 0 && waveStrength > 0.01) {
+            const d = (u - waveCenterU) / 0.14;
+            infoWaveRed = Math.exp(-0.5 * d * d) * waveStrength;
+          }
+          const trailingEdgeRed = smoothstep(0.64, 0.9, u) * edgeRed;
+          return {
+            redMix: clamp(Math.max(infoWaveRed * 0.96, trailingEdgeRed), 0, 1),
+            infoWaveRed,
+          };
+        });
+        const endFadeColor = mixRgb(goldDeep, crimsonDeep, edgeRed);
+
         for (let layerIdx = 0; layerIdx < DEPTH_LAYERS.length; layerIdx++) {
           const layer = DEPTH_LAYERS[layerIdx]!;
           const batch = field.armLayerBatches[armIdx]![layerIdx]!;
@@ -1368,50 +1452,54 @@ export const NeuralStage = memo(function NeuralStage({
           );
 
           // Sample multi-stop gradient along u in [0, 1]:
-          //   - Core through node waist and mid-arm (0.0 -> 0.62): Pure Gold (unless an active crimson info wave is passing through u!)
-          //   - Near the outer trailing edges (0.68 -> 1.0): Transitions toward Crimson Red on connected arms!
-          const stops = [0, 0.16, 0.34, 0.5, 0.64, 0.76, 0.88, 1.0];
-          for (const u of stops) {
-            let infoWaveRed = 0;
-            if (waveCenterU >= 0 && waveStrength > 0.01) {
-              const d = (u - waveCenterU) / 0.14;
-              infoWaveRed = Math.exp(-0.5 * d * d) * waveStrength;
+          //   - During intro growth (steadyBlend < 1), taper softly to 0 alpha BEFORE any filament tip ends!
+          //   - At steady state (steadyBlend = 1), maintain molten gold through waist and crimson near outer corners.
+          for (let sIdx = 0; sIdx < ARM_STOPS.length; sIdx++) {
+            const u = ARM_STOPS[sIdx]!;
+            if (u === 1.0) {
+              armGrad.addColorStop(1.0, `rgba(${endFadeColor}, 0)`);
+              continue;
             }
-
-            const trailingEdgeRed = smoothstep(0.64, 0.9, u) * edgeRed;
-            const redMix = clamp(Math.max(infoWaveRed * 0.96, trailingEdgeRed), 0, 1);
-
+            const { redMix, infoWaveRed } = armStopRedMix[sIdx]!;
             const targetCrimson = u > 0.82 ? crimsonPure : crimsonHot;
             const stopColor =
               redMix > 0.02
                 ? mixRgb(baseRgb, targetCrimson, redMix)
                 : baseRgbStr;
 
-            // Natural brightness profile along the arm
-            const uProfile =
+            const steadyProfile =
               u === 0
                 ? 1.85
                 : u <= 0.36
                   ? 1.38
                   : u <= 0.64
                     ? 0.96
-                    : u <= 0.88
-                      ? 0.5 + 0.36 * redMix
-                      : 0;
+                    : 0.48 + 0.34 * redMix;
+            const growProfile =
+              u === 0
+                ? 1.85
+                : u <= 0.28
+                  ? 1.38
+                  : u <= 0.44
+                    ? 0.82
+                    : u <= 0.60
+                      ? 0.30
+                      : u <= 0.74
+                        ? 0.06
+                        : 0;
+            const uProfile = lerp(growProfile, steadyProfile, steadyBlend);
             const waveBoost = 1 + 0.55 * infoWaveRed;
             const stopAlpha = clamp(baseAlpha * uProfile * waveBoost, 0, 1);
-
-            if (u === 1.0) {
-              armGrad.addColorStop(1.0, `rgba(${mixRgb(goldDeep, crimsonDeep, edgeRed)}, 0)`);
-            } else {
-              armGrad.addColorStop(u, `rgba(${stopColor}, ${stopAlpha})`);
-            }
+            armGrad.addColorStop(u, `rgba(${stopColor}, ${stopAlpha})`);
           }
 
           ctx.beginPath();
           for (const fIdx of batch) {
             const f = field.armFilaments[fIdx]!;
-            const fReach = Math.min(1, singularityUnfurl(intro, f.stagger));
+            const fReach =
+              intro >= 0.999
+                ? 1
+                : clamp(0.84 + 0.16 * singularityUnfurl(intro, f.stagger), 0.84, 1);
             for (let k = 0; k <= CURVE_STEPS; k++) {
               writeArmFilamentPoint(
                 f,
@@ -1447,7 +1535,8 @@ export const NeuralStage = memo(function NeuralStage({
             const lustreGrad = ctx.createLinearGradient(core.x, core.y, spine.tipPt.x, spine.tipPt.y);
             lustreGrad.addColorStop(0, "rgba(255, 226, 138, 0.85)");
             lustreGrad.addColorStop(0.34, "rgba(244, 192, 72, 0.72)");
-            lustreGrad.addColorStop(0.64, "rgba(232, 168, 42, 0.35)");
+            lustreGrad.addColorStop(0.58, `rgba(232, 168, 42, ${lerp(0.14, 0.42, steadyBlend)})`);
+            lustreGrad.addColorStop(0.76, `rgba(232, 168, 42, ${lerp(0, 0.16, steadyBlend)})`);
             lustreGrad.addColorStop(1, "rgba(232, 168, 42, 0)");
             ctx.lineWidth = 0.32;
             ctx.strokeStyle = lustreGrad;
@@ -1475,8 +1564,12 @@ export const NeuralStage = memo(function NeuralStage({
         ctx.stroke();
       }
 
-      // ——— 9. Flowing Photons Along the Connected Node Arms & Horizon Wings ———
+      // ——— 9. Flowing Photons Along the Connected Node Arms & Horizon Wings (Pre-baked Sprite Stamps) ———
       const flowSpeedMul = 1 + 0.9 * energy;
+      const pGoldSprite = isLight ? atlas.photonGoldLight : atlas.photonGoldDark;
+      const pHorizonSprite = isLight ? atlas.photonHorizonGoldLight : atlas.photonHorizonGoldDark;
+      const pCrimsonSprite = isLight ? atlas.photonCrimsonLight : atlas.photonCrimsonDark;
+
       for (const pt of field.armPhotons) {
         const level = armLevels[pt.arm] ?? 0.1;
         if (level < 0.25) continue; // Keep disconnected arms dark
@@ -1492,7 +1585,11 @@ export const NeuralStage = memo(function NeuralStage({
           pt.u = (pt.u + pt.speed * dt * flowSpeedMul * venturiBoost * (0.45 + 0.75 * level)) % 1;
         }
 
-        const uEff = pt.u * Math.min(1, singularityUnfurl(intro, f.stagger));
+        const fReach =
+          intro >= 0.999
+            ? 1
+            : clamp(0.84 + 0.16 * singularityUnfurl(intro, f.stagger), 0.84, 1);
+        const uEff = pt.u * fReach;
         writeArmFilamentPoint(
           f,
           spine,
@@ -1516,16 +1613,23 @@ export const NeuralStage = memo(function NeuralStage({
         );
 
         const edgeFade = Math.sin(pt.u * Math.PI);
-        const isCrimsonTail = edgeRed > 0.05 && pt.u > 0.66;
-        const photonBase = isLight ? GOLD_LIGHT_BRIGHT : goldCore;
-        ctx.fillStyle = isCrimsonTail
-          ? `rgb(${mixRgb(photonBase, crimsonPure, clamp((pt.u - 0.66) * 2.8 * edgeRed, 0, 1))})`
-          : `rgb(${photonBase[0]}, ${photonBase[1]}, ${photonBase[2]})`;
+        const tipFade = intro < 0.999 ? lerp(clamp(1 - smoothstep(0.45, 0.82, pt.u), 0, 1), 1, steadyBlend) : 1;
+        const pAlpha = introEase * pt.alpha * edgeFade * level * tipFade;
+        if (pAlpha <= 0.015) continue;
 
-        ctx.globalAlpha = introEase * pt.alpha * edgeFade * level;
-        ctx.beginPath();
-        ctx.arc(scratchXs[0]!, scratchYs[0]!, pt.size, 0, TAU);
-        ctx.fill();
+        const px = scratchXs[0]!;
+        const py = scratchYs[0]!;
+        const drawR = pt.size * 2.4;
+        const redT = edgeRed > 0.05 && pt.u > 0.66 ? clamp((pt.u - 0.66) * 2.8 * edgeRed, 0, 1) : 0;
+
+        if (redT < 0.85 && pGoldSprite) {
+          ctx.globalAlpha = pAlpha * (1 - redT);
+          ctx.drawImage(pGoldSprite, px - drawR, py - drawR, drawR * 2, drawR * 2);
+        }
+        if (redT > 0.15 && pCrimsonSprite) {
+          ctx.globalAlpha = pAlpha * redT;
+          ctx.drawImage(pCrimsonSprite, px - drawR, py - drawR, drawR * 2, drawR * 2);
+        }
       }
 
       for (const hp of field.horizonPhotons) {
@@ -1536,15 +1640,23 @@ export const NeuralStage = memo(function NeuralStage({
         const pos = pointOnHorizonCurve(curve, hp.u);
         const edgeDist = Math.abs(hp.u - 0.5) * 2;
         const edgeFade = Math.sin(hp.u * Math.PI);
-        const hPhotonBase = isLight ? GOLD_LIGHT_MID : goldBright;
-        ctx.fillStyle =
+        const hpAlpha = introEase * hp.alpha * edgeFade;
+        if (hpAlpha <= 0.015) continue;
+
+        const drawR = hp.size * 2.4;
+        const redT =
           horizonEdgeRed > 0.05 && edgeDist > 0.64
-            ? `rgb(${mixRgb(hPhotonBase, crimsonPure, (edgeDist - 0.64) * 2.6 * horizonEdgeRed)})`
-            : `rgb(${hPhotonBase[0]}, ${hPhotonBase[1]}, ${hPhotonBase[2]})`;
-        ctx.globalAlpha = introEase * hp.alpha * edgeFade;
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, hp.size, 0, TAU);
-        ctx.fill();
+            ? clamp((edgeDist - 0.64) * 2.6 * horizonEdgeRed, 0, 1)
+            : 0;
+
+        if (redT < 0.85 && pHorizonSprite) {
+          ctx.globalAlpha = hpAlpha * (1 - redT);
+          ctx.drawImage(pHorizonSprite, pos.x - drawR, pos.y - drawR, drawR * 2, drawR * 2);
+        }
+        if (redT > 0.15 && pCrimsonSprite) {
+          ctx.globalAlpha = hpAlpha * redT;
+          ctx.drawImage(pCrimsonSprite, pos.x - drawR, pos.y - drawR, drawR * 2, drawR * 2);
+        }
       }
 
       // ——— 10. Mathematically Engineered Moffat PSF & Anisotropic Caustic Singularity Core ———
@@ -1558,6 +1670,8 @@ export const NeuralStage = memo(function NeuralStage({
         coreIntro,
         globalCallHeat,
         isLight,
+        atlas,
+        invCache,
         explosionAfterglow,
       );
     };
