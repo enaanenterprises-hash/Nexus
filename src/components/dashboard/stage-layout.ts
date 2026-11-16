@@ -1,152 +1,114 @@
 import { add, clamp, polar, type Vec } from "@/lib/network/geometry";
 
-export type ArmGeometry = {
-  /** Index of the arm (0..4). */
-  index: number;
-  /** Departure angle from the central singularity orb (radians). */
-  coreAngle: number;
-  /** Asymptotic outward angle toward the viewport corner/edge (radians). */
-  cornerAngle: number;
-  /** Exact coordinate of the node orb (socket). */
-  socket: Vec;
-  /** Outward unit tangent vector at the node orb. */
-  socketTangent: Vec;
-  /** Terminal anchor well past the viewport corner/edge so flowing waves extend to the corners. */
-  cornerTip: Vec;
-  /** Distance from core to the node orb. */
-  socketDist: number;
-  /** Distance from the node orb out to cornerTip. */
-  outerReach: number;
-};
-
-export type HorizonWingGeometry = {
-  side: -1 | 1;
-  angle: number;
-  reach: number;
-  c1: Vec;
-  c2: Vec;
-  tip: Vec;
-};
-
 export type StageLayout = {
   width: number;
   height: number;
   compact: boolean;
-  /** Central Singularity Orb sitting in the middle of the screen. */
+  /** Primary Singularity Core positioned in the lower-middle of the screen. */
   core: Vec;
-  /** Characteristic radius from the central orb to the 5 node orbs. */
+  /** Secondary luminous spine junction just above the core. */
+  spineJunction: Vec;
+  /** Characteristic radius scale of the node focal arc. */
   radius: number;
-  /** Coordinates of each node orb (0..4). */
+  /** Coordinates of each Node focal pinch (0..4). */
   sockets: Vec[];
-  /** Angles of each node orb (0..4). */
+  /** Intermediate curve control anchors giving each arm its sweeping curvature. */
+  socketElbows: Vec[];
+  /** Outward fan angles for each arm's flowing filaments sweeping off the corners. */
   socketAngles: number[];
-  /** Complete C2 spine geometry for each of the 5 functional node arms. */
-  arms: ArmGeometry[];
-  /** Lower-lateral corner waves sweeping into the bottom-left and bottom-right corners. */
-  horizonWings: [HorizonWingGeometry, HorizonWingGeometry];
-  /** Overall diagonal scale of the viewport. */
+  /** Overall field scale used so flowing filaments reach well past all screen corners. */
   scale: number;
 };
 
 export const WIDE_MIN_WIDTH = 1100;
 
 /**
- * Places the neural network right in the middle of the screen (core.y ≈ 49% height),
- * with 5 functional node arms radiating across the middle & upper-corner quadrants
- * and sweeping all the way into the corners of the screen.
+ * Computes the layout so the central node sits lower down (around 55% of viewport height)
+ * and the 5 outer nodes sit balanced across the middle of the screen while their
+ * flowing filaments sweep all the way past the corners and edges of the viewport.
  */
 export function computeStageLayout(width: number, height: number, socketCount: number): StageLayout {
   const compact = width < WIDE_MIN_WIDTH;
-  const diag = Math.hypot(width, height);
 
-  // Sit the singularity core right in the middle of the screen
+  // Lower the central node so both the core and the 5 outer nodes sit in the middle of the screen
   const core: Vec = compact
-    ? { x: width * 0.5, y: height * 0.47 }
-    : { x: width * 0.5, y: clamp(height * 0.485, 320, height * 0.52) };
+    ? { x: width * 0.5, y: height * 0.53 }
+    : { x: width * 0.5, y: clamp(height * 0.55, 360, height - 250) };
+
+  const spineJunction: Vec = {
+    x: width * 0.5,
+    y: core.y - height * 0.02,
+  };
 
   const radius = compact
-    ? clamp(Math.min(width * 0.33, height * 0.28), 125, 215)
-    : clamp(Math.min(height * 0.26, width * 0.21), 165, 265);
+    ? clamp(Math.min(width * 0.34, height * 0.28), 130, 220)
+    : clamp(Math.min(width * 0.26, height * 0.32), 180, 310);
 
-  // Wide, balanced arch around the middle of the screen (-166 deg to -14 deg)
-  // so the side arms sit across the middle-left and middle-right and sweep into the corners.
-  const spread = compact ? 0.86 : 0.84;
-  const socketAngles: number[] = [];
+  // 5 balanced node arms distributed around the middle of the screen:
+  // Arm 0 & Arm 4 sweep laterally across the middle-left and middle-right into the side/lower corners;
+  // Arm 1 & Arm 3 sweep diagonally into the upper-left and upper-right corners;
+  // Arm 2 rises into the upper-center crown.
+  const armSpecs: Array<{
+    at: Vec;
+    elbow: Vec;
+    fanAngle: number;
+  }> = compact
+    ? [
+        // 0: Mid-Left Horizon Wing (nearly level with core, sweeping to left/lower-left corner)
+        { at: { x: -0.78, y: -0.06 }, elbow: { x: -0.38, y: 0.04 }, fanAngle: Math.PI - 0.08 },
+        // 1: Upper-Left Corner Sweeping Arm
+        { at: { x: -0.56, y: -0.48 }, elbow: { x: -0.24, y: -0.28 }, fanAngle: -2.42 },
+        // 2: Central Crown Arm (sits near vertical middle of screen, fans out top)
+        { at: { x: 0.0, y: -0.64 }, elbow: { x: 0.0, y: -0.32 }, fanAngle: -Math.PI / 2 },
+        // 3: Upper-Right Corner Sweeping Arm
+        { at: { x: 0.56, y: -0.48 }, elbow: { x: 0.24, y: -0.28 }, fanAngle: -0.72 },
+        // 4: Mid-Right Horizon Wing (nearly level with core, sweeping to right/lower-right corner)
+        { at: { x: 0.78, y: -0.06 }, elbow: { x: 0.38, y: 0.04 }, fanAngle: 0.08 },
+      ]
+    : [
+        // 0: Mid-Left Horizon Wing
+        { at: { x: -0.86, y: -0.05 }, elbow: { x: -0.42, y: 0.05 }, fanAngle: Math.PI - 0.06 },
+        // 1: Upper-Left Corner Sweeping Arm
+        { at: { x: -0.62, y: -0.5 }, elbow: { x: -0.26, y: -0.3 }, fanAngle: -2.44 },
+        // 2: Central Crown Arm
+        { at: { x: 0.0, y: -0.66 }, elbow: { x: 0.0, y: -0.34 }, fanAngle: -Math.PI / 2 },
+        // 3: Upper-Right Corner Sweeping Arm
+        { at: { x: 0.62, y: -0.5 }, elbow: { x: 0.26, y: -0.3 }, fanAngle: -0.7 },
+        // 4: Mid-Right Horizon Wing
+        { at: { x: 0.86, y: -0.05 }, elbow: { x: 0.42, y: 0.05 }, fanAngle: 0.06 },
+      ];
+
   const sockets: Vec[] = [];
-  const arms: ArmGeometry[] = [];
+  const socketElbows: Vec[] = [];
+  const socketAngles: number[] = [];
 
   for (let i = 0; i < socketCount; i++) {
-    const t = socketCount === 1 ? 0.5 : i / (socketCount - 1);
-    const centered = (t - 0.5) * 2; // -1 .. +1
-    const baseAngle = -Math.PI / 2 + centered * (Math.PI * 0.5 * spread);
-
-    // Gentle outward S-curve deflection so the arms sweep naturally toward the screen corners
-    const cornerDeflection = centered * 0.18;
-    const coreAngle = baseAngle - cornerDeflection * 0.28;
-    const cornerAngle = baseAngle + cornerDeflection * 0.85;
-
-    // Lateral arms reach wider horizontally to fill the middle of the widescreen stage
-    const socketDist = radius * (1 + 0.22 * Math.abs(centered));
-    const socket = add(core, polar(socketDist, baseAngle));
-
-    const tangentAngle = baseAngle + cornerDeflection * 0.42;
-    const socketTangent = {
-      x: Math.cos(tangentAngle),
-      y: Math.sin(tangentAngle),
-    };
-
-    const outerReach = Math.max(diag * 0.66, socketDist * 2.8);
-    const cornerTip = add(socket, polar(outerReach, cornerAngle));
-
-    socketAngles.push(baseAngle);
-    sockets.push(socket);
-    arms.push({
-      index: i,
-      coreAngle,
-      cornerAngle,
-      socket,
-      socketTangent,
-      cornerTip,
-      socketDist,
-      outerReach,
-    });
+    const spec = armSpecs[i % armSpecs.length]!;
+    sockets.push(
+      add(core, {
+        x: spec.at.x * radius,
+        y: spec.at.y * radius,
+      }),
+    );
+    socketElbows.push(
+      add(core, {
+        x: spec.elbow.x * radius,
+        y: spec.elbow.y * radius,
+      }),
+    );
+    socketAngles.push(spec.fanAngle);
   }
-
-  // Two lower-corner waves that sweep into the bottom-left and bottom-right corners
-  // while leaving the bottom-center negative space open for the greeting and input bar.
-  const wingReach = diag * 0.64;
-  const leftWingAngle = Math.PI - 0.34; // ~160.5 deg (sweeps toward bottom-left corner)
-  const rightWingAngle = 0.34; // ~19.5 deg (sweeps toward bottom-right corner)
-
-  const horizonWings: [HorizonWingGeometry, HorizonWingGeometry] = [
-    {
-      side: -1,
-      angle: leftWingAngle,
-      reach: wingReach,
-      c1: add(core, polar(wingReach * 0.28, leftWingAngle + 0.06)),
-      c2: add(core, polar(wingReach * 0.64, leftWingAngle - 0.03)),
-      tip: add(core, polar(wingReach, leftWingAngle)),
-    },
-    {
-      side: 1,
-      angle: rightWingAngle,
-      reach: wingReach,
-      c1: add(core, polar(wingReach * 0.28, rightWingAngle - 0.06)),
-      c2: add(core, polar(wingReach * 0.64, rightWingAngle + 0.03)),
-      tip: add(core, polar(wingReach, rightWingAngle)),
-    },
-  ];
 
   return {
     width,
     height,
     compact,
     core,
+    spineJunction,
     radius,
     sockets,
+    socketElbows,
     socketAngles,
-    arms,
-    horizonWings,
-    scale: diag * 0.68,
+    scale: Math.hypot(width, height) * 0.66,
   };
 }
