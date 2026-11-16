@@ -9,7 +9,6 @@ import {
   fitCanvas,
   lerp,
   polar,
-  radialGlow,
   seededHelpers,
   type Vec,
 } from "@/lib/network/geometry";
@@ -586,6 +585,166 @@ function pointOnHorizonCurve(
   return bezier(curve[3], curve[4], curve[5], curve[6], (u - 0.5) * 2);
 }
 
+/**
+ * Mathematically engineered Optical Singularity Core using:
+ * 1) A 16-stop analytical Moffat Point-Spread Function (PSF):
+ *      I(r) = (1 + (r / r_0)^2)^(-beta)
+ *    which is C^infinity smooth (eliminating Mach-band rings from 3-stop gradients)
+ *    paired with a continuous Planckian blackbody color-temperature shift.
+ * 2) An anisotropic elliptical caustic lens (aligned with the filament waist) so the
+ *    luminance emerges organically from the converging strands rather than sitting
+ *    on top like a round sticker.
+ * 3) 36 logarithmic-spiral caustic micro-involutes woven into the core waist.
+ */
+function renderOpticalSingularityCore(
+  ctx: CanvasRenderingContext2D,
+  core: Vec,
+  R: number,
+  S: number,
+  time: number,
+  energy: number,
+  introEase: number,
+  globalCallHeat: number,
+  isLight: boolean,
+) {
+  if (introEase <= 0.005) return;
+
+  const breathe = 1 + 0.032 * Math.sin(time * 0.65) + 0.05 * energy;
+
+  // Helper to build a 16-stop Moffat PSF gradient with zero Mach banding
+  const createMoffatGradient = (
+    radius: number,
+    coreScaleR: number,
+    beta: number,
+    peakAlpha: number,
+    innerRgb: Rgb,
+    midRgb: Rgb,
+    outerRgb: Rgb,
+  ) => {
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+    const stops = 16;
+    for (let i = 0; i <= stops; i++) {
+      const u = i / stops; // 0 .. 1
+      const rNorm = (u * radius) / coreScaleR;
+      // Analytical Moffat PSF: I(r) = (1 + r^2)^(-beta)
+      const moffat = Math.pow(1 + rNorm * rNorm, -beta);
+      // Smooth window at u = 1 so the outer boundary is 100% imperceptible
+      const windowFade = 1 - u * u * (3 - 2 * u);
+      const a = clamp(peakAlpha * moffat * windowFade, 0, 1);
+
+      // Continuous Planckian-like spectral shift from inner -> mid -> outer
+      const rgb =
+        u < 0.35
+          ? mixRgb(innerRgb, midRgb, u / 0.35)
+          : mixRgb(midRgb, outerRgb, (u - 0.35) / 0.65);
+      g.addColorStop(u, `rgba(${rgb}, ${a})`);
+    }
+    return g;
+  };
+
+  ctx.save();
+  ctx.translate(core.x, core.y);
+  ctx.globalCompositeOperation = isLight ? "source-over" : "lighter";
+
+  // 1. Wide Anisotropic Elliptical Atmospheric Caustic Field (hugs the filament waist)
+  ctx.save();
+  ctx.scale(1.38, 0.82);
+  const fieldR = S * 0.36 * breathe * introEase;
+  const fieldInner: Rgb = isLight ? [226, 166, 38] : [255, 224, 152];
+  const fieldMid: Rgb = isLight ? [208, 138, 18] : [242, 174, 62];
+  const fieldOuter: Rgb = isLight
+    ? [184, 112, 10]
+    : globalCallHeat > 0.05
+      ? mixRgbTuple([198, 116, 28], [238, 48, 42], globalCallHeat * 0.35)
+      : [198, 116, 28];
+
+  ctx.fillStyle = createMoffatGradient(
+    fieldR,
+    fieldR * 0.24,
+    1.85,
+    (isLight ? 0.26 : 0.22) * (1 + 0.18 * energy) * introEase,
+    fieldInner,
+    fieldMid,
+    fieldOuter,
+  );
+  ctx.beginPath();
+  ctx.arc(0, 0, fieldR, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+
+  // 2. Logarithmic-Spiral Caustic Micro-Involutes Woven Into the Core Waist
+  const involuteCount = 36;
+  const involuteReach = R * 0.22 * breathe * introEase;
+  const invColor = isLight ? "184, 112, 10" : "255, 228, 162";
+  const invGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, involuteReach);
+  invGrad.addColorStop(0, `rgba(${invColor}, ${(isLight ? 0.28 : 0.22) * introEase})`);
+  invGrad.addColorStop(0.45, `rgba(${invColor}, ${(isLight ? 0.11 : 0.08) * introEase})`);
+  invGrad.addColorStop(1, `rgba(${invColor}, 0)`);
+
+  ctx.beginPath();
+  for (let i = 0; i < involuteCount; i++) {
+    const baseTheta = (i / involuteCount) * TAU + time * 0.08 * (i % 2 === 0 ? 1 : -1);
+    const curl = (i % 2 === 0 ? 1 : -1) * 0.42;
+    const r1 = involuteReach * 0.35;
+    const r2 = involuteReach * (0.72 + 0.24 * Math.sin(i * 1.7 + time * 0.4));
+    const c1x = Math.cos(baseTheta + curl * 0.4) * r1 * 1.25;
+    const c1y = Math.sin(baseTheta + curl * 0.4) * r1 * 0.82;
+    const c2x = Math.cos(baseTheta + curl * 0.8) * r2 * 0.85;
+    const c2y = Math.sin(baseTheta + curl * 0.8) * r2 * 0.68;
+    const ex = Math.cos(baseTheta + curl) * r2 * 1.15;
+    const ey = Math.sin(baseTheta + curl) * r2 * 0.78;
+    ctx.moveTo(0, 0);
+    ctx.bezierCurveTo(c1x, c1y, c2x, c2y, ex, ey);
+  }
+  ctx.lineWidth = isLight ? 0.65 : 0.5;
+  ctx.strokeStyle = invGrad;
+  ctx.stroke();
+
+  // 3. Subtle Anamorphic Horizontal Caustic Whisper (cinema optical lens waist)
+  ctx.save();
+  ctx.scale(2.65, 0.22);
+  const anamorphicR = R * 0.28 * breathe * introEase;
+  const anaInner: Rgb = isLight ? [196, 124, 12] : [255, 242, 206];
+  const anaMid: Rgb = isLight ? [218, 152, 28] : [248, 192, 86];
+  ctx.fillStyle = createMoffatGradient(
+    anamorphicR,
+    anamorphicR * 0.22,
+    2.2,
+    (isLight ? 0.32 : 0.28) * (1 + 0.22 * energy) * introEase,
+    anaInner,
+    anaMid,
+    fieldOuter,
+  );
+  ctx.beginPath();
+  ctx.arc(0, 0, anamorphicR, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+
+  // 4. Inner Moffat Caustic Core (Soft, Silk-Blended Singularity Heart — No Hard White Sticker)
+  ctx.save();
+  ctx.scale(1.18, 0.9);
+  const heartR = R * 0.19 * breathe * introEase;
+  const heartInner: Rgb = isLight ? [156, 88, 6] : [255, 248, 228];
+  const heartMid: Rgb = isLight ? [198, 128, 16] : [252, 212, 124];
+  const heartOuter: Rgb = isLight ? [228, 168, 42] : [236, 162, 52];
+
+  ctx.fillStyle = createMoffatGradient(
+    heartR,
+    heartR * 0.2,
+    2.45,
+    (isLight ? 0.62 : 0.56) * (1 + 0.16 * energy) * introEase,
+    heartInner,
+    heartMid,
+    heartOuter,
+  );
+  ctx.beginPath();
+  ctx.arc(0, 0, heartR, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.restore();
+}
+
 /* ============================================================================
    COMPONENT
    ============================================================================ */
@@ -906,21 +1065,8 @@ export function NeuralStage({
       ctx.globalCompositeOperation = blendOp;
       ctx.globalAlpha = Math.min(1, intro * 2.4);
 
-      // ——— 3. Deep Atmospheric Singularity Halo ———
+      // ——— 3. Deep Atmospheric Singularity Under-Field ———
       const fieldRadius = S * 1.25 * (0.18 + 0.82 * introEase) * (1 + 0.1 * energy);
-      if (isLight) {
-        radialGlow(ctx, core, S * 0.44 * breathe * (0.2 + 0.8 * introEase), [
-          [0, `rgba(236, 180, 62, ${0.22 + 0.06 * energy})`],
-          [0.42, "rgba(218, 152, 34, 0.08)"],
-          [1, "rgba(218, 152, 34, 0)"],
-        ]);
-      } else {
-        radialGlow(ctx, core, S * 0.46 * breathe * (0.2 + 0.8 * introEase), [
-          [0, `rgba(${mixRgb(goldBright, goldCore, 0.4)}, ${0.12 + 0.05 * energy})`],
-          [0.48, `rgba(${goldDeep.join(", ")}, 0.035)`],
-          [1, "rgba(0, 0, 0, 0)"],
-        ]);
-      }
 
       // ——— 4. Pre-sample C2 Spine Frames for the 5 Functional Node Arms ———
       const spines = L.arms.map((arm) =>
@@ -1214,32 +1360,18 @@ export function NeuralStage({
         ctx.fill();
       }
 
-      // ——— 10. The Singularity Nucleus (Molten 24k Gold Jewel in Both Dark & Light Mode) ———
-      ctx.globalAlpha = 1;
-      const coreScale = intro < 0.28 ? 0.38 + intro * 2.2 : 1;
-      const coreGlowR = S * 0.082 * breathe * coreScale;
-
-      if (isLight) {
-        // In Light Mode, render a rich burnished 24k gold corona & jewel center instead of an opaque white blob
-        radialGlow(ctx, core, coreGlowR, [
-          [0, `rgba(218, 148, 20, ${0.88 + 0.1 * energy})`],
-          [0.24, `rgba(232, 172, 46, ${0.52 + 0.12 * energy})`],
-          [0.58, "rgba(238, 186, 68, 0.16)"],
-          [1, "rgba(238, 186, 68, 0)"],
-        ]);
-        radialGlow(ctx, core, R * 0.032 * breathe * coreScale, [
-          [0, "rgba(255, 251, 235, 0.98)"],
-          [0.55, "rgba(236, 174, 38, 0.92)"],
-          [1, "rgba(184, 112, 10, 0)"],
-        ]);
-      } else {
-        radialGlow(ctx, core, coreGlowR, [
-          [0, "rgba(255, 254, 246, 1)"],
-          [0.18, `rgba(${goldBright.join(", ")}, ${0.84 + 0.14 * energy})`],
-          [0.48, `rgba(${goldMid.join(", ")}, 0.26)`],
-          [1, "rgba(0, 0, 0, 0)"],
-        ]);
-      }
+      // ——— 10. Mathematically Engineered Moffat PSF & Anisotropic Caustic Singularity Core ———
+      renderOpticalSingularityCore(
+        ctx,
+        core,
+        R,
+        S,
+        activeTime,
+        energy,
+        introEase,
+        globalCallHeat,
+        isLight,
+      );
 
       // ——— 11. Soft Left-Sidebar Readability Scrim (Keeps Left Sidebar Crisp Without Clipping Arms) ———
       ctx.globalCompositeOperation = "source-over";
