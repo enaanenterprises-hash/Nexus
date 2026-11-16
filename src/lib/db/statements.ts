@@ -161,6 +161,10 @@ export const COMMAND_SCHEMA_STATEMENTS = [
     "userId" text PRIMARY KEY REFERENCES "user" ("id") ON DELETE CASCADE,
     "widgets" jsonb NOT NULL DEFAULT '[]'
   )`,
+  `CREATE TABLE IF NOT EXISTS "nexus_user_setup" (
+    "userId" text PRIMARY KEY REFERENCES "user" ("id") ON DELETE CASCADE,
+    "completedAt" timestamptz NOT NULL DEFAULT now()
+  )`,
 ] as const
 
 /** Waitlist storage for prospective users. */

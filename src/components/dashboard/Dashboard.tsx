@@ -32,9 +32,46 @@ import {
 } from "./NeuralStage";
 import { NodeMenu, NodeRail, type PanelId, type Surface } from "./NodeNav";
 import { NexusInput, NexusVoice } from "./NexusVoice";
+import { SETUP_RESUME_KEY, SetupExperience, type SetupStep } from "./SetupExperience";
 import { TodayPanel } from "./TodayPanel";
 import { useNexusSession } from "./use-nexus-session";
 import { useTheme } from "@/lib/theme";
+
+const SETUP_DONE_KEY = "nexus:setup-done.v1";
+const INSTALLED_NODES_KEY = "nexus:installed-nodes.v1";
+const DEFAULT_NODE_IDS: ExtensionId[] = [
+  "dev.nexus.sample.daily-brief",
+  "dev.nexus.sample.focus-guard",
+];
+
+function readSavedNodes(): ExtensionId[] | null {
+  try {
+    const raw = window.localStorage.getItem(INSTALLED_NODES_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((id): id is ExtensionId => typeof id === "string") : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveInstalledNodes(ids: readonly ExtensionId[]) {
+  try {
+    window.localStorage.setItem(INSTALLED_NODES_KEY, JSON.stringify(ids));
+  } catch {
+    // Ignore storage access errors
+  }
+}
+
+function clearResumeSetupStep() {
+  try {
+    document.cookie = "nexus_setup_resume=; path=/; max-age=0; SameSite=Lax";
+    window.sessionStorage.removeItem(SETUP_RESUME_KEY);
+    window.localStorage.removeItem(SETUP_RESUME_KEY);
+  } catch {
+    // Ignore storage access errors
+  }
+}
 
 /** Research is hidden from navigation for now; its node, routes and tables stay in place. */
 const RESEARCH_VISIBLE = false;
@@ -54,10 +91,26 @@ const PRODUCT_PAYLOAD_LABELS: Record<string, string> = {
   "dev.nexus.sample.ledger": "Ledger",
 };
 
-export function Dashboard({ viewer }: { viewer: Viewer }) {
+export function Dashboard({
+  viewer,
+  initialSetupDone = true,
+  initialSetupStep = null,
+  initialOauthNotice = null,
+}: {
+  viewer: Viewer;
+  initialSetupDone?: boolean;
+  initialSetupStep?: SetupStep | null;
+  initialOauthNotice?: { ok: boolean; text: string } | null;
+}) {
   const session = useNexusSession();
   const hub = useExtensionHub();
   const { theme } = useTheme();
+  const viewerKey = viewer.email ?? "signed-in";
+
+  const [setupDone, setSetupDone] = useState(initialSetupDone);
+  const [setupResumeStep, setSetupResumeStep] = useState<SetupStep | null>(initialSetupStep);
+  const [setupNotice, setSetupNotice] = useState<{ ok: boolean; text: string } | null>(initialOauthNotice);
+
   const [surface, setSurface] = useState<Surface>({ view: "home", panel: null });
   const [researchMounted, setResearchMounted] = useState(false);
   const [researchRequest, setResearchRequest] = useState<{ input: string; serial: number } | null>(null);
@@ -80,7 +133,7 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
   const menuNavRef = useRef<HTMLElement>(null);
   const panelRef = useRef<HTMLElement>(null);
 
-  // Register sample extensions and wire the first two free Laniakea arms on initial boot
+  // Register sample extensions and restore selected Laniakea nodes once setup is complete
   useEffect(() => {
     const timer = noticeTimer.current;
     async function bootExtensions() {
@@ -89,20 +142,24 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
           await extensionRegistry.register(extension);
         }
       }
-      if (!bootedRef.current) {
+      if (setupDone && !bootedRef.current) {
         bootedRef.current = true;
         const snap = extensionRegistry.getSnapshot();
         const anyOccupied = snap.slots.some((s) => s.occupiedBy !== null);
         if (!anyOccupied) {
-          await extensionRegistry.activate("dev.nexus.sample.daily-brief");
-          await extensionRegistry.activate("dev.nexus.sample.focus-guard");
+          const initialNodes = readSavedNodes() ?? DEFAULT_NODE_IDS;
+          for (const nodeId of initialNodes) {
+            if (extensionRegistry.get(nodeId)) {
+              await extensionRegistry.activate(nodeId);
+            }
+          }
         }
+        bootCompleteRef.current = true;
       }
-      bootCompleteRef.current = true;
     }
     void bootExtensions();
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [setupDone]);
 
   useEffect(
     () =>
@@ -165,22 +222,26 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
   }, []);
 
   useEffect(() => {
+    clearResumeSetupStep();
     const params = new URLSearchParams(window.location.search);
     const outcome = params.get("command");
     if (!outcome) return;
+    window.history.replaceState(null, "", window.location.pathname);
+
+    if (!initialSetupDone || initialSetupStep) return;
+
     const ids = (params.get("service") ?? "").split(",").filter(Boolean);
     const name = ids.length ? ids.map((id) => getConnector(id)?.name ?? id).join(" and ") : "The service";
     const notice =
       outcome === "connected"
         ? `${name} is connected.`
         : `${name} couldn't connect. ${OAUTH_ERRORS[params.get("reason") ?? ""] ?? ""}`.trim();
-    window.history.replaceState(null, "", window.location.pathname);
     openCommand({
       tab: outcome === "connected" ? "overview" : "connections",
       service: ids[0] ?? null,
       notice,
     });
-  }, []);
+  }, [initialSetupDone, initialSetupStep]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -305,12 +366,69 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
     session.ask(text);
   }
 
+  async function applySetupNodes(nodeIds: ExtensionId[]) {
+    for (const extension of SAMPLE_EXTENSIONS) {
+      if (!extensionRegistry.get(extension.manifest.id)) {
+        await extensionRegistry.register(extension);
+      }
+    }
+    const desired = new Set(nodeIds);
+    for (const activeId of extensionRegistry.listActive()) {
+      if (!desired.has(activeId)) {
+        await extensionRegistry.deactivate(activeId);
+      }
+    }
+    for (const id of nodeIds) {
+      if (!extensionRegistry.isActive(id) && extensionRegistry.get(id)) {
+        await extensionRegistry.activate(id);
+      }
+    }
+    saveInstalledNodes(extensionRegistry.listActive());
+  }
+
+  async function completeSetup(nodeIds: ExtensionId[]) {
+    await applySetupNodes(nodeIds);
+    bootedRef.current = true;
+    clearResumeSetupStep();
+    try {
+      window.localStorage.setItem(SETUP_DONE_KEY, viewerKey);
+    } catch {
+      // Ignore storage access errors
+    }
+    await fetch("/api/setup", { method: "POST" }).catch(() => null);
+    setSetupNotice(null);
+    setSetupResumeStep(null);
+    setSetupDone(true);
+  }
+
+  async function skipSetup() {
+    const existing = extensionRegistry.listActive();
+    const fallbackNodes = existing.length > 0 ? existing : (readSavedNodes() ?? DEFAULT_NODE_IDS);
+    await completeSetup(fallbackNodes);
+  }
+
+  async function replaySetup() {
+    clearResumeSetupStep();
+    try {
+      window.localStorage.removeItem(SETUP_DONE_KEY);
+    } catch {
+      // Ignore storage access errors
+    }
+    await fetch("/api/setup", { method: "DELETE" }).catch(() => null);
+    setMenuOpen(false);
+    setSurface({ view: "home", panel: null });
+    setSetupNotice(null);
+    setSetupResumeStep(null);
+    setSetupDone(false);
+  }
+
   async function snap(id: ExtensionId, explicitSlotId?: SlotId) {
     const target = hub.slots.find((s) => s.id === (explicitSlotId ?? selected));
     const slotId = target && !target.occupiedBy && canUseSlot(target, hub.entitlement) ? target.id : undefined;
     const result = await extensionRegistry.activate(id, { slotId });
     const name = extensionRegistry.get(id)?.manifest.name ?? id;
     if (result.ok) {
+      saveInstalledNodes(extensionRegistry.listActive());
       const slot = hub.slots.find((s) => s.id === result.slotId);
       flash(`${name} connected to a ${slot?.tier === "pro" ? "Pro" : "free"} socket.`);
       setSelected(null);
@@ -325,6 +443,7 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
   async function release(id: ExtensionId) {
     const name = extensionRegistry.get(id)?.manifest.name ?? id;
     await extensionRegistry.deactivate(id);
+    saveInstalledNodes(extensionRegistry.listActive());
     flash(`${name} disconnected.`);
     setSurface((s) => (typeof s.panel === "object" && s.panel?.extension === id ? { ...s, panel: null } : s));
   }
@@ -378,6 +497,21 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
   const panel = surface.panel;
   const isNetworkHome = surface.view === "home";
 
+  if (!setupDone) {
+    return (
+      <SetupExperience
+        firstName={firstName}
+        theme={theme}
+        hub={hub}
+        initialStep={setupResumeStep}
+        oauthNotice={setupNotice}
+        onDismissNotice={() => setSetupNotice(null)}
+        onComplete={completeSetup}
+        onSkip={skipSetup}
+      />
+    );
+  }
+
   return (
     <div
       className="dash relative h-[100svh] w-full flex-1 overflow-hidden"
@@ -430,6 +564,7 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
         }}
         onCommand={() => openCommand()}
         onPanel={openPanel}
+        onReplaySetup={() => void replaySetup()}
       />
       {isNetworkHome ? (
         <NodeRail hub={hub} surface={surface} onCommand={() => openCommand()} onSlot={selectSlot} />

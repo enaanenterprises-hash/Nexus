@@ -12,7 +12,7 @@ import {
   type SlotId,
 } from "@/lib/extensions";
 import { useTheme } from "@/lib/theme";
-import { CommandIcon, LockIcon, MoonIcon, NetworkIcon, NodesIcon, PlusIcon, SignOutIcon, SunIcon, TodayIcon } from "./icons";
+import { CommandIcon, LockIcon, MoonIcon, NetworkIcon, NodesIcon, PlusIcon, ReloadIcon, SignOutIcon, SunIcon, TodayIcon } from "./icons";
 
 export type PanelId = "today" | "nodes" | { extension: ExtensionId };
 
@@ -51,6 +51,7 @@ export function NodeMenu({
   onHome,
   onCommand,
   onPanel,
+  onReplaySetup,
 }: {
   id?: string;
   hub: ExtensionHubSnapshot;
@@ -61,6 +62,7 @@ export function NodeMenu({
   onHome: () => void;
   onCommand: () => void;
   onPanel: (panel: PanelId) => void;
+  onReplaySetup?: () => void;
 }) {
   const { theme, toggleTheme } = useTheme();
   const [tierMenuOpen, setTierMenuOpen] = useState(false);
@@ -207,6 +209,21 @@ export function NodeMenu({
               </span>
               <span>{hub.entitlement.isPro ? "Back to Free tier" : "Preview Pro"}</span>
             </button>
+
+            {onReplaySetup ? (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setTierMenuOpen(false);
+                  onReplaySetup();
+                }}
+                className="node-tier-menu-item"
+              >
+                <ReloadIcon size={14} />
+                <span>Setup wizard</span>
+              </button>
+            ) : null}
 
             <div className="my-1 h-px bg-white/10" />
 

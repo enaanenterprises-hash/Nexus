@@ -176,4 +176,16 @@ export const SignOutIcon = (p: IconProps) => (
   </Icon>
 );
 
+export const CheckIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="m5.5 12.5 4.2 4.2L18.5 8" />
+  </Icon>
+);
+
+export const ArrowRight = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M5 12h14M13.5 6.5 19 12l-5.5 5.5" />
+  </Icon>
+);
+
 
