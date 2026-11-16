@@ -1118,7 +1118,7 @@ button.landing-signup {
 
 .nexus-mark-button--open .nexus-mark-stage,
 .nexus-mark-button--open:hover .nexus-mark-stage {
-  scale: 1.06;
+  scale: 1.03;
   filter: drop-shadow(0 0 8px rgba(240, 181, 74, 0.36));
 }
 
@@ -1178,31 +1178,31 @@ button.landing-signup {
 
 /* Gentle hover poise while closed */
 .nexus-mark-button:not(.nexus-mark-button--open):hover .nexus-mark-blade--top {
-  translate: 3.5% -3%;
+  translate: 2% -1.8%;
 }
 
 .nexus-mark-button:not(.nexus-mark-button--open):hover .nexus-mark-blade--left {
-  translate: -4% -1%;
+  translate: -2.2% -0.5%;
 }
 
 .nexus-mark-button:not(.nexus-mark-button--open):hover .nexus-mark-blade--bottom {
-  translate: 2% 3.5%;
+  translate: 1% 2%;
 }
 
-/* Open state: unified fluid 360deg spin + radial blade spread & flare */
+/* Open state: unified fluid 360deg spin + subtle radial blade spread & flare */
 .nexus-mark-button--open .nexus-mark-blade--top {
-  translate: 23% -21%;
-  rotate: 28deg;
+  translate: 8.5% -7.5%;
+  rotate: 11deg;
 }
 
 .nexus-mark-button--open .nexus-mark-blade--left {
-  translate: -26% -6%;
-  rotate: -26deg;
+  translate: -9.5% -2%;
+  rotate: -10deg;
 }
 
 .nexus-mark-button--open .nexus-mark-blade--bottom {
-  translate: 14% 25%;
-  rotate: 24deg;
+  translate: 5% 9%;
+  rotate: 10deg;
 }
 
 .nexus-mark-dot {
