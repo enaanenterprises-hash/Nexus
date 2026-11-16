@@ -60,13 +60,13 @@ export function computeStageLayout(width: number, height: number, socketCount: n
   const compact = width < WIDE_MIN_WIDTH;
   const diag = Math.hypot(width, height);
 
-  // Position the singularity core low in the stage, directly crowning the "Hello, [username]" greeting
+  // Position the singularity core in the lower-mid stage (~58%-62% down), leaving comfortable room below for the greeting, responses, and follow-up chips
   const bottomClearance = compact
-    ? clamp(height * 0.28, 220, 275)
-    : clamp(height * 0.29, 250, 305);
+    ? clamp(height * 0.38, 280, 355)
+    : clamp(height * 0.40, 305, 415);
   const core: Vec = {
     x: width * 0.5,
-    y: clamp(height - bottomClearance, compact ? 320 : 380, height - 215),
+    y: clamp(height - bottomClearance, compact ? 275 : 320, height - 280),
   };
 
   // Vast, commanding radius so the 5 node waists fill the stage without wasted space
