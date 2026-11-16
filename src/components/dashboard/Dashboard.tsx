@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { NexusMark } from "@/components/landing/NexusLogo";
 import { NexusMenuButton } from "./NexusMenuButton";
 import { CommandView, type CommandTab } from "@/components/command/CommandView";
@@ -30,6 +30,7 @@ import {
   type StageSignal,
   type StageTransfer,
 } from "./NeuralStage";
+import { computeCoreCenter } from "./stage-layout";
 import { NodeMenu, NodeRail, type PanelId, type Surface } from "./NodeNav";
 import { NexusInput, NexusVoice } from "./NexusVoice";
 import { SETUP_RESUME_KEY, SetupExperience, type SetupStep } from "./SetupExperience";
@@ -113,6 +114,7 @@ export function Dashboard({
   const [setupResumeStep, setSetupResumeStep] = useState<SetupStep | null>(initialSetupStep);
   const [setupNotice, setSetupNotice] = useState<{ ok: boolean; text: string } | null>(initialOauthNotice);
   const [setupReveal, setSetupReveal] = useState(false);
+  const [setupRevealCoreY, setSetupRevealCoreY] = useState<number | null>(null);
 
   const [surface, setSurface] = useState<Surface>({ view: "home", panel: null });
   const [researchMounted, setResearchMounted] = useState(false);
@@ -314,8 +316,9 @@ export function Dashboard({
       transfer,
       activeSocket: activeSocketIdx >= 0 ? activeSocketIdx : null,
       paused: surface.view !== "home",
+      fromSetupExplosion: setupReveal,
     };
-  }, [session.brain, visuals, theme, hub.lastSnapped, hub.slots, hub.extensions, hub.entitlement, transfer, surface.view, surface.panel, selected]);
+  }, [session.brain, visuals, theme, hub.lastSnapped, hub.slots, hub.extensions, hub.entitlement, transfer, surface.view, surface.panel, selected, setupReveal]);
 
   const firstName = useMemo(() => {
     const rawName = viewerName?.trim();
@@ -408,7 +411,12 @@ export function Dashboard({
     await persistSetup(nodeIds);
     setSetupNotice(null);
     setSetupResumeStep(null);
-    if (options?.fromFinale) setSetupReveal(true);
+    if (options?.fromFinale) {
+      if (typeof window !== "undefined") {
+        setSetupRevealCoreY(computeCoreCenter(window.innerWidth, window.innerHeight).y);
+      }
+      setSetupReveal(true);
+    }
     setSetupDone(true);
   }
 
@@ -535,13 +543,18 @@ export function Dashboard({
 
   return (
     <div
-      className={`dash relative h-[100svh] w-full flex-1 overflow-hidden${setupReveal ? " dash--finale-enter" : ""}`}
+      className="dash relative h-[100svh] w-full flex-1 overflow-hidden"
       data-theme={theme}
       data-nav-open={isNetworkHome ? (menuOpen ? "true" : "false") : "true"}
     >
       {setupReveal ? (
         <div
           className="dash-finale-reveal pointer-events-none fixed inset-0 z-50"
+          style={
+            setupRevealCoreY !== null
+              ? ({ "--dash-core-y": `${setupRevealCoreY}px` } as CSSProperties)
+              : undefined
+          }
           aria-hidden
           onAnimationEnd={() => setSetupReveal(false)}
         />
@@ -609,6 +622,7 @@ export function Dashboard({
               revealed={session.revealed}
               history={session.history}
               followUps={session.followUps}
+              skipWake={setupReveal}
               onAsk={chat}
             />
             <NexusInput

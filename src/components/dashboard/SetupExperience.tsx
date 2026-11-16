@@ -116,6 +116,7 @@ export function SetupExperience({
     return active.length > 0 ? active.slice(0, FREE_ACTIVE_EXTENSION_SLOTS) : DEFAULT_SAMPLE_NODES;
   });
 
+  const rootRef = useRef<HTMLDivElement>(null);
   const modalTimerRef = useRef<number | undefined>(undefined);
   const finaleFallbackRef = useRef<number | undefined>(undefined);
   const persistPromiseRef = useRef<Promise<void> | null>(null);
@@ -264,6 +265,7 @@ export function SetupExperience({
 
   return (
     <div
+      ref={rootRef}
       className="dash setup-root relative h-[100svh] w-full flex-1 overflow-hidden"
       data-theme={theme}
     >
@@ -274,18 +276,21 @@ export function SetupExperience({
           impulseSerial={impulseSerial}
           onClickSingularity={handleStart}
           onFinaleComplete={() => void finalizeAfterAnimation()}
+          onCoreLayout={(y) => rootRef.current?.style.setProperty("--setup-core-y", `${y}px`)}
         />
       </div>
 
       {stage === "singularity" ? (
-        <div className="setup-start-layer pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center px-6">
-          <button
-            type="button"
-            onClick={handleStart}
-            className="setup-start-button pointer-events-auto"
-          >
-            Click to get Started
-          </button>
+        <div className="setup-start-layer pointer-events-none absolute inset-0 z-20">
+          <div className="setup-start-pos">
+            <button
+              type="button"
+              onClick={handleStart}
+              className="setup-start-button pointer-events-auto"
+            >
+              Press to get Started
+            </button>
+          </div>
         </div>
       ) : null}
 

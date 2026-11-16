@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { clamp, fitCanvas, lerp, seededHelpers, type Vec } from "@/lib/network/geometry";
+import { computeCoreCenter } from "./stage-layout";
 
 export type SetupStagePhase = "singularity" | "exploding" | "modal" | "finale";
 
@@ -12,9 +13,9 @@ const BASE_RAY_COUNT = 168;
 const EXTRA_RAY_COUNT = 290;
 const RAY_STEPS = 22;
 
-const FINALE_FILL_END = 1.45;
-const FINALE_EXPLODE_AT = 2.08;
-const FINALE_COMPLETE_AT = 2.46;
+const FINALE_FILL_END = 1.40;
+const FINALE_EXPLODE_AT = 2.02;
+const FINALE_COMPLETE_AT = 2.18;
 
 const GOLD_CORE: Rgb = [255, 250, 232];
 const GOLD_BRIGHT: Rgb = [255, 224, 156];
@@ -191,12 +192,14 @@ export function SetupCanvas({
   impulseSerial = 0,
   onClickSingularity,
   onFinaleComplete,
+  onCoreLayout,
 }: {
   phase: SetupStagePhase;
   theme: "dark" | "light";
   impulseSerial?: number;
   onClickSingularity?: () => void;
   onFinaleComplete?: () => void;
+  onCoreLayout?: (y: number) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const phaseRef = useRef(phase);
@@ -204,6 +207,7 @@ export function SetupCanvas({
   const impulseRef = useRef(impulseSerial);
   const clickCbRef = useRef(onClickSingularity);
   const finaleCbRef = useRef(onFinaleComplete);
+  const coreLayoutCbRef = useRef(onCoreLayout);
 
   useEffect(() => {
     phaseRef.current = phase;
@@ -211,7 +215,8 @@ export function SetupCanvas({
     impulseRef.current = impulseSerial;
     clickCbRef.current = onClickSingularity;
     finaleCbRef.current = onFinaleComplete;
-  }, [phase, theme, impulseSerial, onClickSingularity, onFinaleComplete]);
+    coreLayoutCbRef.current = onCoreLayout;
+  }, [phase, theme, impulseSerial, onClickSingularity, onFinaleComplete, onCoreLayout]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -270,9 +275,8 @@ export function SetupCanvas({
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
-      const cx = width * 0.5;
-      const cy = height * 0.45;
-      if (Math.hypot(x - cx, y - cy) <= Math.min(width, height) * 0.22) {
+      const core = computeCoreCenter(width, height);
+      if (Math.hypot(x - core.x, y - core.y) <= Math.min(width, height) * 0.22) {
         clickCbRef.current();
       }
     };
@@ -379,10 +383,10 @@ export function SetupCanvas({
         pointerPresence = lerp(pointerPresence, 0, reduceMotion ? 1 : 1 - Math.exp(-dt * 2.5));
       }
 
-      const cx = width * 0.5;
+      const core = computeCoreCenter(width, height);
+      const cx = core.x;
+      const cy = core.y;
       const explodeAge = curPhase === "singularity" ? 0 : Math.max(0, time - explodeStartTime);
-      const centerShift = curPhase === "singularity" ? 0 : clamp(explodeAge / 0.9, 0, 1);
-      const cy = height * lerp(0.45, 0.5, centerShift * centerShift * (3 - 2 * centerShift));
 
       const minDim = Math.min(width, height);
       const coreBaseR = clamp(minDim * 0.14, 58, 118);
@@ -697,20 +701,20 @@ export function SetupCanvas({
           ctx.stroke();
         }
 
-        // Expanding golden-white blast front washing across the whole viewport
-        const novaR = Math.max(8, diag * 1.18 * blastEase);
-        const novaAlpha = clamp(Math.pow(blastEase, 0.72) * 0.94, 0, 0.96);
-        ctx.globalCompositeOperation = "source-over";
+        // Expanding golden blast wave racing out from the exact dashboard core
+        const novaR = Math.max(8, diag * 0.72 * blastEase);
+        const novaAlpha = clamp(Math.pow(blastEase, 0.72) * 0.62, 0, 0.65);
+        ctx.globalCompositeOperation = blendOp;
         const ng = ctx.createRadialGradient(cx, cy, 0, cx, cy, novaR);
         if (isLight) {
-          ng.addColorStop(0, `rgba(255, 252, 244, ${novaAlpha})`);
-          ng.addColorStop(0.5, `rgba(250, 232, 188, ${novaAlpha * 0.92})`);
-          ng.addColorStop(0.84, `rgba(228, 174, 68, ${novaAlpha * 0.55})`);
+          ng.addColorStop(0, `rgba(255, 250, 236, ${novaAlpha})`);
+          ng.addColorStop(0.42, `rgba(232, 178, 72, ${novaAlpha * 0.72})`);
+          ng.addColorStop(0.82, `rgba(204, 134, 14, ${novaAlpha * 0.25})`);
           ng.addColorStop(1, "rgba(247, 246, 242, 0)");
         } else {
           ng.addColorStop(0, `rgba(255, 252, 242, ${novaAlpha})`);
-          ng.addColorStop(0.45, `rgba(255, 224, 150, ${novaAlpha * 0.92})`);
-          ng.addColorStop(0.8, `rgba(232, 160, 52, ${novaAlpha * 0.52})`);
+          ng.addColorStop(0.4, `rgba(255, 224, 150, ${novaAlpha * 0.78})`);
+          ng.addColorStop(0.82, `rgba(232, 160, 52, ${novaAlpha * 0.26})`);
           ng.addColorStop(1, "rgba(0, 0, 0, 0)");
         }
         ctx.fillStyle = ng;
@@ -740,71 +744,50 @@ export function SetupCanvas({
         ctx.stroke();
       }
 
-      // 4. Center Singularity Dot (ZERO glow halo at start; sharp solid golden point)
+      // 4. Center Singularity Core (same golden Moffat orb at start, without outer halo)
       ctx.save();
       ctx.translate(cx, cy);
+      ctx.globalCompositeOperation = blendOp;
       ctx.globalAlpha = 1;
 
-      if (curPhase === "singularity") {
-        // Pure crisp dot with no outer glow or bloom
-        ctx.globalCompositeOperation = "source-over";
-        const dotR =
-          clamp(minDim * 0.017, 9, 14) *
-          (1 + 0.02 * Math.sin(time * 1.1) + 0.14 * hoverFocus);
-        const aaEdge = Math.max(0.84, (dotR - 1.25) / dotR);
-        const solidDot = ctx.createRadialGradient(-dotR * 0.18, -dotR * 0.18, 0, 0, 0, dotR);
-        if (isLight) {
-          solidDot.addColorStop(0, "#d48d1a");
-          solidDot.addColorStop(aaEdge, "#a86606");
-          solidDot.addColorStop(1, "rgba(168, 102, 6, 0)");
-        } else {
-          solidDot.addColorStop(0, "#ffe49e");
-          solidDot.addColorStop(aaEdge, "#f0b446");
-          solidDot.addColorStop(1, "rgba(240, 180, 70, 0)");
-        }
-        ctx.fillStyle = solidDot;
-        ctx.beginPath();
-        ctx.arc(0, 0, dotR, 0, TAU);
-        ctx.fill();
-      } else {
-        // Active glow only once ignited into neural lines (smoothly fades in over 0.25s)
-        const glowIn = isFinale ? 1 : clamp(explodeAge / 0.25, 0, 1);
-        ctx.globalCompositeOperation = blendOp;
+      const haloOuter: Rgb = isLight ? [174, 102, 6] : [188, 102, 20];
+      const haloMid: Rgb = isLight ? [204, 134, 14] : [242, 172, 56];
+      const haloInner: Rgb = isLight ? [228, 168, 42] : [255, 226, 154];
 
-        const haloOuter: Rgb = isLight ? [174, 102, 6] : [188, 102, 20];
-        const haloMid: Rgb = isLight ? [204, 134, 14] : [242, 172, 56];
-        const haloInner: Rgb = isLight ? [228, 168, 42] : [255, 226, 154];
-
+      // Omit outer atmospheric halo at start ("singularity"), fading it in smoothly upon explosion
+      const glowHaloIn = curPhase === "singularity" ? 0 : isFinale ? 1 : clamp(explodeAge / 0.28, 0, 1);
+      if (glowHaloIn > 0.01) {
         const haloR = Math.max(2, coreBaseR * (1.28 + 0.35 * coreFlash) * coreScale);
-        if (glowIn > 0.01) {
-          ctx.fillStyle = createMoffat(
-            haloR,
-            haloR * 0.22,
-            1.85,
-            clamp(((isLight ? 0.36 : 0.42) + 0.25 * coreFlash) * glowIn, 0, 1),
-            haloInner,
-            haloMid,
-            haloOuter,
-          );
-          ctx.beginPath();
-          ctx.arc(0, 0, haloR, 0, TAU);
-          ctx.fill();
-        }
-
-        const orbR = Math.max(3, coreBaseR * (0.34 + 0.15 * coreFlash) * coreScale);
         ctx.fillStyle = createMoffat(
-          orbR,
-          orbR * 0.28,
-          2.35,
-          clamp((isLight ? 0.88 : 0.96) + 0.15 * coreFlash, 0, 1),
-          isLight ? [156, 88, 6] : [255, 252, 238],
-          isLight ? [198, 128, 16] : [255, 218, 124],
-          isLight ? [228, 168, 42] : [236, 158, 44],
+          haloR,
+          haloR * 0.22,
+          1.85,
+          clamp(((isLight ? 0.36 : 0.42) + 0.25 * coreFlash) * glowHaloIn, 0, 1),
+          haloInner,
+          haloMid,
+          haloOuter,
         );
         ctx.beginPath();
-        ctx.arc(0, 0, orbR, 0, TAU);
+        ctx.arc(0, 0, haloR, 0, TAU);
         ctx.fill();
       }
+
+      const orbR = Math.max(
+        3,
+        coreBaseR * (0.34 + 0.05 * hoverFocus + 0.15 * coreFlash) * coreScale,
+      );
+      ctx.fillStyle = createMoffat(
+        orbR,
+        orbR * 0.28,
+        2.35,
+        clamp((isLight ? 0.88 : 0.96) + 0.1 * hoverFocus + 0.15 * coreFlash, 0, 1),
+        isLight ? [156, 88, 6] : [255, 252, 238],
+        isLight ? [198, 128, 16] : [255, 218, 124],
+        isLight ? [228, 168, 42] : [236, 158, 44],
+      );
+      ctx.beginPath();
+      ctx.arc(0, 0, orbR, 0, TAU);
+      ctx.fill();
 
       ctx.restore();
     };
@@ -814,6 +797,7 @@ export function SetupCanvas({
       width = fitted.width;
       height = fitted.height;
       diag = Math.hypot(width, height);
+      coreLayoutCbRef.current?.(computeCoreCenter(width, height).y);
       if (reduceMotion) draw(6, 0);
     };
 

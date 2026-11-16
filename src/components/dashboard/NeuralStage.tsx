@@ -41,6 +41,8 @@ export type StageSignal = {
   activeSocket?: number | null;
   /** Skip drawing while a full view covers the stage. */
   paused?: boolean;
+  /** Skip opening silence and continue the singularity explosion straight into node expansion. */
+  fromSetupExplosion?: boolean;
 };
 
 /* ============================================================================
@@ -860,13 +862,19 @@ export function NeuralStage({
     let lastBrain: NexusBrainState = signalRef.current.brain;
     let lastActiveSocket: number | null = signalRef.current.activeSocket ?? null;
 
-    let energy = BRAIN_TARGET_ENERGY[signalRef.current.brain];
+    const fromExplosion = Boolean(signalRef.current.fromSetupExplosion);
+    let energy = fromExplosion ? 1.45 : BRAIN_TARGET_ENERGY[signalRef.current.brain];
     let globalCallHeat = 0;
     let globalCallImpulse = 0;
     let autoTransferClock = 3.8;
     let autoTransferIdx = 0;
     let rippleClock = 0;
-    let wakeShockFired = false;
+    let wakeShockFired = fromExplosion;
+
+    if (fromExplosion && !reduceMotion) {
+      ripples.push({ u: 0.14, crimson: false, strength: 1.35 });
+      ripples.push({ u: 0.03, crimson: false, strength: 0.95 });
+    }
 
     const pointerTarget: Vec = { x: 0, y: 0 };
     const pointerSmooth: Vec = { x: 0, y: 0 };
@@ -990,14 +998,23 @@ export function NeuralStage({
       }
       ctx.fillRect(0, 0, width, height);
 
-      // ——— 2. Phase I Opening Silence (t < 1.60s): Only "Waking up Nexus…" is on screen ———
-      if (!reduceMotion && time < WAKE_SILENCE_SECONDS) {
+      // ——— 2. Phase I Opening Silence (t < 1.60s): skipped when continuing from setup explosion ———
+      if (!reduceMotion && !fromExplosion && time < WAKE_SILENCE_SECONDS) {
         return;
       }
 
-      const activeTime = reduceMotion ? 10 : Math.max(0, time - WAKE_SILENCE_SECONDS);
-      const intro = reduceMotion ? 1 : Math.min(1, activeTime / INTRO_SPRING_SECONDS);
+      const activeTime = reduceMotion
+        ? 10
+        : fromExplosion
+          ? time
+          : Math.max(0, time - WAKE_SILENCE_SECONDS);
+      const intro = reduceMotion
+        ? 1
+        : fromExplosion
+          ? Math.min(1, 0.07 + activeTime / INTRO_SPRING_SECONDS)
+          : Math.min(1, activeTime / INTRO_SPRING_SECONDS);
       const introEase = 1 - Math.pow(1 - intro, 3);
+      const coreIntro = fromExplosion ? clamp(0.45 + introEase * 0.55, 0.45, 1) : introEase;
 
       // Smooth pointer parallax, position, and doubly-damped drift velocity (zero polling jitter)
       const pFollow = reduceMotion ? 1 : 1 - Math.exp(-dt * 3.5);
@@ -1174,7 +1191,7 @@ export function NeuralStage({
       const alphaScale = isLight ? 1.65 : 1.0;
 
       ctx.globalCompositeOperation = blendOp;
-      ctx.globalAlpha = Math.min(1, intro * 2.4);
+      ctx.globalAlpha = fromExplosion ? 1 : Math.min(1, intro * 2.4);
 
       // ——— 3. Deep Atmospheric Singularity Under-Field ———
       const fieldRadius = S * 1.25 * (0.18 + 0.82 * introEase) * (1 + 0.1 * energy);
@@ -1497,7 +1514,7 @@ export function NeuralStage({
         S,
         activeTime,
         energy,
-        introEase,
+        coreIntro,
         globalCallHeat,
         isLight,
       );

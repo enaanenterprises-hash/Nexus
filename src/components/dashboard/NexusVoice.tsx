@@ -13,6 +13,7 @@ type Props = {
   revealed: number;
   history: Utterance[];
   followUps: string[];
+  skipWake?: boolean;
   onAsk: (text: string) => void;
 };
 
@@ -23,14 +24,15 @@ const STATE_LABEL: Record<NexusBrainState, string> = {
 };
 
 /** Nexus speaks in one calm voice in the negative space beneath the core. */
-export function NexusVoice({ firstName, brain, current, pendingPrompt, revealed, history, followUps, onAsk }: Props) {
+export function NexusVoice({ firstName, brain, current, pendingPrompt, revealed, history, followUps, skipWake = false, onAsk }: Props) {
   const [showEarlier, setShowEarlier] = useState(false);
-  const [waking, setWaking] = useState(true);
+  const [waking, setWaking] = useState(!skipWake);
 
   useEffect(() => {
+    if (skipWake) return;
     const timer = window.setTimeout(() => setWaking(false), 1600);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [skipWake]);
 
   const prompt = pendingPrompt ?? current?.prompt ?? null;
   const fromExtension = current && current.source !== "nexus" ? current.source : null;

@@ -56,18 +56,24 @@ export type StageLayout = {
 
 export const WIDE_MIN_WIDTH = 1100;
 
+/** Computes the canonical singularity core coordinate shared by Setup and Dashboard stages. */
+export function computeCoreCenter(width: number, height: number): Vec {
+  const compact = width < WIDE_MIN_WIDTH;
+  const bottomClearance = compact
+    ? clamp(height * 0.38, 280, 355)
+    : clamp(height * 0.40, 305, 415);
+  return {
+    x: width * 0.5,
+    y: clamp(height - bottomClearance, compact ? 275 : 320, height - 280),
+  };
+}
+
 export function computeStageLayout(width: number, height: number, socketCount: number): StageLayout {
   const compact = width < WIDE_MIN_WIDTH;
   const diag = Math.hypot(width, height);
 
   // Position the singularity core in the lower-mid stage (~58%-62% down), leaving comfortable room below for the greeting, responses, and follow-up chips
-  const bottomClearance = compact
-    ? clamp(height * 0.38, 280, 355)
-    : clamp(height * 0.40, 305, 415);
-  const core: Vec = {
-    x: width * 0.5,
-    y: clamp(height - bottomClearance, compact ? 275 : 320, height - 280),
-  };
+  const core = computeCoreCenter(width, height);
 
   // Vast, commanding radius so the 5 node waists fill the stage without wasted space
   const radius = compact
