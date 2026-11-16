@@ -4,16 +4,19 @@ import { useEffect, useRef } from "react";
 import type { NexusBrainState } from "@/lib/extensions";
 import {
   add,
+  bezier,
   clamp,
   fitCanvas,
   lerp,
   polar,
   radialGlow,
+  seededHelpers,
   type Vec,
 } from "@/lib/network/geometry";
 import {
   computeStageLayout,
   type ArmGeometry,
+  type HorizonWingGeometry,
   type StageLayout,
 } from "./stage-layout";
 
@@ -33,7 +36,7 @@ export type StageSignal = {
   socketLabels?: Array<{ monogram: string; name: string; status: string }>;
   /** Increments each time an extension snaps in; `index` is the socket. */
   snap: { index: number; serial: number } | null;
-  /** Explicit node-to-node information transfer trigger. */
+  /** Explicit node call / transfer trigger. */
   transfer?: StageTransfer | null;
   /** Currently opened or called socket index (0..4), if any. */
   activeSocket?: number | null;
@@ -42,57 +45,57 @@ export type StageSignal = {
 };
 
 /* ============================================================================
-   MATHEMATICAL CONSTANTS, TIMING & SPECTRAL PALETTE
+   MATHEMATICAL CONSTANTS & SPECTRAL PALETTE
    ============================================================================ */
 
 type Rgb = readonly [number, number, number];
 
-/**
- * Phase I (0.00s -> 1.60s): Screen is 100% pitch black (#000000) with ZERO neural
- * network present while "Waking up Nexus…" is displayed.
- * Phase II (1.60s+): Singularity pops and springs outward via 2nd-order ODE.
- */
+const TAU = Math.PI * 2;
+/** Phase I (0..1.6s): "Waking up Nexus…" on pure black before the neural network pops to life. */
 const WAKE_SILENCE_SECONDS = 1.6;
-const SPRING_ZETA = 0.74;
-const SPRING_OMEGA_N = 4.8;
-const SPRING_OMEGA_D = SPRING_OMEGA_N * Math.sqrt(1 - SPRING_ZETA * SPRING_ZETA);
+const INTRO_SPRING_SECONDS = 2.1;
+const SOCKET_U = 0.34; // Parametric position of the node socket waist along each arm (0 = core, 1 = beyond screen corner)
+const SPINE_SAMPLES = 56;
+const FILAMENTS_PER_ARM = 44;
+const HORIZON_STRANDS = 72;
 
-const STRANDS_PER_ARM = 36;
-const HORIZON_RIBBON_STRANDS = 24;
+const GOLD_CORE: Rgb = [255, 250, 232];
+const GOLD_BRIGHT: Rgb = [255, 224, 156];
+const GOLD_MID: Rgb = [246, 182, 74];
+const GOLD_DEEP: Rgb = [212, 128, 34];
+const DORMANT_BRONZE: Rgb = [118, 84, 38];
 
-const GOLD_SPECULAR: Rgb = [255, 246, 218];
-const GOLD_PRIMARY: Rgb = [250, 194, 88];
-const GOLD_AMBER: Rgb = [232, 152, 46];
-const GOLD_DEEP: Rgb = [196, 114, 28];
+const GOLD_LIGHT_CORE: Rgb = [176, 108, 10];
+const GOLD_LIGHT_MID: Rgb = [198, 128, 18];
+const GOLD_LIGHT_DEEP: Rgb = [146, 86, 8];
 
-const GOLD_LIGHT_SPEC: Rgb = [156, 92, 8];
-const GOLD_LIGHT_PRI: Rgb = [188, 118, 14];
-const GOLD_LIGHT_AMB: Rgb = [142, 82, 6];
-
-const CRIMSON_CORAL: Rgb = [255, 102, 74];
-const CRIMSON_PURE: Rgb = [248, 42, 40];
-const CRIMSON_DEEP: Rgb = [184, 18, 28];
+const CRIMSON_HOT: Rgb = [255, 104, 82];
+const CRIMSON_PURE: Rgb = [252, 48, 44];
+const CRIMSON_DEEP: Rgb = [196, 20, 30];
 
 /**
- * Disconnected nodes ('open' or 'locked') drop to near-zero luminance so they
- * read as genuinely DARK. Only connected ('occupied') nodes light up (1.0).
+ * Connected ('occupied') nodes blaze at 1.0.
+ * Disconnected ('open' / 'locked') nodes drop to a dim dark-bronze level (0.14 / 0.08)
+ * so they clearly read as DARK/OFF while preserving the mathematical arm geometry.
  */
-const TARGET_CONNECTION_LEVEL: Record<SocketVisual, number> = {
+const SOCKET_TARGET_LEVEL: Record<SocketVisual, number> = {
   occupied: 1.0,
-  open: 0.032,
-  locked: 0.016,
+  open: 0.14,
+  locked: 0.08,
 };
 
-const BRAIN_ENERGY: Record<NexusBrainState, number> = {
-  idle: 0.14,
+const BRAIN_TARGET_ENERGY: Record<NexusBrainState, number> = {
+  idle: 0.16,
   thinking: 1.0,
-  responding: 0.72,
+  responding: 0.76,
 };
 
-const STRATIFIED_WEIGHTS = [
-  { width: 0.45, alpha: 0.34, colorMix: 1.0 }, // Inner specular core strands (|eta| <= 0.28)
-  { width: 0.72, alpha: 0.22, colorMix: 0.55 }, // Mid flowing primary strands (0.28 < |eta| <= 0.68)
-  { width: 1.05, alpha: 0.12, colorMix: 0.0 }, // Outer silk envelope strands (|eta| > 0.68)
+/** Four optical depth layers per arm: wide atmospheric bloom -> medium silk -> crisp filament -> specular core hair. */
+const DEPTH_LAYERS = [
+  { width: 2.3, alpha: 0.055, hot: 0.0 },
+  { width: 1.02, alpha: 0.16, hot: 0.35 },
+  { width: 0.6, alpha: 0.31, hot: 0.7 },
+  { width: 0.38, alpha: 0.52, hot: 1.0 },
 ] as const;
 
 const mixRgb = (a: Rgb, b: Rgb, t: number): string => {
@@ -115,257 +118,454 @@ const smoothstep = (edge0: number, edge1: number, x: number): number => {
 };
 
 /* ============================================================================
-   DETERMINISTIC MATHEMATICAL FOLIATION STRUCTURES
+   PARAMETRIC FIELD STRUCTURES
    ============================================================================ */
 
-type FoliationStrand = {
+type SpineFrame = {
+  pts: Vec[];
+  normals: Vec[];
+  tangents: Vec[];
+  socketPt: Vec;
+  tipPt: Vec;
+};
+
+type ArmFilament = {
   arm: number;
-  weightTier: 0 | 1 | 2;
-  /** Deterministic normalized laminar coordinate in [-1, +1]. */
-  eta: number;
-  /** Stagger delay (seconds) for the singularity spring-to-life pop. */
-  staggerDelay: number;
+  layer: number;
+  /** Signed transverse coordinate in [-1, 1] at the spindle belly. */
+  xi: number;
+  /** Optical crossover factor: +1 stays on same side through waist, -0.82 crosses through caustic focus. */
+  crossover: number;
+  /** Outer corner plume fan multiplier. */
+  flareSpread: number;
+  /** Coherent biharmonic wave phase & frequency modifiers. */
+  phase: number;
+  freqMul: number;
+  /** Singularity wake-up stagger in [0, 1]. */
+  stagger: number;
 };
 
-type HorizonStrand = {
-  weightTier: 0 | 1 | 2;
-  eta: number;
-  staggerDelay: number;
+type HorizonFilament = {
+  layer: number;
+  chirality: -1 | 1;
+  waistOffset: number;
+  leftAngle: number;
+  rightAngle: number;
+  leftReach: number;
+  rightReach: number;
+  curvature: number;
+  phase: number;
+  stagger: number;
 };
 
-/**
- * Represents an information/file transfer wave propagating along the flowing lines
- * from `fromSocket` (or Core = -1) to `toSocket`, turning the active segment of the
- * flowing lines crimson red.
- */
-type InfoFlowWave = {
-  fromSocket: number;
-  toSocket: number;
-  /** Progress s in [0, 1] along the full transfer trajectory. */
-  s: number;
-  speed: number;
+type SynapticBridge = {
+  fromArm: number;
+  toArm: number;
+  archLift: number;
+  phase: number;
 };
 
-/**
- * Represents a snap-in connection ignition wave sweeping from Core (u = 0) to
- * the outer trailing edges (u = 1), flaring the trailing edges crimson red.
- */
-type ConnectIgniteWave = {
-  socket: number;
+type FlowPhoton = {
+  arm: number;
+  filamentIdx: number;
   u: number;
+  speed: number;
+  size: number;
+  alpha: number;
 };
 
-function createDeterministicFoliation(socketCount: number) {
-  const armStrands: FoliationStrand[] = [];
-  const armTierBatches: number[][][] = Array.from({ length: socketCount }, () => [
-    [],
-    [],
-    [],
-  ]);
+type HorizonPhoton = {
+  strandIdx: number;
+  u: number;
+  speed: number;
+  size: number;
+  alpha: number;
+};
 
-  for (let arm = 0; arm < socketCount; arm++) {
-    for (let i = 0; i < STRANDS_PER_ARM; i++) {
-      const eta = (2 * i) / (STRANDS_PER_ARM - 1) - 1; // Strictly ordered in [-1, +1]
-      const absEta = Math.abs(eta);
-      const weightTier: 0 | 1 | 2 =
-        absEta <= 0.28 ? 0 : absEta <= 0.68 ? 1 : 2;
-      const staggerDelay = absEta * 0.16 + Math.abs(arm - 2) * 0.035;
-      const idx = armStrands.length;
-      armStrands.push({ arm, weightTier, eta, staggerDelay });
-      armTierBatches[arm]![weightTier]!.push(idx);
+/**
+ * Travelling crimson information wave along an arm's flowing lines (replaces orbs).
+ */
+type SolitonWave = {
+  arm: number;
+  u: number;
+  speed: number;
+  direction: 1 | -1;
+  intensity: number;
+};
+
+type CoreRipple = {
+  u: number;
+  crimson: boolean;
+  strength: number;
+};
+
+/* ============================================================================
+   PROCEDURAL FIELD GENERATOR
+   ============================================================================ */
+
+function createNeuralField(armCount: number) {
+  const { rnd, gauss, between } = seededHelpers(20261116);
+
+  const pickLayer = (i: number): number => {
+    const r = (i * 0.61803398875 + rnd() * 0.22) % 1;
+    if (r < 0.14) return 0;
+    if (r < 0.44) return 1;
+    if (r < 0.78) return 2;
+    return 3;
+  };
+
+  const armFilaments: ArmFilament[] = [];
+  const armLayerBatches: number[][][] = Array.from({ length: armCount }, () =>
+    DEPTH_LAYERS.map(() => [] as number[]),
+  );
+
+  for (let arm = 0; arm < armCount; arm++) {
+    for (let i = 0; i < FILAMENTS_PER_ARM; i++) {
+      // Stratified laminar distribution across [-1, 1] with smooth coherent phase
+      const stratified = ((i + 0.5) / FILAMENTS_PER_ARM) * 2 - 1;
+      const xi = clamp(stratified * 0.88 + gauss() * 0.1, -1.1, 1.1);
+      const layer = pickLayer(i);
+      const idx = armFilaments.length;
+      armFilaments.push({
+        arm,
+        layer,
+        xi,
+        crossover: i % 3 === 0 ? -0.82 : 0.65,
+        flareSpread: (0.75 + 0.45 * Math.abs(xi)) * between(0.88, 1.15),
+        // Coherent phase across xi with gentle variation so lines flow smoothly without looking messy
+        phase: arm * 1.3 + xi * 1.45 + gauss() * 0.28,
+        freqMul: between(0.92, 1.1),
+        stagger: clamp(Math.abs(xi) * 0.32 + rnd() * 0.18, 0, 0.55),
+      });
+      armLayerBatches[arm]![layer]!.push(idx);
     }
   }
 
-  const horizonStrands: HorizonStrand[] = [];
-  const horizonTierBatches: number[][] = [[], [], []];
-  for (let i = 0; i < HORIZON_RIBBON_RIBBON_COUNT; i++) {
-    const eta = (2 * i) / (HORIZON_RIBBON_RIBBON_COUNT - 1) - 1;
-    const absEta = Math.abs(eta);
-    const weightTier: 0 | 1 | 2 =
-      absEta <= 0.28 ? 0 : absEta <= 0.68 ? 1 : 2;
-    const staggerDelay = 0.06 + absEta * 0.18;
-    const idx = horizonStrands.length;
-    horizonStrands.push({ weightTier, eta, staggerDelay });
-    horizonTierBatches[weightTier]!.push(idx);
+  // Continuous cross-core horizon filaments that sweep into the 4 corners while leaving bottom-center open
+  const horizonFilaments: HorizonFilament[] = [];
+  const horizonLayerBatches: number[][] = DEPTH_LAYERS.map(() => [] as number[]);
+
+  for (let i = 0; i < HORIZON_STRANDS; i++) {
+    const layer = pickLayer(i);
+    const chirality: -1 | 1 = i % 2 === 0 ? 1 : -1;
+    const stratified = ((i + 0.5) / HORIZON_STRANDS) * 2 - 1;
+    const leftLift = stratified * 0.48 + gauss() * 0.06;
+    const rightLift = stratified * 0.48 + gauss() * 0.06;
+    const idx = horizonFilaments.length;
+    horizonFilaments.push({
+      layer,
+      chirality,
+      waistOffset: stratified * 0.015,
+      leftAngle: Math.PI - leftLift * chirality,
+      rightAngle: rightLift * chirality,
+      leftReach: between(0.96, 1.36),
+      rightReach: between(0.96, 1.36),
+      curvature: stratified * 0.18,
+      phase: stratified * 1.4 + rnd() * 0.5,
+      stagger: clamp(Math.abs(stratified) * 0.38 + 0.08, 0.06, 0.62),
+    });
+    horizonLayerBatches[layer]!.push(idx);
   }
 
-  return { armStrands, armTierBatches, horizonStrands, horizonTierBatches };
+  // Delicate harmonic bridges between adjacent connected node sockets
+  const bridges: SynapticBridge[] = [];
+  for (let a = 0; a < armCount - 1; a++) {
+    for (let k = 0; k < 5; k++) {
+      bridges.push({
+        fromArm: a,
+        toArm: a + 1,
+        archLift: between(-0.12, 0.06) + (k - 2) * 0.03,
+        phase: k * 0.8 + a,
+      });
+    }
+  }
+
+  // Photons flowing along the 5 functional node arms
+  const armPhotons: FlowPhoton[] = Array.from({ length: 280 }, (_, i) => {
+    const filamentIdx = i % armFilaments.length;
+    const f = armFilaments[filamentIdx]!;
+    return {
+      arm: f.arm,
+      filamentIdx,
+      u: rnd(),
+      speed: between(0.06, 0.14),
+      size: between(0.55, 1.55),
+      alpha: between(0.45, 0.96),
+    };
+  });
+
+  // Photons gliding along the horizon corner wings
+  const horizonPhotons: HorizonPhoton[] = Array.from({ length: 90 }, () => ({
+    strandIdx: Math.floor(rnd() * horizonFilaments.length),
+    u: rnd(),
+    speed: between(0.04, 0.09),
+    size: between(0.45, 1.25),
+    alpha: between(0.32, 0.78),
+  }));
+
+  return {
+    armFilaments,
+    armLayerBatches,
+    horizonFilaments,
+    horizonLayerBatches,
+    bridges,
+    armPhotons,
+    horizonPhotons,
+  };
 }
 
-const HORIZON_RIBBON_RIBBON_COUNT = HORIZON_RIBBON_STRANDS;
-
 /* ============================================================================
-   SECOND-ORDER SPRING ODE & G1/C2 STREAMLINE GEOMETRY
+   CONTINUOUS C2 DIFFERENTIAL GEOMETRY & VENTURI-CAUSTIC ENVELOPE MATH
    ============================================================================ */
 
 /**
- * Exact analytical solution to the 2nd-order underdamped harmonic oscillator:
- *   r'' + 2 * zeta * omega_n * r' + omega_n^2 * (r - 1) = 0
- * Produces a physical pop and spring-to-life expansion from the singularity (r = 0).
+ * Second-order underdamped spring pop from the singularity (r = 0 -> 1)
+ * that begins only AFTER the "Waking up Nexus…" silence completes.
  */
-function evaluateSingularitySpring(activeTime: number, staggerDelay: number): number {
-  const tau = activeTime - staggerDelay;
-  if (tau <= 0) return 0;
-  const decay = Math.exp(-SPRING_ZETA * SPRING_OMEGA_N * tau);
-  const sinTerm = (SPRING_ZETA / Math.sqrt(1 - SPRING_ZETA * SPRING_ZETA)) * Math.sin(SPRING_OMEGA_D * tau);
-  const cosTerm = Math.cos(SPRING_OMEGA_D * tau);
-  return Math.max(0, 1 - decay * (cosTerm + sinTerm));
+function singularityUnfurl(intro: number, stagger: number): number {
+  const u = clamp((intro - stagger * 0.24) / (1 - stagger * 0.24), 0, 1);
+  if (u <= 0) return 0.001;
+  const zeta = 0.74;
+  const omegaN = 4.8;
+  const omegaD = omegaN * Math.sqrt(1 - zeta * zeta);
+  const tau = u * 1.85;
+  const decay = Math.exp(-zeta * omegaN * tau);
+  const response =
+    1 -
+    decay *
+      (Math.cos(omegaD * tau) +
+        (zeta / Math.sqrt(1 - zeta * zeta)) * Math.sin(omegaD * tau));
+  return clamp(response, 0.001, 1.04);
 }
 
-const scaleFromOrigin = (pt: Vec, origin: Vec, factor: number): Vec => ({
-  x: origin.x + (pt.x - origin.x) * factor,
-  y: origin.y + (pt.y - origin.y) * factor,
-});
-
 /**
- * Evaluates the exact G1-collinear 2-segment cubic Bezier streamline for strand `s`
- * on arm `armGeom`:
- *   Segment 0 (Inner Spindle): Core -> Node Waist (compresses to 3.0px laminar waist)
- *   Segment 1 (Outer Plume):   Node Waist -> Safe Corner Boundary (collinear tangent)
+ * Samples a C2-continuous spine frame from `core` (u = 0), through `socket` (u = SOCKET_U),
+ * and out past the viewport corner (`cornerTip`, u = 1), with living harmonic sway.
  */
-function evaluateArmStreamline(
-  s: FoliationStrand,
-  armGeom: ArmGeometry,
+function sampleArmSpine(
+  arm: ArmGeometry,
   L: StageLayout,
   time: number,
-  springReach: number,
-): [
-  [Vec, Vec, Vec, Vec],
-  [Vec, Vec, Vec, Vec],
-] {
-  const { core, leftSafeX, rightSafeX } = L;
-  const { eta } = s;
-  const absEta = Math.abs(eta);
+  intro: number,
+  pointerOffset: Vec,
+): SpineFrame {
+  const { core, radius: R } = L;
+  const unfurlInner = singularityUnfurl(intro, 0.04);
+  const unfurlOuter = singularityUnfurl(intro, 0.18);
 
-  // Coherent laminar wave phase: varies smoothly with eta so strands never cross chaotically
-  const omega = 0.44;
-  const phase = armGeom.index * 1.15 + eta * 1.1;
-  const waveA = Math.sin(omega * time + phase);
-  const waveB = Math.cos(omega * 0.78 * time - phase * 0.85);
+  const slowWave = Math.sin(time * 0.34 + arm.index * 1.45);
+  const deepWave = Math.cos(time * 0.22 + arm.index * 2.1);
 
-  const coreNormal = {
-    x: -Math.sin(armGeom.coreAngle),
-    y: Math.cos(armGeom.coreAngle),
+  const perpAngle = arm.coreAngle + Math.PI * 0.5;
+  const socketSway = polar(R * 0.02 * slowWave, perpAngle);
+
+  const rawSocket = add(arm.socket, {
+    x: socketSway.x + pointerOffset.x * 0.12,
+    y: socketSway.y + pointerOffset.y * 0.12,
+  });
+
+  const socketPt: Vec = {
+    x: lerp(core.x, rawSocket.x, unfurlInner),
+    y: lerp(core.y, rawSocket.y, unfurlInner),
   };
 
-  // 1. Core Origin (tight 1.8px singularity waist)
-  const wCore = 1.8 * springReach;
-  const p0: Vec = {
-    x: core.x + eta * wCore * coreNormal.x,
-    y: core.y + eta * wCore * coreNormal.y,
-  };
+  const tangentAngle =
+    Math.atan2(arm.socketTangent.y, arm.socketTangent.x) + 0.028 * deepWave;
+  const T_sock = { x: Math.cos(tangentAngle), y: Math.sin(tangentAngle) };
 
-  // 2. Node Waist Locus (tight 3.0px laminar waist at Socket_a)
-  const socketUnfurled = scaleFromOrigin(armGeom.socket, core, springReach);
-  const wWaist = 3.0 * Math.min(1, springReach);
-  const swayWaist = 2.2 * Math.sin(omega * 0.65 * time + armGeom.index) * Math.min(1, springReach);
-  const waistPt: Vec = {
-    x: socketUnfurled.x + (eta * wWaist + swayWaist) * armGeom.waistNormal.x,
-    y: socketUnfurled.y + (eta * wWaist + swayWaist) * armGeom.waistNormal.y,
-  };
-
-  // 3. Inner Spindle Controls (symmetric lens swell between Core and Node Waist)
-  const spanIn = armGeom.innerSpan * springReach;
-  const bellySpreadAngle = armGeom.coreAngle + eta * 0.165 + 0.024 * waveA;
-  const c1 = add(core, polar(spanIn * 0.42, bellySpreadAngle));
-
-  const convergeAngle = armGeom.waistAngle - eta * 0.075 + 0.018 * waveB;
+  const innerDist = Math.hypot(socketPt.x - core.x, socketPt.y - core.y);
+  const c1 = add(
+    core,
+    polar(innerDist * 0.46, arm.coreAngle + 0.04 * slowWave),
+  );
   const c2: Vec = {
-    x: waistPt.x - Math.cos(convergeAngle) * spanIn * 0.34,
-    y: waistPt.y - Math.sin(convergeAngle) * spanIn * 0.34,
+    x: socketPt.x - T_sock.x * innerDist * 0.38,
+    y: socketPt.y - T_sock.y * innerDist * 0.38,
   };
 
-  // 4. Outer Plume Controls (100% collinear tangent vector leaving waistPt)
-  const inDx = waistPt.x - c2.x;
-  const inDy = waistPt.y - c2.y;
-  const inLen = Math.hypot(inDx, inDy) || 1;
-  const tInX = inDx / inLen;
-  const tInY = inDy / inLen;
-
-  const spanOut = armGeom.outerSpan * springReach * (1 - 0.06 * eta * eta);
-  const f1: Vec = {
-    x: waistPt.x + tInX * spanOut * 0.3,
-    y: waistPt.y + tInY * spanOut * 0.3,
+  const rawTip = add(
+    arm.cornerTip,
+    polar(R * 0.12 * deepWave, arm.cornerAngle + Math.PI * 0.5),
+  );
+  const tipPt: Vec = {
+    x: lerp(socketPt.x, rawTip.x, unfurlOuter),
+    y: lerp(socketPt.y, rawTip.y, unfurlOuter),
   };
 
-  // Smooth laminar fan angle toward the corners
-  const fanDelta = eta * (0.24 + 0.04 * absEta) + 0.032 * waveA;
-  const fanAngle = armGeom.outerAngle + fanDelta;
-
-  const rawF2 = add(waistPt, polar(spanOut * 0.66, fanAngle - eta * 0.05));
-  const rawTip = add(waistPt, polar(spanOut, fanAngle));
-
-  // Strictly enforce left-sidebar and right-rail negative-space boundaries
-  const f2: Vec = {
-    x: clamp(rawF2.x, leftSafeX + 8, rightSafeX - 8),
-    y: rawF2.y,
+  const outerDist = Math.hypot(tipPt.x - socketPt.x, tipPt.y - socketPt.y);
+  // d1 is collinear with c2 -> socketPt so the spine is 100% kink-free at the socket
+  const d1: Vec = {
+    x: socketPt.x + T_sock.x * outerDist * 0.32,
+    y: socketPt.y + T_sock.y * outerDist * 0.32,
   };
-  const tip: Vec = {
-    x: clamp(rawTip.x, leftSafeX + 4, rightSafeX - 4),
-    y: rawTip.y,
-  };
+  const d2 = add(
+    socketPt,
+    polar(
+      outerDist * 0.68,
+      lerp(tangentAngle, arm.cornerAngle, 0.65) - 0.03 * slowWave,
+    ),
+  );
 
-  return [
-    [p0, c1, c2, waistPt],
-    [waistPt, f1, f2, tip],
-  ];
+  const socketIdx = Math.round((SPINE_SAMPLES - 1) * SOCKET_U);
+  const pts: Vec[] = new Array(SPINE_SAMPLES);
+
+  for (let i = 0; i <= socketIdx; i++) {
+    const t = i / socketIdx;
+    pts[i] = bezier(core, c1, c2, socketPt, t);
+  }
+  const outerCount = SPINE_SAMPLES - 1 - socketIdx;
+  for (let i = 1; i <= outerCount; i++) {
+    const t = i / outerCount;
+    pts[socketIdx + i] = bezier(socketPt, d1, d2, tipPt, t);
+  }
+
+  const tangents: Vec[] = new Array(SPINE_SAMPLES);
+  const normals: Vec[] = new Array(SPINE_SAMPLES);
+  for (let i = 0; i < SPINE_SAMPLES; i++) {
+    const prev = pts[Math.max(0, i - 1)]!;
+    const next = pts[Math.min(SPINE_SAMPLES - 1, i + 1)]!;
+    const dx = next.x - prev.x;
+    const dy = next.y - prev.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const tx = dx / len;
+    const ty = dy / len;
+    tangents[i] = { x: tx, y: ty };
+    normals[i] = { x: -ty, y: tx };
+  }
+
+  return { pts, normals, tangents, socketPt, tipPt };
 }
 
 /**
- * Evaluates a clean, laminar cross-core horizon ribbon strand that sweeps gently
- * into the left and right mid-upper space while staying strictly inside
- * [leftSafeX + 20, rightSafeX - 20] so it never touches the left sidebar or right rail.
+ * Evaluates a filament's exact 2D position along its parent arm spine at parameter u in [0, 1],
+ * combining the Venturi-Caustic waist envelope, optical braid crossover, and smooth travelling waves.
  */
-function evaluateHorizonStreamline(
-  h: HorizonStrand,
+function evaluateArmFilamentPoint(
+  f: ArmFilament,
+  spine: SpineFrame,
+  u: number,
+  R: number,
+  time: number,
+  armLevel: number,
+  callHeat: number,
+  solitonBoost: number,
+): Vec {
+  const idxFloat = clamp(u, 0, 1) * (SPINE_SAMPLES - 1);
+  const i0 = Math.min(SPINE_SAMPLES - 2, Math.floor(idxFloat));
+  const frac = idxFloat - i0;
+
+  const p0 = spine.pts[i0]!;
+  const p1 = spine.pts[i0 + 1]!;
+  const n0 = spine.normals[i0]!;
+  const n1 = spine.normals[i0 + 1]!;
+
+  const cx = lerp(p0.x, p1.x, frac);
+  const cy = lerp(p0.y, p1.y, frac);
+  const nx = lerp(n0.x, n1.x, frac);
+  const ny = lerp(n0.y, n1.y, frac);
+
+  // Tightness of the caustic waist at the node socket (tightens when occupied & called)
+  const waistRadius = R * lerp(0.028, 0.013, armLevel) * (1 - 0.22 * callHeat);
+
+  let envelope = 0;
+  let braidSign = f.xi;
+
+  if (u <= SOCKET_U) {
+    const s = u / SOCKET_U; // 0 .. 1 from core to socket
+    const spindleBell = Math.sin(Math.PI * Math.pow(s, 0.86));
+    const bellyWidth = R * (0.118 + 0.02 * (1 - armLevel));
+    const crossoverBlend = lerp(1, f.crossover, 0.5 - 0.5 * Math.cos(Math.PI * s));
+    braidSign = f.xi * crossoverBlend;
+    envelope = bellyWidth * spindleBell + waistRadius * Math.sin(s * Math.PI * 0.5);
+  } else {
+    const s = (u - SOCKET_U) / (1 - SOCKET_U); // 0 .. 1 from socket out past the viewport corner
+    braidSign = f.xi * f.crossover;
+    const flare = Math.pow(s, 1.32) * R * 1.42 * f.flareSpread;
+    envelope = waistRadius + flare;
+  }
+
+  // Smooth, natural travelling biharmonic wave along the filament
+  const waveSpeed = (0.88 + 0.95 * callHeat) * f.freqMul;
+  const wave1 = Math.sin(u * 6.8 * f.freqMul - time * waveSpeed + f.phase);
+  const wave2 = Math.cos(u * 11.2 * f.freqMul - time * waveSpeed * 1.45 - f.phase * 1.2);
+  const waveAmp =
+    R *
+    (0.006 + 0.032 * Math.pow(u, 1.2)) *
+    (1 + 0.35 * callHeat + 0.48 * solitonBoost);
+
+  const offset = braidSign * envelope + (wave1 * 0.72 + wave2 * 0.28) * waveAmp;
+
+  return {
+    x: cx + nx * offset,
+    y: cy + ny * offset,
+  };
+}
+
+function traceSmoothPolyline(ctx: CanvasRenderingContext2D, pts: Vec[]) {
+  if (pts.length < 2) return;
+  ctx.moveTo(pts[0]!.x, pts[0]!.y);
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)]!;
+    const p1 = pts[i]!;
+    const p2 = pts[i + 1]!;
+    const p3 = pts[Math.min(pts.length - 1, i + 2)]!;
+
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+
+    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+  }
+}
+
+function evaluateHorizonCurve(
+  h: HorizonFilament,
   L: StageLayout,
   time: number,
-  springReach: number,
-): [
-  [Vec, Vec, Vec, Vec],
-  [Vec, Vec, Vec, Vec],
-] {
-  const { core, leftSafeX, rightSafeX, radius: R } = L;
-  const { eta } = h;
-  const waveA = Math.sin(time * 0.36 + eta * 1.2);
-  const waveB = Math.cos(time * 0.28 - eta * 1.1);
+  intro: number,
+  wingBoost: number,
+): [Vec, Vec, Vec, Vec, Vec, Vec, Vec] {
+  const { core, scale: S, radius: R } = L;
+  const reach = singularityUnfurl(intro, h.stagger);
+  const swayA = Math.sin(time * 0.28 + h.phase);
+  const swayB = Math.cos(time * 0.21 + h.phase * 1.3);
 
   const waist: Vec = {
     x: core.x,
-    y: core.y + eta * 2.4 * Math.min(1, springReach),
+    y: core.y + h.waistOffset * R * reach,
   };
 
-  const maxLeftSpan = Math.max(80, (core.x - (leftSafeX + 26)) * 0.94) * springReach;
-  const maxRightSpan = Math.max(80, (rightSafeX - 26 - core.x) * 0.94) * springReach;
+  const lAngle = h.leftAngle + 0.034 * swayA * (1 + 0.35 * wingBoost);
+  const rAngle = h.rightAngle + 0.034 * swayB * (1 + 0.35 * wingBoost);
 
-  // Gentle upward-arching wing angles (-162..-132 deg left, -18..-48 deg right)
-  const leftAngle = -Math.PI + 0.36 + eta * 0.22 + 0.025 * waveA;
-  const rightAngle = -0.36 - eta * 0.22 + 0.025 * waveB;
+  const lDist = h.leftReach * S * reach;
+  const rDist = h.rightReach * S * reach;
 
-  const pLeft: Vec = {
-    x: clamp(core.x + Math.cos(leftAngle) * maxLeftSpan, leftSafeX + 24, core.x),
-    y: core.y + Math.sin(leftAngle) * maxLeftSpan,
-  };
-  const pRight: Vec = {
-    x: clamp(core.x + Math.cos(rightAngle) * maxRightSpan, core.x, rightSafeX - 24),
-    y: core.y + Math.sin(rightAngle) * maxRightSpan,
-  };
+  const pLeft = add(core, polar(lDist, lAngle));
+  const pRight = add(core, polar(rDist, rAngle));
 
-  const bridgeTilt = eta * 0.14 + 0.02 * waveA;
-  const pull = Math.min(maxLeftSpan, maxRightSpan, R * 1.1) * 0.36;
-  const tX = Math.cos(bridgeTilt) * pull;
-  const tY = Math.sin(bridgeTilt) * pull;
+  const bridgeAngle = (rAngle + (lAngle - Math.PI)) * 0.5 + 0.025 * swayA;
+  const pull = Math.min(lDist, rDist) * 0.34;
+  const tVec = { x: Math.cos(bridgeAngle) * pull, y: Math.sin(bridgeAngle) * pull };
 
-  const cLeft1 = add(pLeft, polar(maxLeftSpan * 0.36, leftAngle + Math.PI - eta * 0.12));
-  const cLeft2: Vec = { x: waist.x - tX, y: waist.y - tY };
+  const cLeft1 = add(pLeft, polar(lDist * 0.38, lAngle + Math.PI + h.curvature));
+  const cLeft2 = { x: waist.x - tVec.x, y: waist.y - tVec.y };
 
-  const cRight1: Vec = { x: waist.x + tX, y: waist.y + tY };
-  const cRight2 = add(pRight, polar(maxRightSpan * 0.36, rightAngle + Math.PI + eta * 0.12));
+  const cRight1 = { x: waist.x + tVec.x, y: waist.y + tVec.y };
+  const cRight2 = add(pRight, polar(rDist * 0.38, rAngle + Math.PI - h.curvature));
 
-  return [
-    [pLeft, cLeft1, cLeft2, waist],
-    [waist, cRight1, cRight2, pRight],
-  ];
+  return [pLeft, cLeft1, cLeft2, waist, cRight1, cRight2, pRight];
+}
+
+function pointOnHorizonCurve(
+  curve: [Vec, Vec, Vec, Vec, Vec, Vec, Vec],
+  u: number,
+): Vec {
+  if (u <= 0.5) {
+    return bezier(curve[0], curve[1], curve[2], curve[3], u * 2);
+  }
+  return bezier(curve[3], curve[4], curve[5], curve[6], (u - 0.5) * 2);
 }
 
 /* ============================================================================
@@ -398,43 +598,53 @@ export function NeuralStage({
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
 
-    const field = createDeterministicFoliation(socketCount);
+    const field = createNeuralField(socketCount);
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    // Continuous connection illumination per arm (1.0 when connected, ~0.02 dark when disconnected)
-    const connectionLevels: number[] = signalRef.current.sockets.map(
-      (s) => TARGET_CONNECTION_LEVEL[s],
-    );
-    // Trailing-edge crimson intensity per arm (flares when a node is connected)
-    const edgeCrimsonLevels: number[] = signalRef.current.sockets.map((s) =>
+    const armLevels: number[] = signalRef.current.sockets.map((s) => SOCKET_TARGET_LEVEL[s]);
+    // Per-arm trailing-edge crimson intensity (connected nodes transition toward crimson near the outer edges)
+    const armTrailingEdgeHeat: number[] = signalRef.current.sockets.map((s) =>
       s === "occupied" ? 0.65 : 0,
     );
-    const prevSocketStates: SocketVisual[] = [...signalRef.current.sockets];
-
-    const infoWaves: InfoFlowWave[] = [];
-    const igniteWaves: ConnectIgniteWave[] = [];
+    const prevStates: SocketVisual[] = [...signalRef.current.sockets];
+    const solitons: SolitonWave[] = [];
+    const ripples: CoreRipple[] = [];
 
     let lastSnapSerial = signalRef.current.snap?.serial ?? 0;
     let lastTransferSerial = signalRef.current.transfer?.serial ?? 0;
     let lastBrain: NexusBrainState = signalRef.current.brain;
     let lastActiveSocket: number | null = signalRef.current.activeSocket ?? null;
 
-    let energy = BRAIN_ENERGY[signalRef.current.brain];
-    let autoFlowClock = 4.2;
-    let autoFlowCounter = 0;
+    let energy = BRAIN_TARGET_ENERGY[signalRef.current.brain];
+    let globalCallHeat = 0;
+    let autoTransferClock = 3.8;
+    let autoTransferIdx = 0;
+    let rippleClock = 0;
+    let wakeShockFired = false;
+
+    const pointerTarget: Vec = { x: 0, y: 0 };
+    const pointerSmooth: Vec = { x: 0, y: 0 };
+    let pointerClient: Vec | null = null;
+
     let layout = computeStageLayout(1, 1, socketCount);
     let frame = 0;
     let start = 0;
     let last = 0;
 
-    const spawnInfoWave = (fromSocket: number, toSocket: number, speed = 0.56) => {
-      if (reduceMotion) return;
-      infoWaves.push({
-        fromSocket,
-        toSocket,
-        s: 0,
-        speed,
-      });
+    const onPointerMove = (e: PointerEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      pointerClient = { x, y };
+      pointerTarget.x = ((x / rect.width) - 0.5) * 24;
+      pointerTarget.y = ((y / rect.height) - 0.5) * 24;
+    };
+
+    const onPointerLeave = () => {
+      pointerClient = null;
+      pointerTarget.x = 0;
+      pointerTarget.y = 0;
     };
 
     const onClick = (e: MouseEvent) => {
@@ -443,318 +653,536 @@ export function NeuralStage({
       const clickPt = { x: e.clientX - rect.left, y: e.clientY - rect.top };
       for (let i = 0; i < layout.sockets.length; i++) {
         const sock = layout.sockets[i]!;
-        if (Math.hypot(clickPt.x - sock.x, clickPt.y - sock.y) <= 26) {
-          spawnInfoWave(-1, i, 0.68);
-          edgeCrimsonLevels[i] = 1.0;
+        if (Math.hypot(clickPt.x - sock.x, clickPt.y - sock.y) <= 28) {
+          launchInformationWave(-1, i);
           onSelectRef.current(i);
           return;
         }
       }
     };
 
+    window.addEventListener("pointermove", onPointerMove, { passive: true });
+    window.addEventListener("pointerleave", onPointerLeave);
     canvas.addEventListener("click", onClick);
+
+    /**
+     * Spawns a flowing crimson wave along the lines between `fromSocket` and `toSocket`
+     * (no orbs — the flowing lines themselves turn crimson red where the information travels).
+     */
+    const launchInformationWave = (fromSocket: number, toSocket: number) => {
+      globalCallHeat = Math.max(globalCallHeat, 1);
+      if (fromSocket >= 0 && fromSocket < socketCount) {
+        armTrailingEdgeHeat[fromSocket] = 1;
+        if (!reduceMotion) {
+          solitons.push({
+            arm: fromSocket,
+            u: 0.72,
+            speed: 0.65,
+            direction: -1,
+            intensity: 1,
+          });
+        }
+      }
+      if (toSocket >= 0 && toSocket < socketCount) {
+        armTrailingEdgeHeat[toSocket] = 1;
+        if (!reduceMotion) {
+          solitons.push({
+            arm: toSocket,
+            u: fromSocket >= 0 ? -0.35 : 0,
+            speed: 0.68,
+            direction: 1,
+            intensity: 1,
+          });
+        }
+      } else if (toSocket < 0 && fromSocket < 0) {
+        signalRef.current.sockets.forEach((s, idx) => {
+          if (s === "occupied") {
+            armTrailingEdgeHeat[idx] = 1;
+            if (!reduceMotion) {
+              solitons.push({
+                arm: idx,
+                u: idx * -0.08,
+                speed: 0.68,
+                direction: 1,
+                intensity: 1,
+              });
+            }
+          }
+        });
+      }
+      if (!reduceMotion) {
+        ripples.push({ u: 0, crimson: true, strength: 0.85 });
+      }
+    };
 
     const draw = (time: number, dt: number) => {
       const { brain, sockets, snap, transfer, activeSocket, theme } = signalRef.current;
       const isLight = (theme ?? "dark") === "light";
       const L = layout;
-      const { width, height, core, radius: R } = L;
+      const { width, height, core, radius: R, scale: S } = L;
 
-      // ——— 1. Pure Background ———
+      // ——— 1. Pure Pitch-Black Background (or Warm Alabaster in Light Mode) ———
       ctx.globalCompositeOperation = "source-over";
       ctx.globalAlpha = 1;
       ctx.fillStyle = isLight ? "#f7f7f8" : "#000000";
       ctx.fillRect(0, 0, width, height);
 
-      // ——— 2. Phase I Opening Silence (t < 1.60s): Neural network is NOT present at all ———
+      // ——— 2. Phase I Opening Silence (t < 1.60s): Only "Waking up Nexus…" is on screen ———
       if (!reduceMotion && time < WAKE_SILENCE_SECONDS) {
         return;
       }
 
       const activeTime = reduceMotion ? 10 : Math.max(0, time - WAKE_SILENCE_SECONDS);
-      const coreSpring = reduceMotion ? 1 : evaluateSingularitySpring(activeTime, 0);
-      const masterAlpha = reduceMotion ? 1 : clamp(activeTime / 0.32, 0, 1);
+      const intro = reduceMotion ? 1 : Math.min(1, activeTime / INTRO_SPRING_SECONDS);
+      const introEase = 1 - Math.pow(1 - intro, 3);
 
-      energy = lerp(
-        energy,
-        BRAIN_ENERGY[brain],
-        reduceMotion ? 1 : 1 - Math.exp(-dt * 2.8),
-      );
+      // Smooth pointer parallax
+      const pFollow = reduceMotion ? 1 : 1 - Math.exp(-dt * 4.2);
+      pointerSmooth.x = lerp(pointerSmooth.x, pointerTarget.x, pFollow);
+      pointerSmooth.y = lerp(pointerSmooth.y, pointerTarget.y, pFollow);
 
-      // Detect node connect / disconnect transitions
-      sockets.forEach((state, i) => {
-        const prev = prevSocketStates[i];
-        if (prev !== state) {
-          prevSocketStates[i] = state;
-          if (state === "occupied") {
-            edgeCrimsonLevels[i] = 1.0;
-            if (!reduceMotion) igniteWaves.push({ socket: i, u: 0 });
-          }
-        }
-
-        const targetLevel = TARGET_CONNECTION_LEVEL[state];
-        const rate = targetLevel > (connectionLevels[i] ?? 0) ? 3.2 : 3.8;
-        connectionLevels[i] = lerp(
-          connectionLevels[i] ?? targetLevel,
-          targetLevel,
-          reduceMotion ? 1 : 1 - Math.exp(-dt * rate),
-        );
-
-        // Connected arms maintain a subtle crimson transition near their outer trailing edges (0.58),
-        // flaring to 1.0 when newly connected or called
-        const isArmCalled =
-          activeSocket === i || ((brain === "thinking" || brain === "responding") && state === "occupied");
-        const targetCrimsonEdge =
-          state === "occupied" ? (isArmCalled ? 1.0 : 0.62) : 0;
-        edgeCrimsonLevels[i] = lerp(
-          edgeCrimsonLevels[i] ?? 0,
-          targetCrimsonEdge,
-          reduceMotion ? 1 : 1 - Math.exp(-dt * (targetCrimsonEdge > (edgeCrimsonLevels[i] ?? 0) ? 4.5 : 1.4)),
-        );
-      });
-
-      // Spawn crimson information waves along the lines when Nexus thinks/responds or routes between nodes
+      // Detect state transitions that call nodes or send information between nodes
       if (brain !== lastBrain) {
         if (brain === "thinking" || brain === "responding") {
-          sockets.forEach((s, idx) => {
-            if (s === "occupied") {
-              edgeCrimsonLevels[idx] = 1.0;
-              spawnInfoWave(-1, idx, 0.64);
-            }
-          });
+          launchInformationWave(-1, activeSocket ?? -1);
         }
         lastBrain = brain;
       }
 
       if ((activeSocket ?? null) !== lastActiveSocket) {
         if (activeSocket !== null && activeSocket !== undefined && activeSocket >= 0) {
-          edgeCrimsonLevels[activeSocket] = 1.0;
-          spawnInfoWave(-1, activeSocket, 0.68);
+          launchInformationWave(-1, activeSocket);
         }
         lastActiveSocket = activeSocket ?? null;
       }
 
       if (snap && snap.serial !== lastSnapSerial) {
         lastSnapSerial = snap.serial;
-        edgeCrimsonLevels[snap.index] = 1.0;
-        if (!reduceMotion) igniteWaves.push({ socket: snap.index, u: 0 });
+        launchInformationWave(-1, snap.index);
       }
 
       if (transfer && transfer.serial !== lastTransferSerial) {
         lastTransferSerial = transfer.serial;
-        spawnInfoWave(transfer.fromSocket, transfer.toSocket, 0.58);
+        launchInformationWave(transfer.fromSocket, transfer.toSocket);
       }
 
-      // Periodic information flow between connected nodes so you see crimson data waves flowing through the lines
-      if (!reduceMotion && activeTime > 2.2) {
-        const occupied = sockets
-          .map((s, idx) => (s === "occupied" ? idx : -1))
-          .filter((idx) => idx >= 0);
-        autoFlowClock -= dt;
-        if (autoFlowClock <= 0) {
-          autoFlowClock = 5.0;
+      // Periodic information waves flowing between connected nodes
+      if (!reduceMotion && intro >= 1 && brain === "idle") {
+        autoTransferClock -= dt;
+        if (autoTransferClock <= 0) {
+          autoTransferClock = 4.6;
+          const occupied = sockets.map((s, i) => (s === "occupied" ? i : -1)).filter((i) => i >= 0);
           if (occupied.length >= 2) {
-            const fromIdx = occupied[autoFlowCounter % occupied.length]!;
-            const toIdx = occupied[(autoFlowCounter + 1) % occupied.length]!;
-            autoFlowCounter++;
-            spawnInfoWave(fromIdx, toIdx, 0.52);
+            const from = occupied[autoTransferIdx % occupied.length]!;
+            const to = occupied[(autoTransferIdx + 1) % occupied.length]!;
+            autoTransferIdx++;
+            launchInformationWave(from, to);
           } else if (occupied.length === 1) {
-            autoFlowCounter++;
-            spawnInfoWave(-1, occupied[0]!, 0.54);
+            autoTransferIdx++;
+            launchInformationWave(-1, occupied[0]!);
           }
         }
       }
 
-      // Advance active waves
-      for (let i = infoWaves.length - 1; i >= 0; i--) {
-        const w = infoWaves[i]!;
-        if (!reduceMotion) w.s += w.speed * dt;
-        if (w.s >= 1.15) infoWaves.splice(i, 1);
-      }
-      for (let i = igniteWaves.length - 1; i >= 0; i--) {
-        const iw = igniteWaves[i]!;
-        if (!reduceMotion) iw.u += dt * 0.92;
-        if (iw.u >= 1.2) igniteWaves.splice(i, 1);
-      }
+      const isCallingAnyNode =
+        brain === "thinking" ||
+        brain === "responding" ||
+        (activeSocket !== null && activeSocket !== undefined && activeSocket >= 0);
 
-      const goldSpec = isLight ? GOLD_LIGHT_SPEC : GOLD_SPECULAR;
-      const goldPri = isLight ? GOLD_LIGHT_PRI : GOLD_PRIMARY;
-      const goldAmb = isLight ? GOLD_LIGHT_AMB : GOLD_AMBER;
-      const goldDeep = isLight ? GOLD_LIGHT_AMB : GOLD_DEEP;
-      const blendOp: GlobalCompositeOperation = isLight ? "source-over" : "lighter";
-      const alphaMul = (isLight ? 1.4 : 1.0) * masterAlpha;
+      const targetGlobalCall = isCallingAnyNode ? 1 : 0;
+      globalCallHeat = lerp(
+        globalCallHeat,
+        targetGlobalCall,
+        reduceMotion ? 1 : 1 - Math.exp(-dt * (targetGlobalCall > globalCallHeat ? 4.8 : 1.4)),
+      );
 
-      ctx.globalCompositeOperation = blendOp;
-      ctx.globalAlpha = masterAlpha;
+      energy = lerp(
+        energy,
+        BRAIN_TARGET_ENERGY[brain],
+        reduceMotion ? 1 : 1 - Math.exp(-dt * 3.0),
+      );
 
-      // ——— 3. Clean Laminar Horizon Ribbon (Strictly Inside Left & Right Safe Corridors) ———
-      const horizonPaths = field.horizonStrands.map((h) => {
-        const reach = reduceMotion ? 1 : evaluateSingularitySpring(activeTime, h.staggerDelay);
-        return evaluateHorizonStreamline(h, L, time, reach);
+      // Update per-arm levels (1.0 when connected, dark ~0.10 when disconnected) & trailing-edge crimson heat
+      sockets.forEach((s, i) => {
+        const prev = prevStates[i];
+        if (prev !== s) {
+          prevStates[i] = s;
+          if (s === "occupied") {
+            armTrailingEdgeHeat[i] = 1.0;
+            launchInformationWave(-1, i);
+          }
+        }
+
+        let hoverBoost = 0;
+        if (pointerClient && L.sockets[i]) {
+          const d = Math.hypot(pointerClient.x - L.sockets[i]!.x, pointerClient.y - L.sockets[i]!.y);
+          hoverBoost = clamp(1 - d / (R * 0.45), 0, 1) * (s === "occupied" ? 0.16 : 0.08);
+        }
+        const targetLevel = clamp(SOCKET_TARGET_LEVEL[s] + hoverBoost, 0, 1.15);
+        armLevels[i] = lerp(
+          armLevels[i] ?? targetLevel,
+          targetLevel,
+          reduceMotion ? 1 : 1 - Math.exp(-dt * 3.5),
+        );
+
+        const armIsCalled =
+          activeSocket === i || ((brain === "thinking" || brain === "responding") && s === "occupied");
+        // Connected arms maintain a crimson transition near their outer trailing edges (0.65),
+        // surging to 1.0 when newly connected or actively transferring information
+        const targetEdgeCrimson =
+          s === "occupied" ? (armIsCalled ? 1.0 : Math.max(0.65, globalCallHeat * 0.9)) : 0;
+        armTrailingEdgeHeat[i] = lerp(
+          armTrailingEdgeHeat[i] ?? 0,
+          targetEdgeCrimson,
+          reduceMotion ? 1 : 1 - Math.exp(-dt * (targetEdgeCrimson > (armTrailingEdgeHeat[i] ?? 0) ? 5.0 : 1.4)),
+        );
       });
 
-      const horizonSpan = Math.max(120, (L.rightSafeX - L.leftSafeX) * 0.48);
-      field.horizonTierBatches.forEach((batch, tierIdx) => {
-        if (!batch.length) return;
-        const tier = STRATIFIED_WEIGHTS[tierIdx]!;
-        const baseGold = mixRgbTuple(goldAmb, goldSpec, tier.colorMix);
-        const goldStr = `${baseGold[0]}, ${baseGold[1]}, ${baseGold[2]}`;
-        const edgeCrimsonStr = mixRgb(baseGold, CRIMSON_PURE, 0.72);
-        const a = tier.alpha * 0.48 * alphaMul * (0.8 + 0.25 * energy);
+      // Advance crimson information waves along the arms
+      for (let i = solitons.length - 1; i >= 0; i--) {
+        const sol = solitons[i]!;
+        if (!reduceMotion) sol.u += sol.speed * sol.direction * dt;
+        if (sol.direction > 0 && sol.u >= 1.2) solitons.splice(i, 1);
+        else if (sol.direction < 0 && sol.u <= -0.15) solitons.splice(i, 1);
+      }
 
-        const hg = ctx.createRadialGradient(core.x, core.y, 0, core.x, core.y, horizonSpan);
-        hg.addColorStop(0, `rgba(${goldStr}, ${Math.min(1, a * 2.1)})`);
-        hg.addColorStop(0.35, `rgba(${goldStr}, ${a * 0.95})`);
-        hg.addColorStop(0.68, `rgba(${goldStr}, ${a * 0.42})`);
-        hg.addColorStop(0.88, `rgba(${edgeCrimsonStr}, ${a * 0.22})`);
-        hg.addColorStop(1, `rgba(${edgeCrimsonStr}, 0)`);
+      // Opening singularity shockwave when popping to life
+      if (!reduceMotion && intro > 0.04 && !wakeShockFired) {
+        wakeShockFired = true;
+        ripples.push({ u: 0.01, crimson: false, strength: 0.95 });
+      }
+
+      if (!reduceMotion && brain === "responding") {
+        rippleClock -= dt;
+        if (rippleClock <= 0) {
+          rippleClock = 0.88;
+          ripples.push({ u: 0, crimson: true, strength: 0.85 });
+        }
+      } else {
+        rippleClock = 0;
+      }
+
+      const goldCore = isLight ? GOLD_LIGHT_CORE : GOLD_CORE;
+      const goldBright = isLight ? GOLD_LIGHT_MID : GOLD_BRIGHT;
+      const goldMid = isLight ? GOLD_LIGHT_MID : GOLD_MID;
+      const goldDeep = isLight ? GOLD_LIGHT_DEEP : GOLD_DEEP;
+      const blendOp: GlobalCompositeOperation = isLight ? "source-over" : "lighter";
+      const alphaScale = isLight ? 1.45 : 1.0;
+
+      const thinkingBeat = brain === "thinking" ? 0.5 + 0.5 * Math.sin(time * 6.5) : 0;
+      const breathe = 1 + 0.045 * Math.sin(time * (0.6 + energy)) + 0.08 * energy + 0.04 * thinkingBeat;
+
+      ctx.globalCompositeOperation = blendOp;
+      ctx.globalAlpha = Math.min(1, intro * 2.4);
+
+      // ——— 3. Deep Atmospheric Singularity Halo ———
+      const fieldRadius = S * 1.25 * (0.18 + 0.82 * introEase) * (1 + 0.1 * energy);
+      radialGlow(ctx, core, S * 0.46 * breathe * (0.2 + 0.8 * introEase), [
+        [0, `rgba(${mixRgb(goldBright, goldCore, 0.4)}, ${(isLight ? 0.18 : 0.12) + 0.05 * energy})`],
+        [0.48, `rgba(${goldDeep.join(", ")}, ${isLight ? 0.05 : 0.035})`],
+        [1, "rgba(0, 0, 0, 0)"],
+      ]);
+
+      // ——— 4. Pre-sample C2 Spine Frames for the 5 Functional Node Arms ———
+      const spines = L.arms.map((arm) =>
+        sampleArmSpine(arm, L, activeTime, intro, pointerSmooth),
+      );
+
+      // ——— 5. Continuous Corner-Sweeping Horizon Wings (Gold Body -> Crimson Near Outer Edges) ———
+      const horizonCurves = field.horizonFilaments.map((h) =>
+        evaluateHorizonCurve(h, L, activeTime, intro, globalCallHeat),
+      );
+
+      const anyConnected = sockets.some((s) => s === "occupied");
+      const horizonEdgeRed = Math.max(anyConnected ? 0.55 : 0, globalCallHeat);
+
+      field.horizonLayerBatches.forEach((indices, layerIdx) => {
+        if (!indices.length) return;
+        const layer = DEPTH_LAYERS[layerIdx]!;
+        const baseRgb = mixRgbTuple(goldMid, goldBright, layer.hot);
+        const coreColor = `${baseRgb[0]}, ${baseRgb[1]}, ${baseRgb[2]}`;
+        const midTrailColor = mixRgb(baseRgb, CRIMSON_HOT, horizonEdgeRed * 0.78);
+        const outerTrailColor = mixRgb(goldDeep, CRIMSON_PURE, horizonEdgeRed * 0.96);
+        const a = layer.alpha * 0.52 * alphaScale * (0.75 + 0.35 * energy);
+
+        const g = ctx.createRadialGradient(core.x, core.y, 0, core.x, core.y, fieldRadius);
+        g.addColorStop(0, `rgba(${coreColor}, ${Math.min(1, a * 2.1)})`);
+        g.addColorStop(0.28, `rgba(${coreColor}, ${Math.min(1, a * 1.1)})`);
+        g.addColorStop(0.56, `rgba(${coreColor}, ${a * 0.52})`);
+        // Near the outer edges, the flowing lines transition toward crimson red
+        g.addColorStop(0.74, `rgba(${midTrailColor}, ${a * (0.3 + 0.32 * horizonEdgeRed)})`);
+        g.addColorStop(0.9, `rgba(${outerTrailColor}, ${a * (0.16 + 0.28 * horizonEdgeRed)})`);
+        g.addColorStop(1, `rgba(${outerTrailColor}, 0)`);
 
         ctx.beginPath();
-        for (const idx of batch) {
-          const [leftSeg, rightSeg] = horizonPaths[idx]!;
-          ctx.moveTo(leftSeg[0].x, leftSeg[0].y);
-          ctx.bezierCurveTo(leftSeg[1].x, leftSeg[1].y, leftSeg[2].x, leftSeg[2].y, leftSeg[3].x, leftSeg[3].y);
-          ctx.bezierCurveTo(rightSeg[1].x, rightSeg[1].y, rightSeg[2].x, rightSeg[2].y, rightSeg[3].x, rightSeg[3].y);
+        for (const idx of indices) {
+          const c = horizonCurves[idx]!;
+          ctx.moveTo(c[0].x, c[0].y);
+          ctx.bezierCurveTo(c[1].x, c[1].y, c[2].x, c[2].y, c[3].x, c[3].y);
+          ctx.bezierCurveTo(c[4].x, c[4].y, c[5].x, c[5].y, c[6].x, c[6].y);
         }
-        ctx.lineWidth = tier.width * (isLight ? 1.12 : 1);
-        ctx.strokeStyle = hg;
+        ctx.lineWidth = layer.width * 0.85 * (isLight ? 1.12 : 1);
+        ctx.strokeStyle = g;
         ctx.stroke();
       });
 
-      // ——— 4. The 5 Node Arms (Deterministic Foliation, Dark When Disconnected, Crimson Edges & Information Waves) ———
-      const armStreamlines = field.armStrands.map((s) => {
-        const reach = reduceMotion ? 1 : evaluateSingularitySpring(activeTime, s.staggerDelay);
-        return evaluateArmStreamline(s, L.arms[s.arm]!, L, time, reach);
+      // Lower-lateral horizon corner spines
+      L.horizonWings.forEach((wing: HorizonWingGeometry) => {
+        const reach = singularityUnfurl(intro, 0.22);
+        const c1 = { x: lerp(core.x, wing.c1.x, reach), y: lerp(core.y, wing.c1.y, reach) };
+        const c2 = { x: lerp(core.x, wing.c2.x, reach), y: lerp(core.y, wing.c2.y, reach) };
+        const tip = { x: lerp(core.x, wing.tip.x, reach), y: lerp(core.y, wing.tip.y, reach) };
+        const wg = ctx.createLinearGradient(core.x, core.y, tip.x, tip.y);
+        const goldStr = `${goldMid[0]}, ${goldMid[1]}, ${goldMid[2]}`;
+        const edgeStr = mixRgb(goldDeep, CRIMSON_PURE, horizonEdgeRed * 0.92);
+        wg.addColorStop(0, `rgba(${goldStr}, ${0.2 * alphaScale})`);
+        wg.addColorStop(0.55, `rgba(${goldStr}, ${0.08 * alphaScale})`);
+        wg.addColorStop(0.82, `rgba(${edgeStr}, ${(0.04 + 0.08 * horizonEdgeRed) * alphaScale})`);
+        wg.addColorStop(1, `rgba(${edgeStr}, 0)`);
+        ctx.beginPath();
+        ctx.moveTo(core.x, core.y);
+        ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, tip.x, tip.y);
+        ctx.lineWidth = 1.3;
+        ctx.strokeStyle = wg;
+        ctx.stroke();
       });
 
+      // ——— 6. Subtle Inter-Node Harmonic Bridges between Adjacent Connected Sockets ———
+      for (const b of field.bridges) {
+        const lvlA = armLevels[b.fromArm] ?? 0;
+        const lvlB = armLevels[b.toArm] ?? 0;
+        const bridgeStrength = Math.min(lvlA, lvlB);
+        if (bridgeStrength < 0.45) continue;
+
+        const pA = spines[b.fromArm]!.socketPt;
+        const pB = spines[b.toArm]!.socketPt;
+        const mid: Vec = { x: (pA.x + pB.x) * 0.5, y: (pA.y + pB.y) * 0.5 };
+        const dirFromCore = Math.atan2(mid.y - core.y, mid.x - core.x);
+        const sway = Math.sin(activeTime * 0.5 + b.phase) * R * 0.022;
+        const ctrl = add(mid, polar(R * b.archLift + sway, dirFromCore));
+
+        ctx.beginPath();
+        ctx.moveTo(pA.x, pA.y);
+        ctx.quadraticCurveTo(ctrl.x, ctrl.y, pB.x, pB.y);
+        ctx.lineWidth = 0.45;
+        ctx.strokeStyle = `rgba(${goldMid.join(", ")}, ${0.075 * bridgeStrength * alphaScale * introEase})`;
+        ctx.stroke();
+      }
+
+      // ——— 7. The 5 Primary Functional Node Arms (Continuous C2 Venturi-Caustic Flowing Wave Bundles) ———
+      // - Zero artificial radialGlow circles at the nodes!
+      // - Connected nodes are lit up in rich molten gold, transitioning near the outer edges to crimson red.
+      // - Disconnected nodes go dark (muted dim bronze).
+      // - When sending information between nodes, a crimson wave flows directly along the lines!
+      const CURVE_STEPS = 22;
+      const sampleUs = Array.from({ length: CURVE_STEPS + 1 }, (_, k) => k / CURVE_STEPS);
+
       for (let armIdx = 0; armIdx < socketCount; armIdx++) {
-        const armGeom = L.arms[armIdx]!;
-        const connLevel = connectionLevels[armIdx] ?? 0.02;
-        const edgeRed = edgeCrimsonLevels[armIdx] ?? 0;
+        const spine = spines[armIdx]!;
+        const level = armLevels[armIdx] ?? 0.1;
+        const edgeRed = armTrailingEdgeHeat[armIdx] ?? 0;
+        const isConnected = level > 0.35;
 
-        // Check if an ignition wave is currently sweeping along this arm
-        let igniteFront = 1.0;
-        for (const iw of igniteWaves) {
-          if (iw.socket === armIdx) {
-            igniteFront = Math.min(igniteFront, clamp(iw.u, 0.05, 1));
+        // Check active crimson information wave position along this arm
+        let waveCenterU = -1;
+        let waveStrength = 0;
+        let armSolitonBoost = 0;
+        for (const sol of solitons) {
+          if (sol.arm === armIdx && sol.u >= 0 && sol.u <= 1.05) {
+            waveCenterU = sol.u;
+            waveStrength = Math.max(waveStrength, Math.sin(clamp(sol.u, 0, 1) * Math.PI) * sol.intensity);
+            const distFromSocket = Math.abs(sol.u - SOCKET_U);
+            armSolitonBoost = Math.max(
+              armSolitonBoost,
+              Math.exp(-(distFromSocket * distFromSocket) / 0.035) * sol.intensity,
+            );
           }
         }
 
-        // Check if an information transfer wave is currently flowing along this arm:
-        //   - Inbound leg (fromSocket === armIdx): wave center moves from u = 0.65 -> u = 0.00 (into Core)
-        //   - Outbound leg (toSocket === armIdx):  wave center moves from u = 0.00 -> u = 1.00 (Core -> Node -> Trailing Edge)
-        let activeWaveU = -1;
-        let activeWaveStrength = 0;
-        for (const wave of infoWaves) {
-          if (wave.fromSocket === armIdx && wave.s <= 0.42) {
-            const legP = wave.s / 0.42; // 0 .. 1
-            activeWaveU = lerp(0.58, 0.0, legP);
-            activeWaveStrength = Math.max(activeWaveStrength, Math.sin(legP * Math.PI));
-          } else if (wave.toSocket === armIdx) {
-            const startS = wave.fromSocket >= 0 ? 0.36 : 0.0;
-            if (wave.s >= startS) {
-              const legP = clamp((wave.s - startS) / (1 - startS), 0, 1);
-              activeWaveU = legP;
-              activeWaveStrength = Math.max(activeWaveStrength, Math.sin(clamp(legP * 1.05, 0, 1) * Math.PI));
-            }
-          }
-        }
-
-        const tip = scaleFromOrigin(armGeom.tipCenter, core, Math.min(1, coreSpring));
-
-        for (let tierIdx = 0; tierIdx < STRATIFIED_WEIGHTS.length; tierIdx++) {
-          const tier = STRATIFIED_WEIGHTS[tierIdx]!;
-          const batch = field.armTierBatches[armIdx]![tierIdx]!;
+        for (let layerIdx = 0; layerIdx < DEPTH_LAYERS.length; layerIdx++) {
+          const layer = DEPTH_LAYERS[layerIdx]!;
+          const batch = field.armLayerBatches[armIdx]![layerIdx]!;
           if (!batch.length) continue;
 
-          const baseGold = mixRgbTuple(goldAmb, goldSpec, tier.colorMix);
-          const goldStr = `${baseGold[0]}, ${baseGold[1]}, ${baseGold[2]}`;
-          const coralEdgeStr = mixRgb(baseGold, CRIMSON_CORAL, edgeRed * 0.9);
-          const crimsonEdgeStr = mixRgb(goldDeep, CRIMSON_PURE, edgeRed * 0.98);
-          const deepCrimsonStr = mixRgb(goldDeep, CRIMSON_DEEP, edgeRed * 1.0);
+          // Connected arms use full molten gold; disconnected arms use dark dormant bronze
+          const activeGold = mixRgbTuple(goldMid, goldCore, layer.hot);
+          const baseRgb = isConnected
+            ? activeGold
+            : mixRgbTuple(DORMANT_BRONZE, activeGold, clamp((level - 0.08) * 1.5, 0, 1));
+          const baseRgbStr = `${baseRgb[0]}, ${baseRgb[1]}, ${baseRgb[2]}`;
 
-          // Base opacity scales directly with connLevel:
-          // - Connected (connLevel = 1.0): full luminous golden brilliance
-          // - Disconnected (connLevel ≈ 0.02): genuinely dark shadow
-          const effectiveLevel = Math.max(connLevel, activeWaveStrength * 0.85);
-          const a =
-            tier.alpha *
-            alphaMul *
-            effectiveLevel *
-            (1 + 0.22 * energy + 0.35 * activeWaveStrength);
+          const baseAlpha =
+            layer.alpha *
+            alphaScale *
+            (isConnected ? 0.32 + 1.02 * level : level * 0.65) *
+            (1 + 0.25 * energy + 0.38 * waveStrength);
 
-          const armGrad = ctx.createLinearGradient(core.x, core.y, tip.x, tip.y);
+          const armGrad = ctx.createLinearGradient(
+            core.x,
+            core.y,
+            spine.tipPt.x,
+            spine.tipPt.y,
+          );
 
-          // Sample 9 stops along u in [0, 1] so both:
-          //   (a) the travelling crimson information wave R_wave(u, t), AND
-          //   (b) the crimson transition near the outer trailing edges (u > 0.68)
-          // are rendered directly in the flowing lines themselves!
-          const stops = [0, 0.14, 0.28, 0.38, 0.5, 0.64, 0.76, 0.9, 1.0];
+          // Sample multi-stop gradient along u in [0, 1]:
+          //   - Core through node waist and mid-arm (0.0 -> 0.62): Pure Gold (unless an active crimson info wave is passing through u!)
+          //   - Near the outer trailing edges (0.68 -> 1.0): Transitions toward Crimson Red on connected arms!
+          const stops = [0, 0.16, 0.34, 0.5, 0.64, 0.76, 0.88, 1.0];
           for (const u of stops) {
-            if (u > igniteFront + 0.08) {
-              armGrad.addColorStop(u, "rgba(0, 0, 0, 0)");
-              continue;
+            let infoWaveRed = 0;
+            if (waveCenterU >= 0 && waveStrength > 0.01) {
+              const d = (u - waveCenterU) / 0.14;
+              infoWaveRed = Math.exp(-0.5 * d * d) * waveStrength;
             }
 
-            // 1) Information-transfer crimson wavepacket along the lines
-            let waveRed = 0;
-            if (activeWaveU >= 0 && activeWaveStrength > 0.01) {
-              const d = (u - activeWaveU) / 0.14;
-              waveRed = Math.exp(-0.5 * d * d) * activeWaveStrength;
-            }
+            const trailingEdgeRed = smoothstep(0.64, 0.9, u) * edgeRed;
+            const redMix = clamp(Math.max(infoWaveRed * 0.96, trailingEdgeRed), 0, 1);
 
-            // 2) Connected node outer trailing edge transition toward crimson red (u in [0.68, 1.0])
-            const trailingEdgeFactor = smoothstep(0.66, 0.92, u) * edgeRed;
+            const targetCrimson = u > 0.82 ? CRIMSON_PURE : CRIMSON_HOT;
+            const stopColor =
+              redMix > 0.02
+                ? mixRgb(baseRgb, targetCrimson, redMix)
+                : baseRgbStr;
 
-            const totalRedMix = clamp(Math.max(waveRed * 0.98, trailingEdgeFactor), 0, 1);
-
-            let stopRgb = goldStr;
-            if (totalRedMix > 0.02) {
-              if (u > 0.84 && trailingEdgeFactor > waveRed) {
-                stopRgb = mixRgb(baseGold, CRIMSON_PURE, totalRedMix);
-              } else if (waveRed > trailingEdgeFactor) {
-                stopRgb = mixRgb(baseGold, CRIMSON_PURE, waveRed * 0.95);
-              } else {
-                stopRgb = coralEdgeStr;
-              }
-            }
-
-            // Radial envelope along the arm: bright at core and node waist (u ≈ 0.34), tapering smoothly at u = 1
-            const waistFocus = 1 + 0.45 * Math.exp(-Math.pow((u - 0.35) / 0.1, 2));
-            const edgeTaper = u < 0.72 ? 1 : 1 - smoothstep(0.72, 1.0, u);
-            const waveBoost = 1 + 0.65 * waveRed;
-            const stopAlpha = clamp(a * waistFocus * edgeTaper * waveBoost, 0, 1);
+            // Natural brightness profile along the arm
+            const uProfile =
+              u === 0
+                ? 1.85
+                : u <= 0.36
+                  ? 1.35
+                  : u <= 0.64
+                    ? 0.95
+                    : u <= 0.88
+                      ? 0.48 + 0.35 * redMix
+                      : 0;
+            const waveBoost = 1 + 0.55 * infoWaveRed;
+            const stopAlpha = clamp(baseAlpha * uProfile * waveBoost, 0, 1);
 
             if (u === 1.0) {
-              armGrad.addColorStop(1.0, `rgba(${deepCrimsonStr}, 0)`);
+              armGrad.addColorStop(1.0, `rgba(${mixRgb(goldDeep, CRIMSON_DEEP, edgeRed)}, 0)`);
             } else {
-              armGrad.addColorStop(u, `rgba(${stopRgb}, ${stopAlpha})`);
+              armGrad.addColorStop(u, `rgba(${stopColor}, ${stopAlpha})`);
             }
           }
 
           ctx.beginPath();
-          for (const sIdx of batch) {
-            const [segIn, segOut] = armStreamlines[sIdx]!;
-            ctx.moveTo(segIn[0].x, segIn[0].y);
-            ctx.bezierCurveTo(segIn[1].x, segIn[1].y, segIn[2].x, segIn[2].y, segIn[3].x, segIn[3].y);
-            ctx.bezierCurveTo(segOut[1].x, segOut[1].y, segOut[2].x, segOut[2].y, segOut[3].x, segOut[3].y);
+          for (const fIdx of batch) {
+            const f = field.armFilaments[fIdx]!;
+            const fReach = Math.min(1, singularityUnfurl(intro, f.stagger));
+            const pts: Vec[] = new Array(CURVE_STEPS + 1);
+            for (let k = 0; k <= CURVE_STEPS; k++) {
+              const u = sampleUs[k]! * fReach;
+              pts[k] = evaluateArmFilamentPoint(
+                f,
+                spine,
+                u,
+                R,
+                activeTime,
+                level,
+                edgeRed * 0.5 + waveStrength * 0.5,
+                armSolitonBoost,
+              );
+            }
+            traceSmoothPolyline(ctx, pts);
           }
 
-          ctx.lineWidth = tier.width * (0.85 + 0.3 * effectiveLevel + 0.2 * activeWaveStrength) * (isLight ? 1.12 : 1);
+          ctx.lineWidth = layer.width * (0.85 + 0.45 * level + 0.2 * waveStrength) * (isLight ? 1.15 : 1);
           ctx.strokeStyle = armGrad;
           ctx.stroke();
         }
       }
 
-      // ——— 5. Singularity Core Focal Point (Formed Where All Lines Converge) ———
-      const breathe = 1 + 0.04 * Math.sin(time * (0.55 + energy));
-      const coreGlowR = R * 0.18 * breathe * Math.min(1, coreSpring);
+      // ——— 8. Expanding Harmonic Ripples from the Singularity Core ———
+      ctx.lineWidth = 1.1;
+      for (let i = ripples.length - 1; i >= 0; i--) {
+        const rp = ripples[i]!;
+        if (!reduceMotion) rp.u += dt * 0.46;
+        if (rp.u >= 1) {
+          ripples.splice(i, 1);
+          continue;
+        }
+        const fade = Math.pow(1 - rp.u, 2) * rp.strength;
+        const rpColor = rp.crimson
+          ? mixRgb(goldBright, CRIMSON_PURE, clamp(rp.u * 1.35, 0, 1))
+          : `${goldBright[0]}, ${goldBright[1]}, ${goldBright[2]}`;
+        ctx.strokeStyle = `rgba(${rpColor}, ${0.3 * fade * alphaScale})`;
+        ctx.beginPath();
+        ctx.arc(core.x, core.y, R * (0.08 + rp.u * 1.55), 0, TAU);
+        ctx.stroke();
+      }
+
+      // ——— 9. Flowing Photons Along the Connected Node Arms & Horizon Wings ———
+      const flowSpeedMul = 1 + 1.85 * energy;
+      for (const pt of field.armPhotons) {
+        const level = armLevels[pt.arm] ?? 0.1;
+        if (level < 0.25) continue; // Keep disconnected arms dark
+        const edgeRed = armTrailingEdgeHeat[pt.arm] ?? 0;
+        const f = field.armFilaments[pt.filamentIdx]!;
+        const spine = spines[pt.arm]!;
+
+        const distFromWaist = Math.abs(pt.u - SOCKET_U);
+        const venturiBoost = 1 + 0.65 * Math.exp(-(distFromWaist * distFromWaist) / 0.025);
+
+        if (!reduceMotion) {
+          pt.u = (pt.u + pt.speed * dt * flowSpeedMul * venturiBoost * (0.45 + 0.75 * level)) % 1;
+        }
+
+        const uEff = pt.u * Math.min(1, singularityUnfurl(intro, f.stagger));
+        const pos = evaluateArmFilamentPoint(f, spine, uEff, R, activeTime, level, edgeRed * 0.4, 0);
+
+        const edgeFade = Math.sin(pt.u * Math.PI);
+        const isCrimsonTail = edgeRed > 0.05 && pt.u > 0.66;
+        ctx.fillStyle = isCrimsonTail
+          ? `rgb(${mixRgb(goldCore, CRIMSON_PURE, clamp((pt.u - 0.66) * 2.8 * edgeRed, 0, 1))})`
+          : `rgb(${goldCore[0]}, ${goldCore[1]}, ${goldCore[2]})`;
+
+        ctx.globalAlpha = introEase * pt.alpha * edgeFade * level;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, pt.size, 0, TAU);
+        ctx.fill();
+      }
+
+      for (const hp of field.horizonPhotons) {
+        if (!reduceMotion) {
+          hp.u = (hp.u + hp.speed * dt * flowSpeedMul) % 1;
+        }
+        const curve = horizonCurves[hp.strandIdx]!;
+        const pos = pointOnHorizonCurve(curve, hp.u);
+        const edgeDist = Math.abs(hp.u - 0.5) * 2;
+        const edgeFade = Math.sin(hp.u * Math.PI);
+        ctx.fillStyle =
+          horizonEdgeRed > 0.05 && edgeDist > 0.64
+            ? `rgb(${mixRgb(goldBright, CRIMSON_PURE, (edgeDist - 0.64) * 2.6 * horizonEdgeRed)})`
+            : `rgb(${goldBright[0]}, ${goldBright[1]}, ${goldBright[2]})`;
+        ctx.globalAlpha = introEase * hp.alpha * edgeFade;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, hp.size, 0, TAU);
+        ctx.fill();
+      }
+
+      // ——— 10. The Singularity Nucleus (Always Pure White-Hot & Molten 24k Gold) ———
+      ctx.globalAlpha = 1;
+      const coreScale = intro < 0.28 ? 0.38 + intro * 2.2 : 1;
+      const coreGlowR = S * 0.082 * breathe * coreScale;
+
       radialGlow(ctx, core, coreGlowR, [
-        [0, `rgba(${goldSpec.join(", ")}, ${0.95 * masterAlpha})`],
-        [0.28, `rgba(${goldPri.join(", ")}, ${(0.58 + 0.2 * energy) * masterAlpha})`],
-        [0.65, `rgba(${goldAmb.join(", ")}, ${0.14 * masterAlpha})`],
+        [0, isLight ? "rgba(255, 252, 240, 1)" : "rgba(255, 254, 246, 1)"],
+        [0.18, `rgba(${goldBright.join(", ")}, ${0.84 + 0.14 * energy})`],
+        [0.48, `rgba(${goldMid.join(", ")}, 0.26)`],
         [1, "rgba(0, 0, 0, 0)"],
       ]);
+
+      // ——— 11. Soft Left-Sidebar Readability Scrim (Keeps Left Sidebar Crisp Without Clipping Arms) ———
+      if (!isLight) {
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 1;
+        const leftScrim = ctx.createLinearGradient(0, 0, 92, 0);
+        leftScrim.addColorStop(0, "rgba(0, 0, 0, 0.86)");
+        leftScrim.addColorStop(0.65, "rgba(0, 0, 0, 0.45)");
+        leftScrim.addColorStop(1, "rgba(0, 0, 0, 0)");
+        ctx.fillStyle = leftScrim;
+        ctx.fillRect(0, 0, 92, height);
+      }
     };
 
     const resize = () => {
@@ -780,6 +1208,8 @@ export function NeuralStage({
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerleave", onPointerLeave);
       canvas.removeEventListener("click", onClick);
       redrawRef.current = null;
     };
