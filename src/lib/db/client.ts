@@ -1,6 +1,12 @@
 import { drizzle } from "drizzle-orm/postgres-js"
 import postgres from "postgres"
-import { AUTH_SCHEMA_STATEMENTS, COMMAND_SCHEMA_STATEMENTS, RESEARCH_SCHEMA_STATEMENTS, WAITLIST_SCHEMA_STATEMENTS } from "./statements"
+import {
+  AUTH_SCHEMA_STATEMENTS,
+  COMMAND_SCHEMA_STATEMENTS,
+  RESEARCH_SCHEMA_STATEMENTS,
+  STUDIO_SCHEMA_STATEMENTS,
+  WAITLIST_SCHEMA_STATEMENTS,
+} from "./statements"
 
 type Sql = ReturnType<typeof postgres>
 type Database = ReturnType<typeof drizzle>
@@ -9,6 +15,7 @@ let sql: Sql | undefined
 let database: Database | undefined
 let schemaReady: Promise<void> | null = null
 let researchReady: Promise<void> | null = null
+let studioReady: Promise<void> | null = null
 let commandReady: Promise<void> | null = null
 let waitlistReady: Promise<void> | null = null
 
@@ -99,4 +106,19 @@ export function ensureWaitlistSchema() {
     throw error
   })
   return waitlistReady
+}
+
+/** Creates the Recording Studio tables (after the Auth.js tables they reference). */
+export function ensureStudioSchema() {
+  studioReady ??= (async () => {
+    await ensureAuthSchema()
+    const connection = getSql()
+    for (const statement of STUDIO_SCHEMA_STATEMENTS) {
+      await connection.unsafe(statement)
+    }
+  })().catch((error: unknown) => {
+    studioReady = null
+    throw error
+  })
+  return studioReady
 }

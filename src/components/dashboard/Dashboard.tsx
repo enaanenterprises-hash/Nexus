@@ -10,10 +10,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { NexusMenuButton } from "./NexusMenuButton";
 import { CommandView, type CommandTab } from "@/components/command/CommandView";
 import { ResearchView } from "@/components/research/ResearchView";
+import { StudioView } from "@/components/studio/StudioView";
 import type { Viewer } from "@/lib/auth/types";
 import { COMMAND_NODE_ID } from "@/extensions/command/node";
 import { RESEARCH_NODE_ID } from "@/extensions/research/node";
 import { SAMPLE_EXTENSIONS } from "@/extensions/samples";
+import { STUDIO_NODE_ID, studioExtension } from "@/extensions/studio/node";
 import {
   canUseSlot,
   extensionRegistry,
@@ -43,9 +45,10 @@ import { useTheme } from "@/lib/theme";
 
 const SETUP_DONE_KEY = "nexus:setup-done.v1";
 const INSTALLED_NODES_KEY = "nexus:installed-nodes.v1";
+const BUILTIN_EXTENSIONS = [studioExtension, ...SAMPLE_EXTENSIONS] as const;
 const DEFAULT_NODE_IDS: ExtensionId[] = [
+  STUDIO_NODE_ID,
   "dev.nexus.sample.daily-brief",
-  "dev.nexus.sample.focus-guard",
 ];
 
 function readSavedNodes(): ExtensionId[] | null {
@@ -89,6 +92,7 @@ const OAUTH_ERRORS: Record<string, string> = {
 };
 
 const PRODUCT_PAYLOAD_LABELS: Record<string, string> = {
+  [STUDIO_NODE_ID]: "Studio",
   "dev.nexus.sample.daily-brief": "Daily Brief",
   "dev.nexus.sample.focus-guard": "Focus Guard",
   "dev.nexus.sample.quick-capture": "Quick Capture",
@@ -124,6 +128,7 @@ export function Dashboard({
   const [researchMounted, setResearchMounted] = useState(false);
   const [researchRequest, setResearchRequest] = useState<{ input: string; serial: number } | null>(null);
   const [commandMounted, setCommandMounted] = useState(false);
+  const [studioMounted, setStudioMounted] = useState(false);
   const [commandRequest, setCommandRequest] = useState<{
     tab: CommandTab;
     service: string | null;
@@ -166,15 +171,28 @@ export function Dashboard({
     [],
   );
 
-  const openPanel = useCallback((panel: PanelId) => {
-    setSurface((s) => {
-      const same =
-        typeof panel === "string"
-          ? s.panel === panel
-          : typeof s.panel === "object" && s.panel?.extension === panel.extension;
-      return { view: s.view, panel: same ? null : panel };
-    });
+  const openStudio = useCallback(() => {
+    setStudioMounted(true);
+    setMenuOpen(false);
+    setSurface({ view: "studio", panel: null });
   }, []);
+
+  const openPanel = useCallback(
+    (panel: PanelId) => {
+      if (typeof panel === "object" && panel.extension === STUDIO_NODE_ID) {
+        openStudio();
+        return;
+      }
+      setSurface((s) => {
+        const same =
+          typeof panel === "string"
+            ? s.panel === panel
+            : typeof s.panel === "object" && s.panel?.extension === panel.extension;
+        return { view: s.view, panel: same ? null : panel };
+      });
+    },
+    [openStudio],
+  );
 
   const goHome = useCallback(() => {
     setSurface({ view: "home", panel: null });
@@ -226,7 +244,7 @@ export function Dashboard({
   useEffect(() => {
     const timer = noticeTimer.current;
     async function bootExtensions() {
-      for (const extension of SAMPLE_EXTENSIONS) {
+      for (const extension of BUILTIN_EXTENSIONS) {
         if (!extensionRegistry.get(extension.manifest.id)) {
           await extensionRegistry.register(extension);
         }
@@ -304,11 +322,37 @@ export function Dashboard({
       }
     });
 
+    const unsubStudioRouted = nexusBus.subscribe("studio:take-routed", (event) => {
+      const snap = extensionRegistry.getSnapshot();
+      const fromIdx = snap.slots.findIndex((s) => s.occupiedBy === STUDIO_NODE_ID);
+      if (fromIdx < 0) return;
+      const targetId = event.payload.targetNodeId;
+      const explicitIdx = targetId ? snap.slots.findIndex((s) => s.occupiedBy === targetId) : -1;
+      const targetName =
+        event.payload.intent === "video-studio"
+          ? "Video Studio"
+          : event.payload.intent === "study-space"
+            ? "Study Space"
+            : event.payload.intent === "ai-notes"
+              ? "AI Notes"
+              : targetId
+                ? (extensionRegistry.get(targetId)?.manifest.name ?? PRODUCT_PAYLOAD_LABELS[targetId] ?? "Node")
+                : "Command";
+      setTransfer((prev) => ({
+        fromSocket: fromIdx,
+        toSocket: explicitIdx >= 0 ? explicitIdx : -1,
+        label: `Studio → ${targetName}`,
+        serial: (prev?.serial ?? 0) + 1,
+      }));
+      flash(`Routed “${event.payload.title}” to ${targetName}.`);
+    });
+
     return () => {
       unsubCommand();
       unsubProactive();
+      unsubStudioRouted();
     };
-  }, []);
+  }, [flash]);
 
   useEffect(() => {
     clearResumeSetupStep();
@@ -351,7 +395,7 @@ export function Dashboard({
       }
       if (surface.panel) {
         setSurface((s) => ({ ...s, panel: null }));
-      } else if (surface.view === "command" || surface.view === "research") {
+      } else if (surface.view === "command" || surface.view === "research" || surface.view === "studio") {
         setSurface({ view: "home", panel: null });
       } else if (menuOpen) {
         setMenuOpen(false);
@@ -464,7 +508,7 @@ export function Dashboard({
   }
 
   async function applySetupNodes(nodeIds: ExtensionId[]) {
-    for (const extension of SAMPLE_EXTENSIONS) {
+    for (const extension of BUILTIN_EXTENSIONS) {
       if (!extensionRegistry.get(extension.manifest.id)) {
         await extensionRegistry.register(extension);
       }
@@ -581,7 +625,12 @@ export function Dashboard({
     await extensionRegistry.deactivate(id);
     saveInstalledNodes(extensionRegistry.listActive());
     flash(`${name} disconnected.`);
-    setSurface((s) => (typeof s.panel === "object" && s.panel?.extension === id ? { ...s, panel: null } : s));
+    setSurface((s) => {
+      if (id === STUDIO_NODE_ID && s.view === "studio") {
+        return { view: "home", panel: null };
+      }
+      return typeof s.panel === "object" && s.panel?.extension === id ? { ...s, panel: null } : s;
+    });
   }
 
   function triggerNodeTransfer(fromId: ExtensionId, explicitToId?: ExtensionId) {
@@ -708,6 +757,16 @@ export function Dashboard({
           {commandMounted ? (
             <div className="command-screen" hidden={surface.view !== "command"}>
               <CommandView request={commandRequest} onClose={() => setSurface({ view: "home", panel: null })} />
+            </div>
+          ) : null}
+
+          {studioMounted ? (
+            <div className="studio-fullscreen" hidden={surface.view !== "studio"}>
+              <StudioView
+                hub={hub}
+                onClose={() => setSurface({ view: "home", panel: null })}
+                onReleaseNode={() => void release(STUDIO_NODE_ID)}
+              />
             </div>
           ) : null}
 

@@ -12,6 +12,9 @@ export function requiredCapability(event: NexusEvent): ExtensionCapability | nul
       return contentCapability((event as NexusEvent<"command:item-published">).payload.kind, "read");
     case "command:automation-ran":
       return "automations";
+    case "studio:recording-saved":
+    case "studio:take-routed":
+      return contentCapability("studio.recording", "read");
     default:
       return null;
   }

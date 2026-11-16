@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { STUDIO_NODE_ID } from "@/extensions/studio/node";
 import { signOutAction } from "@/lib/auth/actions";
 import {
   FREE_ACTIVE_EXTENSION_SLOTS,
@@ -29,7 +30,7 @@ import { CommandIcon, LockIcon, MoonIcon, NetworkIcon, NodesIcon, PlusIcon, SunI
 
 export type PanelId = "today" | "nodes" | "settings" | { extension: ExtensionId };
 
-export type Surface = { view: "home" | "research" | "command"; panel: PanelId | null };
+export type Surface = { view: "home" | "research" | "command" | "studio"; panel: PanelId | null };
 
 const isPanel = (panel: PanelId | null, id: PanelId) =>
   typeof id === "string" ? panel === id : typeof panel === "object" && panel?.extension === id.extension;
@@ -162,7 +163,10 @@ export const NodeMenu = memo(function NodeMenu({
           key={ext.manifest.id}
           label={ext.manifest.name}
           tooltip={ext.manifest.name}
-          active={isPanel(surface.panel, { extension: ext.manifest.id })}
+          active={
+            isPanel(surface.panel, { extension: ext.manifest.id }) ||
+            (ext.manifest.id === STUDIO_NODE_ID && surface.view === "studio")
+          }
           onClick={() => onPanel({ extension: ext.manifest.id })}
         >
           <span className="text-[11px] font-semibold">{ext.manifest.monogram ?? ext.manifest.name.slice(0, 2)}</span>
@@ -460,7 +464,10 @@ export const NodeRail = memo(function NodeRail({
           const openSlot = canUseSlot(slot, hub.entitlement);
           const name = ext?.manifest.name ?? placeholderName(slot.placeholderKey);
           const state = ext ? "live" : openSlot ? "open" : "locked";
-          const selected = ext && isPanel(surface.panel, { extension: ext.manifest.id });
+          const selected =
+            ext &&
+            (isPanel(surface.panel, { extension: ext.manifest.id }) ||
+              (ext.manifest.id === STUDIO_NODE_ID && surface.view === "studio"));
           const tip = ext
             ? `${name} · live`
             : openSlot

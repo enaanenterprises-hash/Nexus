@@ -177,3 +177,42 @@ export const WAITLIST_SCHEMA_STATEMENTS = [
   )`,
   `CREATE INDEX IF NOT EXISTS "waitlist_email_idx" ON "waitlist" ("email")`,
 ] as const
+
+/**
+ * Recording Studio metadata and AI-ready enrichment columns (`transcript`,
+ * `summary`, `chapters`), scoped per user. Binary track payloads reside in client
+ * IndexedDB or referenced remote object URLs (`tracks[*].audioRef`).
+ */
+export const STUDIO_SCHEMA_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS "studio_collection" (
+    "id" text PRIMARY KEY NOT NULL,
+    "userId" text NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
+    "name" text NOT NULL,
+    "description" text,
+    "createdAt" timestamptz NOT NULL DEFAULT now(),
+    "updatedAt" timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS "studio_collection_userId_idx" ON "studio_collection" ("userId")`,
+  `CREATE TABLE IF NOT EXISTS "studio_recording" (
+    "id" text PRIMARY KEY NOT NULL,
+    "userId" text NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
+    "collectionId" text NOT NULL REFERENCES "studio_collection" ("id") ON DELETE CASCADE,
+    "title" text NOT NULL,
+    "description" text,
+    "bpm" integer NOT NULL DEFAULT 120,
+    "countInBars" integer NOT NULL DEFAULT 0,
+    "durationMs" integer NOT NULL DEFAULT 0,
+    "masterGain" double precision NOT NULL DEFAULT 1,
+    "peaks" jsonb NOT NULL DEFAULT '[]',
+    "tracks" jsonb NOT NULL DEFAULT '[]',
+    "markers" jsonb NOT NULL DEFAULT '[]',
+    "tags" text[] NOT NULL DEFAULT '{}',
+    "transcript" jsonb,
+    "summary" jsonb,
+    "chapters" jsonb,
+    "createdAt" timestamptz NOT NULL DEFAULT now(),
+    "updatedAt" timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS "studio_recording_userId_idx" ON "studio_recording" ("userId", "updatedAt" DESC)`,
+  `CREATE INDEX IF NOT EXISTS "studio_recording_collectionId_idx" ON "studio_recording" ("collectionId")`,
+] as const

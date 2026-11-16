@@ -42,6 +42,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SAMPLE_EXTENSIONS } from "@/extensions/samples";
+import { STUDIO_NODE_ID, studioExtension } from "@/extensions/studio/node";
 import { connectGoogleServices } from "@/lib/command/google-connect";
 import {
   COMMAND_WIDGETS,
@@ -144,8 +145,8 @@ const OTHER_APP_ORDER: readonly string[] = [
 ];
 
 const DEFAULT_SAMPLE_NODES: ExtensionId[] = [
+  STUDIO_NODE_ID,
   "dev.nexus.sample.daily-brief",
-  "dev.nexus.sample.focus-guard",
 ];
 
 function computeSuggestedWidgets(connectedConnectorIds: Set<string>): string[] {
@@ -1672,49 +1673,55 @@ function SetupNodesStep({
     onChange([...selectedNodes, id]);
   }
 
+  function renderNodeOption(ext: (typeof SAMPLE_EXTENSIONS)[number], extraClassName = "") {
+    const { id, name, monogram, description } = ext.manifest;
+    const active = selectedNodes.includes(id);
+    return (
+      <button
+        key={id}
+        type="button"
+        onClick={() => toggleNode(id)}
+        className={`setup-node-cell text-left ${extraClassName}`}
+        data-selected={active ? "true" : "false"}
+        aria-pressed={active}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="setup-node-monogram" data-active={active ? "true" : "false"}>
+              {monogram ?? name.slice(0, 2).toUpperCase()}
+            </span>
+            <div className="min-w-0">
+              <div className="setup-row-title">{name}</div>
+              <div className="setup-row-sub mt-0.5 line-clamp-2">{description}</div>
+            </div>
+          </div>
+          <span className="setup-check-ring mt-0.5 shrink-0" data-checked={active ? "true" : "false"}>
+            {active ? <Check className="size-3" strokeWidth={2.5} /> : null}
+          </span>
+        </div>
+      </button>
+    );
+  }
+
   return (
     <div className="space-y-4 py-1">
       <div className="setup-section-head flex items-center justify-between gap-2 pb-2">
-        <span className="setup-label">Starter nodes</span>
+        <span className="setup-label">Functional Studio &amp; starter nodes</span>
         <span className="setup-count-meta">
           {selectedNodes.length} of {FREE_ACTIVE_EXTENSION_SLOTS} active
         </span>
       </div>
 
+      <div className="setup-node-matrix !grid-cols-1">
+        {renderNodeOption(studioExtension, "!border-r-0 !border-b-0")}
+      </div>
+
       <div className="setup-node-matrix">
-        {SAMPLE_EXTENSIONS.map((ext) => {
-          const { id, name, monogram, description } = ext.manifest;
-          const active = selectedNodes.includes(id);
-          return (
-            <button
-              key={id}
-              type="button"
-              onClick={() => toggleNode(id)}
-              className="setup-node-cell text-left"
-              data-selected={active ? "true" : "false"}
-              aria-pressed={active}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-start gap-3">
-                  <span className="setup-node-monogram" data-active={active ? "true" : "false"}>
-                    {monogram ?? name.slice(0, 2).toUpperCase()}
-                  </span>
-                  <div className="min-w-0">
-                    <div className="setup-row-title">{name}</div>
-                    <div className="setup-row-sub mt-0.5 line-clamp-2">{description}</div>
-                  </div>
-                </div>
-                <span className="setup-check-ring mt-0.5 shrink-0" data-checked={active ? "true" : "false"}>
-                  {active ? <Check className="size-3" strokeWidth={2.5} /> : null}
-                </span>
-              </div>
-            </button>
-          );
-        })}
+        {SAMPLE_EXTENSIONS.map((ext) => renderNodeOption(ext))}
       </div>
 
       <p className="setup-footer-note">
-        Showing sample starter nodes for preview. Functional nodes will be added here in later updates.
+        Recording Studio is live with voice-reactive audio and cross-node routing; sample nodes remain available for network previews.
       </p>
     </div>
   );

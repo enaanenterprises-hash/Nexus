@@ -3,6 +3,11 @@ import type {
   ResearchSourceContentV1,
   ResearchSourceListItemV1,
 } from "@/lib/research/types";
+import type {
+  StudioRecordingAnnotationV1,
+  StudioRecordingContentV1,
+  StudioRecordingListItemV1,
+} from "@/lib/studio/types";
 import type { CommandItemOf, CommandKind } from "@/lib/command/kinds";
 import type { ExtensionId } from "./types";
 
@@ -74,6 +79,12 @@ export interface ContentKindMap extends CommandKindEntries {
     item: ResearchSourceContentV1;
     annotation: ResearchSourceAnnotationV1;
   };
+  "studio.recording": {
+    version: 1;
+    listItem: StudioRecordingListItemV1;
+    item: StudioRecordingContentV1;
+    annotation: StudioRecordingAnnotationV1;
+  };
 }
 
 export type KnownContentKind = keyof ContentKindMap;
@@ -81,6 +92,7 @@ export type KnownContentKind = keyof ContentKindMap;
 /** Versions this build of Nexus speaks, sent with every request. */
 export const CONTENT_KIND_VERSIONS: { [K in KnownContentKind]: ContentKindMap[K]["version"] } = {
   "research.source": 1,
+  "studio.recording": 1,
   "command.event": 1,
   "command.task": 1,
   "command.deadline": 1,

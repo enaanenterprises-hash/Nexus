@@ -7,7 +7,20 @@ import { register } from "node:module";
 register(
   "data:text/javascript," +
     encodeURIComponent(`
+      const rootUrl = new URL("../src/", ${JSON.stringify(import.meta.url)}).href;
       export async function resolve(specifier, context, next) {
+        if (specifier.startsWith("@/")) {
+          const mapped = rootUrl + specifier.slice(2);
+          try {
+            return await next(mapped, context);
+          } catch {
+            try {
+              return await next(mapped + ".ts", context);
+            } catch {
+              return next(mapped + "/index.ts", context);
+            }
+          }
+        }
         try {
           return await next(specifier, context);
         } catch (error) {
@@ -22,6 +35,7 @@ register(
 
 const ext = await import("../src/lib/extensions/index.ts");
 const { ExtensionBus, ExtensionRegistry, NEXUS_EXTENSION_API_VERSION, setStubPro, validateManifest } = ext;
+const { STUDIO_NODE_ID, studioExtension } = await import("../src/extensions/studio/node.ts");
 
 let failed = 0;
 function assert(cond, msg) {
@@ -237,6 +251,60 @@ const tl = buildTimeline(
 assert(tl.day === "2026-11-14" && tl.entries.length === 2, "timeline keeps only today's timed items in the viewer's zone");
 assert(tl.entries[0].live && tl.nowIndex === 1, "timeline marks live entries and places the now marker");
 assert(tl.anytime.length === 1 && tl.signals.length === 1, "untimed tasks and signals get their own lanes");
+
+// Studio extension contract & gated event delivery
+const studioBus = new ExtensionBus();
+const studioReg = new ExtensionRegistry(studioBus);
+const downstream = { video: [], blind: [] };
+await studioReg.register(studioExtension);
+await studioReg.register({
+  manifest: manifest("com.acme.video", { capabilities: ["media", "content:studio.recording:read"] }),
+  handlers: { onEvent: (e) => void downstream.video.push(e.type) },
+});
+await studioReg.register({
+  manifest: manifest("com.acme.stranger", { capabilities: ["media"] }),
+  handlers: { onEvent: (e) => void downstream.blind.push(e.type) },
+});
+const studioAct = await studioReg.activate(STUDIO_NODE_ID);
+const videoAct = await studioReg.activate("com.acme.video");
+studioReg.getSnapshot();
+assert(studioAct.ok && videoAct.ok, "Studio extension and downstream consumer snap cleanly into free sockets");
+assert(contentKinds.get("studio.recording")?.provider === STUDIO_NODE_ID, "studio.recording content kind registered to Studio");
+studioBus.emit(
+  "studio:take-routed",
+  {
+    recordingId: "rec-1",
+    targetNodeId: "com.acme.video",
+    intent: "video-studio",
+    title: "Intro Voicing",
+    envelope: {
+      kind: "studio.recording",
+      version: 1,
+      id: "rec-1",
+      title: "Intro Voicing",
+      collectionId: "col-1",
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      data: {
+        description: null,
+        bpm: 120,
+        countInBars: 1,
+        durationMs: 4200,
+        masterGain: 1,
+        tracks: [],
+        markers: [],
+        tags: [],
+        transcript: null,
+        summary: null,
+        chapters: null,
+      },
+    },
+  },
+  STUDIO_NODE_ID,
+);
+await new Promise((r) => setTimeout(r, 0));
+assert(downstream.video.includes("studio:take-routed"), "studio:take-routed reaches consumers declaring content:studio.recording:read");
+assert(!downstream.blind.includes("studio:take-routed"), "nodes without content:studio.recording:read never see studio takes");
 
 if (failed > 0) process.exit(1);
 console.log("smoke-extensions passed");

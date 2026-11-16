@@ -6,6 +6,7 @@
 
 import type { AutomationRun, FocusSession } from "@/lib/command/automation/types";
 import type { CommandItem, CommandKind } from "@/lib/command/kinds";
+import type { StudioRecordingContentV1, StudioRoutingIntent } from "@/lib/studio/types";
 import type { ContentClient } from "./content-access";
 import type { ContentCapability, ContentKindDeclaration } from "./content";
 
@@ -79,6 +80,21 @@ export type NexusEventMap = {
   "research:page-opened": { url: string; title: string; siteName: string | null; sourceId: string | null };
   "research:source-saved": { sourceId: string; collectionId: string; url: string; title: string };
   "research:highlight-added": { sourceId: string; highlightId: string; quote: string };
+  "studio:recording-saved": {
+    recordingId: string;
+    collectionId: string;
+    title: string;
+    durationMs: number;
+    trackCount: number;
+  };
+  /** Delivered only with `content:studio.recording:read`. */
+  "studio:take-routed": {
+    recordingId: string;
+    targetNodeId?: ExtensionId;
+    intent: StudioRoutingIntent;
+    title: string;
+    envelope: StudioRecordingContentV1;
+  };
   /** A new Command item reached the network. Delivered only with `content:<kind>:read`. */
   "command:item-published": { kind: CommandKind; item: CommandItem };
   /** An automation ran. Delivered only with the `automations` capability. */
