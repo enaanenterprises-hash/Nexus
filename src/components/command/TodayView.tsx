@@ -1,12 +1,10 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { ACTION_DEFINITIONS } from "@/lib/command/actions";
 import type { CommandItem, CommandItemOf } from "@/lib/command/kinds";
 import { connectGoogleServices } from "@/lib/command/google-connect";
@@ -16,22 +14,25 @@ import { ExternalIcon } from "@/components/dashboard/icons";
 import { commandApi, viewerTimeZone, type LiveWeather } from "./command-client";
 import { clock, countdown, dayLabel, money, relative, sourceName } from "./format";
 import { KindIcon, Section, SourceGlyph, StatusDot, useNow } from "./parts";
+import { buildQuotedMailHtml, RichMailDialog, type MailDraft } from "./RichMailEditor";
 import type { CommandController } from "./use-command";
 
 type MailItem = CommandItemOf<"command.message">;
 type EventItem = CommandItemOf<"command.event">;
 
-type Draft = {
-  to: string;
-  cc: string;
-  subject: string;
-  body: string;
-  threadId: string | null;
-  inReplyTo: string | null;
-  reply: boolean;
-};
-
-const blankDraft = (): Draft => ({ to: "", cc: "", subject: "", body: "", threadId: null, inReplyTo: null, reply: false });
+const blankDraft = (): MailDraft => ({
+  id: `today-${Date.now()}`,
+  to: "",
+  cc: "",
+  bcc: "",
+  subject: "",
+  body: "",
+  html: "",
+  initialHtml: "",
+  threadId: null,
+  inReplyTo: null,
+  mode: "compose",
+});
 
 export function TodayView({ command, onConnections }: { command: CommandController; onConnections: () => void }) {
   const state = command.state!;
@@ -39,7 +40,8 @@ export function TodayView({ command, onConnections }: { command: CommandControll
   const timeZone = useMemo(() => viewerTimeZone(), []);
   const timeline = useMemo(() => buildTimeline(state.items, { now: new Date(now), timeZone }), [state.items, now, timeZone]);
   const { goals, anytime } = timeline;
-  const [draft, setDraft] = useState<Draft | null>(null);
+  const [draft, setDraft] = useState<MailDraft | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
   const [sent, setSent] = useState<string | null>(null);
   const mail = useMemo(
     () =>
@@ -61,15 +63,24 @@ export function TodayView({ command, onConnections }: { command: CommandControll
 
   function replyTo(message: MailItem) {
     const subject = message.data.subject.startsWith("Re:") ? message.data.subject : `Re: ${message.data.subject}`;
+    setSendError(null);
     setSent(null);
     setDraft({
+      id: `today-reply-${message.id}-${Date.now()}`,
       to: senderEmail(message.data.from),
       cc: "",
+      bcc: "",
       subject,
       body: "",
+      html: "",
+      initialHtml: buildQuotedMailHtml({
+        from: message.data.from,
+        date: relative(message.data.receivedAt, now),
+        text: message.data.body || message.data.snippet,
+      }),
       threadId: message.data.threadId ?? null,
       inReplyTo: message.data.rfcMessageId ?? null,
-      reply: true,
+      mode: "reply",
     });
   }
 
@@ -179,26 +190,36 @@ export function TodayView({ command, onConnections }: { command: CommandControll
         </aside>
       </div>
       {draft ? (
-        <ComposeMail
+        <RichMailDialog
           draft={draft}
           canSend={canSend}
           sending={command.pending === "mail"}
+          error={sendError}
           onChange={setDraft}
-          onClose={() => setDraft(null)}
-          onSend={async () => {
-            const failure = await command.sendMail({
-              to: draft.to,
-              cc: draft.cc.trim() || undefined,
-              subject: draft.subject,
-              body: draft.body,
-              threadId: draft.threadId,
-              inReplyTo: draft.inReplyTo,
-            });
-            if (!failure) {
-              setSent(draft.reply ? `Reply sent to ${draft.to}.` : `Sent to ${draft.to}.`);
+          onClose={() => {
+            setDraft(null);
+            setSendError(null);
+          }}
+          onSend={() => {
+            void (async () => {
+              setSendError(null);
+              const failure = await command.sendMail({
+                to: draft.to,
+                cc: draft.cc.trim() || undefined,
+                bcc: draft.bcc.trim() || undefined,
+                subject: draft.subject,
+                body: draft.body,
+                html: draft.html || null,
+                threadId: draft.threadId,
+                inReplyTo: draft.inReplyTo,
+              });
+              if (failure) {
+                setSendError(failure);
+                return;
+              }
+              setSent(draft.mode === "reply" ? `Reply sent to ${draft.to}.` : `Sent to ${draft.to}.`);
               setDraft(null);
-            }
-            return failure;
+            })();
           }}
         />
       ) : null}
@@ -381,114 +402,6 @@ function MonthCalendar({ events, connection, now }: { events: Map<string, EventI
         </>
       )}
     </section>
-  );
-}
-
-function ComposeMail({
-  draft,
-  canSend,
-  sending,
-  onChange,
-  onClose,
-  onSend,
-}: {
-  draft: Draft;
-  canSend: boolean;
-  sending: boolean;
-  onChange: (draft: Draft) => void;
-  onClose: () => void;
-  onSend: () => Promise<string | null>;
-}) {
-  const formId = useId();
-  const [error, setError] = useState<string | null>(null);
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setError(null);
-    const failure = await onSend();
-    if (failure) setError(failure);
-  }
-  return (
-    <Dialog open onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="gap-4 border border-border bg-popover p-6 text-popover-foreground shadow-2xl ring-0 sm:max-w-[520px]">
-        <DialogHeader>
-          <DialogTitle className="font-sans text-[15px] font-medium">
-            {draft.reply ? "Reply" : "New message"}
-          </DialogTitle>
-        </DialogHeader>
-
-        {canSend ? (
-          <form className="space-y-3" onSubmit={(e) => void submit(e)}>
-            <div className="space-y-1">
-              <Label htmlFor={`${formId}-to`} className="cmd-label">To</Label>
-              <Input
-                id={`${formId}-to`}
-                className="cmd-field h-9 rounded-lg border border-border bg-background/50"
-                value={draft.to}
-                onChange={(e) => onChange({ ...draft, to: e.target.value })}
-                required
-                autoComplete="off"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor={`${formId}-cc`} className="cmd-label">Cc</Label>
-              <Input
-                id={`${formId}-cc`}
-                className="cmd-field h-9 rounded-lg border border-border bg-background/50"
-                value={draft.cc}
-                onChange={(e) => onChange({ ...draft, cc: e.target.value })}
-                autoComplete="off"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor={`${formId}-subject`} className="cmd-label">Subject</Label>
-              <Input
-                id={`${formId}-subject`}
-                className="cmd-field h-9 rounded-lg border border-border bg-background/50"
-                value={draft.subject}
-                onChange={(e) => onChange({ ...draft, subject: e.target.value })}
-                maxLength={300}
-                autoComplete="off"
-              />
-            </div>
-            <Textarea
-              aria-label="Message body"
-              className="cmd-field min-h-32 w-full rounded-xl border border-border bg-background/50 p-3"
-              value={draft.body}
-              onChange={(e) => onChange({ ...draft, body: e.target.value })}
-              placeholder="Write your message"
-              maxLength={50000}
-            />
-            {error ? (
-              <Alert variant="destructive" className="rounded-xl py-2">
-                <AlertDescription className="text-xs">{error}</AlertDescription>
-              </Alert>
-            ) : null}
-            <div className="flex justify-end pt-1">
-              <Button
-                type="submit"
-                size="sm"
-                className="border border-[color:var(--land-gold)]/55 bg-[color:var(--land-gold)]/18 text-[color:var(--land-ink)] hover:bg-[color:var(--land-gold)]/28"
-                disabled={sending || !draft.to.trim()}
-              >
-                {sending ? "Sending…" : "Send"}
-              </Button>
-            </div>
-          </form>
-        ) : (
-          <div className="cmd-connect-empty space-y-3">
-            <p>Sending needs its own Google permission. Reading your inbox stays on the read-only scope.</p>
-            <Button
-              type="button"
-              size="sm"
-              className="border border-[color:var(--land-gold)]/55 bg-[color:var(--land-gold)]/18 text-[color:var(--land-ink)] hover:bg-[color:var(--land-gold)]/28"
-              onClick={() => void connectGoogleServices(["gmail-send"])}
-            >
-              Allow sending
-            </Button>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
   );
 }
 

@@ -69,6 +69,8 @@ export interface CommandTaskV1 extends CommandBaseV1 {
   project: string | null;
   doneAt: string | null;
   goal: CommandGoalV1 | null;
+  /** Optional Google Tasks list id for write-back sync. */
+  taskListId?: string | null;
 }
 
 export interface CommandDeadlineV1 extends CommandBaseV1 {

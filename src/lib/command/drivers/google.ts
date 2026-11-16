@@ -1,4 +1,5 @@
 import "server-only"
+import { randomBytes } from "crypto"
 import type { CommandItemInput } from "../kinds"
 import { parseReceipt } from "../parsers/receipt"
 import { apiJson } from "./http"
@@ -119,9 +120,95 @@ function textOf(part: GPart): string {
     if (t) return t
   }
   if (part.mimeType === "text/html" && part.body?.data) {
-    return decode(part.body.data).replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<br\s*\/?>|<\/(p|div|tr|li|h\d)>/gi, "\n").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/[ \t]+/g, " ")
+    return htmlToPlainText(decode(part.body.data))
   }
   return ""
+}
+
+function htmlOf(part: GPart): string {
+  if (part.mimeType === "text/html" && part.body?.data) return decode(part.body.data)
+  for (const p of part.parts ?? []) {
+    const h = htmlOf(p)
+    if (h) return h
+  }
+  return ""
+}
+
+const SAFE_EMAIL_TAGS = new Set([
+  "p", "br", "div", "span", "strong", "b", "em", "i", "u", "s", "del",
+  "blockquote", "pre", "code", "ul", "ol", "li", "h1", "h2", "h3", "hr", "a",
+])
+const VOID_EMAIL_TAGS = new Set(["br", "hr"])
+const BLOCK_SPACE_TAGS = new Set(["tr", "td", "th", "section", "article", "header", "footer"])
+
+function escapeHtmlAttr(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+}
+
+function safeHref(raw: string): string | null {
+  const clean = raw.replace(/[\u0000-\u001f\u007f]+/g, "").trim()
+  if (/^(https?:\/\/|mailto:)/i.test(clean)) return clean
+  return null
+}
+
+/** Strips active content and unsafe attributes while preserving structural email markup. */
+export function sanitizeEmailHtml(rawHtml: string): string {
+  const stripped = rawHtml
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/<(script|style|head|title|meta|link|iframe|object|embed|svg|math)\b[^>]*>[\s\S]*?<\/\1>/gi, "")
+    .replace(/<(script|style|head|title|meta|link|iframe|object|embed|svg|math)\b[^>]*\/?>/gi, "")
+
+  const tokens: string[] = []
+  const re = /<\/?([a-zA-Z0-9]+)(?:\s+([^>]*))?\/?>|([^<]+)/g
+  let match: RegExpExecArray | null
+  while ((match = re.exec(stripped)) !== null) {
+    if (match[3] !== undefined) {
+      tokens.push(match[3].replaceAll("<", "&lt;").replaceAll(">", "&gt;"))
+      continue
+    }
+    const rawName = (match[1] ?? "").toLowerCase()
+    const isClose = match[0].startsWith("</")
+    if (!SAFE_EMAIL_TAGS.has(rawName)) {
+      if (isClose && BLOCK_SPACE_TAGS.has(rawName)) tokens.push("<br>")
+      continue
+    }
+    if (VOID_EMAIL_TAGS.has(rawName)) {
+      if (!isClose) tokens.push(`<${rawName}>`)
+      continue
+    }
+    if (isClose) {
+      tokens.push(`</${rawName}>`)
+      continue
+    }
+    if (rawName === "a") {
+      const attrs = match[2] ?? ""
+      const hrefMatch = /\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(attrs)
+      const href = safeHref(hrefMatch?.[1] ?? hrefMatch?.[2] ?? hrefMatch?.[3] ?? "")
+      if (href) {
+        tokens.push(`<a href="${escapeHtmlAttr(href)}" target="_blank" rel="noopener noreferrer">`)
+      }
+      continue
+    }
+    tokens.push(`<${rawName}>`)
+  }
+  return tokens.join("").trim()
+}
+
+export function htmlToPlainText(rawHtml: string): string {
+  return rawHtml
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<br\s*\/?>|<\/(p|div|tr|li|h\d|blockquote)>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "• ")
+    .replace(/<[^>]+>/g, " ")
+    .replaceAll("&nbsp;", " ")
+    .replaceAll("&amp;", "&")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
 }
 
 /** The 25 most recent inbox messages from the last week. Bodies are kept only for receipts, so the receipt recipe can read them. */
@@ -163,12 +250,14 @@ export const gmailDriver: ConnectorDriver = {
   },
 }
 
-/** One inbox message, body included, using the read-only Gmail grant. */
+/** One inbox message, body and sanitized HTML included, using the read-only Gmail grant. */
 export async function fetchGmailMessage(ctx: DriverContext, id: string) {
   if (!/^[a-zA-Z0-9_-]{1,128}$/.test(id)) throw new DriverError("That message could not be opened.", "config")
   const m = await google<GMessage>(ctx, `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`)
   const header = (name: string) => m.payload?.headers?.find((h) => h.name.toLowerCase() === name)?.value ?? ""
   const body = textOf(m.payload).replace(/\n{3,}/g, "\n\n").trim()
+  const rawHtml = htmlOf(m.payload)
+  const sanitizedHtml = rawHtml ? sanitizeEmailHtml(rawHtml) : ""
   return {
     id: m.id,
     threadId: m.threadId || null,
@@ -176,6 +265,7 @@ export async function fetchGmailMessage(ctx: DriverContext, id: string) {
     subject: header("subject") || "(no subject)",
     snippet: m.snippet ?? "",
     body: body || m.snippet || "",
+    bodyHtml: sanitizedHtml || null,
     receivedAt: new Date(Number(m.internalDate)).toISOString(),
     rfcMessageId: header("message-id") || null,
   }
@@ -202,18 +292,55 @@ export function parseRecipients(value: unknown): string[] {
   return list
 }
 
-/** Builds an RFC 2822 message as base64url for `users.messages.send`. */
-export function buildRawMessage(input: { to: string[]; cc: string[]; subject: string; body: string; inReplyTo?: string | null }): string {
-  const lines = [
+/** Builds an RFC 2822 message as base64url for `users.messages.send` (multipart/alternative when HTML is present). */
+export function buildRawMessage(input: {
+  to: string[]
+  cc: string[]
+  bcc?: string[]
+  subject: string
+  body: string
+  html?: string | null
+  inReplyTo?: string | null
+}): string {
+  const safeHtml = input.html ? sanitizeEmailHtml(input.html) : ""
+  const plainBody = input.body.trim() ? input.body : safeHtml ? htmlToPlainText(safeHtml) : ""
+  const baseHeaders = [
     `To: ${input.to.join(", ")}`,
     ...(input.cc.length ? [`Cc: ${input.cc.join(", ")}`] : []),
+    ...(input.bcc?.length ? [`Bcc: ${input.bcc.join(", ")}`] : []),
     `Subject: ${headerValue(input.subject)}`,
     ...(input.inReplyTo ? [`In-Reply-To: ${headerValue(input.inReplyTo)}`, `References: ${headerValue(input.inReplyTo)}`] : []),
     "MIME-Version: 1.0",
+  ]
+
+  if (safeHtml) {
+    const boundary = `nexus_alt_${randomBytes(10).toString("hex")}`
+    const wrappedHtml = `<!DOCTYPE html><html><body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;line-height:1.6;color:#111827;">${safeHtml}</body></html>`
+    const lines = [
+      ...baseHeaders,
+      `Content-Type: multipart/alternative; boundary="${boundary}"`,
+      "",
+      `--${boundary}`,
+      'Content-Type: text/plain; charset="UTF-8"',
+      "Content-Transfer-Encoding: base64",
+      "",
+      Buffer.from(plainBody, "utf8").toString("base64").replace(/.{76}/g, "$&\r\n"),
+      `--${boundary}`,
+      'Content-Type: text/html; charset="UTF-8"',
+      "Content-Transfer-Encoding: base64",
+      "",
+      Buffer.from(wrappedHtml, "utf8").toString("base64").replace(/.{76}/g, "$&\r\n"),
+      `--${boundary}--`,
+    ]
+    return Buffer.from(lines.join("\r\n"), "utf8").toString("base64url")
+  }
+
+  const lines = [
+    ...baseHeaders,
     'Content-Type: text/plain; charset="UTF-8"',
     "Content-Transfer-Encoding: base64",
     "",
-    Buffer.from(input.body, "utf8").toString("base64").replace(/.{76}/g, "$&\r\n"),
+    Buffer.from(plainBody, "utf8").toString("base64").replace(/.{76}/g, "$&\r\n"),
   ]
   return Buffer.from(lines.join("\r\n"), "utf8").toString("base64url")
 }
@@ -225,11 +352,14 @@ export const gmailSendDriver: ConnectorDriver = {
     "mail.send": async (ctx, params) => {
       const to = parseRecipients(params["to"])
       const cc = params["cc"] ? parseRecipients(params["cc"]) : []
+      const bcc = params["bcc"] ? parseRecipients(params["bcc"]) : []
       const subject = String(params["subject"] ?? "").slice(0, 300)
       const body = String(params["body"] ?? "").slice(0, 50_000)
-      if (!subject.trim() && !body.trim()) throw new DriverError("Write a subject or a message.", "config")
+      const html = typeof params["html"] === "string" ? params["html"].slice(0, 100_000) : null
+      const plainCheck = body.trim() || (html ? htmlToPlainText(html).trim() : "")
+      if (!subject.trim() && !plainCheck) throw new DriverError("Write a subject or a message.", "config")
       const threadId = typeof params["threadId"] === "string" && params["threadId"] ? params["threadId"] : undefined
-      const raw = buildRawMessage({ to, cc, subject, body, inReplyTo: typeof params["inReplyTo"] === "string" ? params["inReplyTo"] : null })
+      const raw = buildRawMessage({ to, cc, bcc, subject, body, html, inReplyTo: typeof params["inReplyTo"] === "string" ? params["inReplyTo"] : null })
       const sent = await google<{ id: string; threadId: string }>(ctx, "https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
         method: "POST",
         body: JSON.stringify({ raw, ...(threadId ? { threadId } : {}) }),
@@ -283,10 +413,66 @@ export const googleTasksDriver: ConnectorDriver = {
             project: list.title,
             doneAt: done ? (t.completed ?? null) : null,
             goal: null,
+            taskListId: list.id,
           },
         })
       }
     }
     return out
   },
+}
+
+/** Creates a task in Google Tasks (primary `@default` list by default). */
+export async function createGoogleTask(
+  ctx: DriverContext,
+  input: { title: string; listId?: string | null; dueAt?: string | null },
+): Promise<CommandItemInput> {
+  const listId = input.listId?.trim() || "@default"
+  const created = await google<GTask>(
+    ctx,
+    `https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(listId)}/tasks`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        title: input.title,
+        ...(input.dueAt ? { due: input.dueAt } : {}),
+      }),
+    },
+  )
+  const today = localDay(ctx.now, ctx.timeZone)
+  return {
+    kind: "command.task",
+    title: created.title || input.title,
+    externalId: created.id,
+    url: created.webViewLink ?? "https://tasks.google.com/",
+    data: {
+      status: created.status === "completed" ? "done" : "open",
+      priority: created.due && created.due.slice(0, 10) <= today ? "high" : "medium",
+      dueAt: created.due ? zonedDate(created.due.slice(0, 10), "23:59", ctx.timeZone).toISOString() : null,
+      project: "My Tasks",
+      doneAt: created.status === "completed" ? (created.completed ?? ctx.now.toISOString()) : null,
+      goal: null,
+      taskListId: listId,
+    },
+  }
+}
+
+/** Updates a Google Task's completion state via Tasks API v1. */
+export async function toggleGoogleTask(
+  ctx: DriverContext,
+  input: { listId?: string | null; taskId: string; done: boolean },
+) {
+  const listId = input.listId?.trim() || "@default"
+  return google<GTask>(
+    ctx,
+    `https://tasks.googleapis.com/tasks/v1/lists/${encodeURIComponent(listId)}/tasks/${encodeURIComponent(input.taskId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        id: input.taskId,
+        status: input.done ? "completed" : "needsAction",
+        completed: input.done ? ctx.now.toISOString() : null,
+      }),
+    },
+  )
 }

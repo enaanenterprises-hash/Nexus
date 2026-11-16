@@ -5,7 +5,12 @@ import type { ActionId } from "./actions"
 import { buildScope, executePlan, planRun, runStatus, type StepHandler } from "./automation/engine"
 import { BUILT_IN_RECIPES } from "./automation/recipes"
 import type { ActionTarget, AutomationRun, FocusSession, PlannedStep, TriggerEvent } from "./automation/types"
-import { fetchGmailMessage } from "./drivers/google"
+import {
+  createGoogleTask,
+  fetchGmailMessage,
+  googleCalendarDriver,
+  toggleGoogleTask,
+} from "./drivers/google"
 import { DriverError, type DriverContext, type DriverRegistry } from "./drivers/types"
 import {
   COMMAND_CORE_SOURCE,
@@ -440,7 +445,16 @@ export async function sendMail(options: {
   userId: string
   timeZone: string
   drivers: DriverRegistry
-  message: { to: string; cc?: string; subject: string; body: string; threadId?: string | null; inReplyTo?: string | null }
+  message: {
+    to: string
+    cc?: string
+    bcc?: string
+    subject: string
+    body: string
+    html?: string | null
+    threadId?: string | null
+    inReplyTo?: string | null
+  }
 }): Promise<{ detail: string; sentId: string | null }> {
   const connection = await store.getConnection(options.userId, "gmail-send")
   if (!connection || connection.status === "needs_auth") {
@@ -459,4 +473,105 @@ export async function readMail(options: { userId: string; messageId: string; tim
     throw new DriverError("Reading needs https://www.googleapis.com/auth/gmail.readonly. Connect Gmail, then try again.", "auth")
   }
   return withTimeout(fetchGmailMessage(driverContext(options.userId, connection, options.timeZone, new Date()), options.messageId), "Gmail")
+}
+
+/** Creates a task in Google Tasks (when connected) or local Command storage. */
+export async function createTaskItem(options: {
+  userId: string
+  timeZone: string
+  title: string
+  dueAt?: string | null
+}): Promise<CommandResult> {
+  const now = new Date()
+  const connection = await store.getConnection(options.userId, "google-tasks")
+  if (connection && connection.status !== "needs_auth") {
+    const input = await withTimeout(
+      createGoogleTask(driverContext(options.userId, connection, options.timeZone, now), {
+        title: options.title,
+        dueAt: options.dueAt ?? null,
+      }),
+      "Google Tasks",
+    )
+    const saved = await store.upsertItems(options.userId, [stampItem("google-tasks", "user", input, now)])
+    return { created: saved.created, runs: [], errors: [] }
+  }
+  const input: CommandItemInput = {
+    kind: "command.task",
+    title: options.title,
+    externalId: `task-${now.getTime()}`,
+    data: {
+      status: "open",
+      priority: "medium",
+      dueAt: options.dueAt ?? null,
+      project: null,
+      doneAt: null,
+      goal: null,
+    },
+  }
+  const saved = await store.upsertItems(options.userId, [stampItem(COMMAND_CORE_SOURCE, "user", input, now)])
+  return { created: saved.created, runs: [], errors: [] }
+}
+
+/** Toggles completion status on a task (syncs to Google Tasks when backed by Google Tasks). */
+export async function toggleTaskItem(options: {
+  userId: string
+  timeZone: string
+  itemId: string
+  done: boolean
+}): Promise<CommandItem> {
+  const now = new Date()
+  const item = await store.getItem(options.userId, options.itemId)
+  if (!item || item.kind !== "command.task") {
+    throw new DriverError("That task could not be found.", "config")
+  }
+  if (item.data.connectorId === "google-tasks") {
+    const connection = await store.getConnection(options.userId, "google-tasks")
+    if (!connection || connection.status === "needs_auth") {
+      throw new DriverError("Connect Google Tasks to update tasks.", "auth")
+    }
+    await withTimeout(
+      toggleGoogleTask(driverContext(options.userId, connection, options.timeZone, now), {
+        listId: item.data.taskListId,
+        taskId: item.data.externalId,
+        done: options.done,
+      }),
+      "Google Tasks",
+    )
+  }
+  return store.updateItemData(options.userId, {
+    ...item,
+    data: {
+      ...item.data,
+      status: options.done ? "done" : "open",
+      doneAt: options.done ? now.toISOString() : null,
+    },
+  })
+}
+
+/** Creates an event on Google Calendar from the Calendar widget. */
+export async function createCalendarEvent(options: {
+  userId: string
+  timeZone: string
+  title: string
+  startsAt: string
+  endsAt: string
+}): Promise<CommandResult> {
+  const now = new Date()
+  const connection = await store.getConnection(options.userId, "google-calendar")
+  if (!connection || connection.status === "needs_auth") {
+    throw new DriverError("Connect Google Calendar to schedule events.", "auth")
+  }
+  const action = googleCalendarDriver.actions?.["calendar.block"]
+  if (!action) throw new DriverError("Calendar scheduling is not available.", "config")
+  const out = await withTimeout(
+    action(driverContext(options.userId, connection, options.timeZone, now), {
+      title: options.title,
+      startsAt: options.startsAt,
+      endsAt: options.endsAt,
+    }),
+    "Google Calendar",
+  )
+  const inputs = (out.items ?? []).map((i) => stampItem("google-calendar", "user", i, now))
+  const saved = inputs.length ? await store.upsertItems(options.userId, inputs) : { created: [] }
+  return { created: saved.created, runs: [], errors: [] }
 }

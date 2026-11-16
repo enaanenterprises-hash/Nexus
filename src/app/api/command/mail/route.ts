@@ -34,8 +34,10 @@ export async function POST(request: Request) {
       message: {
         to,
         cc: str(body?.["cc"], 2000) ?? undefined,
+        bcc: str(body?.["bcc"], 2000) ?? undefined,
         subject: typeof body?.["subject"] === "string" ? body["subject"] : "",
         body: typeof body?.["body"] === "string" ? body["body"] : "",
+        html: typeof body?.["html"] === "string" ? body["html"].slice(0, 100_000) : null,
         threadId: str(body?.["threadId"], 200),
         inReplyTo: str(body?.["inReplyTo"], 500),
       },

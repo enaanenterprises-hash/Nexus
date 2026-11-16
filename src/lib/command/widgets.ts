@@ -19,17 +19,17 @@ export interface WidgetDef {
 }
 
 export const COMMAND_WIDGETS: readonly WidgetDef[] = [
-  { id: "gmail", name: "Gmail", blurb: "Read, reply, and write mail.", w: 2, h: 2, connectorId: "gmail", needsConnection: true },
-  { id: "calendar", name: "Calendar", blurb: "What is coming up.", w: 2, h: 1, connectorId: "google-calendar", needsConnection: true },
-  { id: "weather", name: "Weather", blurb: "The sky outside, with no key.", w: 1, h: 1, connectorId: "weather", needsConnection: false },
-  { id: "tasks", name: "Tasks", blurb: "Open tasks from Google Tasks.", w: 1, h: 2, connectorId: "google-tasks", needsConnection: true },
-  { id: "crypto", name: "Crypto", blurb: "Prices and the day’s change.", w: 2, h: 1, connectorId: "markets", needsConnection: true },
-  { id: "sky", name: "Night sky", blurb: "Sunset, darkness, and the moon.", w: 1, h: 1, connectorId: "sky", needsConnection: true },
-  { id: "f1", name: "Formula 1", blurb: "The next Grand Prix sessions.", w: 2, h: 1, connectorId: "f1", needsConnection: true },
-  { id: "uptime", name: "Uptime", blurb: "How fast your sites answer.", w: 2, h: 1, connectorId: "uptime", needsConnection: true },
-  { id: "github", name: "GitHub", blurb: "Reviews, issues, and today’s pushes.", w: 2, h: 1, connectorId: "github", needsConnection: true },
-  { id: "strava", name: "Strava", blurb: "The latest run or ride.", w: 1, h: 1, connectorId: "strava", needsConnection: true },
-  { id: "vercel", name: "Vercel", blurb: "Recent deployments.", w: 1, h: 1, connectorId: "vercel", needsConnection: true },
+  { id: "gmail", name: "Gmail", blurb: "Inbox, rich formatting compose, and replies.", w: 2, h: 1, connectorId: "gmail", needsConnection: true },
+  { id: "calendar", name: "Calendar", blurb: "Schedule and quick event creation.", w: 2, h: 1, connectorId: "google-calendar", needsConnection: true },
+  { id: "weather", name: "Weather", blurb: "Live forecast, wind, rain & hourly view.", w: 1, h: 1, connectorId: "weather", needsConnection: false },
+  { id: "tasks", name: "Tasks", blurb: "Check off and add Google Tasks.", w: 1, h: 1, connectorId: "google-tasks", needsConnection: true },
+  { id: "crypto", name: "Crypto", blurb: "Live prices, 24h delta, and coin list.", w: 2, h: 1, connectorId: "markets", needsConnection: true },
+  { id: "sky", name: "Night sky", blurb: "Moon phase, sunset, dark sky window.", w: 1, h: 1, connectorId: "sky", needsConnection: true },
+  { id: "f1", name: "Formula 1", blurb: "Grand Prix countdown and sessions.", w: 2, h: 1, connectorId: "f1", needsConnection: true },
+  { id: "uptime", name: "Uptime", blurb: "Site latency, HTTP codes, and status.", w: 2, h: 1, connectorId: "uptime", needsConnection: true },
+  { id: "github", name: "GitHub", blurb: "Reviews, issues, PRs, and pushes.", w: 2, h: 1, connectorId: "github", needsConnection: true },
+  { id: "strava", name: "Strava", blurb: "Latest workout metrics and weekly load.", w: 1, h: 1, connectorId: "strava", needsConnection: true },
+  { id: "vercel", name: "Vercel", blurb: "Deployments, branches, and build health.", w: 1, h: 1, connectorId: "vercel", needsConnection: true },
 ]
 
 const BY_ID = new Map(COMMAND_WIDGETS.map((w) => [w.id, w]))

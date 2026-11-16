@@ -119,6 +119,9 @@ export function useCommand() {
         await commandApi.sendMail(message);
         return commandApi.state();
       }),
+    createTask: (input: Parameters<typeof commandApi.createTask>[0]) => run("task:create", () => commandApi.createTask(input)),
+    toggleTask: (input: Parameters<typeof commandApi.toggleTask>[0]) => run(`task:${input.id}`, () => commandApi.toggleTask(input)),
+    createEvent: (input: Parameters<typeof commandApi.createEvent>[0]) => run("calendar:create", () => commandApi.createEvent(input)),
     setOverview: (widgets: string[]) => run("overview", () => commandApi.setOverview(widgets)),
   };
 }

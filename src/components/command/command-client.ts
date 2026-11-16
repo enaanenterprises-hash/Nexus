@@ -57,9 +57,20 @@ export const commandApi = {
   geocode: (q: string) => call<{ places: { label: string; value: string }[] }>(`/geocode?q=${encodeURIComponent(q)}`),
   /** Keyless forecast. Works with no connection. */
   weather: () => call<{ signal: LiveWeather | null; location: string }>(`/weather?timeZone=${encodeURIComponent(viewerTimeZone())}`),
-  sendMail: (message: { to: string; cc?: string; subject: string; body: string; threadId?: string | null; inReplyTo?: string | null }) =>
-    call<{ detail: string; sentId: string | null }>("/mail", "POST", withZone(message)),
+  sendMail: (message: {
+    to: string;
+    cc?: string;
+    bcc?: string;
+    subject: string;
+    body: string;
+    html?: string | null;
+    threadId?: string | null;
+    inReplyTo?: string | null;
+  }) => call<{ detail: string; sentId: string | null }>("/mail", "POST", withZone(message)),
   readMail: (id: string) => call<GmailLetter>(`/mail?id=${encodeURIComponent(id)}&timeZone=${encodeURIComponent(viewerTimeZone())}`),
+  createTask: (input: { title: string; dueAt?: string | null }) => call<CommandSnapshot>("/tasks", "POST", withZone(input)),
+  toggleTask: (input: { id: string; done: boolean }) => call<CommandSnapshot>("/tasks", "PATCH", withZone(input)),
+  createEvent: (input: { title: string; startsAt: string; endsAt: string }) => call<CommandSnapshot>("/calendar", "POST", withZone(input)),
   setOverview: (widgets: string[]) => call<CommandSnapshot>("/overview", "PUT", { widgets }),
 };
 
@@ -70,6 +81,7 @@ export interface GmailLetter {
   subject: string;
   snippet: string;
   body: string;
+  bodyHtml?: string | null;
   receivedAt: string;
   rfcMessageId: string | null;
 }
