@@ -135,6 +135,13 @@ type SpineFrame = {
   tipPt: Vec;
 };
 
+type PointerField = {
+  pos: Vec;
+  vel: Vec;
+  parallax: Vec;
+  presence: number;
+};
+
 type ArmFilament = {
   arm: number;
   layer: number;
@@ -360,7 +367,7 @@ function sampleArmSpine(
   L: StageLayout,
   time: number,
   intro: number,
-  pointerOffset: Vec,
+  pointer: PointerField,
 ): SpineFrame {
   const { core, radius: R } = L;
   const unfurlInner = singularityUnfurl(intro, 0.04);
@@ -372,9 +379,22 @@ function sampleArmSpine(
   const perpAngle = arm.coreAngle + Math.PI * 0.5;
   const socketSway = polar(R * 0.02 * slowWave, perpAngle);
 
+  // Local magnetic attraction/parting & velocity brush drag on the arm socket when cursor flows over it
+  let localPullX = 0;
+  let localPullY = 0;
+  if (pointer.presence > 0.005) {
+    const dx = arm.socket.x - pointer.pos.x;
+    const dy = arm.socket.y - pointer.pos.y;
+    const distSq = dx * dx + dy * dy;
+    const sigma = R * 0.52;
+    const k = pointer.presence * Math.exp(-distSq / (2 * sigma * sigma));
+    localPullX = pointer.vel.x * 0.28 * k - (dx / (Math.sqrt(distSq) + 40)) * R * 0.035 * k;
+    localPullY = pointer.vel.y * 0.28 * k - (dy / (Math.sqrt(distSq) + 40)) * R * 0.035 * k;
+  }
+
   const rawSocket = add(arm.socket, {
-    x: socketSway.x + pointerOffset.x * 0.12,
-    y: socketSway.y + pointerOffset.y * 0.12,
+    x: socketSway.x + pointer.parallax.x * 0.15 + localPullX,
+    y: socketSway.y + pointer.parallax.y * 0.15 + localPullY,
   });
 
   const socketPt: Vec = {
@@ -462,6 +482,7 @@ function evaluateArmFilamentPoint(
   armLevel: number,
   callHeat: number,
   solitonBoost: number,
+  pointer: PointerField,
 ): Vec {
   const idxFloat = clamp(u, 0, 1) * (SPINE_SAMPLES - 1);
   const i0 = Math.min(SPINE_SAMPLES - 2, Math.floor(idxFloat));
@@ -512,9 +533,50 @@ function evaluateArmFilamentPoint(
 
   const offset = braidSign * envelope + (wave1 * 0.74 + wave2 * 0.26) * waveAmp;
 
+  let px = cx + nx * offset;
+  let py = cy + ny * offset;
+
+  // Fluid-magnetic cursor interaction: filaments part around the cursor, comb along its velocity vector,
+  // and ripple with harmonic wake waves as the mouse flows over them
+  if (pointer.presence > 0.005 && u > 0.02) {
+    const dx = px - pointer.pos.x;
+    const dy = py - pointer.pos.y;
+    const distSq = dx * dx + dy * dy;
+    const sigma = R * 0.38;
+    const twoSigmaSq = 2 * sigma * sigma;
+
+    if (distSq < twoSigmaSq * 3.2) {
+      const k = pointer.presence * Math.exp(-distSq / twoSigmaSq);
+      const corePin = smoothstep(0.02, 0.12, u);
+      const elasticity = 0.58 + 0.55 * Math.abs(f.xi);
+      const dist = Math.sqrt(distSq) + 22;
+
+      // 1) Soft magnetic parting away from cursor center + strand-specific vortex swirl
+      const partMag = R * 0.095 * k * corePin * elasticity;
+      const partX = (dx / dist) * partMag;
+      const partY = (dy / dist) * partMag;
+
+      // 2) Viscous brush drag along the cursor's velocity vector
+      const dragX = pointer.vel.x * 0.45 * k * corePin * elasticity;
+      const dragY = pointer.vel.y * 0.45 * k * corePin * elasticity;
+
+      // 3) Local harmonic wake ripple along the filament normal
+      const wakeRipple =
+        Math.sin(dist * 0.065 - time * 3.8 + f.phase) *
+        R *
+        0.028 *
+        k *
+        corePin *
+        (0.5 + 0.015 * Math.hypot(pointer.vel.x, pointer.vel.y));
+
+      px += partX + dragX + nx * wakeRipple;
+      py += partY + dragY + ny * wakeRipple;
+    }
+  }
+
   return {
-    x: cx + nx * offset,
-    y: cy + ny * offset,
+    x: px,
+    y: py,
   };
 }
 
@@ -542,6 +604,7 @@ function evaluateHorizonCurve(
   time: number,
   intro: number,
   wingBoost: number,
+  pointer: PointerField,
 ): [Vec, Vec, Vec, Vec, Vec, Vec, Vec] {
   const { core, scale: S, radius: R } = L;
   const reach = singularityUnfurl(intro, h.stagger);
@@ -566,11 +629,26 @@ function evaluateHorizonCurve(
   const pull = Math.min(lDist, rDist) * 0.34;
   const tVec = { x: Math.cos(bridgeAngle) * pull, y: Math.sin(bridgeAngle) * pull };
 
-  const cLeft1 = add(pLeft, polar(lDist * 0.38, lAngle + Math.PI + h.curvature));
-  const cLeft2 = { x: waist.x - tVec.x, y: waist.y - tVec.y };
+  const deflectPoint = (pt: Vec): Vec => {
+    if (pointer.presence <= 0.005) return pt;
+    const dx = pt.x - pointer.pos.x;
+    const dy = pt.y - pointer.pos.y;
+    const distSq = dx * dx + dy * dy;
+    const sigma = R * 0.48;
+    const k = pointer.presence * Math.exp(-distSq / (2 * sigma * sigma));
+    if (k < 0.002) return pt;
+    const dist = Math.sqrt(distSq) + 30;
+    return {
+      x: pt.x + (dx / dist) * R * 0.08 * k + pointer.vel.x * 0.38 * k,
+      y: pt.y + (dy / dist) * R * 0.08 * k + pointer.vel.y * 0.38 * k,
+    };
+  };
 
-  const cRight1 = { x: waist.x + tVec.x, y: waist.y + tVec.y };
-  const cRight2 = add(pRight, polar(rDist * 0.38, rAngle + Math.PI - h.curvature));
+  const cLeft1 = deflectPoint(add(pLeft, polar(lDist * 0.38, lAngle + Math.PI + h.curvature)));
+  const cLeft2 = deflectPoint({ x: waist.x - tVec.x, y: waist.y - tVec.y });
+
+  const cRight1 = deflectPoint({ x: waist.x + tVec.x, y: waist.y + tVec.y });
+  const cRight2 = deflectPoint(add(pRight, polar(rDist * 0.38, rAngle + Math.PI - h.curvature)));
 
   return [pLeft, cLeft1, cLeft2, waist, cRight1, cRight2, pRight];
 }
@@ -801,6 +879,9 @@ export function NeuralStage({
 
     const pointerTarget: Vec = { x: 0, y: 0 };
     const pointerSmooth: Vec = { x: 0, y: 0 };
+    const pointerPosSmooth: Vec = { x: -9999, y: -9999 };
+    const pointerVelSmooth: Vec = { x: 0, y: 0 };
+    let pointerPresence = 0;
     let pointerClient: Vec | null = null;
 
     let layout = computeStageLayout(1, 1, socketCount);
@@ -815,9 +896,13 @@ export function NeuralStage({
       if (rect.width <= 0 || rect.height <= 0) return;
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
+      if (!pointerClient) {
+        pointerPosSmooth.x = x;
+        pointerPosSmooth.y = y;
+      }
       pointerClient = { x, y };
-      pointerTarget.x = ((x / rect.width) - 0.5) * 24;
-      pointerTarget.y = ((y / rect.height) - 0.5) * 24;
+      pointerTarget.x = ((x / rect.width) - 0.5) * 28;
+      pointerTarget.y = ((y / rect.height) - 0.5) * 28;
     };
 
     const onPointerLeave = () => {
@@ -923,10 +1008,32 @@ export function NeuralStage({
       const intro = reduceMotion ? 1 : Math.min(1, activeTime / INTRO_SPRING_SECONDS);
       const introEase = 1 - Math.pow(1 - intro, 3);
 
-      // Smooth pointer parallax
-      const pFollow = reduceMotion ? 1 : 1 - Math.exp(-dt * 4.2);
+      // Smooth pointer parallax, position, and velocity wake field
+      const pFollow = reduceMotion ? 1 : 1 - Math.exp(-dt * 4.5);
       pointerSmooth.x = lerp(pointerSmooth.x, pointerTarget.x, pFollow);
       pointerSmooth.y = lerp(pointerSmooth.y, pointerTarget.y, pFollow);
+
+      const posFollow = reduceMotion ? 1 : 1 - Math.exp(-dt * 14);
+      if (pointerClient) {
+        const instVx = clamp(pointerClient.x - pointerPosSmooth.x, -90, 90);
+        const instVy = clamp(pointerClient.y - pointerPosSmooth.y, -90, 90);
+        pointerPosSmooth.x = lerp(pointerPosSmooth.x, pointerClient.x, posFollow);
+        pointerPosSmooth.y = lerp(pointerPosSmooth.y, pointerClient.y, posFollow);
+        pointerVelSmooth.x = lerp(pointerVelSmooth.x, instVx, 1 - Math.exp(-dt * 10));
+        pointerVelSmooth.y = lerp(pointerVelSmooth.y, instVy, 1 - Math.exp(-dt * 10));
+        pointerPresence = lerp(pointerPresence, 1, 1 - Math.exp(-dt * 8));
+      } else {
+        pointerVelSmooth.x *= Math.exp(-dt * 6);
+        pointerVelSmooth.y *= Math.exp(-dt * 6);
+        pointerPresence = lerp(pointerPresence, 0, 1 - Math.exp(-dt * 3.5));
+      }
+
+      const pointerField: PointerField = {
+        pos: pointerPosSmooth,
+        vel: pointerVelSmooth,
+        parallax: pointerSmooth,
+        presence: pointerPresence,
+      };
 
       // Detect state transitions that call nodes or send information between nodes
       if (brain !== lastBrain) {
@@ -1070,12 +1177,12 @@ export function NeuralStage({
 
       // ——— 4. Pre-sample C2 Spine Frames for the 5 Functional Node Arms ———
       const spines = L.arms.map((arm) =>
-        sampleArmSpine(arm, L, activeTime, intro, pointerSmooth),
+        sampleArmSpine(arm, L, activeTime, intro, pointerField),
       );
 
       // ——— 5. Continuous Corner-Sweeping Horizon Wings (Gold Body -> Crimson Near Outer Edges) ———
       const horizonCurves = field.horizonFilaments.map((h) =>
-        evaluateHorizonCurve(h, L, activeTime, intro, globalCallHeat),
+        evaluateHorizonCurve(h, L, activeTime, intro, globalCallHeat, pointerField),
       );
 
       const anyConnected = sockets.some((s) => s === "occupied");
@@ -1267,6 +1374,7 @@ export function NeuralStage({
                 level,
                 edgeRed * 0.5 + waveStrength * 0.5,
                 armSolitonBoost,
+                pointerField,
               );
             }
             traceSmoothPolyline(ctx, pts);
@@ -1326,7 +1434,17 @@ export function NeuralStage({
         }
 
         const uEff = pt.u * Math.min(1, singularityUnfurl(intro, f.stagger));
-        const pos = evaluateArmFilamentPoint(f, spine, uEff, R, activeTime, level, edgeRed * 0.4, 0);
+        const pos = evaluateArmFilamentPoint(
+          f,
+          spine,
+          uEff,
+          R,
+          activeTime,
+          level,
+          edgeRed * 0.4,
+          0,
+          pointerField,
+        );
 
         const edgeFade = Math.sin(pt.u * Math.PI);
         const isCrimsonTail = edgeRed > 0.05 && pt.u > 0.66;
