@@ -60,10 +60,14 @@ export function computeStageLayout(width: number, height: number, socketCount: n
   const compact = width < WIDE_MIN_WIDTH;
   const diag = Math.hypot(width, height);
 
-  // Center the singularity core in the middle of the stage
-  const core: Vec = compact
-    ? { x: width * 0.5, y: height * 0.5 }
-    : { x: width * 0.5, y: clamp(height * 0.51, 340, height - 245) };
+  // Position the singularity core low in the stage, directly crowning the "Hello, [username]" greeting
+  const bottomClearance = compact
+    ? clamp(height * 0.28, 220, 275)
+    : clamp(height * 0.29, 250, 305);
+  const core: Vec = {
+    x: width * 0.5,
+    y: clamp(height - bottomClearance, compact ? 320 : 380, height - 215),
+  };
 
   // Vast, commanding radius so the 5 node waists fill the stage without wasted space
   const radius = compact
@@ -97,7 +101,7 @@ export function computeStageLayout(width: number, height: number, socketCount: n
     };
 
     // Extend well beyond the viewport corners so the vast plumes sweep off-screen seamlessly
-    const outerReach = Math.max(diag * 0.74, socketDist * 3.0);
+    const outerReach = Math.max(diag * 0.84, socketDist * 3.3);
     const cornerTip = add(socket, polar(outerReach, cornerAngle));
 
     const innerControl = add(core, polar(socketDist * 0.52, coreAngle));

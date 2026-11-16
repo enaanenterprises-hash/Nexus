@@ -932,10 +932,10 @@ button.landing-signup {
 .dash-scrim--home {
   background: linear-gradient(
     0deg,
-    rgba(1, 2, 5, 0.96) 0%,
-    rgba(1, 2, 5, 0.78) 26%,
-    rgba(1, 2, 5, 0.28) 46%,
-    transparent 64%
+    rgba(1, 2, 5, 0.88) 0%,
+    rgba(1, 2, 5, 0.42) 12%,
+    rgba(1, 2, 5, 0.08) 20%,
+    transparent 27%
   );
 }
 
@@ -5702,10 +5702,10 @@ html[data-dash-theme="light"] {
 .dash[data-theme="light"] .dash-scrim--home {
   background: linear-gradient(
     0deg,
-    rgba(247, 247, 248, 0.96) 0%,
-    rgba(247, 247, 248, 0.78) 25%,
-    rgba(247, 247, 248, 0.24) 45%,
-    transparent 64%
+    rgba(247, 247, 248, 0.88) 0%,
+    rgba(247, 247, 248, 0.42) 12%,
+    rgba(247, 247, 248, 0.08) 20%,
+    transparent 27%
   );
 }
 

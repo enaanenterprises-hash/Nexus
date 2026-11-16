@@ -38,7 +38,7 @@ export function NexusVoice({ firstName, brain, current, pendingPrompt, revealed,
 
   return (
     <div className="flex w-full flex-col items-center text-center">
-      <div className="dash-voice-stage flex min-h-[6.5rem] w-full flex-col items-center justify-center sm:min-h-[8.5rem]">
+      <div className="dash-voice-stage flex min-h-[4.5rem] w-full flex-col items-center justify-center sm:min-h-[5.25rem]">
         {!hasConversation ? (
           waking ? (
             <p key="waking" className="dash-welcome dash-welcome--waking dash-fade-in" aria-live="polite">
