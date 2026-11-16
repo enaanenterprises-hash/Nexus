@@ -19,15 +19,15 @@ export type SetupStagePhase = "singularity" | "exploding" | "modal" | "finale" |
 
 const TAU = Math.PI * 2;
 
-const SHEAF_STEPS = 20;
-const GEODESIC_STEPS = 22;
-const VORTEX_STEPS = 18;
-const TENDRIL_STEPS = 12;
+const SHEAF_STEPS = 12;
+const GEODESIC_STEPS = 14;
+const VORTEX_STEPS = 12;
+const TENDRIL_STEPS = 10;
 
 // Opening arc ("exploding": Frames 2 -> 3 -> 4 -> 5 -> 6, firing onExplosionComplete at ~2.25s)
 const OPEN_CONSTELLATION_FADE_END = 0.34;
 const OPEN_RING_END = 0.36;
-const OPEN_VORTEX_START = 0.18;
+const OPEN_VORTEX_START = 0.16;
 const OPEN_BLAST_AT = 0.94;
 const OPEN_WEB_SETTLE_AT = 1.42;
 const OPEN_COMPLETE_AT = 2.25;
@@ -41,10 +41,10 @@ const FINALE_BLAST_DURATION = 1.12;
 const FINALE_COMPLETE_AT = FINALE_EXPLODE_AT + FINALE_BLAST_DURATION; // 3.68s
 
 const DEPTH_LAYERS = [
-  { width: 3.0, alpha: 0.052, hot: 0.08 },
-  { width: 1.5, alpha: 0.14, hot: 0.35 },
-  { width: 0.85, alpha: 0.3, hot: 0.68 },
-  { width: 0.44, alpha: 0.6, hot: 0.96 },
+  { width: 4.4, alpha: 0.058, hot: 0.08 },
+  { width: 2.1, alpha: 0.15, hot: 0.35 },
+  { width: 1.05, alpha: 0.32, hot: 0.68 },
+  { width: 0.48, alpha: 0.58, hot: 0.96 },
 ] as const;
 
 type OrbitalTendril = {
@@ -80,18 +80,15 @@ type SheafFilament = {
   waveAmp: number;
   freqMul: number;
   phase: number;
-  staggerFinale: number;
   reachMul: number;
-  twistDir: number;
   layer: number;
-  isExtra: boolean;
 };
 
-type SheafPhoton = {
-  rayIdx: number;
-  u: number;
-  speed: number;
-  size: number;
+type BlastPlume = {
+  angle: number;
+  distFrac: number;
+  lenFrac: number;
+  widthFrac: number;
   alpha: number;
 };
 
@@ -113,22 +110,34 @@ type ShockRing = {
   crimson: boolean;
 };
 
-type GeodesicCurve = {
-  kind: "u" | "v" | "diag";
-  fixedCoord: number;
+type SilkWaveStrand = {
+  kind: "wave" | "arch" | "diag";
+  band: -1 | 1;
+  baseCoord: number;
+  eta: number;
   skew: number;
-  layer: number;
+  waveFreq: number;
   phase: number;
+  layer: number;
 };
 
-type GeodesicNode = {
+type SilkNode = {
   u: number;
   v: number;
+  band: -1 | 1;
   size: number;
   alpha: number;
   twinkleSpeed: number;
   phase: number;
   kind: "anchor" | "star" | "dot";
+};
+
+type SilkPhoton = {
+  strandIdx: number;
+  t: number;
+  speed: number;
+  size: number;
+  alpha: number;
 };
 
 type ConstellationStar = {
@@ -335,10 +344,10 @@ function segmentIntersectsConstellationExclusion(
   return my >= promptTop && Math.abs(mx - cx) < promptHalfW;
 }
 
-/** Fits canvas up to 3x native DPR so fine gold constellations, filaments, and flares stay razor crisp. */
+/** Fits canvas up to 2x native DPR so fine gold constellations, filaments, and flares stay sharp and fast. */
 function fitHighResCanvas(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
   const rect = canvas.getBoundingClientRect();
-  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const w = Math.max(1, Math.round(rect.width * dpr));
   const h = Math.max(1, Math.round(rect.height * dpr));
   if (canvas.width !== w || canvas.height !== h) {
@@ -369,7 +378,6 @@ function createConstellationField(width: number, height: number): ConstellationF
   const minDim = Math.min(width, height);
   const coreBaseR = clamp(minDim * 0.14, 58, 118);
 
-  // Reserve extra excursion margin so drift and rotation stay strictly outside center and lower prompt negative space
   const maxDrift = 24;
   const clearR = coreBaseR * 1.72 + maxDrift;
   const promptTop = cy + coreBaseR * 0.3 - maxDrift;
@@ -541,60 +549,61 @@ function createConstellationField(width: number, height: number): ConstellationF
 function createProceduralField() {
   const { rnd, gauss, between } = seededHelpers(20261117);
 
-  // Frame 2 curved plasma tendrils peeling off the golden orbital ring
+  // Frame 2 curved plasma tendrils peeling smoothly off the golden orbital ring
   const orbitalTendrils: OrbitalTendril[] = Array.from({ length: 12 }, (_, i) => ({
     angle: (i / 12) * TAU + between(-0.14, 0.14),
-    curl: (i % 2 === 0 ? 1 : -1) * between(0.85, 1.55),
-    reachMul: between(1.8, 3.4),
+    curl: (i % 2 === 0 ? 1 : -1) * between(0.9, 1.65),
+    reachMul: between(1.9, 3.5),
     layer: i % 3 === 0 ? 1 : i % 2 === 0 ? 2 : 3,
     phase: rnd() * TAU,
   }));
 
   // Frame 3 differential-foliation (eta in [-1, 1]) 3D logarithmic spiral accretion vortex
-  const vortexArms = 4;
-  const streamsPerArm = 14;
+  // 5 sweeping galactic arms x 12 laminar streamlines wrapping tangentially from the orbital torus
+  const vortexArms = 5;
+  const streamsPerArm = 12;
   const vortexStreams: VortexStream[] = [];
   const vortexLayerBatches: number[][] = DEPTH_LAYERS.map(() => []);
 
   for (let a = 0; a < vortexArms; a++) {
-    const armBase = (a / vortexArms) * TAU + 0.35;
+    const armBase = (a / vortexArms) * TAU + 0.28;
     for (let s = 0; s < streamsPerArm; s++) {
       const eta = (2 * s) / (streamsPerArm - 1) - 1;
       const absEta = Math.abs(eta);
-      const layer = absEta <= 0.22 ? 3 : absEta <= 0.56 ? 2 : absEta <= 0.82 ? 1 : 0;
+      const layer = absEta <= 0.22 ? 3 : absEta <= 0.56 ? 2 : absEta <= 0.84 ? 1 : 0;
       const idx = vortexStreams.length;
       vortexStreams.push({
         armIdx: a,
         armBase,
         eta,
-        reachMul: lerp(1.16, 0.76, absEta * 0.7) * between(0.94, 1.06),
+        reachMul: lerp(1.18, 0.78, absEta * 0.65) * between(0.95, 1.05),
         layer,
-        phase: a * 1.45 + eta * 1.25,
+        phase: a * 1.35 + eta * 1.2,
       });
       vortexLayerBatches[layer]!.push(idx);
     }
   }
 
-  const vortexBeads: VortexBead[] = Array.from({ length: 68 }, (_, i) => ({
+  const vortexBeads: VortexBead[] = Array.from({ length: 76 }, (_, i) => ({
     streamIdx: i % vortexStreams.length,
     u: rnd(),
-    speed: between(0.22, 0.48),
-    size: i % 9 === 0 ? between(2.4, 3.3) : i % 3 === 0 ? between(1.4, 2.2) : between(0.85, 1.45),
-    alpha: between(0.58, 0.98),
-    kind: i % 9 === 0 ? "anchor" : i % 3 === 0 ? "star" : "dot",
+    speed: between(0.24, 0.5),
+    size: i % 8 === 0 ? between(2.7, 3.8) : i % 3 === 0 ? between(1.6, 2.5) : between(0.95, 1.55),
+    alpha: between(0.64, 1.0),
+    kind: i % 8 === 0 ? "anchor" : i % 3 === 0 ? "star" : "dot",
   }));
 
-  // Frame 4 curved radial plasma sheaves (18 laminar jet clusters x 5 streamlines + 50 outer wisps)
+  // Frame 4 curved radial plasma sheaves (18 laminar jet clusters x 5 streamlines) + soft directional plasma plumes
   const sheafRays: SheafFilament[] = [];
-  const baseSheafBatches: number[][] = DEPTH_LAYERS.map(() => []);
-  const extraSheafBatches: number[][] = DEPTH_LAYERS.map(() => []);
+  const sheafBatches: number[][] = DEPTH_LAYERS.map(() => []);
 
   const clusterCount = 18;
   const strandsPerCluster = 5;
   for (let c = 0; c < clusterCount; c++) {
-    const baseAngle = (c / clusterCount) * TAU + Math.sin(c * 2.1) * 0.04;
-    const clusterBend = gauss() * 0.28 + (c % 2 === 0 ? 0.08 : -0.08);
-    const clusterReach = between(0.82, 1.18) * (1 + 0.14 * Math.abs(Math.cos(baseAngle)));
+    const baseAngle = (c / clusterCount) * TAU + Math.sin(c * 2.1) * 0.045;
+    const clusterBend = gauss() * 0.24 + (c % 2 === 0 ? 0.07 : -0.07);
+    const horizontalBias = Math.pow(Math.abs(Math.cos(baseAngle)), 1.5);
+    const clusterReach = between(0.76, 1.12) * (1 + 0.16 * horizontalBias);
     const clusterPhase = rnd() * TAU;
 
     for (let s = 0; s < strandsPerCluster; s++) {
@@ -604,139 +613,153 @@ function createProceduralField() {
       const idx = sheafRays.length;
       sheafRays.push({
         angle: baseAngle,
-        bend: clusterBend + eta * 0.06,
-        fanOffset: eta * 0.115,
-        waveAmp: between(0.018, 0.046) * (c % 2 === 0 ? 1 : -1),
+        bend: clusterBend + eta * 0.055,
+        fanOffset: eta * 0.135,
+        waveAmp: between(0.018, 0.044) * (c % 2 === 0 ? 1 : -1),
         freqMul: between(0.9, 1.12),
-        phase: clusterPhase + eta * 0.9,
-        staggerFinale: 0,
+        phase: clusterPhase + eta * 0.85,
         reachMul: clusterReach * (1 - absEta * 0.12),
-        twistDir: c % 2 === 0 ? 1 : -1,
         layer,
-        isExtra: false,
       });
-      baseSheafBatches[layer]!.push(idx);
+      sheafBatches[layer]!.push(idx);
     }
   }
 
-  for (let i = 0; i < 50; i++) {
-    const baseAngle = ((i + 0.5) / 50) * TAU + gauss() * 0.04;
-    const layer = i % 7 === 0 ? 0 : i % 3 === 0 ? 1 : i % 2 === 0 ? 2 : 3;
-    const idx = sheafRays.length;
-    sheafRays.push({
-      angle: baseAngle,
-      bend: gauss() * 0.34,
-      fanOffset: gauss() * 0.05,
-      waveAmp: between(0.024, 0.068) * (i % 2 === 0 ? -1 : 1),
-      freqMul: between(0.86, 1.18),
-      phase: rnd() * TAU,
-      staggerFinale: between(0.02, 0.54),
-      reachMul: between(0.86, 1.24),
-      twistDir: i % 2 === 0 ? 1 : -1,
-      layer,
-      isExtra: true,
+  // Soft misty glowing radial plasma plumes (8 sleek horizontal & diagonal jets, fast DPR=2 fill rate)
+  const blastPlumes: BlastPlume[] = [];
+  const plumeAngles = [0, Math.PI, 0.42, Math.PI - 0.42, -0.42, -Math.PI + 0.42, Math.PI * 0.5, -Math.PI * 0.5];
+  for (let i = 0; i < plumeAngles.length; i++) {
+    const a = plumeAngles[i]!;
+    const isHorizontal = i < 2;
+    blastPlumes.push({
+      angle: a + gauss() * 0.05,
+      distFrac: isHorizontal ? 0.24 : 0.2,
+      lenFrac: isHorizontal ? between(0.28, 0.42) : between(0.18, 0.28),
+      widthFrac: isHorizontal ? between(0.055, 0.085) : between(0.045, 0.075),
+      alpha: isHorizontal ? 0.34 : 0.22,
     });
-    extraSheafBatches[layer]!.push(idx);
   }
 
-  const stardustSparks: StardustSpark[] = Array.from({ length: 135 }, (_, i) => {
+  // Luminous pinpoint stardust motes & sparkles (zero straight stick needles!)
+  const stardustSparks: StardustSpark[] = Array.from({ length: 84 }, (_, i) => {
     const tier: 0 | 1 | 2 = i % 6 === 0 ? 2 : i % 2 === 0 ? 1 : 0;
     return {
-      angle: (i / 135) * TAU + gauss() * 0.038,
-      curve: gauss() * 0.14,
-      speedMul: between(0.48, 1.32),
-      lengthMul: between(0.055, 0.165),
-      size: tier === 2 ? between(1.6, 2.2) : tier === 1 ? between(1.0, 1.5) : between(0.65, 1.0),
-      alpha: tier === 2 ? between(0.8, 1.0) : tier === 1 ? between(0.55, 0.82) : between(0.35, 0.62),
+      angle: (i / 84) * TAU + gauss() * 0.045,
+      curve: gauss() * 0.16,
+      speedMul: between(0.42, 1.25),
+      lengthMul: 0,
+      size: tier === 2 ? between(1.8, 2.6) : tier === 1 ? between(1.1, 1.7) : between(0.7, 1.15),
+      alpha: tier === 2 ? between(0.84, 1.0) : tier === 1 ? between(0.6, 0.86) : between(0.4, 0.68),
       tier,
-      hasHead: tier === 2 || i % 3 === 0,
+      hasHead: true,
     };
   });
 
-  const photons: SheafPhoton[] = Array.from({ length: 160 }, (_, i) => ({
-    rayIdx: i % sheafRays.length,
-    u: rnd(),
-    speed: between(0.11, 0.26),
-    size: between(0.95, 1.85),
-    alpha: between(0.45, 0.95),
-  }));
+  // Frames 5 -> 6 -> 7: Multi-strand 3D Caustic Silk Wave Ribbons + Crossing Geodesic Arches
+  // 8 sweeping wave ribbons x 5 laminar strands (40 strands) + 10 crossing geodesic arch ribbons x 2 strands (20) + 6 diagonal weaves = 66 strands
+  const silkStrands: SilkWaveStrand[] = [];
+  const silkLayerBatches: number[][] = DEPTH_LAYERS.map(() => []);
 
-  // Frames 5 -> 6 -> 7: 3D Perspective Geodesic Cosmic Silk Lattice
-  const geodesicCurves: GeodesicCurve[] = [];
-  const geodesicLayerBatches: number[][] = DEPTH_LAYERS.map(() => []);
-  const uVals: number[] = [];
-  const vVals: number[] = [];
+  const waveRibbonSpecs: Array<{ band: -1 | 1; base: number; freq: number; phase: number }> = [
+    { band: -1, base: -0.22, freq: 1.45, phase: 0.2 },
+    { band: -1, base: -0.44, freq: 1.8, phase: 1.35 },
+    { band: -1, base: -0.68, freq: 1.3, phase: 2.5 },
+    { band: -1, base: -0.9, freq: 1.6, phase: 3.4 },
+    { band: 1, base: 0.22, freq: 1.5, phase: 0.85 },
+    { band: 1, base: 0.44, freq: 1.75, phase: 2.1 },
+    { band: 1, base: 0.68, freq: 1.35, phase: 3.15 },
+    { band: 1, base: 0.9, freq: 1.65, phase: 4.1 },
+  ];
 
-  const uRibbonCount = 16;
-  for (let j = 0; j < uRibbonCount; j++) {
-    const t = j / (uRibbonCount - 1);
-    const vRaw = lerp(-0.94, 0.94, t);
-    // Keep slight central split so parting opens symmetrically into upper/lower cosmic canopies
-    const vCoord = vRaw >= 0 ? Math.max(0.08, vRaw) : Math.min(-0.08, vRaw);
-    vVals.push(vCoord);
-    const layer = j % 5 === 0 ? 0 : j % 3 === 0 ? 1 : j % 2 === 0 ? 2 : 3;
-    const idx = geodesicCurves.length;
-    geodesicCurves.push({
-      kind: "u",
-      fixedCoord: vCoord,
-      skew: 0,
-      layer,
-      phase: j * 0.48,
-    });
-    geodesicLayerBatches[layer]!.push(idx);
+  for (let wIdx = 0; wIdx < waveRibbonSpecs.length; wIdx++) {
+    const spec = waveRibbonSpecs[wIdx]!;
+    const strandsInRibbon = 5;
+    for (let s = 0; s < strandsInRibbon; s++) {
+      const eta = (2 * s) / (strandsInRibbon - 1) - 1;
+      const absEta = Math.abs(eta);
+      const layer = absEta <= 0.1 ? 3 : absEta <= 0.55 ? 2 : wIdx % 2 === 0 ? 1 : 0;
+      const idx = silkStrands.length;
+      silkStrands.push({
+        kind: "wave",
+        band: spec.band,
+        baseCoord: spec.base,
+        eta,
+        skew: 0,
+        waveFreq: spec.freq,
+        phase: spec.phase,
+        layer,
+      });
+      silkLayerBatches[layer]!.push(idx);
+    }
   }
 
-  const vRibbonCount = 16;
-  for (let i = 0; i < vRibbonCount; i++) {
-    const t = i / (vRibbonCount - 1);
-    const uCoord = lerp(-0.96, 0.96, t);
-    uVals.push(uCoord);
-    const layer = i % 6 === 0 ? 0 : i % 3 === 0 ? 1 : i % 2 === 0 ? 2 : 3;
-    const idx = geodesicCurves.length;
-    geodesicCurves.push({
-      kind: "v",
-      fixedCoord: uCoord,
-      skew: (i % 2 === 0 ? 1 : -1) * 0.34,
-      layer,
-      phase: i * 0.53 + 1.2,
-    });
-    geodesicLayerBatches[layer]!.push(idx);
+  // Sweeping geodesic arch ribbons crossing diagonally across the upper/lower waves
+  for (let a = 0; a < 10; a++) {
+    const uBase = lerp(-0.88, 0.88, a / 9);
+    for (let s = 0; s < 2; s++) {
+      const eta = s === 0 ? -0.45 : 0.45;
+      const layer = s === 0 ? 2 : a % 3 === 0 ? 0 : 1;
+      const idx = silkStrands.length;
+      silkStrands.push({
+        kind: "arch",
+        band: a % 2 === 0 ? -1 : 1,
+        baseCoord: uBase,
+        eta,
+        skew: (a % 2 === 0 ? 1 : -1) * 0.36,
+        waveFreq: 1.4,
+        phase: a * 0.62,
+        layer,
+      });
+      silkLayerBatches[layer]!.push(idx);
+    }
   }
 
-  for (let k = 0; k < 8; k++) {
-    const offset = lerp(-0.72, 0.72, k / 7);
-    const layer = k % 3 === 0 ? 1 : 2;
-    const idx = geodesicCurves.length;
-    geodesicCurves.push({
+  for (let d = 0; d < 6; d++) {
+    const offset = lerp(-0.66, 0.66, d / 5);
+    const layer = d % 2 === 0 ? 1 : 2;
+    const idx = silkStrands.length;
+    silkStrands.push({
       kind: "diag",
-      fixedCoord: offset,
-      skew: k % 2 === 0 ? 0.82 : -0.82,
+      band: d % 2 === 0 ? -1 : 1,
+      baseCoord: offset,
+      eta: 0,
+      skew: d % 2 === 0 ? 0.58 : -0.58,
+      waveFreq: 1.3,
+      phase: d * 0.9,
       layer,
-      phase: k * 0.77,
     });
-    geodesicLayerBatches[layer]!.push(idx);
+    silkLayerBatches[layer]!.push(idx);
   }
 
-  // Real lattice intersection nodes where U and V arches actually cross
-  const geodesicNodes: GeodesicNode[] = [];
-  for (let i = 0; i < uVals.length; i += 2) {
-    for (let j = 0; j < vVals.length; j += 2) {
-      if ((i + j) % 4 === 2) continue;
-      const u = uVals[i]!;
-      const v = vVals[j]!;
-      const isAnchor = (i + j) % 4 === 0 && Math.abs(v) > 0.16 && Math.abs(u) < 0.82;
-      const isStar = !isAnchor && (i + j) % 2 === 0;
-      geodesicNodes.push({
-        u,
-        v,
-        size: isAnchor ? between(2.3, 3.2) : isStar ? between(1.4, 2.1) : between(1.0, 1.5),
-        alpha: isAnchor ? between(0.82, 0.98) : between(0.48, 0.8),
-        twinkleSpeed: between(1.2, 2.4),
+  // Luminous 4-point star junctions placed cleanly along the glowing wave ridges & crossings (Frames 5-7)
+  const silkNodes: SilkNode[] = [];
+  const nodeUs = [-0.82, -0.54, -0.26, 0.04, 0.32, 0.6, 0.84];
+  for (let i = 0; i < nodeUs.length; i++) {
+    for (let wIdx = 0; wIdx < waveRibbonSpecs.length; wIdx++) {
+      if ((i + wIdx) % 2 === 1 && wIdx % 3 !== 0) continue;
+      const spec = waveRibbonSpecs[wIdx]!;
+      const isMajor = (i + wIdx) % 3 === 0 && Math.abs(spec.base) <= 0.72;
+      const isStar = !isMajor && (i + wIdx) % 2 === 0;
+      silkNodes.push({
+        u: nodeUs[i]! + (wIdx % 2 === 0 ? 0.04 : -0.04),
+        v: spec.base,
+        band: spec.band,
+        size: isMajor ? between(2.7, 3.8) : isStar ? between(1.6, 2.35) : between(1.1, 1.6),
+        alpha: isMajor ? between(0.86, 1.0) : between(0.55, 0.85),
+        twinkleSpeed: between(1.25, 2.5),
         phase: rnd() * TAU,
-        kind: isAnchor ? "anchor" : isStar ? "star" : "dot",
+        kind: isMajor ? "anchor" : isStar ? "star" : "dot",
       });
     }
   }
+
+  const silkPhotons: SilkPhoton[] = Array.from({ length: 64 }, (_, i) => ({
+    strandIdx: i % silkStrands.length,
+    t: between(-1.2, 1.2),
+    speed: between(0.14, 0.32) * (i % 2 === 0 ? 1 : -1),
+    size: between(1.0, 1.85),
+    alpha: between(0.5, 0.95),
+  }));
 
   return {
     orbitalTendrils,
@@ -744,13 +767,13 @@ function createProceduralField() {
     vortexLayerBatches,
     vortexBeads,
     sheafRays,
-    baseSheafBatches,
-    extraSheafBatches,
+    sheafBatches,
+    blastPlumes,
     stardustSparks,
-    photons,
-    geodesicCurves,
-    geodesicLayerBatches,
-    geodesicNodes,
+    silkStrands,
+    silkLayerBatches,
+    silkNodes,
+    silkPhotons,
   };
 }
 
@@ -849,7 +872,6 @@ export const SetupCanvas = memo(function SetupCanvas({
     const scratchXs = new Float64Array(maxScratchLen);
     const scratchYs = new Float64Array(maxScratchLen);
 
-    // Pre-allocated scratch buffers for constellation stars & edges (zero per-frame array allocations)
     const starXs = new Float64Array(16);
     const starYs = new Float64Array(16);
     const starRs = new Float64Array(16);
@@ -867,7 +889,6 @@ export const SetupCanvas = memo(function SetupCanvas({
       return atlas;
     };
 
-    // Cached gradients (recreated only on resize / theme change — zero per-frame loop allocations)
     let cachedLightBg: { cx: number; cy: number; diag: number; grad: CanvasGradient } | null = null;
     let cachedWebGrads: { width: number; theme: SetupThemeMode; grads: CanvasGradient[] } | null = null;
     const radialTierFracs = [0.26, 0.48, 0.72, 0.98, 1.28] as const;
@@ -876,7 +897,8 @@ export const SetupCanvas = memo(function SetupCanvas({
       cy: number;
       diag: number;
       theme: SetupThemeMode;
-      buckets: Array<CanvasGradient[] | undefined>;
+      softBuckets: Array<CanvasGradient[] | undefined>;
+      hardBuckets: Array<CanvasGradient[] | undefined>;
     } | null = null;
 
     const getLightBgGrad = (cx: number, cy: number, diag: number): CanvasGradient => {
@@ -900,15 +922,18 @@ export const SetupCanvas = memo(function SetupCanvas({
       if (cachedWebGrads && cachedWebGrads.theme === mode && Math.abs(cachedWebGrads.width - width) < 0.5) {
         return cachedWebGrads.grads;
       }
+      const isLight = mode === "light";
       const grads = DEPTH_LAYERS.map((layer) => {
-        const col = mixRgb(p.goldMid, p.goldCore, layer.hot);
+        const col = isLight
+          ? mixRgb(p.goldMid, p.goldBright, layer.hot * 0.75)
+          : mixRgb(p.goldMid, p.goldCore, layer.hot);
         const edgeCol = mixRgb(p.goldDeep, p.goldBright, layer.hot * 0.55);
         const lg = ctx.createLinearGradient(0, 0, Math.max(1, width), 0);
-        lg.addColorStop(0, `rgba(${edgeCol}, 0.34)`);
-        lg.addColorStop(0.24, `rgba(${col}, 0.96)`);
-        lg.addColorStop(0.5, `rgba(${col}, 0.84)`);
-        lg.addColorStop(0.76, `rgba(${col}, 0.96)`);
-        lg.addColorStop(1, `rgba(${edgeCol}, 0.34)`);
+        lg.addColorStop(0, `rgba(${edgeCol}, 0.28)`);
+        lg.addColorStop(0.22, `rgba(${col}, 0.96)`);
+        lg.addColorStop(0.5, `rgba(${col}, 0.88)`);
+        lg.addColorStop(0.78, `rgba(${col}, 0.96)`);
+        lg.addColorStop(1, `rgba(${edgeCol}, 0.28)`);
         return lg;
       });
       cachedWebGrads = { width, theme: mode, grads };
@@ -922,6 +947,7 @@ export const SetupCanvas = memo(function SetupCanvas({
       mode: SetupThemeMode,
       p: ThemePalette,
       boost: number,
+      softStart: boolean,
     ): CanvasGradient[] => {
       if (
         !cachedRadialTiers ||
@@ -930,7 +956,14 @@ export const SetupCanvas = memo(function SetupCanvas({
         Math.abs(cachedRadialTiers.cy - cy) >= 0.5 ||
         Math.abs(cachedRadialTiers.diag - diag) >= 0.5
       ) {
-        cachedRadialTiers = { cx, cy, diag, theme: mode, buckets: new Array(radialTierFracs.length) };
+        cachedRadialTiers = {
+          cx,
+          cy,
+          diag,
+          theme: mode,
+          softBuckets: new Array(radialTierFracs.length),
+          hardBuckets: new Array(radialTierFracs.length),
+        };
       }
 
       const normSpan = span / Math.max(1, diag);
@@ -942,20 +975,30 @@ export const SetupCanvas = memo(function SetupCanvas({
         }
       }
 
-      let grads = cachedRadialTiers.buckets[bIdx];
+      const bucketStore = softStart ? cachedRadialTiers.softBuckets : cachedRadialTiers.hardBuckets;
+      let grads = bucketStore[bIdx];
       if (!grads) {
+        const isLight = mode === "light";
         const bucketSpan = Math.max(8, diag * radialTierFracs[bIdx]!);
         grads = DEPTH_LAYERS.map((layer) => {
-          const innerRgb = mixRgb(p.goldMid, p.goldCore, clamp(layer.hot + 0.16 * boost, 0, 1));
-          const outerRgb = mixRgb(p.goldDeep, p.goldBright, clamp(layer.hot * 0.55 + 0.2 * boost, 0, 1));
+          const coreRgb = isLight ? rgbStr(p.goldBright) : rgbStr(p.goldCore);
+          const innerRgb = isLight
+            ? mixRgb(p.goldMid, p.goldBright, clamp(layer.hot * 0.7 + 0.15 * boost, 0, 1))
+            : mixRgb(p.goldMid, p.goldCore, clamp(layer.hot + 0.16 * boost, 0, 1));
+          const outerRgb = mixRgb(p.goldDeep, p.goldBright, clamp(layer.hot * 0.5 + 0.18 * boost, 0, 1));
           const rg = ctx.createRadialGradient(cx, cy, 0, cx, cy, bucketSpan);
-          rg.addColorStop(0, `rgba(${rgbStr(p.goldCore)}, 1)`);
-          rg.addColorStop(0.26, `rgba(${innerRgb}, 0.88)`);
-          rg.addColorStop(0.7, `rgba(${outerRgb}, 0.42)`);
+          if (softStart) {
+            rg.addColorStop(0, `rgba(${coreRgb}, 0.25)`);
+            rg.addColorStop(0.14, `rgba(${coreRgb}, 0.96)`);
+          } else {
+            rg.addColorStop(0, `rgba(${coreRgb}, 1)`);
+          }
+          rg.addColorStop(0.32, `rgba(${innerRgb}, 0.85)`);
+          rg.addColorStop(0.7, `rgba(${outerRgb}, 0.36)`);
           rg.addColorStop(1, `rgba(${outerRgb}, 0)`);
           return rg;
         });
-        cachedRadialTiers.buckets[bIdx] = grads;
+        bucketStore[bIdx] = grads;
       }
       return grads;
     };
@@ -974,13 +1017,11 @@ export const SetupCanvas = memo(function SetupCanvas({
 
     let trackedPhase: SetupStagePhase = phaseRef.current;
     let openAge = trackedPhase === "modal" ? 5 : 0;
-    let openBlastFired = trackedPhase !== "singularity" && trackedPhase !== "exploding";
     let openDispatched = trackedPhase !== "exploding";
     let finaleAge = trackedPhase === "finale-blast" ? FINALE_EXPLODE_AT : 0;
     let finaleCollapsedDispatched = trackedPhase === "finale-blast";
     let finaleExplodeDispatched = trackedPhase === "finale-blast";
     let finaleCompleteDispatched = false;
-    let finaleBoomLaunched = false;
     let lastImpulse = impulseRef.current;
     let hoverFocus = 0;
 
@@ -1041,7 +1082,6 @@ export const SetupCanvas = memo(function SetupCanvas({
       ctx.globalCompositeOperation = p.blendOp;
       ctx.lineCap = "round";
 
-      // Ambient drifting gold dust & subtle 4-point starlets
       for (const star of constellations.ambientStars) {
         const dx = reduceMotion ? 0 : Math.sin(time * star.driftFreqX + star.driftPhase) * star.driftAmpX;
         const dy = reduceMotion ? 0 : Math.cos(time * star.driftFreqY + star.driftPhase * 1.3) * star.driftAmpY;
@@ -1056,12 +1096,9 @@ export const SetupCanvas = memo(function SetupCanvas({
         }
       }
 
-      // Asterism groups: batch edges across all groups into 2 clean passes + stamp sprite stars
       let edgeCountA = 0;
       let edgeCountB = 0;
 
-      // Pass 1: compute live points & render asterism lines first, then stamp crisp star sprites on top
-      // To avoid extra passes over groups, first collect edges into flat scratch buffers, then stamp stars
       for (let gIdx = 0; gIdx < constellations.groups.length; gIdx++) {
         const group = constellations.groups[gIdx]!;
         const gdx = reduceMotion ? 0 : Math.sin(time * group.driftFreqX + group.driftPhase) * group.driftAmpX;
@@ -1120,7 +1157,6 @@ export const SetupCanvas = memo(function SetupCanvas({
         }
       }
 
-      // Batched asterism glow aura pass (1 stroke)
       if (edgeCountA + edgeCountB > 0) {
         ctx.globalAlpha = 1;
         ctx.beginPath();
@@ -1138,7 +1174,6 @@ export const SetupCanvas = memo(function SetupCanvas({
         ctx.strokeStyle = `rgba(${glowLineStr}, ${clamp(0.16 * fade * (isLight ? 0.82 : 1), 0, 1)})`;
         ctx.stroke();
 
-        // Crisp primary gold filament lines (2 shimmer buckets)
         if (edgeCountA > 0) {
           ctx.beginPath();
           for (let i = 0; i < edgeCountA; i++) {
@@ -1163,7 +1198,6 @@ export const SetupCanvas = memo(function SetupCanvas({
         }
       }
 
-      // Stamp constellation pinpoint stars & 4-point anchor flares
       for (let gIdx = 0; gIdx < constellations.groups.length; gIdx++) {
         const group = constellations.groups[gIdx]!;
         const gdx = reduceMotion ? 0 : Math.sin(time * group.driftFreqX + group.driftPhase) * group.driftAmpX;
@@ -1194,7 +1228,7 @@ export const SetupCanvas = memo(function SetupCanvas({
       ctx.restore();
     };
 
-    /** Frame 2 orbital plasma ring + outer crescent arc & curved tendrils around igniting or compressed core. */
+    /** Frame 2 orbital plasma ring + outer crescent arc & curved tendrils around igniting singularity. */
     const renderOrbitalIgnitionRing = (
       cx: number,
       cy: number,
@@ -1202,34 +1236,33 @@ export const SetupCanvas = memo(function SetupCanvas({
       intensity: number,
       spin: number,
       tendrilGrowth: number,
-      tremor: number,
+      isLight: boolean,
       p: ThemePalette,
       atlas: SetupSpriteAtlas,
     ) => {
       if (intensity <= 0.01 || ringR < 2) return;
-      const cStr = rgbStr(p.goldCore);
+      const cStr = rgbStr(isLight ? p.goldBright : p.goldCore);
       const bStr = rgbStr(p.goldBright);
       const mStr = rgbStr(p.goldMid);
       const scaleA = p.alphaScale;
 
       ctx.globalAlpha = 1;
 
-      // Soft outer plasma torus glow
+      // Soft warm torus aura
       ctx.lineWidth = lerp(2.2, 4.4, intensity);
       ctx.strokeStyle = `rgba(${mStr}, ${clamp(0.32 * intensity * scaleA, 0, 1)})`;
       ctx.beginPath();
       ctx.arc(cx, cy, ringR, 0, TAU);
       ctx.stroke();
 
-      // Razor-crisp molten golden orbital torus (subtle tremor when holding compressed charge)
-      const jitterR = tremor > 0 ? ringR * (1 + tremor * Math.sin(spin * 9.5)) : ringR;
+      // Razor-crisp molten photon ring
       ctx.lineWidth = lerp(1.0, 1.85, intensity);
       ctx.strokeStyle = `rgba(${cStr}, ${clamp(0.92 * intensity * scaleA, 0, 1)})`;
       ctx.beginPath();
-      ctx.arc(cx, cy, Math.max(2, jitterR), 0, TAU);
+      ctx.arc(cx, cy, ringR, 0, TAU);
       ctx.stroke();
 
-      // Outer thin orbital crescent arc + counter-arc + orbiting 4-point star bead
+      // Outer thin orbital crescent arc + counter-arc + orbiting 4-point star bead (Frame 2 only)
       const arcR = ringR * 2.15;
       const arcSpan = Math.PI * 0.94;
       ctx.lineWidth = 0.95;
@@ -1245,7 +1278,6 @@ export const SetupCanvas = memo(function SetupCanvas({
       ctx.arc(cx, cy, innerArcR, -spin * 0.8 + Math.PI * 0.4, -spin * 0.8 + Math.PI * 1.1);
       ctx.stroke();
 
-      // Curved plasma tendrils peeling off the orbital ring (Frame 2)
       if (tendrilGrowth > 0.02) {
         for (let layerIdx = 1; layerIdx <= 3; layerIdx++) {
           const layer = DEPTH_LAYERS[layerIdx]!;
@@ -1265,8 +1297,8 @@ export const SetupCanvas = memo(function SetupCanvas({
             traceSmoothPolylineScratch(ctx, scratchXs, scratchYs, TENDRIL_STEPS + 1);
           }
           if (hasAny) {
-            ctx.lineWidth = layer.width * 0.95;
-            ctx.strokeStyle = `rgba(${mixRgb(p.goldMid, p.goldCore, layer.hot)}, ${clamp(layer.alpha * intensity * tendrilGrowth * scaleA * 1.45, 0, 1)})`;
+            ctx.lineWidth = layer.width * 0.85;
+            ctx.strokeStyle = `rgba(${mixRgb(p.goldMid, isLight ? p.goldBright : p.goldCore, layer.hot)}, ${clamp(layer.alpha * intensity * tendrilGrowth * scaleA * 1.45, 0, 1)})`;
             ctx.stroke();
           }
         }
@@ -1278,7 +1310,10 @@ export const SetupCanvas = memo(function SetupCanvas({
       ctx.globalAlpha = 1;
     };
 
-    /** Evaluates a 3D foreshortened point on a differential-foliation logarithmic spiral accretion vortex. */
+    const tmpX = { value: 0 };
+    const tmpY = { value: 0 };
+
+    /** Evaluates a 3D foreshortened tangential point on the Frame 3 differential-foliation logarithmic spiral vortex. */
     const projectVortexPoint = (
       stream: VortexStream,
       u: number,
@@ -1293,17 +1328,17 @@ export const SetupCanvas = memo(function SetupCanvas({
       outY: { value: number },
     ) => {
       const span = maxSpan * stream.reachMul;
-      const r = lerp(ringR * 0.9, span, Math.pow(u, 0.82));
-      const logSpiral = Math.log(1 + u * 4.2) * 1.82;
-      const spread = stream.eta * (0.06 + 0.32 * Math.pow(u, 0.85));
-      const wave = 0.052 * Math.sin(u * 4.6 - waveTime * 2.1 + stream.phase) * Math.pow(u, 0.58);
+      // Taper inward smoothly right from r = 0 so arms spiral organically from the core instead of butting into a hard hoop
+      const r = lerp(ringR * 0.15, span, Math.pow(u, 1.04));
+      const logSpiral = Math.log(1 + u * 5.6) * 2.25;
+      const spread = stream.eta * lerp(0.46, 0.24, Math.pow(u, 0.72));
+      const wave = 0.048 * Math.sin(u * 4.4 - waveTime * 2.1 + stream.phase) * Math.pow(u, 0.6);
       const theta = stream.armBase + spinTheta + direction * logSpiral + spread + wave;
 
-      // Local orbital disk coordinates
       const lx = Math.cos(theta) * r;
       const ly = Math.sin(theta) * r;
 
-      // Subtle 3D tilted orbital inclination (like Frame 3 foreshortening)
+      // Subtle 3D tilted orbital disk inclination (matches storyboard Frame 3)
       const bankCos = 0.978;
       const bankSin = -0.208;
       const tiltCos = 0.79;
@@ -1319,10 +1354,7 @@ export const SetupCanvas = memo(function SetupCanvas({
       outY.value = cy + pyFlat * persp;
     };
 
-    const tmpX = { value: 0 };
-    const tmpY = { value: 0 };
-
-    /** Frame 3 differential-foliation 3D logarithmic spiral accretion vortex & orbiting pre-baked star beads. */
+    /** Frame 3 differential-foliation 3D logarithmic spiral accretion vortex + arm-hugging mist + orbiting star beads. */
     const renderVortexSwirl = (
       cx: number,
       cy: number,
@@ -1342,17 +1374,18 @@ export const SetupCanvas = memo(function SetupCanvas({
       ctx.save();
       ctx.globalCompositeOperation = p.blendOp;
 
-      // Soft spiral nebula mist stamped from pre-baked dustMistSprite (0 gradient allocations!)
-      for (let i = 0; i < 8; i++) {
-        const theta = spinTheta + (i / 8) * TAU;
-        const dist = ringR * 1.45 + maxSpan * 0.28 * vortexExpand;
-        const mx = cx + Math.cos(theta) * dist;
-        const my = cy + Math.sin(theta) * dist * 0.82;
-        const mistSize = clamp(maxSpan * 0.68, 48, 320);
-        stampSprite(ctx, atlas.dustMistSprite, mx, my, mistSize, clamp(0.24 * vortexAlpha, 0, 0.45));
+      // Warm accretion eye glow + spiral-arm mist placed strictly along the 5 active spiral arms (zero gap blobs!)
+      stampSprite(ctx, atlas.coreHaloSprite, cx, cy, Math.max(24, ringR * 5.2), clamp(0.54 * vortexAlpha, 0, 0.78));
+      for (let a = 0; a < 5; a++) {
+        const sStream = field.vortexStreams[a * 12 + 6]!;
+        for (const uMist of [0.22, 0.42]) {
+          projectVortexPoint(sStream, uMist, ringR, maxSpan, spinTheta, direction, waveTime, cx, cy, tmpX, tmpY);
+          const mistSize = clamp(maxSpan * (uMist === 0.22 ? 0.28 : 0.34), 32, 160);
+          stampSprite(ctx, atlas.dustMistSprite, tmpX.value, tmpY.value, mistSize, clamp(0.22 * vortexAlpha, 0, 0.36));
+        }
       }
 
-      const layerGrads = getRadialLayerGrads(cx, cy, maxSpan * 1.05, mode, p, 0.25);
+      const layerGrads = getRadialLayerGrads(cx, cy, maxSpan * 1.05, mode, p, 0.25, true);
 
       for (let layerIdx = 0; layerIdx < DEPTH_LAYERS.length; layerIdx++) {
         const layer = DEPTH_LAYERS[layerIdx]!;
@@ -1370,13 +1403,13 @@ export const SetupCanvas = memo(function SetupCanvas({
           }
           traceSmoothPolylineScratch(ctx, scratchXs, scratchYs, VORTEX_STEPS + 1);
         }
-        ctx.globalAlpha = clamp(layer.alpha * vortexAlpha * p.alphaScale * 1.55, 0, 1);
-        ctx.lineWidth = layer.width * 1.15;
+        ctx.globalAlpha = clamp(layer.alpha * vortexAlpha * p.alphaScale * 1.45, 0, 1);
+        ctx.lineWidth = layer.width * 0.95;
         ctx.strokeStyle = layerGrads[layerIdx]!;
         ctx.stroke();
       }
 
-      // Orbiting 4-point gold star beads & luminous photons stamped from pre-baked sprites
+      // Prominent orbiting 4-point gold star beads & luminous photons along spiral curves
       for (const bead of field.vortexBeads) {
         const stream = field.vortexStreams[bead.streamIdx]!;
         const u = (bead.u + waveTime * bead.speed * 0.34 * direction + 1) % 1;
@@ -1385,11 +1418,11 @@ export const SetupCanvas = memo(function SetupCanvas({
         if (fade <= 0.02) continue;
         const a = clamp(bead.alpha * fade, 0, 1);
         if (bead.kind === "anchor") {
-          stampSprite(ctx, atlas.goldAnchorFlareSprite, tmpX.value, tmpY.value, bead.size * 14.5, a);
+          stampSprite(ctx, atlas.goldAnchorFlareSprite, tmpX.value, tmpY.value, bead.size * 15.2, a);
         } else if (bead.kind === "star") {
-          stampSprite(ctx, atlas.goldStarSprite, tmpX.value, tmpY.value, bead.size * 11.2, a);
+          stampSprite(ctx, atlas.goldStarSprite, tmpX.value, tmpY.value, bead.size * 11.8, a);
         } else {
-          stampSprite(ctx, atlas.sparkDotSprite, tmpX.value, tmpY.value, bead.size * 8.2, a);
+          stampSprite(ctx, atlas.sparkDotSprite, tmpX.value, tmpY.value, bead.size * 8.4, a);
         }
       }
 
@@ -1397,33 +1430,29 @@ export const SetupCanvas = memo(function SetupCanvas({
       ctx.restore();
     };
 
-    /** Evaluates one organic curved radial plasma sheaf point (replaces stiff straight blast shafts). */
+    /** Evaluates one organic curved radial plasma sheaf point for Frame 4 starburst. */
     const writeSheafPoint = (
       ray: SheafFilament,
       u: number,
       cx: number,
       cy: number,
       maxLen: number,
-      burstFrac: number,
       waveTime: number,
-      implode: number,
       outIdx: number,
     ) => {
-      const uShape = implode > 0 ? Math.pow(u, 1 + 1.12 * implode) : u;
-      const r = uShape * maxLen * burstFrac;
+      const r = u * maxLen;
       const sway =
         ray.waveAmp *
         (Math.sin(u * 4.4 * ray.freqMul - waveTime * ray.freqMul + ray.phase) * 0.72 +
           Math.cos(u * 6.2 * ray.freqMul - waveTime * 1.12 - ray.phase) * 0.28) *
         Math.pow(u, 0.78);
-      const vortex = implode * ray.twistDir * (0.36 + 0.82 * (1 - u)) * 1.05;
-      const fan = ray.fanOffset * Math.pow(u, 0.76) * (1 - 0.5 * implode);
-      const theta = ray.angle + ray.bend * Math.pow(u, 1.24) + fan + sway + vortex;
+      const fan = ray.fanOffset * Math.pow(u, 0.78);
+      const theta = ray.angle + ray.bend * Math.pow(u, 1.24) + fan + sway;
 
       let px = cx + Math.cos(theta) * r;
       let py = cy + Math.sin(theta) * r;
 
-      if (pointerPresence > 0.005 && u > 0.04 && implode < 0.35) {
+      if (pointerPresence > 0.005 && u > 0.04) {
         const dx = px - pointerSmooth.x;
         const dy = py - pointerSmooth.y;
         const distSq = dx * dx + dy * dy;
@@ -1432,7 +1461,7 @@ export const SetupCanvas = memo(function SetupCanvas({
         if (distSq < twoSigmaSq * 3.2) {
           const k = pointerPresence * Math.exp(-distSq / twoSigmaSq) * (1 - Math.exp(-u * 8));
           const dist = Math.sqrt(distSq) + 28;
-          const part = 8.5 * k * (1 - implode);
+          const part = 8.5 * k;
           px += (dx / dist) * part;
           py += (dy / dist) * part;
         }
@@ -1443,8 +1472,8 @@ export const SetupCanvas = memo(function SetupCanvas({
     };
 
     /**
-     * Frame 4 organic curved radial starburst sheaves, concentric spherical shockwave mesh arcs,
-     * fast stardust streaks, and soft nova bloom wash (used for both opening blast and transparent finale-blast).
+     * Frame 4 organic curved radial starburst plumes, curved plasma sheaves,
+     * and luminous stardust particle motes (zero compass circles or needle sticks).
      */
     const renderStarburstExplosion = (
       cx: number,
@@ -1459,113 +1488,84 @@ export const SetupCanvas = memo(function SetupCanvas({
       isTerminal: boolean,
     ) => {
       if (burstEnv <= 0.006 || reach < 2) return;
+      const isLight = mode === "light";
 
       ctx.save();
       ctx.globalCompositeOperation = p.blendOp;
 
-      // Soft warm supernova mist wash via pre-baked sprite (0 per-frame radial gradients!)
-      const novaSize = Math.max(48, reach * 1.56);
-      stampSprite(ctx, atlas.dustMistSprite, cx, cy, novaSize, clamp(burstEnv * (isTerminal ? 0.56 : 0.44), 0, 0.72));
+      // Compact warm central nova wash via pre-baked sprite (keeps DPR=2 fill rate fast!)
+      const novaSize = Math.max(48, Math.min(reach * 0.92, Math.max(width, height) * 0.72));
+      stampSprite(
+        ctx,
+        atlas.dustMistSprite,
+        cx,
+        cy,
+        novaSize,
+        clamp(burstEnv * (isLight ? 0.24 : isTerminal ? 0.46 : 0.4), 0, 0.58),
+      );
 
-      // Batched curved radial plasma sheaves across 4 DEPTH_LAYERS (1 stroke per tier!)
-      const layerGrads = getRadialLayerGrads(cx, cy, reach * 1.15, mode, p, 0.9);
+      // Elongated soft glowing plasma plumes along major horizontal & diagonal burst jets
+      for (const plume of field.blastPlumes) {
+        const px = cx + Math.cos(plume.angle) * reach * plume.distFrac;
+        const py = cy + Math.sin(plume.angle) * reach * plume.distFrac;
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(plume.angle);
+        ctx.scale(reach * plume.lenFrac, reach * plume.widthFrac);
+        ctx.globalAlpha = clamp(plume.alpha * burstEnv * (isLight ? 0.5 : 0.95), 0, 0.52);
+        ctx.drawImage(atlas.dustMistSprite, -0.5, -0.5, 1, 1);
+        ctx.restore();
+      }
+
+      // Batched curved radial plasma sheaves across 4 DEPTH_LAYERS
+      const layerGrads = getRadialLayerGrads(cx, cy, reach * 1.15, mode, p, 0.9, false);
       for (let layerIdx = 0; layerIdx < DEPTH_LAYERS.length; layerIdx++) {
         const layer = DEPTH_LAYERS[layerIdx]!;
-        const baseBatch = field.baseSheafBatches[layerIdx]!;
-        const extraBatch = field.extraSheafBatches[layerIdx]!;
-        if (!baseBatch.length && !extraBatch.length) continue;
+        const batch = field.sheafBatches[layerIdx]!;
+        if (!batch.length) continue;
 
         ctx.beginPath();
-        for (const rIdx of baseBatch) {
+        for (const rIdx of batch) {
           const ray = field.sheafRays[rIdx]!;
           const maxLen = reach * ray.reachMul;
           for (let k = 0; k <= SHEAF_STEPS; k++) {
-            writeSheafPoint(ray, k / SHEAF_STEPS, cx, cy, maxLen, 1, waveTime, 0, k);
-          }
-          traceSmoothPolylineScratch(ctx, scratchXs, scratchYs, SHEAF_STEPS + 1);
-        }
-        for (const rIdx of extraBatch) {
-          const ray = field.sheafRays[rIdx]!;
-          const maxLen = reach * ray.reachMul * 0.94;
-          for (let k = 0; k <= SHEAF_STEPS; k++) {
-            writeSheafPoint(ray, k / SHEAF_STEPS, cx, cy, maxLen, 1, waveTime, 0, k);
+            writeSheafPoint(ray, k / SHEAF_STEPS, cx, cy, maxLen, waveTime, k);
           }
           traceSmoothPolylineScratch(ctx, scratchXs, scratchYs, SHEAF_STEPS + 1);
         }
 
-        ctx.globalAlpha = clamp(layer.alpha * burstEnv * p.alphaScale * 1.85, 0, 1);
-        ctx.lineWidth = layer.width * (1 + burstEnv * 0.45);
+        ctx.globalAlpha = clamp(layer.alpha * burstEnv * p.alphaScale * (isLight ? 1.05 : 1.55), 0, 1);
+        ctx.lineWidth = layer.width * (isLight ? 0.85 : 1.0 + burstEnv * 0.35);
         ctx.strokeStyle = layerGrads[layerIdx]!;
         ctx.stroke();
       }
 
-      // Concentric 3D-foreshortened spherical shock-mesh arcs (Frame 4 geometric detail, batched in 2 strokes)
-      ctx.globalAlpha = 1;
-      for (let pass = 0; pass < 2; pass++) {
-        ctx.beginPath();
-        for (let s = 0; s < 6; s++) {
-          if (s % 2 !== pass) continue;
-          const shellFrac = 0.16 + s * 0.14;
-          const shellR = reach * shellFrac;
-          if (shellR < 10) continue;
-          const rotOffset = s * 0.42 + waveTime * (s % 2 === 0 ? 0.16 : -0.14);
-          for (let seg = 0; seg < 4; seg++) {
-            const a0 = rotOffset + (seg / 4) * TAU + 0.12;
-            const a1 = a0 + 0.88;
-            const steps = 8;
-            for (let k = 0; k <= steps; k++) {
-              const th = lerp(a0, a1, k / steps);
-              const px = cx + Math.cos(th) * shellR;
-              const py = cy + Math.sin(th) * shellR * 0.86;
-              if (k === 0) ctx.moveTo(px, py);
-              else ctx.lineTo(px, py);
-            }
-          }
-        }
-        ctx.lineWidth = pass === 0 ? 1.05 : 0.72;
-        ctx.strokeStyle = `rgba(${rgbStr(p.goldBright)}, ${clamp((pass === 0 ? 0.3 : 0.2) * burstEnv * p.alphaScale, 0, 0.85)})`;
-        ctx.stroke();
-      }
-
-      // Fast crisp stardust streaks batched into 3 width/alpha tiers + pre-baked spark heads
+      // Luminous pinpoint stardust motes & sparkles bursting radially outward (no stick needles!)
       const pRaw = clamp(starburstU / (isTerminal ? 0.68 : 0.62), 0, 1);
       const pEase = 1 - Math.pow(2, -8 * pRaw);
-      const streakFade = clamp(burstEnv * (1 - pRaw * 0.35), 0, 1);
-      const coreStr = rgbStr(p.goldCore);
-
-      for (let tier = 0; tier < 3; tier++) {
-        ctx.beginPath();
-        for (const spark of field.stardustSparks) {
-          if (spark.tier !== tier) continue;
-          const travel = pEase * diag * 0.98 * spark.speedMul;
-          const tail = Math.max(0, travel - spark.lengthMul * diag * (1 - pRaw * 0.45));
-          const thHead = spark.angle + spark.curve * pEase;
-          const thTail = spark.angle + spark.curve * (pEase * 0.65);
-          ctx.moveTo(cx + Math.cos(thTail) * tail, cy + Math.sin(thTail) * tail);
-          ctx.lineTo(cx + Math.cos(thHead) * travel, cy + Math.sin(thHead) * travel);
-        }
-        ctx.lineWidth = tier === 2 ? 1.85 : tier === 1 ? 1.2 : 0.78;
-        ctx.strokeStyle = `rgba(${coreStr}, ${clamp((tier === 2 ? 0.88 : tier === 1 ? 0.62 : 0.38) * streakFade * p.alphaScale, 0, 1)})`;
-        ctx.stroke();
-      }
+      const moteFade = clamp(burstEnv * (1 - pRaw * 0.25), 0, 1);
 
       for (const spark of field.stardustSparks) {
-        if (!spark.hasHead) continue;
-        const travel = pEase * diag * 0.98 * spark.speedMul;
+        const travel = pEase * diag * 0.96 * spark.speedMul;
         const thHead = spark.angle + spark.curve * pEase;
         const hx = cx + Math.cos(thHead) * travel;
         const hy = cy + Math.sin(thHead) * travel;
-        stampSprite(ctx, atlas.sparkDotSprite, hx, hy, spark.size * 7.8, clamp(spark.alpha * streakFade, 0, 1));
+        if (spark.tier === 2) {
+          stampSprite(ctx, atlas.goldStarSprite, hx, hy, spark.size * 9.8, clamp(spark.alpha * moteFade, 0, 1));
+        } else {
+          stampSprite(ctx, atlas.sparkDotSprite, hx, hy, spark.size * 7.6, clamp(spark.alpha * moteFade, 0, 1));
+        }
       }
 
       ctx.globalAlpha = 1;
       ctx.restore();
     };
 
-    /** Evaluates a 3D perspective point on the geodesic cosmic silk lattice (Frames 5 -> 6 -> 7). */
-    const evaluateGeodesicPoint = (
+    /** Evaluates a 3D perspective point on the multi-strand caustic silk lattice (Frames 5 -> 6 -> 7). */
+    const evaluateSilkLatticePoint = (
       u: number,
       v: number,
+      eta: number,
       parting: number,
       swirlPull: number,
       waveTime: number,
@@ -1575,30 +1575,33 @@ export const SetupCanvas = memo(function SetupCanvas({
       outY: { value: number },
     ) => {
       const minDim = Math.min(width, height);
-      const x0 = u * width * 0.64 + v * width * 0.11;
-      const y0 = v * height * 0.54 + Math.sin(u * 1.45 + v * 0.6) * height * 0.075;
-      const wave =
-        Math.sin(u * 2.4 - waveTime * 0.42 + v * 1.9) * height * 0.044 +
-        Math.cos(v * 2.8 + waveTime * 0.34 - u * 1.5) * width * 0.022;
-      const z =
-        minDim * (0.28 * (u * u + v * v - 0.55) + 0.16 * Math.sin(u * 2.1 + v * 1.7 + waveTime * 0.32));
+      // Pinch silk ribbon thickness gently at periodic focal junctions so additive strands bloom naturally
+      const pinch = 0.22 + 0.78 * Math.abs(Math.sin(u * Math.PI * 1.45 + v * 1.2));
+      const ribbonThickness = eta * height * 0.036 * pinch;
 
-      const camDist = diag * 1.18;
-      const persp = camDist / Math.max(camDist * 0.44, camDist + z);
+      const x0 = u * width * 0.78 + v * width * 0.11;
+      const y0 = v * height * 0.62 + Math.sin(u * 1.35 + v * 0.6) * height * 0.075 + ribbonThickness;
+      const wave =
+        Math.sin(u * 2.2 - waveTime * 0.42 + v * 1.85 + eta * 0.55) * height * 0.048 +
+        Math.cos(v * 2.6 + waveTime * 0.34 - u * 1.4) * width * 0.022;
+      const z =
+        minDim * (0.24 * (u * u + v * v - 0.55) + 0.14 * Math.sin(u * 2.0 + v * 1.65 + waveTime * 0.32));
+
+      const camDist = diag * 1.25;
+      const persp = camDist / Math.max(camDist * 0.48, camDist + z);
 
       let px = cx + x0 * persp;
       let py = cy + (y0 + wave) * persp;
 
       // Clean parting around center modal zone (Frames 6 -> 7)
       if (parting > 0.002) {
-        const distNorm = Math.hypot(u * 0.74, v * 1.12);
-        const partMask = Math.exp(-distNorm * distNorm * 1.38);
+        const distNorm = Math.hypot(u * 0.62, v * 1.05);
+        const partMask = Math.exp(-distNorm * distNorm * 1.28);
         const vDir = Math.tanh(v * 3.4);
         py += vDir * parting * height * 0.33 * partMask;
-        px += u * parting * width * 0.09 * partMask;
+        px += u * parting * width * 0.08 * partMask;
       }
 
-      // Subtle cursor deflection on living silk lattice
       if (pointerPresence > 0.005 && swirlPull < 0.35) {
         const dx = px - pointerSmooth.x;
         const dy = py - pointerSmooth.y;
@@ -1607,12 +1610,11 @@ export const SetupCanvas = memo(function SetupCanvas({
         const k = pointerPresence * Math.exp(-distSq / (2 * sigma * sigma));
         if (k > 0.002) {
           const dist = Math.sqrt(distSq) + 28;
-          px += (dx / dist) * 11 * k;
-          py += (dy / dist) * 11 * k;
+          px += (dx / dist) * 12 * k;
+          py += (dy / dist) * 12 * k;
         }
       }
 
-      // Harmonic impulse shock ripple across cosmic silk threads
       if (shockRings.length > 0 && swirlPull < 0.2) {
         const dx = px - cx;
         const dy = py - cy;
@@ -1630,13 +1632,12 @@ export const SetupCanvas = memo(function SetupCanvas({
         }
       }
 
-      // Gravitational vortex collapse during finale implosion
       if (swirlPull > 0.004) {
         const dx = px - cx;
         const dy = py - cy;
         const dist = Math.hypot(dx, dy);
-        const angle = Math.atan2(dy, dx) - swirlPull * (1.35 + 2.8 * (1 - clamp(dist / diag, 0, 1)));
-        const rCollapsed = dist * Math.pow(1 - swirlPull, 1.16);
+        const angle = Math.atan2(dy, dx) - swirlPull * (1.5 + 3.0 * (1 - clamp(dist / diag, 0, 1)));
+        const rCollapsed = dist * Math.pow(1 - swirlPull, 1.2);
         px = cx + Math.cos(angle) * rCollapsed;
         py = cy + Math.sin(angle) * rCollapsed;
       }
@@ -1645,7 +1646,24 @@ export const SetupCanvas = memo(function SetupCanvas({
       outY.value = py;
     };
 
-    /** Frames 5 -> 6..7 3D perspective geodesic cosmic silk lattice + real intersection 4-point star nodes. */
+    /** Evaluates (u, v) on one SilkWaveStrand at sweep parameter t in [-1.62, 1.62]. */
+    const strandUvAt = (strand: SilkWaveStrand, t: number): readonly [number, number] => {
+      if (strand.kind === "wave") {
+        const u = t;
+        const v = strand.baseCoord + Math.sin(t * strand.waveFreq + strand.phase) * 0.11;
+        return [u, v];
+      }
+      if (strand.kind === "arch") {
+        const u = strand.baseCoord + t * strand.skew + Math.sin(t * 1.2 + strand.phase) * 0.08;
+        const v = t * 0.88;
+        return [u, v];
+      }
+      const u = t;
+      const v = strand.baseCoord + t * strand.skew;
+      return [u, v];
+    };
+
+    /** Frames 5 -> 6..7 Glowing multi-strand 3D caustic silk ribbons, crossing arches, flowing photons & 4-point star junctions. */
     const renderGeodesicSilkLattice = (
       cx: number,
       cy: number,
@@ -1666,54 +1684,54 @@ export const SetupCanvas = memo(function SetupCanvas({
 
       for (let layerIdx = 0; layerIdx < DEPTH_LAYERS.length; layerIdx++) {
         const layer = DEPTH_LAYERS[layerIdx]!;
-        const batch = field.geodesicLayerBatches[layerIdx]!;
+        const batch = field.silkLayerBatches[layerIdx]!;
         if (!batch.length) continue;
 
         ctx.beginPath();
-        for (const cIdx of batch) {
-          const curve = field.geodesicCurves[cIdx]!;
+        for (const sIdx of batch) {
+          const strand = field.silkStrands[sIdx]!;
           for (let k = 0; k <= GEODESIC_STEPS; k++) {
-            const t = lerp(-1.12, 1.12, k / GEODESIC_STEPS);
-            let u = 0;
-            let v = 0;
-            if (curve.kind === "u") {
-              u = t;
-              v = curve.fixedCoord + Math.sin(t * 1.45 + curve.phase) * 0.08;
-            } else if (curve.kind === "v") {
-              u = curve.fixedCoord + t * curve.skew + Math.sin(t * 1.35 + curve.phase) * 0.06;
-              v = t;
-            } else {
-              u = t;
-              v = curve.fixedCoord + t * curve.skew;
-            }
-            evaluateGeodesicPoint(u, v, parting, swirlPull, waveTime, cx, cy, tmpX, tmpY);
+            const t = lerp(-1.62, 1.62, k / GEODESIC_STEPS);
+            const [u, v] = strandUvAt(strand, t);
+            evaluateSilkLatticePoint(u, v, strand.eta, parting, swirlPull, waveTime, cx, cy, tmpX, tmpY);
             scratchXs[k] = tmpX.value;
             scratchYs[k] = tmpY.value;
           }
           traceSmoothPolylineScratch(ctx, scratchXs, scratchYs, GEODESIC_STEPS + 1);
         }
 
-        ctx.globalAlpha = clamp(layer.alpha * alpha * p.alphaScale * 1.38, 0, 1);
-        ctx.lineWidth = layer.width * (isLight ? 1.12 : 1.02);
+        ctx.globalAlpha = clamp(layer.alpha * alpha * p.alphaScale * (isLight ? 1.25 : 1.78), 0, 1);
+        ctx.lineWidth = layer.width * (isLight ? 1.05 : 1.02);
         ctx.strokeStyle = webGrads[layerIdx]!;
         ctx.stroke();
       }
 
-      // Luminous 4-point star junctions pinned cleanly at geodesic lattice intersections
-      for (const node of field.geodesicNodes) {
-        evaluateGeodesicPoint(node.u, node.v, parting, swirlPull, waveTime, cx, cy, tmpX, tmpY);
+      // Luminous photons gliding along the caustic silk ribbons
+      for (const pt of field.silkPhotons) {
+        const strand = field.silkStrands[pt.strandIdx]!;
+        const t = ((((pt.t + waveTime * pt.speed) + 1.4) % 2.8) + 2.8) % 2.8 - 1.4;
+        const [u, v] = strandUvAt(strand, t);
+        evaluateSilkLatticePoint(u, v, strand.eta, parting, swirlPull, waveTime, cx, cy, tmpX, tmpY);
+        const fade = clamp(1 - Math.abs(t) / 1.4, 0, 1) * alpha * (1 - swirlPull * 0.25);
+        if (fade <= 0.02) continue;
+        stampSprite(ctx, atlas.sparkDotSprite, tmpX.value, tmpY.value, pt.size * 7.6, clamp(pt.alpha * fade, 0, 1));
+      }
+
+      // Luminous 4-point star junctions + soft misty golden glow along the wave ridges (Frames 5-7)
+      for (const node of field.silkNodes) {
+        evaluateSilkLatticePoint(node.u, node.v, 0, parting, swirlPull, waveTime, cx, cy, tmpX, tmpY);
         const tw = twinkleWave(waveTime, node.twinkleSpeed, 1.75, node.phase, reduceMotion);
-        const edgeWindow =
-          clamp(1 - Math.abs(node.u) * 0.72, 0.15, 1) * clamp(1 - Math.abs(node.v) * 0.65, 0.15, 1);
+        const edgeWindow = clamp(1 - Math.abs(node.u) * 0.38, 0.25, 1);
         const starAlpha = clamp(node.alpha * tw * alpha * edgeWindow * (1 - swirlPull * 0.25), 0, 1);
         if (starAlpha <= 0.02) continue;
         const size = node.size * (0.9 + 0.22 * tw);
         if (node.kind === "anchor") {
-          stampSprite(ctx, atlas.goldAnchorFlareSprite, tmpX.value, tmpY.value, size * 14.5, starAlpha);
+          stampSprite(ctx, atlas.dustMistSprite, tmpX.value, tmpY.value, size * 24, starAlpha * 0.28);
+          stampSprite(ctx, atlas.goldAnchorFlareSprite, tmpX.value, tmpY.value, size * 15.2, starAlpha);
         } else if (node.kind === "star") {
-          stampSprite(ctx, atlas.goldStarSprite, tmpX.value, tmpY.value, size * 11.2, starAlpha);
+          stampSprite(ctx, atlas.goldStarSprite, tmpX.value, tmpY.value, size * 11.8, starAlpha);
         } else {
-          stampSprite(ctx, atlas.sparkDotSprite, tmpX.value, tmpY.value, size * 8.2, starAlpha);
+          stampSprite(ctx, atlas.sparkDotSprite, tmpX.value, tmpY.value, size * 8.4, starAlpha);
         }
       }
 
@@ -1732,7 +1750,6 @@ export const SetupCanvas = memo(function SetupCanvas({
       if (curPhase !== prevPhase) {
         if (prevPhase === "singularity" && curPhase !== "singularity") {
           openAge = 0;
-          openBlastFired = false;
           openDispatched = false;
         }
         if (curPhase === "finale") {
@@ -1741,16 +1758,13 @@ export const SetupCanvas = memo(function SetupCanvas({
           finaleCollapsedDispatched = false;
           finaleExplodeDispatched = false;
           finaleCompleteDispatched = false;
-          finaleBoomLaunched = false;
         } else if (curPhase === "finale-blast" && prevPhase !== "finale") {
           finaleAge = FINALE_EXPLODE_AT;
           shockRings.length = 0;
           finaleCollapsedDispatched = true;
           finaleExplodeDispatched = true;
           finaleCompleteDispatched = false;
-          finaleBoomLaunched = false;
         } else if (curPhase === "finale-blast" && prevPhase === "finale") {
-          // Seamless rAF continuation across finale -> finale-blast with zero clock reset
           finaleAge += wallDt;
         }
         trackedPhase = curPhase;
@@ -1788,12 +1802,7 @@ export const SetupCanvas = memo(function SetupCanvas({
       }
       hoverFocus = lerp(hoverFocus, targetHover, reduceMotion ? 1 : 1 - Math.exp(-dt * 4.5));
 
-      // Opening beat triggers (Frames 2 -> 3 -> 4 -> 5 -> 6)
-      if (curPhase === "exploding" && !reduceMotion && !openBlastFired && openAge >= OPEN_BLAST_AT) {
-        openBlastFired = true;
-        shockRings.push({ u: 0.01, speed: 1.55, strength: 1.35, crimson: false });
-        shockRings.push({ u: 0.0, speed: 1.05, strength: 0.85, crimson: false });
-      }
+      // Opening completion trigger (~2.25s, skipped under reduced motion)
       if (curPhase === "exploding" && !openDispatched && !reduceMotion && openAge >= OPEN_COMPLETE_AT) {
         openDispatched = true;
         explosionCbRef.current?.();
@@ -1821,10 +1830,7 @@ export const SetupCanvas = memo(function SetupCanvas({
       const blastAge = isFinaleBlasting ? finaleAge - FINALE_EXPLODE_AT : 0;
       const blastProgress = isFinaleBlasting ? clamp(blastAge / FINALE_BLAST_DURATION, 0, 1) : 0;
       const blastReachEase = blastProgress > 0 ? 1 - Math.pow(2, -9.0 * clamp(blastAge / 0.65, 0, 1)) : 0;
-      // Organic fade from full peak brilliance down to exact 0 alpha across ~1.12s so unmounting overlay is invisible
-      const finaleOverlayFade = isFinaleBlasting
-        ? Math.pow(clamp(1 - blastProgress, 0, 1), 1.55)
-        : 0;
+      const finaleOverlayFade = isFinaleBlasting ? Math.pow(clamp(1 - blastProgress, 0, 1), 1.55) : 0;
 
       if (curPhase === "finale" && !reduceMotion && !finaleCollapsedDispatched && finaleAge >= FINALE_COLLAPSE_END) {
         finaleCollapsedDispatched = true;
@@ -1836,18 +1842,12 @@ export const SetupCanvas = memo(function SetupCanvas({
         finaleExplodeCbRef.current?.();
       }
 
-      if (isFinaleBlasting && !reduceMotion && !finaleBoomLaunched) {
-        finaleBoomLaunched = true;
-        shockRings.push({ u: 0.01, speed: 2.25, strength: 1.5, crimson: false });
-        shockRings.push({ u: 0.0, speed: 1.65, strength: 1.1, crimson: false });
-      }
-
       if (isFinaleTimeline && !finaleCompleteDispatched && !reduceMotion && finaleAge >= FINALE_COMPLETE_AT) {
         finaleCompleteDispatched = true;
         finaleCbRef.current?.();
       }
 
-      // 0. Background: transparent clearRect during "finale-blast" so <NeuralStage> underneath shines cleanly!
+      // 0. Background: transparent clearRect during "finale-blast" so <NeuralStage> underneath shines cleanly
       ctx.globalCompositeOperation = "source-over";
       ctx.globalAlpha = 1;
       if (isTransparentBlast) {
@@ -1912,13 +1912,14 @@ export const SetupCanvas = memo(function SetupCanvas({
           ? 0.6 * Math.sin(time * 1.48 + 0.35) + 0.4 * Math.cos(time * 2.96 - 0.45)
           : 0;
 
-      // 1. Opening Frames 2 -> 3 (Orbital plasma ring, crescent arc, tendrils & 3D logarithmic accretion vortex)
-      if (curPhase === "exploding" && !reduceMotion && openAge < OPEN_BLAST_AT + 0.34) {
+      // 1. Opening Frames 2 -> 3 (Orbital plasma ring fades smoothly as tangential 3D spiral vortex builds; gone before blast!)
+      if (curPhase === "exploding" && !reduceMotion && openAge < OPEN_BLAST_AT + 0.22) {
         const ringBuild = clamp(openAge / OPEN_RING_END, 0, 1);
-        const postBlastFade = openAge > OPEN_BLAST_AT ? clamp(1 - (openAge - OPEN_BLAST_AT) / 0.32, 0, 1) : 1;
+        const preBlastRingFade = clamp(1 - (openAge - 0.32) / 0.28, 0, 1);
+        const postBlastVortexFade = openAge > OPEN_BLAST_AT ? clamp(1 - (openAge - OPEN_BLAST_AT) / 0.22, 0, 1) : 1;
         const vortexU = clamp((openAge - OPEN_VORTEX_START) / (OPEN_BLAST_AT - OPEN_VORTEX_START), 0, 1);
         const vortexEase = 1 - Math.pow(1 - vortexU, 1.85);
-        const ringR = coreBaseR * lerp(0.16, 0.36, ringBuild) * (1 - 0.14 * clamp((openAge - 0.76) / 0.16, 0, 1));
+        const ringR = coreBaseR * lerp(0.16, 0.32, ringBuild) * (1 - 0.35 * clamp((openAge - 0.55) / 0.35, 0, 1));
 
         ctx.save();
         ctx.globalCompositeOperation = p.blendOp;
@@ -1927,7 +1928,7 @@ export const SetupCanvas = memo(function SetupCanvas({
           cy,
           ringR,
           lerp(0.08, 1.08, vortexEase),
-          clamp(vortexU * 1.35, 0, 1) * postBlastFade,
+          clamp(vortexU * 1.35, 0, 1) * postBlastVortexFade,
           vortexSpin,
           1,
           wavePhase,
@@ -1935,17 +1936,19 @@ export const SetupCanvas = memo(function SetupCanvas({
           p,
           atlas,
         );
-        renderOrbitalIgnitionRing(
-          cx,
-          cy,
-          ringR,
-          clamp(ringBuild * 1.1, 0, 1) * postBlastFade,
-          vortexSpin * 1.35,
-          clamp(openAge / 0.3, 0, 1) * (1 - clamp((openAge - 0.35) / 0.4, 0, 1)),
-          0,
-          p,
-          atlas,
-        );
+        if (preBlastRingFade > 0.01) {
+          renderOrbitalIgnitionRing(
+            cx,
+            cy,
+            ringR,
+            clamp(ringBuild * 1.1, 0, 1) * preBlastRingFade,
+            vortexSpin * 1.35,
+            clamp(openAge / 0.28, 0, 1) * preBlastRingFade,
+            isLight,
+            p,
+            atlas,
+          );
+        }
         ctx.restore();
       }
 
@@ -1986,7 +1989,8 @@ export const SetupCanvas = memo(function SetupCanvas({
         );
       }
 
-      // 3. Frames 5 -> 6..7 3D Perspective Geodesic Cosmic Silk Lattice
+      // 3. Frames 5 -> 6..7 3D Multi-Strand Caustic Silk Lattice
+      //    Active from opening blast settle through Setup Modal & Finale full-web fill + vortex collapse
       let silkAlpha = 0;
       let silkParting = 1;
       let silkSwirlPull = 0;
@@ -1995,16 +1999,16 @@ export const SetupCanvas = memo(function SetupCanvas({
         if (curPhase === "exploding" && !reduceMotion) {
           const webIn = clamp((openAge - OPEN_BLAST_AT) / 0.55, 0, 1);
           const partU = clamp((openAge - OPEN_WEB_SETTLE_AT) / (OPEN_COMPLETE_AT - OPEN_WEB_SETTLE_AT), 0, 1);
-          silkAlpha = Math.pow(webIn, 0.85) * lerp(1.0, 0.58, partU);
+          silkAlpha = Math.pow(webIn, 0.85) * lerp(1.18, 0.82, partU);
           silkParting = partU * partU * (3 - 2 * partU);
         } else {
-          silkAlpha = 0.58;
+          silkAlpha = 0.82;
           silkParting = 1;
         }
       } else if (isFinaleTimeline && !raysCollapsed) {
-        silkAlpha = lerp(0.58, 1.05, fillEase) * (1 - Math.pow(collapseU, 2.2));
+        silkAlpha = lerp(0.82, 1.32, fillEase) * (1 - Math.pow(collapseU, 2.2));
         silkParting = lerp(1.0, 0.0, clamp(fillEase * 1.25, 0, 1));
-        silkSwirlPull = implode * 0.94;
+        silkSwirlPull = implode * 0.96;
       }
 
       if (silkAlpha > 0.01) {
@@ -2022,135 +2026,52 @@ export const SetupCanvas = memo(function SetupCanvas({
         );
       }
 
-      // 4. Finale Surge & Frame-3 Gravitational Vortex Implosion (0.00 -> 1.88s)
-      if (isFinaleTimeline && !raysCollapsed) {
-        const outerReach = diag * lerp(0.66, 1.18, fillEase) * (1 - implode);
-        const speedBoost = 1 + fillEase * 2.1 + implode * 2.8;
-        const widthBoost = 1 + fillEase * 0.65 - implode * 0.42;
-
-        if (outerReach > 3) {
-          ctx.save();
-          ctx.globalCompositeOperation = p.blendOp;
-          const layerGrads = getRadialLayerGrads(cx, cy, Math.max(8, outerReach), mode, p, fillEase);
-
-          for (let layerIdx = 0; layerIdx < DEPTH_LAYERS.length; layerIdx++) {
-            const layer = DEPTH_LAYERS[layerIdx]!;
-            const baseBatch = field.baseSheafBatches[layerIdx]!;
-            const extraBatch = field.extraSheafBatches[layerIdx]!;
-            if (!baseBatch.length && !extraBatch.length) continue;
-
-            ctx.beginPath();
-            for (const rayIdx of baseBatch) {
-              const ray = field.sheafRays[rayIdx]!;
-              const maxLen = outerReach * ray.reachMul;
-              for (let k = 0; k <= SHEAF_STEPS; k++) {
-                writeSheafPoint(ray, k / SHEAF_STEPS, cx, cy, maxLen, fillEase, wavePhase, implode, k);
-              }
-              traceSmoothPolylineScratch(ctx, scratchXs, scratchYs, SHEAF_STEPS + 1);
-            }
-            for (const rayIdx of extraBatch) {
-              const ray = field.sheafRays[rayIdx]!;
-              const tau = Math.max(0, finaleAge - ray.staggerFinale);
-              if (tau <= 0) continue;
-              const grow = clamp(1 - Math.exp(-3.4 * tau), 0, 1.04);
-              const maxLen = outerReach * ray.reachMul;
-              for (let k = 0; k <= SHEAF_STEPS; k++) {
-                writeSheafPoint(ray, k / SHEAF_STEPS, cx, cy, maxLen, grow, wavePhase, implode, k);
-              }
-              traceSmoothPolylineScratch(ctx, scratchXs, scratchYs, SHEAF_STEPS + 1);
-            }
-
-            ctx.globalAlpha = clamp(layer.alpha * p.alphaScale * (0.45 + 0.95 * fillEase) * (1 - collapseU * 0.25), 0, 1);
-            ctx.lineWidth = layer.width * (isLight ? 1.08 : 0.96) * widthBoost;
-            ctx.strokeStyle = layerGrads[layerIdx]!;
-            ctx.stroke();
-          }
-
-          // Flowing photons streaming outward on fill, then whipping rapidly inward on collapse
-          for (const pt of field.photons) {
-            const ray = field.sheafRays[pt.rayIdx]!;
-            const tau = ray.isExtra ? Math.max(0, finaleAge - ray.staggerFinale) : 2;
-            if (tau <= 0) continue;
-            const expand = ray.isExtra ? clamp(1 - Math.exp(-3.4 * tau), 0, 1.04) : 1;
-            if (!reduceMotion) {
-              pt.u = collapseU > 0 ? (pt.u - dt * (0.55 + implode * 2.15) + 1) % 1 : (pt.u + pt.speed * speedBoost * dt) % 1;
-            }
-            writeSheafPoint(ray, pt.u, cx, cy, outerReach * ray.reachMul, expand, wavePhase, implode, 0);
-            const fade = Math.sin(pt.u * Math.PI);
-            stampSprite(
-              ctx,
-              atlas.sparkDotSprite,
-              scratchXs[0]!,
-              scratchYs[0]!,
-              pt.size * (1 + fillEase * 0.38) * 7.8,
-              clamp(pt.alpha * fade * fillEase * (isLight ? 0.85 : 1), 0, 1),
-            );
-          }
-
-          ctx.globalAlpha = 1;
-          ctx.restore();
-        }
-
-        // Swirling Frame-3 gravitational vortex funnel wrapping inward into the orbital eye
-        if (collapseU > 0.02) {
-          const vortexFadeIn = Math.sin(collapseU * Math.PI);
-          const vortexR = coreBaseR * lerp(0.45, 0.16, implode);
-          renderVortexSwirl(
-            cx,
-            cy,
-            vortexR,
-            1 - implode * 0.94,
-            clamp(vortexFadeIn * 1.25, 0, 1),
-            vortexSpin,
-            -1,
-            wavePhase,
-            mode,
-            p,
-            atlas,
-          );
-          ctx.save();
-          ctx.globalCompositeOperation = p.blendOp;
-          renderOrbitalIgnitionRing(
-            cx,
-            cy,
-            Math.max(4, coreBaseR * lerp(0.42, 0.165, implode)),
-            clamp(lerp(0.18, 0.78, implode), 0, 1),
-            vortexSpin,
-            0,
-            0,
-            p,
-            atlas,
-          );
-          ctx.restore();
-        }
+      // 4. Finale Frame-3 Gravitational Vortex Implosion (1.22 -> 1.88s only; 0.00 -> 1.22s stays pure Frame-5 cosmic web!)
+      if (isFinaleTimeline && !raysCollapsed && collapseU > 0.015) {
+        const vortexFadeIn = Math.sin(collapseU * Math.PI);
+        const vortexR = coreBaseR * lerp(0.38, 0.1, implode);
+        renderVortexSwirl(
+          cx,
+          cy,
+          vortexR,
+          1 - implode * 0.94,
+          clamp(vortexFadeIn * 1.35, 0, 1),
+          vortexSpin,
+          -1,
+          wavePhase,
+          mode,
+          p,
+          atlas,
+        );
       }
 
-      // 5. Expanding Shockwave Rings
-      ctx.save();
-      ctx.globalCompositeOperation = p.blendOp;
-      ctx.lineWidth = isFinaleBlasting || isOpeningBurst ? 1.85 : 1.2;
-      for (let i = shockRings.length - 1; i >= 0; i--) {
-        const ring = shockRings[i]!;
-        if (!reduceMotion) ring.u += ring.speed * dt;
-        if (ring.u >= 1) {
-          shockRings.splice(i, 1);
-          continue;
+      // 5. Modal Impulse Shockwave Ripples
+      if (shockRings.length > 0) {
+        ctx.save();
+        ctx.globalCompositeOperation = p.blendOp;
+        ctx.lineWidth = 1.15;
+        for (let i = shockRings.length - 1; i >= 0; i--) {
+          const ring = shockRings[i]!;
+          if (!reduceMotion) ring.u += ring.speed * dt;
+          if (ring.u >= 1) {
+            shockRings.splice(i, 1);
+            continue;
+          }
+          const ease = 1 - Math.pow(1 - ring.u, 2.4);
+          const fade = Math.pow(1 - ring.u, 2.0) * ring.strength;
+          if (fade <= 0.006) continue;
+          const c = ring.crimson
+            ? mixRgb(p.goldBright, p.crimson, clamp(ring.u * 1.4, 0, 1))
+            : rgbStr(p.goldBright);
+          ctx.strokeStyle = `rgba(${c}, ${clamp(0.38 * fade * p.alphaScale, 0, 1)})`;
+          ctx.beginPath();
+          ctx.arc(cx, cy, diag * 0.85 * ease, 0, TAU);
+          ctx.stroke();
         }
-        const ease = 1 - Math.pow(1 - ring.u, 2.4);
-        const blastFade = isFinaleBlasting ? finaleOverlayFade : 1;
-        const fade = Math.pow(1 - ring.u, 2.0) * ring.strength * blastFade;
-        if (fade <= 0.006) continue;
-        const c = ring.crimson
-          ? mixRgb(p.goldBright, p.crimson, clamp(ring.u * 1.4, 0, 1))
-          : rgbStr(p.goldBright);
-        ctx.strokeStyle = `rgba(${c}, ${clamp(0.46 * fade * p.alphaScale, 0, 1)})`;
-        ctx.beginPath();
-        ctx.arc(cx, cy, diag * 0.85 * ease, 0, TAU);
-        ctx.stroke();
+        ctx.restore();
       }
-      ctx.restore();
 
-      // 6. Central Singularity Core + Horizontal Anamorphic Optical Streak (Zero gradient allocs!)
+      // 6. Central Singularity Core + Horizontal Anamorphic Optical Streak
       ctx.save();
       ctx.translate(cx, cy);
       ctx.globalCompositeOperation = p.blendOp;
@@ -2164,7 +2085,6 @@ export const SetupCanvas = memo(function SetupCanvas({
       let flareVertical = 0;
 
       if (curPhase === "singularity") {
-        // Frame 1: Radiant pulsing pinpoint white-gold singularity + razor-crisp horizontal lens flare (NO static halo ring)
         coreScale = 1 + 0.14 * singPulse + 0.16 * hoverFocus;
         flareSpan = Math.min(width * 0.34, coreBaseR * (2.65 + 0.45 * singPulse + 0.72 * hoverFocus));
         flareThickness = 1.3 + 0.28 * singRipple + 0.25 * hoverFocus;
@@ -2203,32 +2123,20 @@ export const SetupCanvas = memo(function SetupCanvas({
           const holdBreath = holdU > 0 ? 0.04 * Math.sin(holdU * Math.PI) : 0;
           const expandedScale = lerp(0.86, 1.32, fillEase) + holdBreath;
           const expandedFlash = lerp(0.15, 1.1, fillEase) + holdBreath;
-          coreScale = lerp(expandedScale, 0.14, implode);
-          coreFlash = lerp(expandedFlash, 1.55, implode);
-          flareSpan = lerp(coreBaseR * 2.2, coreBaseR * 0.95, implode);
-          flareThickness = lerp(1.4, 1.8, implode);
+          coreScale = lerp(expandedScale, 0.22, implode);
+          coreFlash = lerp(expandedFlash, 1.45, implode);
+          flareSpan = lerp(coreBaseR * 2.2, coreBaseR * 0.75, implode);
+          flareThickness = lerp(1.4, 1.45, implode);
           flareAlpha = lerp(0.65, 0.95, implode);
         } else if (isCollapsedHold) {
-          // 1.88 -> 2.56s: Pure background + ONE taut compacted golden core + trembling photon ring + razor micro-glint
-          const charge = compressHoldU > 0.65 ? Math.pow((compressHoldU - 0.65) / 0.35, 1.85) : 0;
-          const tremor = (0.014 + 0.028 * charge) * Math.sin(time * (18 + 26 * charge));
-          coreScale = 0.135 + tremor * 0.5 - charge * 0.025;
-          coreFlash = 1.45 + charge * 0.95;
-          flareSpan = coreBaseR * (0.95 + 1.35 * charge);
-          flareThickness = 1.05 + 0.85 * charge;
-          flareAlpha = 0.92 + 0.08 * charge;
-
-          renderOrbitalIgnitionRing(
-            0,
-            0,
-            Math.max(4, coreBaseR * (0.165 - 0.018 * charge)),
-            0.78 + 0.22 * charge,
-            time * (2.6 + 3.8 * charge),
-            0,
-            0.024 + 0.036 * charge,
-            p,
-            atlas,
-          );
+          // 1.88 -> 2.56s: Pure background + ONE taut compacted pulsing pinpoint core + razor horizontal micro-glint (NO hollow ring!)
+          const charge = compressHoldU > 0.56 ? Math.pow((compressHoldU - 0.56) / 0.44, 1.75) : 0;
+          const pulse = 0.065 * Math.sin(time * (14 + 22 * charge));
+          coreScale = 0.38 + pulse - charge * 0.08;
+          coreFlash = 1.25 + charge * 0.95;
+          flareSpan = coreBaseR * (1.1 + 1.35 * charge + 0.18 * Math.sin(time * 16));
+          flareThickness = 1.0 + 0.65 * charge;
+          flareAlpha = 0.9 + 0.1 * charge;
         } else {
           // 2.56 -> 3.68s ("finale-blast"): Blazing supernova flash fading organically to 0 over 1.12s
           coreScale = lerp(2.2, 1.25, blastProgress);
@@ -2241,25 +2149,24 @@ export const SetupCanvas = memo(function SetupCanvas({
         }
       }
 
-      // Outer optical corona halo (STRICTLY 0 during Frame 1 "singularity" so orb has no static halo ring!)
+      // Outer optical corona halo (STRICTLY 0 during Frame 1 "singularity")
       const glowHaloIn =
         curPhase === "singularity"
           ? 0
           : isFinaleTimeline
             ? isCollapsedHold
-              ? lerp(0.1, 0.34, Math.pow(compressHoldU, 2.4))
+              ? lerp(0.18, 0.42, Math.pow(compressHoldU, 2.2))
               : isFinaleBlasting
                 ? finaleOverlayFade
-                : clamp(1 - implode * 0.88, 0.14, 1)
+                : clamp(1 - implode * 0.82, 0.18, 1)
             : clamp(openAge / 0.3, 0.06, 1);
 
       if (glowHaloIn > 0.01 && coreAlpha > 0.005) {
-        const haloR = Math.max(4, coreBaseR * (1.18 + 0.34 * coreFlash) * coreScale);
-        const haloAlpha = clamp(((isLight ? 0.32 : 0.42) + 0.28 * coreFlash) * glowHaloIn * coreAlpha, 0, 1);
+        const haloR = Math.max(4, coreBaseR * (1.16 + 0.32 * coreFlash) * coreScale);
+        const haloAlpha = clamp(((isLight ? 0.3 : 0.42) + 0.26 * coreFlash) * glowHaloIn * coreAlpha, 0, 1);
         stampSprite(ctx, atlas.coreHaloSprite, 0, 0, haloR * 2.0813, haloAlpha);
       }
 
-      // Razor-crisp horizontal optical anamorphic streak
       if (flareAlpha > 0.005 && coreAlpha > 0.005) {
         stampAnamorphicFlare(
           ctx,
@@ -2273,7 +2180,6 @@ export const SetupCanvas = memo(function SetupCanvas({
         );
       }
 
-      // Living white-gold Moffat singularity heart
       if (coreAlpha > 0.005) {
         const orbRadiusMul =
           curPhase === "singularity"
@@ -2283,7 +2189,7 @@ export const SetupCanvas = memo(function SetupCanvas({
         const orbAlpha =
           curPhase === "singularity"
             ? clamp((isLight ? 0.82 : 0.94) + 0.06 * singRipple + 0.06 * hoverFocus, 0, 1)
-            : clamp(((isLight ? 0.86 : 0.98) + 0.1 * hoverFocus + 0.15 * coreFlash) * coreAlpha, 0, 1);
+            : clamp(((isLight ? 0.88 : 0.98) + 0.1 * hoverFocus + 0.15 * coreFlash) * coreAlpha, 0, 1);
 
         stampSprite(ctx, atlas.coreMoffatSprite, 0, 0, orbR * 2.0813, orbAlpha);
       }

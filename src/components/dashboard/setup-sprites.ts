@@ -42,20 +42,20 @@ export type ThemePalette = {
 export function getThemePalette(theme: SetupThemeMode): ThemePalette {
   if (theme === "light") {
     return {
-      goldCore: GOLD_LIGHT_SPECULAR,
+      goldCore: [255, 250, 234],
       goldBright: GOLD_LIGHT_BRIGHT,
       goldMid: GOLD_LIGHT_MID,
       goldDeep: GOLD_LIGHT_DEEP,
       goldDust: GOLD_LIGHT_DUST,
-      haloInner: [228, 168, 42],
-      haloMid: [204, 134, 14],
-      haloOuter: [174, 102, 6],
-      orbInner: [156, 88, 6],
-      orbMid: [198, 128, 16],
-      orbOuter: [228, 168, 42],
+      haloInner: [255, 246, 214],
+      haloMid: [238, 186, 68],
+      haloOuter: [204, 136, 16],
+      orbInner: [255, 250, 234],
+      orbMid: [246, 204, 104],
+      orbOuter: [204, 136, 16],
       crimson: CRIMSON_LIGHT_ACCENT,
       blendOp: "source-over",
-      alphaScale: 1.55,
+      alphaScale: 1.45,
     };
   }
 
@@ -213,18 +213,30 @@ function bakeGoldStarSprite(p: ThemePalette, isLight: boolean): HTMLCanvasElemen
     84,
     0.2,
     1.95,
-    isLight ? 0.44 : 0.48,
+    isLight ? 0.52 : 0.48,
     p.goldBright,
     p.goldMid,
     p.goldDeep,
   );
 
   // Subtle crisp 4-point cross spikes
-  paintOpticalSpike(ctx, half, half, 74, 0, 2.2, 0.72, p.goldCore, p.goldBright, p.goldMid);
-  paintOpticalSpike(ctx, half, half, 66, Math.PI * 0.5, 2.0, 0.64, p.goldCore, p.goldBright, p.goldMid);
+  const spikeCore: Rgb = isLight ? p.goldBright : p.goldCore;
+  paintOpticalSpike(ctx, half, half, 74, 0, 2.2, 0.78, spikeCore, p.goldBright, p.goldMid);
+  paintOpticalSpike(ctx, half, half, 66, Math.PI * 0.5, 2.0, 0.7, spikeCore, p.goldBright, p.goldMid);
 
   // Radiant pinpoint star core
-  paintMoffatCircle(ctx, half, half, 17, 0.44, 1.65, 1.0, p.goldCore, p.goldBright, p.goldMid);
+  paintMoffatCircle(
+    ctx,
+    half,
+    half,
+    17,
+    0.44,
+    1.65,
+    1.0,
+    p.goldCore,
+    p.goldBright,
+    p.goldMid,
+  );
   return canvas;
 }
 
@@ -241,21 +253,22 @@ function bakeGoldAnchorFlareSprite(p: ThemePalette, isLight: boolean): HTMLCanva
     118,
     0.18,
     1.85,
-    isLight ? 0.52 : 0.62,
+    isLight ? 0.58 : 0.62,
     p.goldBright,
     p.goldMid,
     p.goldDeep,
   );
 
   // Soft wide flare aura + sharp axial optical blades (anamorphic slightly wider horizontally)
-  paintOpticalSpike(ctx, half, half, 118, 0, 4.2, 0.42, p.goldBright, p.goldMid, p.goldDeep);
-  paintOpticalSpike(ctx, half, half, 102, Math.PI * 0.5, 3.6, 0.36, p.goldBright, p.goldMid, p.goldDeep);
-  paintOpticalSpike(ctx, half, half, 118, 0, 1.75, 0.96, p.goldCore, p.goldBright, p.goldMid);
-  paintOpticalSpike(ctx, half, half, 102, Math.PI * 0.5, 1.55, 0.88, p.goldCore, p.goldBright, p.goldMid);
+  const spikeCore: Rgb = isLight ? [168, 98, 8] : p.goldCore;
+  paintOpticalSpike(ctx, half, half, 118, 0, 4.2, 0.46, p.goldBright, p.goldMid, p.goldDeep);
+  paintOpticalSpike(ctx, half, half, 102, Math.PI * 0.5, 3.6, 0.4, p.goldBright, p.goldMid, p.goldDeep);
+  paintOpticalSpike(ctx, half, half, 118, 0, 1.75, 0.96, spikeCore, p.goldBright, p.goldMid);
+  paintOpticalSpike(ctx, half, half, 102, Math.PI * 0.5, 1.55, 0.88, spikeCore, p.goldBright, p.goldMid);
 
   // Faint diagonal micro-glints for astronomical diamond brilliance
-  paintOpticalSpike(ctx, half, half, 36, Math.PI * 0.25, 1.1, 0.28, p.goldCore, p.goldBright, p.goldMid);
-  paintOpticalSpike(ctx, half, half, 36, -Math.PI * 0.25, 1.1, 0.28, p.goldCore, p.goldBright, p.goldMid);
+  paintOpticalSpike(ctx, half, half, 36, Math.PI * 0.25, 1.1, 0.3, spikeCore, p.goldBright, p.goldMid);
+  paintOpticalSpike(ctx, half, half, 36, -Math.PI * 0.25, 1.1, 0.3, spikeCore, p.goldBright, p.goldMid);
 
   // Incandescent pinpoint heart
   paintMoffatCircle(ctx, half, half, 19, 0.42, 1.6, 1.0, p.goldCore, p.goldBright, p.goldMid);
