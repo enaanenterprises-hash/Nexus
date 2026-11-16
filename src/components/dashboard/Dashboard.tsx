@@ -196,6 +196,12 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
 
   const signal = useMemo<StageSignal>(() => {
     const snapIndex = hub.lastSnapped ? hub.slots.findIndex((s) => s.id === hub.lastSnapped!.slotId) : -1;
+    const activeExtId = typeof surface.panel === "object" && surface.panel ? surface.panel.extension : null;
+    const activeSocketIdx = activeExtId
+      ? hub.slots.findIndex((s) => s.occupiedBy === activeExtId)
+      : selected
+        ? hub.slots.findIndex((s) => s.id === selected)
+        : -1;
     const socketLabels = hub.slots.map((slot) => {
       const ext = slot.occupiedBy ? hub.extensions.find((e) => e.manifest.id === slot.occupiedBy) : undefined;
       const open = canUseSlot(slot, hub.entitlement);
@@ -212,9 +218,10 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
       socketLabels,
       snap: hub.lastSnapped && snapIndex >= 0 ? { index: snapIndex, serial: hub.lastSnapped.serial } : null,
       transfer,
+      activeSocket: activeSocketIdx >= 0 ? activeSocketIdx : null,
       paused: surface.view !== "home",
     };
-  }, [session.brain, visuals, theme, hub.lastSnapped, hub.slots, hub.extensions, hub.entitlement, transfer, surface.view]);
+  }, [session.brain, visuals, theme, hub.lastSnapped, hub.slots, hub.extensions, hub.entitlement, transfer, surface.view, surface.panel, selected]);
 
   const firstName = useMemo(() => {
     const rawName = viewer.name?.trim();
@@ -350,9 +357,9 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
         <div className="dash-scrim--home pointer-events-none absolute inset-0" />
       </section>
 
-      <header className="landing-enter pointer-events-none absolute inset-x-0 top-0 z-40 flex h-14 items-center">
-        <Link href="/" aria-label="Nexus home" className="pointer-events-auto inline-flex w-[52px] shrink-0 justify-center">
-          <NexusMark className="dash-brand-mark h-5 w-auto" />
+      <header className="landing-enter pointer-events-none absolute inset-x-0 top-0 z-40 flex h-16 items-center">
+        <Link href="/" aria-label="Nexus home" className="pointer-events-auto inline-flex w-[76px] shrink-0 justify-center">
+          <NexusMark className="dash-brand-mark h-7 w-auto" />
         </Link>
       </header>
 

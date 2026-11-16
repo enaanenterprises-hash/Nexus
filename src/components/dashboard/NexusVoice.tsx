@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import type { NexusBrainState } from "@/lib/extensions";
 import { ResearchIcon } from "./icons";
 import type { Utterance } from "./use-nexus-session";
@@ -22,23 +22,37 @@ const STATE_LABEL: Record<NexusBrainState, string> = {
   responding: "Speaking",
 };
 
-/** Nexus speaks in one calm voice beneath the core rather than a message thread. */
+/** Nexus speaks in one calm voice in the negative space beneath the core. */
 export function NexusVoice({ firstName, brain, current, pendingPrompt, revealed, history, followUps, onAsk }: Props) {
   const [showEarlier, setShowEarlier] = useState(false);
+  const [waking, setWaking] = useState(true);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setWaking(false), 2100);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   const prompt = pendingPrompt ?? current?.prompt ?? null;
   const fromExtension = current && current.source !== "nexus" ? current.source : null;
-
   const hasConversation = Boolean(prompt || current);
 
   return (
     <div className="flex w-full flex-col items-center text-center">
-      <div className="dash-voice-stage flex w-full flex-col items-center justify-center">
-        <p className="dash-welcome">Hello, {firstName}</p>
-
-        {hasConversation ? (
-          <div className="mt-2.5 flex w-full flex-col items-center justify-center">
+      <div className="dash-voice-stage flex min-h-[6.5rem] w-full flex-col items-center justify-center sm:min-h-[8.5rem]">
+        {!hasConversation ? (
+          waking ? (
+            <p key="waking" className="dash-welcome dash-welcome--waking dash-fade-in" aria-live="polite">
+              Waking up Nexus…
+            </p>
+          ) : (
+            <p key="hello" className="dash-welcome dash-fade-in" aria-live="polite">
+              Hello, {firstName}
+            </p>
+          )
+        ) : (
+          <div className="flex w-full flex-col items-center justify-center">
             {prompt ? (
-              <p key={`p-${prompt}`} className="dash-fade-in mb-2 max-w-full truncate text-[14px] text-[color:var(--land-muted)]">
+              <p key={`p-${prompt}`} className="dash-fade-in mb-2.5 max-w-full truncate text-[14px] text-[color:var(--land-muted)]">
                 <span className="text-[color:var(--land-faint)]">You — </span>
                 {prompt}
               </p>
@@ -57,7 +71,7 @@ export function NexusVoice({ firstName, brain, current, pendingPrompt, revealed,
               </p>
             )}
           </div>
-        ) : null}
+        )}
       </div>
 
       {followUps.length > 0 ? (
@@ -93,9 +107,17 @@ export function NexusVoice({ firstName, brain, current, pendingPrompt, revealed,
         </div>
       ) : null}
 
-      <p className="dash-eyebrow mt-3.5 flex items-center gap-2" aria-live="polite">
-        <span className={`state-dot ${brain === "thinking" ? "state-dot--thinking" : ""}`} />
-        {fromExtension ? `${fromExtension} · via Nexus` : `Nexus · ${STATE_LABEL[brain]}`}
+      <p className="dash-eyebrow mt-4 flex items-center gap-2" aria-live="polite">
+        <span
+          className={`state-dot ${
+            waking || brain === "thinking" ? "state-dot--thinking" : ""
+          } ${brain === "thinking" || brain === "responding" ? "state-dot--calling" : ""}`}
+        />
+        {waking
+          ? "Nexus · Waking"
+          : fromExtension
+            ? `${fromExtension} · via Nexus`
+            : `Nexus · ${STATE_LABEL[brain]}`}
       </p>
     </div>
   );
@@ -122,7 +144,6 @@ export function NexusInput({
 
   return (
     <form onSubmit={submit} className="dash-input w-full">
-      <span className="dash-input-dot" aria-hidden />
       <label htmlFor="nexus-input" className="sr-only">
         Talk to Nexus
       </label>
@@ -130,7 +151,7 @@ export function NexusInput({
         id="nexus-input"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
-        placeholder={onResearch ? "Ask Nexus, or search the web" : "Ask Nexus anything…"}
+        placeholder={onResearch ? "Ask Nexus, or search the web" : "Ask Nexus"}
         autoComplete="off"
       />
       {onResearch ? (

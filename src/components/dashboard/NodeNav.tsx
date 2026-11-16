@@ -203,7 +203,7 @@ export function NodeMenu({
   );
 }
 
-/** Right rail: pops up only when the cursor moves to the right edge of the screen. */
+/** Right rail: one-tap access to Command and every hub socket. */
 export function NodeRail({
   hub,
   surface,
@@ -215,71 +215,43 @@ export function NodeRail({
   onCommand: () => void;
   onSlot: (slotId: SlotId) => void;
 }) {
-  const [revealed, setRevealed] = useState(false);
-
-  useEffect(() => {
-    function onMouseMove(event: MouseEvent) {
-      const distanceFromRight = window.innerWidth - event.clientX;
-      setRevealed((prev) => {
-        if (distanceFromRight <= 28) return true;
-        if (prev && distanceFromRight <= 88) return true;
-        return false;
-      });
-    }
-    function onMouseLeave() {
-      setRevealed(false);
-    }
-    window.addEventListener("mousemove", onMouseMove, { passive: true });
-    document.addEventListener("mouseleave", onMouseLeave);
-    return () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseleave", onMouseLeave);
-    };
-  }, []);
-
   return (
-    <div
-      className="node-rail-zone"
-      onMouseEnter={() => setRevealed(true)}
-      onMouseLeave={() => setRevealed(false)}
-    >
-      <nav aria-label="Quick access" className={`node-rail ${revealed ? "node-rail--open" : ""}`}>
-        <button
-          type="button"
-          onClick={onCommand}
-          className={`node-rail-button node-rail-button--core ${surface.view === "command" ? "node-rail-button--on" : ""}`}
-          title="Command"
-          aria-label="Command"
-        >
-          <CommandIcon size={17} />
-        </button>
-        <span className="node-menu-divider" aria-hidden />
-        {hub.slots.map((slot) => {
-          const ext = slot.occupiedBy ? hub.extensions.find((e) => e.manifest.id === slot.occupiedBy) : undefined;
-          const open = canUseSlot(slot, hub.entitlement);
-          const name = ext?.manifest.name ?? placeholderName(slot.placeholderKey);
-          const state = ext ? "live" : open ? "open" : "locked";
-          const selected = ext && isPanel(surface.panel, { extension: ext.manifest.id });
-          return (
-            <button
-              key={slot.id}
-              type="button"
-              onClick={() => onSlot(slot.id)}
-              className={`node-rail-button node-rail-button--${state} ${selected ? "node-rail-button--on" : ""}`}
-              title={ext ? `${name} · live` : open ? `${slot.tier === "pro" ? "Pro" : "Free"} socket · open (${name})` : `Pro socket · ${name}`}
-              aria-label={ext ? `${name}, wired in` : open ? `Open ${slot.tier} socket, reserved for ${name}` : `Locked Pro socket, reserved for ${name}`}
-            >
-              {ext ? (
-                <span className="text-[11px] font-semibold">{ext.manifest.monogram ?? name.slice(0, 2)}</span>
-              ) : open ? (
-                <PlusIcon size={14} />
-              ) : (
-                <LockIcon size={13} />
-              )}
-            </button>
-          );
-        })}
-      </nav>
-    </div>
+    <nav aria-label="Quick access" className="node-rail">
+      <button
+        type="button"
+        onClick={onCommand}
+        className={`node-rail-button node-rail-button--core ${surface.view === "command" ? "node-rail-button--on" : ""}`}
+        title="Command"
+        aria-label="Command"
+      >
+        <CommandIcon size={17} />
+      </button>
+      <span className="node-menu-divider" aria-hidden />
+      {hub.slots.map((slot) => {
+        const ext = slot.occupiedBy ? hub.extensions.find((e) => e.manifest.id === slot.occupiedBy) : undefined;
+        const open = canUseSlot(slot, hub.entitlement);
+        const name = ext?.manifest.name ?? placeholderName(slot.placeholderKey);
+        const state = ext ? "live" : open ? "open" : "locked";
+        const selected = ext && isPanel(surface.panel, { extension: ext.manifest.id });
+        return (
+          <button
+            key={slot.id}
+            type="button"
+            onClick={() => onSlot(slot.id)}
+            className={`node-rail-button node-rail-button--${state} ${selected ? "node-rail-button--on" : ""}`}
+            title={ext ? `${name} · live` : open ? `${slot.tier === "pro" ? "Pro" : "Free"} socket · open (${name})` : `Pro socket · ${name}`}
+            aria-label={ext ? `${name}, wired in` : open ? `Open ${slot.tier} socket, reserved for ${name}` : `Locked Pro socket, reserved for ${name}`}
+          >
+            {ext ? (
+              <span className="text-[11px] font-semibold">{ext.manifest.monogram ?? name.slice(0, 2)}</span>
+            ) : open ? (
+              <PlusIcon size={14} />
+            ) : (
+              <LockIcon size={13} />
+            )}
+          </button>
+        );
+      })}
+    </nav>
   );
 }
