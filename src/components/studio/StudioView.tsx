@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   Bookmark,
+  ChevronDown,
   Copy,
   Download,
-  FolderOpen,
   FolderPlus,
   Headphones,
   Layers,
@@ -57,6 +57,7 @@ import type {
 import { slicePeaksForRange } from "@/lib/studio/wav";
 import { useTheme } from "@/lib/theme";
 import { ReactiveRecordBar } from "./ReactiveRecordBar";
+import { StudioCaptureStage } from "./StudioCaptureStage";
 import { StudioRoutingSheet } from "./StudioRoutingSheet";
 import {
   TimelineWaveform,
@@ -174,6 +175,7 @@ export function StudioView({
   const [markerKind, setMarkerKind] = useState<StudioMarkerKind>("chapter");
   const [toolMode, setToolMode] = useState<StudioTimelineTool>("select");
   const [timelineZoom, setTimelineZoom] = useState(1);
+  const [studioPage, setStudioPage] = useState<"record" | "edit">("record");
 
   const [takesDrawerOpen, setTakesDrawerOpen] = useState(false);
   const [notesDrawerOpen, setNotesDrawerOpen] = useState(false);
@@ -201,6 +203,26 @@ export function StudioView({
     () => tracks.reduce((max, t) => Math.max(max, t.offsetMs + t.durationMs), 0),
     [tracks],
   );
+
+  const summaryPeaks = useMemo(() => {
+    const active = tracks.filter((t) => !t.muted && t.peaks.length > 0);
+    const pool = active.length > 0 ? active : tracks.filter((t) => t.peaks.length > 0);
+    if (pool.length === 0 || totalTimelineMs <= 0) return [];
+    const buckets = 110;
+    const out = new Array<number>(buckets).fill(0);
+    for (const tr of pool) {
+      const startBucket = Math.floor((tr.offsetMs / totalTimelineMs) * buckets);
+      const endBucket = Math.min(buckets - 1, Math.ceil(((tr.offsetMs + tr.durationMs) / totalTimelineMs) * buckets));
+      const span = Math.max(1, endBucket - startBucket);
+      for (let b = startBucket; b <= endBucket; b++) {
+        const u = (b - startBucket) / span;
+        const pIdx = Math.min(tr.peaks.length - 1, Math.floor(u * tr.peaks.length));
+        const amp = Math.min(1, (tr.peaks[pIdx] ?? 0) * tr.gain);
+        if (amp > out[b]!) out[b] = amp;
+      }
+    }
+    return out;
+  }, [totalTimelineMs, tracks]);
 
   const persistDraft = useCallback(
     async (
@@ -283,6 +305,7 @@ export function StudioView({
       });
       setLayerCount((prev) => Math.max(prev, layerIdx + 1));
       setSelectedTrackId(stamped.id);
+      setStudioPage("edit");
       showNotice(`Captured ${stamped.name} (${fmtDuration(stamped.durationMs)}).`);
     },
     [activeLayerIndex, layerMixers, markers, persistDraft, showNotice],
@@ -322,6 +345,7 @@ export function StudioView({
     setLayerMixers(deriveLayerMixers(full.tracks));
     setSelectedTrackId(full.tracks[0]?.id ?? null);
     setSavedProjectSnapshot(full);
+    if (full.tracks.length > 0) setStudioPage("edit");
   }
 
   useEffect(() => {
@@ -380,6 +404,7 @@ export function StudioView({
     setLayerMixers({ 0: { ...DEFAULT_LAYER_MIXER }, 1: { ...DEFAULT_LAYER_MIXER } });
     setSelectedTrackId(null);
     setSavedProjectSnapshot(null);
+    setStudioPage("record");
     audio.seek(0);
   }
 
@@ -695,6 +720,11 @@ export function StudioView({
     [selectedTrackId, tracks],
   );
 
+  const beginRecordingFromAnywhere = useCallback(() => {
+    setStudioPage("record");
+    void audio.startRecording(captureRole, activeLayerIndex);
+  }, [activeLayerIndex, audio, captureRole]);
+
   // Keyboard shortcuts: Space (Play/Pause), R (Rec/Stop), M (Marker), V (Move tool), C (Split tool), X (Split at playhead)
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -717,7 +747,7 @@ export function StudioView({
         if (audio.transport === "recording" || audio.transport === "paused" || audio.transport === "counting-in") {
           audio.stopRecording();
         } else {
-          void audio.startRecording(captureRole, activeLayerIndex);
+          beginRecordingFromAnywhere();
         }
       } else if ((e.key === "m" || e.key === "M") && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
@@ -739,9 +769,8 @@ export function StudioView({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
-    activeLayerIndex,
     audio,
-    captureRole,
+    beginRecordingFromAnywhere,
     dropMarkerAtPlayhead,
     handleRemoveTrack,
     selectedTrack,
@@ -759,542 +788,568 @@ export function StudioView({
     <section
       aria-label="Nexus Recording Studio"
       data-studio-ready={collections.length > 0 ? "true" : "false"}
+      data-studio-page={studioPage}
       className="studio-screen flex h-full w-full flex-col overflow-hidden"
     >
-      {/* Top Studio Header — left clearance neatly frames the top-left Nexus blade button */}
-      <header className="studio-header flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/80 py-2 pl-[92px] pr-4 sm:pr-6">
-        <div className="flex min-w-0 items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => setTakesDrawerOpen(true)}
-            className="h-8 gap-1.5 rounded-full text-[12px]"
-          >
-            <FolderOpen className="size-3.5" />
-            <span>Takes ({summaries.length})</span>
-          </Button>
-
-          <div className="flex min-w-0 items-center gap-1.5">
-            <Input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              onBlur={() => {
-                if (tracks.length > 0 || activeId) void persistDraft(tracks, markers);
-              }}
-              aria-label="Recording project title"
-              className="h-8 w-[140px] border-0 bg-transparent px-1.5 font-[family-name:var(--font-display)] text-[1.25rem] font-normal shadow-none focus-visible:ring-1 sm:w-[230px]"
-            />
-            <Badge variant="outline" className="hidden text-[10px] font-normal md:inline-flex">
-              {databaseConfigured ? "Synced" : "Local IDB"}
-            </Badge>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => void persistDraft(tracks, markers)}
-            disabled={saving || tracks.length === 0}
-            className="h-8 gap-1.5 rounded-full text-[12px]"
-          >
-            {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
-            <span className="hidden sm:inline">{saving ? "Saving" : "Save"}</span>
-          </Button>
-
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => void handleExportMix()}
-            disabled={exporting || tracks.length === 0}
-            className="h-8 gap-1.5 rounded-full text-[12px]"
-          >
-            {exporting ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-            <span className="hidden sm:inline">Export WAV</span>
-          </Button>
-
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => void openRouting()}
-            className="h-8 gap-1.5 rounded-full bg-[color:var(--land-gold)] text-[#09090b] hover:opacity-90"
-          >
-            <Zap className="size-3.5" />
-            <span>Send → Node</span>
-          </Button>
-
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={onClose}
-            className="h-8 rounded-full text-[12px] text-muted-foreground hover:text-foreground"
-          >
-            Exit
-          </Button>
-
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={onReleaseNode}
-            className="hidden h-8 rounded-full text-[12px] text-muted-foreground hover:text-destructive sm:inline-flex"
-          >
-            Disconnect
-          </Button>
-        </div>
-      </header>
-
-      {/* Full-Bleed DAW Workspace */}
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-4 py-3 sm:px-6 sm:py-4">
-        {audio.micError ? (
-          <div role="alert" className="shrink-0 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-2 text-[12.5px] text-destructive">
-            {audio.micError}
-          </div>
-        ) : null}
-
-        {statusBanner ? (
-          <div role="status" className="shrink-0 rounded-xl border border-border/80 bg-muted/40 px-4 py-1.5 text-[12px] text-foreground">
-            {statusBanner}
-          </div>
-        ) : null}
-
-        {/* SIGNATURE CRIMSON REACTIVE VOICE RECORDING BAR */}
-        <div className="shrink-0">
-          <ReactiveRecordBar
-            transport={audio.transport}
-            micReady={audio.micReady}
-            playheadMs={audio.playheadMs}
-            countInBeat={audio.countInBeat}
-            theme={theme}
-            sampleTelemetry={audio.sampleTelemetry}
-            onArmMic={() => void audio.armMicrophone()}
-            onStartRecord={() => void audio.startRecording(captureRole, activeLayerIndex)}
-            onPauseRecord={audio.pauseRecording}
-            onResumeRecord={audio.resumeRecording}
-            onStopRecord={audio.stopRecording}
-            onPlay={() => void audio.play()}
-            onPausePlay={audio.pausePlayback}
-            onDropMarker={dropMarkerAtPlayhead}
-          />
-        </div>
-
-        {/* Single Clean DAW Arrangement Toolbar */}
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-2xl border border-border/80 bg-card/55 px-3 py-2">
-          {/* Edit & Arrangement Tools */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <div className="inline-flex rounded-full border border-border/80 bg-background/60 p-0.5" role="group" aria-label="Timeline edit mode">
-              <Button
-                type="button"
-                size="sm"
-                variant={toolMode === "select" ? "secondary" : "ghost"}
-                onClick={() => setToolMode("select")}
-                className="h-7 gap-1.5 rounded-full px-2.5 text-[12px]"
-              >
-                <MousePointer className="size-3.5" />
-                <span>Move (V)</span>
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={toolMode === "cut" ? "destructive" : "ghost"}
-                onClick={() => setToolMode("cut")}
-                className="h-7 gap-1.5 rounded-full px-2.5 text-[12px]"
-              >
-                <Scissors className="size-3.5" />
-                <span>Split (C)</span>
-              </Button>
+      {studioPage === "record" ? (
+        <StudioCaptureStage
+          transport={audio.transport}
+          micReady={audio.micReady}
+          micError={audio.micError}
+          countInBeat={audio.countInBeat}
+          metronomeEnabled={metronomeEnabled}
+          overdubEnabled={audio.overdubEnabled}
+          monitorInput={audio.monitorInput}
+          studioRawMic={audio.studioRawMic}
+          inputGain={audio.inputGain}
+          devices={audio.devices}
+          selectedDeviceId={audio.selectedDeviceId}
+          activeLayerIndex={activeLayerIndex}
+          takesCount={summaries.length}
+          clipCount={tracks.length}
+          theme={theme}
+          sampleTelemetry={audio.sampleTelemetry}
+          onArmMic={() => void audio.armMicrophone()}
+          onStartRecord={() => void audio.startRecording(captureRole, activeLayerIndex)}
+          onPauseRecord={audio.pauseRecording}
+          onResumeRecord={audio.resumeRecording}
+          onStopRecord={audio.stopRecording}
+          onToggleMetronome={() => setMetronomeEnabled((v) => !v)}
+          onToggleOverdub={() => audio.setOverdubEnabled(!audio.overdubEnabled)}
+          onToggleMonitor={(next) => audio.setMonitorInput(next)}
+          onToggleRawMic={(next) => audio.setStudioRawMic(next)}
+          onChangeInputGain={(val) => audio.setInputGain(val)}
+          onSelectDevice={(id) => audio.setSelectedDeviceId(id)}
+          onDropMarker={dropMarkerAtPlayhead}
+          onOpenTakes={() => setTakesDrawerOpen(true)}
+          onGoToEdit={() => setStudioPage("edit")}
+        />
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {/* Top Edit Studio Header — left clearance frames the top-left Nexus blade button */}
+          <header className="studio-header flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/75 py-2 pl-[92px] pr-4 sm:pr-6">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onBlur={() => {
+                  if (tracks.length > 0 || activeId) void persistDraft(tracks, markers);
+                }}
+                aria-label="Recording project title"
+                className="h-8 w-[145px] border-0 bg-transparent px-1.5 text-[14px] font-medium shadow-none focus-visible:ring-1 sm:w-[205px]"
+              />
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      onClick={() => setTakesDrawerOpen(true)}
+                      aria-label={`Browse takes (${summaries.length})`}
+                      className="h-7 w-7 rounded-full text-muted-foreground hover:text-foreground"
+                    >
+                      <ChevronDown className="size-4" />
+                    </Button>
+                  }
+                />
+                <TooltipContent side="bottom">Takes &amp; folders ({summaries.length})</TooltipContent>
+              </Tooltip>
+              <Badge variant="outline" className="hidden text-[10px] font-normal md:inline-flex">
+                {databaseConfigured ? "Synced" : "Local IDB"}
+              </Badge>
             </div>
 
-            <Tooltip>
-              <TooltipTrigger
-                render={
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void persistDraft(tracks, markers)}
+                disabled={saving || tracks.length === 0}
+                className="h-8 gap-1.5 rounded-full border-border/80 bg-background/40 text-[12px]"
+              >
+                {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
+                <span className="hidden sm:inline">{saving ? "Saving" : "Save"}</span>
+              </Button>
+
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void handleExportMix()}
+                disabled={exporting || tracks.length === 0}
+                className="h-8 gap-1.5 rounded-full border-border/80 bg-background/40 text-[12px]"
+              >
+                {exporting ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+                <span className="hidden sm:inline">Export WAV</span>
+              </Button>
+
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void openRouting()}
+                className="h-8 gap-1.5 rounded-full bg-foreground text-background hover:opacity-90"
+              >
+                <Zap className="size-3.5" />
+                <span>Send → Node</span>
+              </Button>
+
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={onClose}
+                className="h-8 rounded-full text-[12px] text-muted-foreground hover:text-foreground"
+              >
+                Exit
+              </Button>
+
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={onReleaseNode}
+                className="hidden h-8 rounded-full text-[12px] text-muted-foreground hover:text-destructive sm:inline-flex"
+              >
+                Disconnect
+              </Button>
+            </div>
+          </header>
+
+          {/* Edit Page Content: Transport Strip + Monochrome Pill Rows + Full-Height DAW Timeline */}
+          <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden px-4 py-3 sm:px-6">
+            {audio.micError ? (
+              <div role="alert" className="shrink-0 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-2 text-[12.5px] text-destructive">
+                {audio.micError}
+              </div>
+            ) : null}
+
+            {statusBanner ? (
+              <div role="status" className="shrink-0 rounded-xl border border-border/80 bg-muted/40 px-4 py-1.5 text-[12px] text-foreground">
+                {statusBanner}
+              </div>
+            ) : null}
+
+            <div className="shrink-0">
+              <ReactiveRecordBar
+                transport={audio.transport}
+                micReady={audio.micReady}
+                playheadMs={audio.playheadMs}
+                totalTimelineMs={totalTimelineMs}
+                summaryPeaks={summaryPeaks}
+                countInBeat={audio.countInBeat}
+                theme={theme}
+                sampleTelemetry={audio.sampleTelemetry}
+                onArmMic={() => void audio.armMicrophone()}
+                onStartRecord={beginRecordingFromAnywhere}
+                onPauseRecord={audio.pauseRecording}
+                onResumeRecord={audio.resumeRecording}
+                onStopRecord={audio.stopRecording}
+                onPlay={() => void audio.play()}
+                onPausePlay={audio.pausePlayback}
+                onDropMarker={dropMarkerAtPlayhead}
+              />
+            </div>
+
+            {/* Row 1: Primary Timeline Editing Tools + Inline Clip Quick Actions (Image 2 Style) */}
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <div className="inline-flex rounded-full border border-border/80 bg-card/60 p-0.5" role="group" aria-label="Timeline edit mode">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={toolMode === "select" ? "secondary" : "ghost"}
+                    onClick={() => setToolMode("select")}
+                    className="h-7 gap-1.5 rounded-full px-2.5 text-[12px]"
+                  >
+                    <MousePointer className="size-3.5" />
+                    <span>Move (V)</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={toolMode === "cut" ? "destructive" : "ghost"}
+                    onClick={() => setToolMode("cut")}
+                    className="h-7 gap-1.5 rounded-full px-2.5 text-[12px]"
+                  >
+                    <Scissors className="size-3.5" />
+                    <span>Split (C)</span>
+                  </Button>
+                </div>
+
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={!splittableTrackAtPlayhead}
+                        onClick={() => {
+                          if (splittableTrackAtPlayhead) splitClipAt(splittableTrackAtPlayhead.id, audio.playheadMs);
+                        }}
+                        className="h-8 gap-1.5 rounded-full border-border/80 bg-card/60 text-[12px]"
+                      >
+                        <Scissors className="size-3.5" />
+                        <span>Split @ Playhead</span>
+                      </Button>
+                    }
+                  />
+                  <TooltipContent side="bottom">Cut audio clip at red playhead line (X)</TooltipContent>
+                </Tooltip>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleAddLayer}
+                  className="h-8 gap-1.5 rounded-full border-border/80 bg-card/60 text-[12px]"
+                >
+                  <Layers className="size-3.5" />
+                  <span>+ Layer</span>
+                </Button>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="audio/*"
+                  onChange={(e) => void handleImportStem(e)}
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="h-8 gap-1.5 rounded-full border-border/80 bg-card/60 text-[12px]"
+                >
+                  <Upload className="size-3.5" />
+                  <span>Import</span>
+                </Button>
+              </div>
+
+              {selectedTrack ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Input
+                    value={selectedTrack.name}
+                    onChange={(e) =>
+                      updateTrack(selectedTrack.id, (prev) => ({ ...prev, name: e.target.value }))
+                    }
+                    aria-label="Selected clip name"
+                    className="h-7 w-32 rounded-full border-border/75 bg-card/60 px-2.5 text-[11.5px] font-medium"
+                  />
+                  <span className="hidden font-mono text-[11px] text-muted-foreground tabular-nums lg:inline">
+                    {fmtExactSec(selectedTrack.offsetMs)} →{" "}
+                    {fmtExactSec(selectedTrack.offsetMs + selectedTrack.durationMs)}
+                  </span>
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
-                    disabled={!splittableTrackAtPlayhead}
-                    onClick={() => {
-                      if (splittableTrackAtPlayhead) splitClipAt(splittableTrackAtPlayhead.id, audio.playheadMs);
-                    }}
-                    className="h-8 gap-1.5 rounded-full text-[12px]"
+                    disabled={
+                      !(
+                        audio.playheadMs > selectedTrack.offsetMs + 140 &&
+                        audio.playheadMs < selectedTrack.offsetMs + selectedTrack.durationMs - 140
+                      )
+                    }
+                    onClick={() => splitClipAt(selectedTrack.id, audio.playheadMs)}
+                    className="h-7 gap-1 rounded-full border-border/80 bg-card/60 px-2.5 text-[11.5px]"
                   >
-                    <Scissors className="size-3.5" />
-                    <span>Split @ Playhead</span>
+                    <Scissors className="size-3" />
+                    <span>Split here</span>
                   </Button>
-                }
-              />
-              <TooltipContent side="bottom">Cut audio clip at red playhead line (X)</TooltipContent>
-            </Tooltip>
-
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={handleAddLayer}
-              className="h-8 gap-1.5 rounded-full text-[12px]"
-            >
-              <Layers className="size-3.5" />
-              <span>+ Layer</span>
-            </Button>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="audio/*"
-              onChange={(e) => void handleImportStem(e)}
-              className="hidden"
-            />
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => fileInputRef.current?.click()}
-              className="h-8 gap-1.5 rounded-full text-[12px]"
-            >
-              <Upload className="size-3.5" />
-              <span>Import</span>
-            </Button>
-          </div>
-
-          {/* Timing, Metronome & Popover Audio Settings */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            <div className="flex h-8 items-center gap-1.5 rounded-full border border-border/80 bg-background/60 px-2.5 text-[12px]">
-              <span className="text-muted-foreground">BPM</span>
-              <input
-                type="number"
-                min={40}
-                max={240}
-                value={bpm}
-                onChange={(e) => setBpm(Math.max(40, Math.min(240, Number(e.target.value) || 120)))}
-                aria-label="Tempo BPM"
-                className="w-10 bg-transparent text-right font-mono font-semibold text-foreground focus:outline-none"
-              />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleDuplicateClip(selectedTrack)}
+                    className="h-7 gap-1 rounded-full border-border/80 bg-card/60 px-2.5 text-[11.5px]"
+                  >
+                    <Copy className="size-3" />
+                    <span>Duplicate</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void handleDownloadRawTrack(selectedTrack)}
+                    className="h-7 gap-1 rounded-full border-border/80 bg-card/60 px-2.5 text-[11.5px]"
+                  >
+                    <Download className="size-3" />
+                    <span>Audio</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => void handleRemoveTrack(selectedTrack)}
+                    className="h-7 gap-1 rounded-full px-2.5 text-[11.5px] text-destructive hover:text-destructive"
+                  >
+                    <Trash2 className="size-3" />
+                    <span>Delete</span>
+                  </Button>
+                </div>
+              ) : null}
             </div>
 
-            <Button
-              type="button"
-              size="sm"
-              variant={metronomeEnabled ? "secondary" : "outline"}
-              onClick={() => setMetronomeEnabled((v) => !v)}
-              aria-pressed={metronomeEnabled}
-              className={`h-8 gap-1.5 rounded-full text-[12px] ${
-                metronomeEnabled ? "border-[color:var(--land-gold)]/55 text-foreground" : ""
-              }`}
-            >
-              <Metronome className="size-3.5" />
-              <span>Click</span>
-            </Button>
-
-            <Select
-              value={String(countInBars)}
-              onValueChange={(v) => {
-                if (v !== null) setCountInBars(Number(v));
-              }}
-            >
-              <SelectTrigger aria-label="Count-in bars" className="h-8 min-w-[126px] rounded-full text-[12px]">
-                <SelectValue>{COUNT_IN_LABELS[String(countInBars)] ?? "Count: 1 bar"}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(COUNT_IN_LABELS).map(([val, label]) => (
-                  <SelectItem key={val} value={val}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Button
-              type="button"
-              size="sm"
-              variant={audio.overdubEnabled ? "secondary" : "outline"}
-              onClick={() => audio.setOverdubEnabled(!audio.overdubEnabled)}
-              className="h-8 rounded-full text-[12px]"
-            >
-              Overdub {audio.overdubEnabled ? "On" : "Off"}
-            </Button>
-
-            <Separator orientation="vertical" className="mx-0.5 hidden h-5 sm:block" />
-
-            {/* Secondary Hardware I/O & Mix Popover */}
-            <Popover>
-              <PopoverTrigger
-                render={
-                  <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5 rounded-full text-[12px]">
-                    <SlidersHorizontal className="size-3.5" />
-                    <span>Input &amp; Mix</span>
-                  </Button>
-                }
-              />
-              <PopoverContent align="end" className="w-80 space-y-4 rounded-2xl p-4">
-                <div className="space-y-1.5">
-                  <label className="text-[11.5px] font-medium text-muted-foreground">Microphone Input</label>
-                  <Select
-                    value={audio.selectedDeviceId}
-                    onValueChange={(v) => {
-                      if (v) audio.setSelectedDeviceId(v);
-                    }}
-                  >
-                    <SelectTrigger aria-label="Microphone input" className="h-8 w-full text-[12px]">
-                      <SelectValue>{micLabel}</SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="default">Default microphone</SelectItem>
-                      {audio.devices.map((d) => (
-                        <SelectItem key={d.deviceId} value={d.deviceId}>
-                          {d.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[11.5px] font-medium text-muted-foreground">Capture Tag</label>
-                  <Select
-                    value={captureRole}
-                    onValueChange={(v) => {
-                      if (v) setCaptureRole(v as StudioTrackRole);
-                    }}
-                  >
-                    <SelectTrigger aria-label="Next track role" className="h-8 w-full text-[12px]">
-                      <SelectValue className="capitalize">{captureRole}</SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="voice">Voice / Lead</SelectItem>
-                      <SelectItem value="overdub">Overdub</SelectItem>
-                      <SelectItem value="instrumental">Layer / Instrumental</SelectItem>
-                      <SelectItem value="scratch">Scratch / Draft</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-[12.5px]">
-                    <Headphones className="size-3.5 text-muted-foreground" />
-                    <span>Headphone Monitor</span>
-                  </div>
-                  <Switch
-                    checked={audio.monitorInput}
-                    onCheckedChange={(checked) => audio.setMonitorInput(checked)}
-                    aria-label="Toggle headphone monitor"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-[12.5px]">
-                    <Radio className="size-3.5 text-muted-foreground" />
-                    <span>Raw Unprocessed Mic</span>
-                  </div>
-                  <Switch
-                    checked={audio.studioRawMic}
-                    onCheckedChange={(checked) => audio.setStudioRawMic(checked)}
-                    aria-label="Toggle raw microphone processing"
-                  />
-                </div>
-
-                <Separator />
-
-                <div className="space-y-2.5 text-[12px]">
-                  <label className="flex items-center justify-between gap-3">
-                    <span className="text-muted-foreground">Mic Gain</span>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range"
-                        min={0.5}
-                        max={2}
-                        step={0.05}
-                        value={audio.inputGain}
-                        onChange={(e) => audio.setInputGain(Number(e.target.value))}
-                        className="studio-range w-28"
-                      />
-                      <span className="w-9 text-right font-mono text-[11px] tabular-nums">
-                        {Math.round(audio.inputGain * 100)}%
-                      </span>
-                    </div>
-                  </label>
-                  <label className="flex items-center justify-between gap-3">
-                    <span className="text-muted-foreground">Master Output</span>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="range"
-                        min={0}
-                        max={1.5}
-                        step={0.05}
-                        value={masterGain}
-                        onChange={(e) => setMasterGain(Number(e.target.value))}
-                        className="studio-range w-28"
-                      />
-                      <span className="w-9 text-right font-mono text-[11px] tabular-nums">
-                        {Math.round(masterGain * 100)}%
-                      </span>
-                    </div>
-                  </label>
-                </div>
-              </PopoverContent>
-            </Popover>
-
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => setNotesDrawerOpen(true)}
-              className="h-8 gap-1.5 rounded-full text-[12px]"
-            >
-              <Bookmark className="size-3.5 text-[color:var(--land-gold)]" />
-              <span>Markers ({markers.length})</span>
-            </Button>
-
-            <div className="inline-flex items-center rounded-full border border-border/80 bg-background/60 p-0.5">
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="ghost"
-                onClick={() => setTimelineZoom((z) => Math.max(1, Number((z - 0.5).toFixed(1))))}
-                disabled={timelineZoom <= 1}
-                aria-label="Zoom out timeline"
-                className="h-6 w-6 rounded-full"
-              >
-                <ZoomOut className="size-3.5" />
-              </Button>
-              <span className="px-1.5 font-mono text-[10.5px] text-muted-foreground tabular-nums">
-                {timelineZoom}×
-              </span>
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="ghost"
-                onClick={() => setTimelineZoom((z) => Math.min(4, Number((z + 0.5).toFixed(1))))}
-                disabled={timelineZoom >= 4}
-                aria-label="Zoom in timeline"
-                className="h-6 w-6 rounded-full"
-              >
-                <ZoomIn className="size-3.5" />
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* Slim Contextual Clip Inspector / Arrangement Hint Bar */}
-        <div className="flex min-h-[38px] shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border border-border/70 bg-card/35 px-3 py-1.5 text-[12px]">
-          {selectedTrack ? (
-            <>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[11px] font-medium text-muted-foreground">
-                  Layer {(selectedTrack.layerIndex ?? 0) + 1}
-                </span>
-                <Input
-                  value={selectedTrack.name}
-                  onChange={(e) =>
-                    updateTrack(selectedTrack.id, (prev) => ({ ...prev, name: e.target.value }))
-                  }
-                  aria-label="Selected clip name"
-                  className="h-6 w-36 border-border/60 bg-background/60 px-2 text-[12px] font-medium"
+            {/* Row 2: Timing, Metronome, I/O Popover, Markers & Zoom */}
+            <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+              <div className="flex h-8 items-center gap-1.5 rounded-full border border-border/80 bg-card/60 px-2.5 text-[12px]">
+                <span className="text-muted-foreground">BPM</span>
+                <input
+                  type="number"
+                  min={40}
+                  max={240}
+                  value={bpm}
+                  onChange={(e) => setBpm(Math.max(40, Math.min(240, Number(e.target.value) || 120)))}
+                  aria-label="Tempo BPM"
+                  className="w-10 bg-transparent text-right font-mono font-semibold text-foreground focus:outline-none"
                 />
-                <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
-                  {fmtExactSec(selectedTrack.offsetMs)} → {fmtExactSec(selectedTrack.offsetMs + selectedTrack.durationMs)} (
-                  {fmtExactSec(selectedTrack.durationMs)})
-                </span>
               </div>
 
-              <div className="flex flex-wrap items-center gap-1">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={
-                    !(
-                      audio.playheadMs > selectedTrack.offsetMs + 140 &&
-                      audio.playheadMs < selectedTrack.offsetMs + selectedTrack.durationMs - 140
-                    )
+              <Button
+                type="button"
+                size="sm"
+                variant={metronomeEnabled ? "secondary" : "outline"}
+                onClick={() => setMetronomeEnabled((v) => !v)}
+                aria-pressed={metronomeEnabled}
+                className="h-8 gap-1.5 rounded-full border-border/80 bg-card/60 text-[12px]"
+              >
+                <Metronome className="size-3.5" />
+                <span>Click</span>
+                {metronomeEnabled ? <span className="h-1.5 w-1.5 rounded-full bg-[#ef332c]" aria-hidden /> : null}
+              </Button>
+
+              <Select
+                value={String(countInBars)}
+                onValueChange={(v) => {
+                  if (v !== null) setCountInBars(Number(v));
+                }}
+              >
+                <SelectTrigger aria-label="Count-in bars" className="h-8 min-w-[126px] rounded-full border-border/80 bg-card/60 text-[12px]">
+                  <SelectValue>{COUNT_IN_LABELS[String(countInBars)] ?? "Count: 1 bar"}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(COUNT_IN_LABELS).map(([val, label]) => (
+                    <SelectItem key={val} value={val}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Button
+                type="button"
+                size="sm"
+                variant={audio.overdubEnabled ? "secondary" : "outline"}
+                onClick={() => audio.setOverdubEnabled(!audio.overdubEnabled)}
+                className="h-8 gap-1.5 rounded-full border-border/80 bg-card/60 text-[12px]"
+              >
+                {audio.overdubEnabled ? (
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#ef332c]" aria-hidden />
+                ) : null}
+                <span>Overdub {audio.overdubEnabled ? "On" : "Off"}</span>
+              </Button>
+
+              <Popover>
+                <PopoverTrigger
+                  render={
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 gap-1.5 rounded-full border-border/80 bg-card/60 text-[12px]"
+                    >
+                      <SlidersHorizontal className="size-3.5" />
+                      <span>Input &amp; Mix</span>
+                    </Button>
                   }
-                  onClick={() => splitClipAt(selectedTrack.id, audio.playheadMs)}
-                  className="h-6 gap-1 rounded-full px-2 text-[11px]"
-                >
-                  <Scissors className="size-3" />
-                  <span>Split here</span>
-                </Button>
+                />
+                <PopoverContent align="start" className="w-80 space-y-4 rounded-2xl p-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[11.5px] font-medium text-muted-foreground">Microphone Input</label>
+                    <Select
+                      value={audio.selectedDeviceId}
+                      onValueChange={(v) => {
+                        if (v) audio.setSelectedDeviceId(v);
+                      }}
+                    >
+                      <SelectTrigger aria-label="Microphone input" className="h-8 w-full text-[12px]">
+                        <SelectValue>{micLabel}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="default">Default microphone</SelectItem>
+                        {audio.devices.map((d) => (
+                          <SelectItem key={d.deviceId} value={d.deviceId}>
+                            {d.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[11.5px] font-medium text-muted-foreground">Capture Tag</label>
+                    <Select
+                      value={captureRole}
+                      onValueChange={(v) => {
+                        if (v) setCaptureRole(v as StudioTrackRole);
+                      }}
+                    >
+                      <SelectTrigger aria-label="Next track role" className="h-8 w-full text-[12px]">
+                        <SelectValue className="capitalize">{captureRole}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="voice">Voice / Lead</SelectItem>
+                        <SelectItem value="overdub">Overdub</SelectItem>
+                        <SelectItem value="instrumental">Layer / Instrumental</SelectItem>
+                        <SelectItem value="scratch">Scratch / Draft</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-[12.5px]">
+                      <Headphones className="size-3.5 text-muted-foreground" />
+                      <span>Headphone Monitor</span>
+                    </div>
+                    <Switch
+                      checked={audio.monitorInput}
+                      onCheckedChange={(checked) => audio.setMonitorInput(checked)}
+                      aria-label="Toggle headphone monitor"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-[12.5px]">
+                      <Radio className="size-3.5 text-muted-foreground" />
+                      <span>Raw Unprocessed Mic</span>
+                    </div>
+                    <Switch
+                      checked={audio.studioRawMic}
+                      onCheckedChange={(checked) => audio.setStudioRawMic(checked)}
+                      aria-label="Toggle raw microphone processing"
+                    />
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-2.5 text-[12px]">
+                    <label className="flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">Mic Gain</span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="range"
+                          min={0.5}
+                          max={2}
+                          step={0.05}
+                          value={audio.inputGain}
+                          onChange={(e) => audio.setInputGain(Number(e.target.value))}
+                          className="studio-range w-28"
+                        />
+                        <span className="w-9 text-right font-mono text-[11px] tabular-nums">
+                          {Math.round(audio.inputGain * 100)}%
+                        </span>
+                      </div>
+                    </label>
+                    <label className="flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">Master Output</span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="range"
+                          min={0}
+                          max={1.5}
+                          step={0.05}
+                          value={masterGain}
+                          onChange={(e) => setMasterGain(Number(e.target.value))}
+                          className="studio-range w-28"
+                        />
+                        <span className="w-9 text-right font-mono text-[11px] tabular-nums">
+                          {Math.round(masterGain * 100)}%
+                        </span>
+                      </div>
+                    </label>
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setNotesDrawerOpen(true)}
+                className="h-8 gap-1.5 rounded-full border-border/80 bg-card/60 text-[12px]"
+              >
+                <Bookmark className="size-3.5 text-[color:var(--land-gold)]" />
+                <span>Markers ({markers.length})</span>
+              </Button>
+
+              <div className="inline-flex h-8 items-center rounded-full border border-border/80 bg-card/60 px-1">
                 <Button
                   type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleDuplicateClip(selectedTrack)}
-                  className="h-6 gap-1 rounded-full px-2 text-[11px]"
-                >
-                  <Copy className="size-3" />
-                  <span>Duplicate</span>
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void handleDownloadRawTrack(selectedTrack)}
-                  className="h-6 gap-1 rounded-full px-2 text-[11px]"
-                >
-                  <Download className="size-3" />
-                  <span>Audio</span>
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
+                  size="icon-sm"
                   variant="ghost"
-                  onClick={() => void handleRemoveTrack(selectedTrack)}
-                  className="h-6 gap-1 rounded-full px-2 text-[11px] text-destructive hover:text-destructive"
+                  onClick={() => setTimelineZoom((z) => Math.max(1, Number((z - 0.5).toFixed(1))))}
+                  disabled={timelineZoom <= 1}
+                  aria-label="Zoom out timeline"
+                  className="h-6 w-6 rounded-full"
                 >
-                  <Trash2 className="size-3" />
-                  <span>Delete</span>
+                  <ZoomOut className="size-3.5" />
+                </Button>
+                <span className="px-1.5 font-mono text-[11px] text-muted-foreground tabular-nums">
+                  {timelineZoom}×
+                </span>
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="ghost"
+                  onClick={() => setTimelineZoom((z) => Math.min(4, Number((z + 0.5).toFixed(1))))}
+                  disabled={timelineZoom >= 4}
+                  aria-label="Zoom in timeline"
+                  className="h-6 w-6 rounded-full"
+                >
+                  <ZoomIn className="size-3.5" />
                 </Button>
               </div>
-            </>
-          ) : (
-            <div className="flex w-full flex-wrap items-center justify-between gap-2 text-muted-foreground">
-              <span>
-                Active input layer: <strong className="font-medium text-foreground">Layer {activeLayerIndex + 1}</strong> —{" "}
-                drag audio left/right across time, up/down between layers, drag edges to trim, or switch to{" "}
-                <strong className="font-medium text-foreground">Split (C)</strong> to cut clips in half.
-              </span>
-              <span className="font-mono text-[11px] tabular-nums">Total {fmtDuration(totalTimelineMs)}</span>
             </div>
-          )}
-        </div>
 
-        {/* Full-Height Multi-Layer DAW Canvas */}
-        <TimelineWaveform
-          tracks={tracks}
-          markers={markers}
-          layerCount={layerCount}
-          activeLayerIndex={activeLayerIndex}
-          layerMixers={layerMixers}
-          playheadMs={audio.playheadMs}
-          totalTimelineMs={totalTimelineMs}
-          bpm={bpm}
-          zoom={timelineZoom}
-          toolMode={toolMode}
-          selectedTrackId={selectedTrackId}
-          theme={theme}
-          onSelectTrack={(id) => setSelectedTrackId(id)}
-          onSelectLayer={(idx) => setActiveLayerIndex(idx)}
-          onAddLayer={handleAddLayer}
-          onRemoveLayer={handleRemoveLayer}
-          onMoveClip={handleMoveClip}
-          onTrimClip={handleTrimClip}
-          onSplitClipAt={splitClipAt}
-          onSeek={audio.seek}
-          onSelectMarker={(m) => showNotice(`${m.label} (${fmtDuration(m.atMs)})`)}
-          onToggleLayerMute={(idx) =>
-            updateLayerMixer(idx, (prev) => ({ ...prev, muted: !prev.muted }))
-          }
-          onToggleLayerSolo={(idx) =>
-            updateLayerMixer(idx, (prev) => ({ ...prev, solo: !prev.solo }))
-          }
-          onChangeLayerGain={(idx, gain) =>
-            updateLayerMixer(idx, (prev) => ({ ...prev, gain }))
-          }
-        />
-      </div>
+            {/* Full-Height Multi-Layer DAW Canvas */}
+            <TimelineWaveform
+              tracks={tracks}
+              markers={markers}
+              layerCount={layerCount}
+              activeLayerIndex={activeLayerIndex}
+              layerMixers={layerMixers}
+              playheadMs={audio.playheadMs}
+              totalTimelineMs={totalTimelineMs}
+              bpm={bpm}
+              zoom={timelineZoom}
+              toolMode={toolMode}
+              selectedTrackId={selectedTrackId}
+              theme={theme}
+              onSelectTrack={(id) => setSelectedTrackId(id)}
+              onSelectLayer={(idx) => setActiveLayerIndex(idx)}
+              onAddLayer={handleAddLayer}
+              onRemoveLayer={handleRemoveLayer}
+              onMoveClip={handleMoveClip}
+              onTrimClip={handleTrimClip}
+              onSplitClipAt={splitClipAt}
+              onSeek={audio.seek}
+              onSelectMarker={(m) => showNotice(`${m.label} (${fmtDuration(m.atMs)})`)}
+              onToggleLayerMute={(idx) =>
+                updateLayerMixer(idx, (prev) => ({ ...prev, muted: !prev.muted }))
+              }
+              onToggleLayerSolo={(idx) =>
+                updateLayerMixer(idx, (prev) => ({ ...prev, solo: !prev.solo }))
+              }
+              onChangeLayerGain={(idx, gain) =>
+                updateLayerMixer(idx, (prev) => ({ ...prev, gain }))
+              }
+            />
+          </div>
+        </div>
+      )}
 
       {/* Left Takes & Folders Sheet Drawer (keeps workspace full width by default) */}
       <Sheet open={takesDrawerOpen} onOpenChange={setTakesDrawerOpen}>

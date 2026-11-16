@@ -42,20 +42,6 @@ type DragSession =
       previewDurationMs: number;
     };
 
-const ROLE_COLORS_DARK: Record<StudioTrackV1["role"], string> = {
-  voice: "252, 72, 64",
-  overdub: "240, 181, 74",
-  instrumental: "228, 228, 234",
-  scratch: "161, 161, 170",
-};
-
-const ROLE_COLORS_LIGHT: Record<StudioTrackV1["role"], string> = {
-  voice: "196, 22, 28",
-  overdub: "184, 120, 16",
-  instrumental: "24, 24, 28",
-  scratch: "113, 113, 122",
-};
-
 const LANE_HEIGHT = 76;
 const RULER_HEIGHT = 28;
 const EDGE_HANDLE_PX = 9;
@@ -265,15 +251,14 @@ export function TimelineWaveform({
       ctx.stroke();
     }
 
-    // 3. Draw every clip in its assigned vertical layer lane
+    // 3. Draw every clip in its assigned vertical layer lane (monochrome silver waveforms in frosted glass clip frames)
     const anySolo =
       Object.values(layerMixers).some((m) => m.solo) || displayTracks.some((t) => t.solo);
-    const rolePalette = isLight ? ROLE_COLORS_LIGHT : ROLE_COLORS_DARK;
 
     for (const tr of displayTracks) {
       const layerIdx = Math.max(0, tr.layerIndex ?? 0);
       const yTop = RULER_HEIGHT + layerIdx * LANE_HEIGHT;
-      const midY = yTop + LANE_HEIGHT * 0.5 + 3;
+      const midY = yTop + LANE_HEIGHT * 0.5;
       const layerMix = layerMixers[layerIdx];
       const muted = layerMix ? layerMix.muted : tr.muted;
       const solo = layerMix ? layerMix.solo : tr.solo;
@@ -282,64 +267,70 @@ export function TimelineWaveform({
 
       const x0 = tr.offsetMs * pxPerMs;
       const clipW = Math.max(14, tr.durationMs * pxPerMs);
-      const clipH = LANE_HEIGHT - 12;
-      const clipTop = yTop + 6;
-      const rgb = rolePalette[tr.role] ?? rolePalette.voice;
+      const clipH = LANE_HEIGHT - 14;
+      const clipTop = yTop + 7;
 
-      // Clip card fill & border
-      ctx.fillStyle = `rgba(${rgb}, ${audible ? (isSelected ? 0.15 : 0.095) : 0.035})`;
+      // Translucent clip block matching Image 2
+      ctx.fillStyle = isLight
+        ? `rgba(18, 20, 26, ${audible ? (isSelected ? 0.08 : 0.04) : 0.015})`
+        : `rgba(255, 255, 255, ${audible ? (isSelected ? 0.065 : 0.032) : 0.014})`;
       ctx.strokeStyle = isSelected
         ? isLight
-          ? "#b87810"
-          : "#f0b54a"
-        : `rgba(${rgb}, ${audible ? 0.36 : 0.16})`;
+          ? "rgba(18, 20, 26, 0.72)"
+          : "rgba(255, 255, 255, 0.62)"
+        : isLight
+          ? `rgba(18, 20, 26, ${audible ? 0.24 : 0.12})`
+          : `rgba(255, 255, 255, ${audible ? 0.22 : 0.1})`;
       ctx.lineWidth = isSelected ? 1.5 : 1;
       ctx.beginPath();
-      ctx.roundRect(x0, clipTop, clipW, clipH, 8);
+      ctx.roundRect(x0, clipTop, clipW, clipH, 10);
       ctx.fill();
       ctx.stroke();
 
-      // Trim handle grips on selected clip
-      if (isSelected && clipW > 26) {
-        ctx.fillStyle = isLight ? "rgba(184, 120, 16, 0.72)" : "rgba(240, 181, 74, 0.8)";
-        ctx.fillRect(x0 + 3, clipTop + clipH * 0.28, 2, clipH * 0.44);
-        ctx.fillRect(x0 + clipW - 5, clipTop + clipH * 0.28, 2, clipH * 0.44);
+      // Subtle corner trim handle bars when selected
+      if (isSelected && clipW > 28) {
+        ctx.fillStyle = isLight ? "rgba(18, 20, 26, 0.68)" : "rgba(255, 255, 255, 0.72)";
+        ctx.fillRect(x0 + 3.5, clipTop + clipH * 0.3, 2, clipH * 0.4);
+        ctx.fillRect(x0 + clipW - 5.5, clipTop + clipH * 0.3, 2, clipH * 0.4);
       }
 
-      // Clip title label inside top header of clip block
-      if (clipW > 42) {
+      // Subtle clip caption tucked softly at top-left
+      if (clipW > 56) {
         ctx.save();
         ctx.beginPath();
         ctx.rect(x0 + 6, clipTop, clipW - 12, clipH);
         ctx.clip();
-        ctx.font = "600 10.5px ui-sans-serif, system-ui, sans-serif";
-        ctx.fillStyle = isLight ? "rgba(15, 15, 18, 0.84)" : "rgba(245, 245, 247, 0.9)";
-        const label = `${tr.name} · ${formatClipDuration(tr.durationMs)}`;
-        ctx.fillText(label, x0 + 8, clipTop + 13);
+        ctx.font = "500 9.5px ui-sans-serif, system-ui, sans-serif";
+        ctx.fillStyle = isLight ? "rgba(18, 20, 26, 0.52)" : "rgba(220, 224, 232, 0.48)";
+        ctx.fillText(`${tr.name} · ${formatClipDuration(tr.durationMs)}`, x0 + 9, clipTop + 12);
         ctx.restore();
       }
 
-      // Waveform bars cleanly clipped within box
+      // Dense mirrored vertical bar waveform matching Image 2
       const peaks = tr.peaks;
       if (peaks.length > 0 && clipW > 12) {
-        const waveTop = clipTop + 18;
-        const innerMaxH = Math.max(8, (clipTop + clipH - waveTop - 4) * 0.46);
-        const waveMid = waveTop + (clipTop + clipH - waveTop) * 0.5;
-        const bars = Math.min(peaks.length, Math.max(8, Math.floor((clipW - 6) / 2.6)));
-        const stepW = (clipW - 6) / bars;
-        ctx.fillStyle = `rgba(${rgb}, ${audible ? 0.85 : 0.28})`;
+        const innerMaxH = Math.max(8, (clipH - 18) * 0.48);
+        const waveMid = clipTop + clipH * 0.54;
+        const barStep = 4.2;
+        const bars = Math.max(8, Math.floor((clipW - 10) / barStep));
+        const barW = 1.9;
+        ctx.fillStyle = isLight
+          ? `rgba(28, 30, 38, ${audible ? 0.82 : 0.25})`
+          : `rgba(218, 222, 232, ${audible ? 0.84 : 0.26})`;
         for (let b = 0; b < bars; b++) {
           const pIdx = Math.min(peaks.length - 1, Math.floor((b / bars) * peaks.length));
-          const p = Math.max(0.05, Math.min(1, peaks[pIdx]! * Math.min(1.5, tr.gain)));
-          const barH = Math.max(2, p * innerMaxH * 2);
-          const bx = x0 + 3 + b * stepW;
-          ctx.fillRect(bx, waveMid - barH * 0.5, Math.max(1.4, stepW * 0.68), barH);
+          const p = Math.max(0.05, Math.min(1, peaks[pIdx]! * Math.min(1.4, tr.gain)));
+          const barH = Math.max(2.2, p * innerMaxH * 2);
+          const bx = x0 + 5 + b * barStep;
+          ctx.beginPath();
+          ctx.roundRect(bx, waveMid - barH * 0.5, barW, barH, barW * 0.5);
+          ctx.fill();
         }
       } else {
-        ctx.strokeStyle = `rgba(${rgb}, ${audible ? 0.4 : 0.2})`;
+        ctx.strokeStyle = isLight ? "rgba(28, 30, 38, 0.35)" : "rgba(218, 222, 232, 0.35)";
         ctx.beginPath();
-        ctx.moveTo(x0 + 4, midY);
-        ctx.lineTo(x0 + clipW - 4, midY);
+        ctx.moveTo(x0 + 5, midY);
+        ctx.lineTo(x0 + clipW - 5, midY);
         ctx.stroke();
       }
     }
@@ -669,7 +660,7 @@ export function TimelineWaveform({
                       <span
                         className={`h-2 w-2 shrink-0 rounded-full ${
                           isTarget
-                            ? "bg-[color:var(--land-gold)]"
+                            ? "bg-[#e55336]"
                             : layerClips.length > 0
                               ? "bg-foreground/45"
                               : "bg-foreground/15"
