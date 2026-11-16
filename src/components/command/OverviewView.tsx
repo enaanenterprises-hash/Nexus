@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { CloseIcon, PlusIcon } from "@/components/dashboard/icons";
 import {
   COMMAND_WIDGETS,
@@ -44,11 +44,15 @@ function findFirstOpenCell(placed: readonly PlacedWidget[]): { x: number; y: num
 }
 
 export function OverviewView({ command, onConnections }: { command: CommandController; onConnections: () => void }) {
-  const ids = command.state?.overview ?? [];
-  const placed = placeWidgets(ids);
+  const overviewIds = command.state?.overview;
+  const ids = useMemo(() => overviewIds ?? [], [overviewIds]);
+  const placed = useMemo(() => placeWidgets(ids), [ids]);
   const [open, setOpen] = useState(false);
-  const pageFull = COMMAND_WIDGETS.every((widget) => !overviewAccepts(ids, widget.id));
-  const openCell = findFirstOpenCell(placed);
+  const pageFull = useMemo(
+    () => COMMAND_WIDGETS.every((widget) => !overviewAccepts(ids, widget.id)),
+    [ids],
+  );
+  const openCell = useMemo(() => findFirstOpenCell(placed), [placed]);
 
   useEffect(() => {
     if (!open) return;

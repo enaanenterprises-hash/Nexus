@@ -7,6 +7,7 @@ import {
   clamp,
   fitCanvas,
   lerp,
+  observeCanvasActivity,
   radialGlow,
   seededHelpers,
   type Vec,
@@ -178,8 +179,9 @@ export function CommandLivePreview() {
     let width = 1;
     let height = 1;
     let frame = 0;
-    let start = 0;
     let last = 0;
+    let elapsed = 0;
+    let active = true;
 
     const draw = (time: number, dt: number) => {
       currentNorm = lerp(currentNorm, targetNormRef.current, reduceMotion ? 1 : clamp(dt * 3.5, 0, 1));
@@ -267,20 +269,39 @@ export function CommandLivePreview() {
     };
 
     const loop = (now: number) => {
-      if (!start) start = last = now;
+      if (!active || reduceMotion) {
+        frame = 0;
+        last = 0;
+        return;
+      }
+      if (!last) last = now;
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
-      draw((now - start) / 1000, dt);
+      elapsed += dt;
+      draw(elapsed, dt);
       frame = requestAnimationFrame(loop);
     };
+
+    const stopVisibility = observeCanvasActivity(canvas, (isActive) => {
+      active = isActive;
+      if (isActive && !reduceMotion && frame === 0) {
+        last = 0;
+        frame = requestAnimationFrame(loop);
+      } else if (!isActive && frame !== 0) {
+        cancelAnimationFrame(frame);
+        frame = 0;
+        last = 0;
+      }
+    });
 
     const observer = new ResizeObserver(resize);
     observer.observe(canvas);
     resize();
-    if (!reduceMotion) frame = requestAnimationFrame(loop);
+    if (!reduceMotion && active && frame === 0) frame = requestAnimationFrame(loop);
 
     return () => {
       cancelAnimationFrame(frame);
+      stopVisibility();
       observer.disconnect();
     };
   }, []);

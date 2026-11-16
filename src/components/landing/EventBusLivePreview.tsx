@@ -17,6 +17,7 @@ import {
   clamp,
   fitCanvas,
   lerp,
+  observeCanvasActivity,
   pointOnPath,
   polar,
   radialGlow,
@@ -484,8 +485,9 @@ export function EventBusLivePreview() {
 
     let geom = computeGeometry(1, 1, socketCount);
     let frame = 0;
-    let start = 0;
     let last = 0;
+    let elapsed = 0;
+    let active = true;
     let pulseClock = 0;
 
     const draw = (time: number, dt: number) => {
@@ -759,20 +761,39 @@ export function EventBusLivePreview() {
     };
 
     const loop = (now: number) => {
-      if (!start) start = last = now;
+      if (!active || reduceMotion) {
+        frame = 0;
+        last = 0;
+        return;
+      }
+      if (!last) last = now;
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
-      draw((now - start) / 1000, dt);
+      elapsed += dt;
+      draw(elapsed, dt);
       frame = requestAnimationFrame(loop);
     };
+
+    const stopVisibility = observeCanvasActivity(canvas, (isActive) => {
+      active = isActive;
+      if (isActive && !reduceMotion && frame === 0) {
+        last = 0;
+        frame = requestAnimationFrame(loop);
+      } else if (!isActive && frame !== 0) {
+        cancelAnimationFrame(frame);
+        frame = 0;
+        last = 0;
+      }
+    });
 
     const observer = new ResizeObserver(resize);
     observer.observe(canvas);
     resize();
-    if (!reduceMotion) frame = requestAnimationFrame(loop);
+    if (!reduceMotion && active && frame === 0) frame = requestAnimationFrame(loop);
 
     return () => {
       cancelAnimationFrame(frame);
+      stopVisibility();
       observer.disconnect();
     };
   }, []);

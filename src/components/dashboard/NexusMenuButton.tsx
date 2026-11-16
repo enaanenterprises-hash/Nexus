@@ -1,4 +1,4 @@
-import type { RefObject } from "react";
+import { memo, type RefObject } from "react";
 import Image from "next/image";
 import mark from "@/assets/brand/nexus-mark.png";
 
@@ -6,7 +6,7 @@ import mark from "@/assets/brand/nexus-mark.png";
  * Merged top-left menu button for the Network view: splits nexus-mark.png into
  * its three exact shard layers so pressing it smoothly spins and spreads the blades apart.
  */
-export function NexusMenuButton({
+export const NexusMenuButton = memo(function NexusMenuButton({
   open,
   hasActivePanel = false,
   controlsId,
@@ -46,4 +46,4 @@ export function NexusMenuButton({
       </span>
     </button>
   );
-}
+});

@@ -5,6 +5,7 @@ import {
   add,
   bezier,
   fitCanvas,
+  observeCanvasActivity,
   polar,
   radialGlow,
   seededHelpers,
@@ -36,7 +37,9 @@ export function LandingCTA() {
     let width = 1;
     let height = 1;
     let frame = 0;
-    let start = 0;
+    let last = 0;
+    let elapsed = 0;
+    let active = true;
 
     const draw = (time: number) => {
       ctx.globalCompositeOperation = "source-over";
@@ -96,18 +99,39 @@ export function LandingCTA() {
     };
 
     const loop = (now: number) => {
-      if (!start) start = now;
-      draw((now - start) / 1000);
+      if (!active || reduceMotion) {
+        frame = 0;
+        last = 0;
+        return;
+      }
+      if (!last) last = now;
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      elapsed += dt;
+      draw(elapsed);
       frame = requestAnimationFrame(loop);
     };
+
+    const stopVisibility = observeCanvasActivity(canvas, (isActive) => {
+      active = isActive;
+      if (isActive && !reduceMotion && frame === 0) {
+        last = 0;
+        frame = requestAnimationFrame(loop);
+      } else if (!isActive && frame !== 0) {
+        cancelAnimationFrame(frame);
+        frame = 0;
+        last = 0;
+      }
+    });
 
     const observer = new ResizeObserver(resize);
     observer.observe(canvas);
     resize();
-    if (!reduceMotion) frame = requestAnimationFrame(loop);
+    if (!reduceMotion && active && frame === 0) frame = requestAnimationFrame(loop);
 
     return () => {
       cancelAnimationFrame(frame);
+      stopVisibility();
       observer.disconnect();
     };
   }, []);

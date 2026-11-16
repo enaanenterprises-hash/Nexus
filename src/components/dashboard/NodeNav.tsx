@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { memo, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { signOutAction } from "@/lib/auth/actions";
 import {
   FREE_ACTIVE_EXTENSION_SLOTS,
@@ -41,7 +41,7 @@ function MenuItem({
 }
 
 /** Left menu: docked on full-screen views; extends from the top-left button on the network stage. */
-export function NodeMenu({
+export const NodeMenu = memo(function NodeMenu({
   id,
   hub,
   surface,
@@ -251,10 +251,10 @@ export function NodeMenu({
       </div>
     </nav>
   );
-}
+});
 
 /** Right rail: minimizes into a slim bar at the right edge and slides out on mouse hover. */
-export function NodeRail({
+export const NodeRail = memo(function NodeRail({
   hub,
   surface,
   onCommand,
@@ -370,4 +370,4 @@ export function NodeRail({
       </nav>
     </div>
   );
-}
+});

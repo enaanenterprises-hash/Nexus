@@ -6,6 +6,7 @@ import {
   bezier,
   fitCanvas,
   lerp,
+  observeCanvasActivity,
   radialGlow,
   seededHelpers,
   type Vec,
@@ -168,10 +169,13 @@ export function NodesLivePreview() {
     };
   }, [activeId, isPro]);
 
+  const activeViewRef = useRef(true);
+
   useEffect(() => {
     const timer = window.setInterval(() => {
+      if (!activeViewRef.current) return;
       setPlayhead((p) => (p >= 92 ? 12 : Number((p + 0.9).toFixed(1))));
-    }, 140);
+    }, 180);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -196,6 +200,7 @@ export function NodesLivePreview() {
     let height = 1;
     let frame = 0;
     let last = 0;
+    let active = true;
 
     const draw = (dt: number) => {
       if (busRef.current.burstSerial !== lastSerial) {
@@ -312,6 +317,11 @@ export function NodesLivePreview() {
     };
 
     const loop = (now: number) => {
+      if (!active || reduceMotion) {
+        frame = 0;
+        last = 0;
+        return;
+      }
       if (!last) last = now;
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
@@ -319,13 +329,27 @@ export function NodesLivePreview() {
       frame = requestAnimationFrame(loop);
     };
 
+    const stopVisibility = observeCanvasActivity(canvas, (isActive) => {
+      active = isActive;
+      activeViewRef.current = isActive;
+      if (isActive && !reduceMotion && frame === 0) {
+        last = 0;
+        frame = requestAnimationFrame(loop);
+      } else if (!isActive && frame !== 0) {
+        cancelAnimationFrame(frame);
+        frame = 0;
+        last = 0;
+      }
+    });
+
     const observer = new ResizeObserver(resize);
     observer.observe(canvas);
     resize();
-    if (!reduceMotion) frame = requestAnimationFrame(loop);
+    if (!reduceMotion && active && frame === 0) frame = requestAnimationFrame(loop);
 
     return () => {
       cancelAnimationFrame(frame);
+      stopVisibility();
       observer.disconnect();
     };
   }, []);

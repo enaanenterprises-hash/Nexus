@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { NexusMark } from "@/components/landing/NexusLogo";
 import { NexusMenuButton } from "./NexusMenuButton";
 import { CommandView, type CommandTab } from "@/components/command/CommandView";
@@ -139,6 +139,85 @@ export function Dashboard({
   const menuNavRef = useRef<HTMLElement>(null);
   const panelRef = useRef<HTMLElement>(null);
 
+  const flash = useCallback((message: string) => {
+    setNotice(message);
+    window.clearTimeout(noticeTimer.current);
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 6000);
+  }, []);
+
+  const openResearch = useCallback((input?: string) => {
+    setResearchMounted(true);
+    setMenuOpen(false);
+    setSurface({ view: "research", panel: null });
+    if (input !== undefined) setResearchRequest((r) => ({ input, serial: (r?.serial ?? 0) + 1 }));
+  }, []);
+
+  const openCommand = useCallback(
+    (request?: { tab: CommandTab; service: string | null; notice: string | null }) => {
+      setCommandMounted(true);
+      setMenuOpen(false);
+      setSurface({ view: "command", panel: null });
+      if (request) setCommandRequest((r) => ({ ...request, serial: (r?.serial ?? 0) + 1 }));
+    },
+    [],
+  );
+
+  const openPanel = useCallback((panel: PanelId) => {
+    setSurface((s) => {
+      const same =
+        typeof panel === "string"
+          ? s.panel === panel
+          : typeof s.panel === "object" && s.panel?.extension === panel.extension;
+      return { view: s.view, panel: same ? null : panel };
+    });
+  }, []);
+
+  const goHome = useCallback(() => {
+    setSurface({ view: "home", panel: null });
+    setMenuOpen(false);
+  }, []);
+
+  const toggleMenu = useCallback(() => {
+    setMenuOpen((v) => !v);
+  }, []);
+
+  const handleOpenCommand = useCallback(() => {
+    openCommand();
+  }, [openCommand]);
+
+  const hubRef = useRef(hub);
+  useEffect(() => {
+    hubRef.current = hub;
+  }, [hub]);
+
+  const selectSlot = useCallback(
+    (slotId: SlotId) => {
+      const currentHub = hubRef.current;
+      const slot = currentHub.slots.find((s) => s.id === slotId);
+      if (!slot) return;
+      if (slot.occupiedBy) {
+        openPanel({ extension: slot.occupiedBy });
+        return;
+      }
+      setSelected(slotId);
+      setSurface((s) => ({ ...s, panel: "nodes" }));
+      flash(
+        canUseSlot(slot, currentHub.entitlement)
+          ? "Socket selected. Choose an extension to snap into it."
+          : "Pro sockets unlock with Nexus Pro. Try “Preview Pro” to open them.",
+      );
+    },
+    [openPanel, flash],
+  );
+
+  const handleSelectSocket = useCallback(
+    (idx: number) => {
+      const slot = hubRef.current.slots[idx];
+      if (slot) selectSlot(slot.id);
+    },
+    [selectSlot],
+  );
+
   // Register sample extensions and restore selected Laniakea nodes once setup is complete
   useEffect(() => {
     const timer = noticeTimer.current;
@@ -174,7 +253,7 @@ export function Dashboard({
         else if (event.payload.nodeId === RESEARCH_NODE_ID && RESEARCH_VISIBLE) openResearch(event.payload.input);
         else if (extensionRegistry.get(event.payload.nodeId)) openPanel({ extension: event.payload.nodeId });
       }),
-    [],
+    [openCommand, openPanel, openResearch],
   );
 
   // Automatically visualize bus events as travelling product comets between Laniakea arms
@@ -242,12 +321,19 @@ export function Dashboard({
       outcome === "connected"
         ? `${name} is connected.`
         : `${name} couldn't connect. ${OAUTH_ERRORS[params.get("reason") ?? ""] ?? ""}`.trim();
-    openCommand({
-      tab: outcome === "connected" ? "overview" : "connections",
-      service: ids[0] ?? null,
-      notice,
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      openCommand({
+        tab: outcome === "connected" ? "overview" : "connections",
+        service: ids[0] ?? null,
+        notice,
+      });
     });
-  }, [initialSetupDone, initialSetupStep]);
+    return () => {
+      cancelled = true;
+    };
+  }, [initialSetupDone, initialSetupStep, openCommand]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -333,36 +419,6 @@ export function Dashboard({
     return "Friend";
   }, [viewerName, viewer.email]);
 
-  function flash(message: string) {
-    setNotice(message);
-    window.clearTimeout(noticeTimer.current);
-    noticeTimer.current = window.setTimeout(() => setNotice(null), 6000);
-  }
-
-  function openResearch(input?: string) {
-    setResearchMounted(true);
-    setMenuOpen(false);
-    setSurface({ view: "research", panel: null });
-    if (input !== undefined) setResearchRequest((r) => ({ input, serial: (r?.serial ?? 0) + 1 }));
-  }
-
-  function openCommand(request?: { tab: CommandTab; service: string | null; notice: string | null }) {
-    setCommandMounted(true);
-    setMenuOpen(false);
-    setSurface({ view: "command", panel: null });
-    if (request) setCommandRequest((r) => ({ ...request, serial: (r?.serial ?? 0) + 1 }));
-  }
-
-  function openPanel(panel: PanelId) {
-    setSurface((s) => {
-      const same =
-        typeof panel === "string"
-          ? s.panel === panel
-          : typeof s.panel === "object" && s.panel?.extension === panel.extension;
-      return { view: s.view, panel: same ? null : panel };
-    });
-  }
-
   function chat(text: string) {
     const query = RESEARCH_VISIBLE ? researchIntent(text) : null;
     if (query) {
@@ -426,7 +482,7 @@ export function Dashboard({
     await completeSetup(fallbackNodes);
   }
 
-  async function replaySetup() {
+  const replaySetup = useCallback(async () => {
     clearResumeSetupStep();
     persistedNodesRef.current = false;
     setSetupReveal(false);
@@ -441,7 +497,7 @@ export function Dashboard({
     setSetupNotice(null);
     setSetupResumeStep(null);
     setSetupDone(false);
-  }
+  }, []);
 
   useEffect(() => {
     if (!setupReveal) return;
@@ -505,22 +561,6 @@ export function Dashboard({
     flash(`Routing ${routeText}.`);
   }
 
-  function selectSlot(slotId: SlotId) {
-    const slot = hub.slots.find((s) => s.id === slotId);
-    if (!slot) return;
-    if (slot.occupiedBy) {
-      openPanel({ extension: slot.occupiedBy });
-      return;
-    }
-    setSelected(slotId);
-    setSurface((s) => ({ ...s, panel: "nodes" }));
-    flash(
-      canUseSlot(slot, hub.entitlement)
-        ? "Socket selected. Choose an extension to snap into it."
-        : "Pro sockets unlock with Nexus Pro. Try “Preview Pro” to open them.",
-    );
-  }
-
   const panel = surface.panel;
   const isNetworkHome = surface.view === "home";
 
@@ -564,13 +604,7 @@ export function Dashboard({
         className="absolute inset-0"
         hidden={surface.view === "command"}
       >
-        <NeuralStage
-          signal={signal}
-          onSelectSocket={(idx) => {
-            const slot = hub.slots[idx];
-            if (slot) selectSlot(slot.id);
-          }}
-        />
+        <NeuralStage signal={signal} onSelectSocket={handleSelectSocket} />
         <div className="dash-scrim--home pointer-events-none absolute inset-0" />
       </section>
 
@@ -582,7 +616,7 @@ export function Dashboard({
               open={menuOpen}
               hasActivePanel={Boolean(panel)}
               controlsId="nexus-network-menu"
-              onClick={() => setMenuOpen((v) => !v)}
+              onClick={toggleMenu}
             />
           </div>
         ) : (
@@ -599,16 +633,13 @@ export function Dashboard({
         surface={surface}
         floating={isNetworkHome}
         open={isNetworkHome ? menuOpen : true}
-        onHome={() => {
-          setSurface({ view: "home", panel: null });
-          setMenuOpen(false);
-        }}
-        onCommand={() => openCommand()}
+        onHome={goHome}
+        onCommand={handleOpenCommand}
         onPanel={openPanel}
-        onReplaySetup={() => void replaySetup()}
+        onReplaySetup={replaySetup}
       />
       {isNetworkHome ? (
-        <NodeRail hub={hub} surface={surface} onCommand={() => openCommand()} onSlot={selectSlot} />
+        <NodeRail hub={hub} surface={surface} onCommand={handleOpenCommand} onSlot={selectSlot} />
       ) : null}
 
       {surface.view === "home" ? (

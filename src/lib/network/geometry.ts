@@ -61,12 +61,63 @@ export function radialGlow(
   ctx.fillRect(at.x - radius, at.y - radius, radius * 2, radius * 2);
 }
 
-/** Fits a canvas to its CSS box at a capped device pixel ratio. */
+/** Fits a canvas to its CSS box at a balanced device pixel ratio for 60fps rendering. */
 export function fitCanvas(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) {
   const rect = canvas.getBoundingClientRect();
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  canvas.width = Math.round(rect.width * dpr);
-  canvas.height = Math.round(rect.height * dpr);
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+  const w = Math.max(1, Math.round(rect.width * dpr));
+  const h = Math.max(1, Math.round(rect.height * dpr));
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w;
+    canvas.height = h;
+  }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   return { width: rect.width, height: rect.height };
+}
+
+/**
+ * Watches whether `element` is near/in the viewport and the document tab is visible.
+ * Pauses offscreen & background animation loops cleanly.
+ */
+export function observeCanvasActivity(
+  element: Element,
+  onActiveChange: (active: boolean) => void,
+): () => void {
+  let inView = true;
+  let visible = typeof document === "undefined" || document.visibilityState !== "hidden";
+  let lastActive: boolean | null = null;
+
+  const notify = () => {
+    const next = inView && visible;
+    if (next !== lastActive) {
+      lastActive = next;
+      onActiveChange(next);
+    }
+  };
+
+  let io: IntersectionObserver | null = null;
+  if (typeof IntersectionObserver !== "undefined") {
+    io = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (!entry) return;
+        inView = entry.isIntersecting;
+        notify();
+      },
+      { rootMargin: "120px" },
+    );
+    io.observe(element);
+  }
+
+  const onVis = () => {
+    visible = document.visibilityState !== "hidden";
+    notify();
+  };
+  document.addEventListener("visibilitychange", onVis);
+  notify();
+
+  return () => {
+    io?.disconnect();
+    document.removeEventListener("visibilitychange", onVis);
+  };
 }
