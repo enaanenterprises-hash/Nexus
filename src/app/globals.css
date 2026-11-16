@@ -1077,49 +1077,135 @@ button.landing-signup {
   border-color: rgba(240, 181, 74, 0.7);
 }
 
-/* ——— Node menu (left) and quick rail (right) ——— */
-.node-menu-trigger {
+/* ——— Merged Nexus Blade Menu Button & Node Navigation ——— */
+.nexus-mark-button {
   position: relative;
   display: inline-grid;
   place-items: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: 11px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(12, 11, 9, 0.68);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  color: var(--land-muted);
+  width: 2.85rem;
+  height: 2.65rem;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  overflow: visible;
   cursor: pointer;
   transition:
-    color 180ms ease,
-    background 180ms ease,
-    border-color 180ms ease,
-    box-shadow 180ms ease,
-    transform 180ms ease;
+    background 200ms ease,
+    box-shadow 200ms ease;
 }
 
-.node-menu-trigger:hover {
-  color: var(--land-ink);
-  background: rgba(24, 22, 18, 0.86);
-  border-color: rgba(255, 255, 255, 0.28);
+.nexus-mark-button:focus-visible {
+  outline: 2px solid var(--land-gold);
+  outline-offset: 2px;
 }
 
-.node-menu-trigger--open {
-  color: var(--land-gold-soft);
-  border-color: rgba(240, 181, 74, 0.48);
-  background: rgba(240, 181, 74, 0.12);
+.nexus-mark-stage {
+  position: relative;
+  display: block;
+  height: 1.85rem;
+  aspect-ratio: 206 / 218;
+  overflow: visible;
 }
 
-.node-menu-trigger-dot {
+.nexus-mark-rotor {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: 51% 54%;
+  transition:
+    transform 620ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 300ms ease;
+  will-change: transform;
+}
+
+.nexus-mark-blade {
   position: absolute;
-  top: 5px;
-  right: 5px;
-  width: 5px;
-  height: 5px;
+  inset: 0;
+  display: block;
+  overflow: visible;
+  transition: transform 600ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.nexus-mark-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Exact alpha-disjoint clip regions & true centroids for nexus-mark.png (206x218) */
+.nexus-mark-blade--top {
+  clip-path: polygon(55.8% 0%, 100% 0%, 100% 57.5%, 55.8% 57.5%);
+  transform-origin: 72.2% 32.8%;
+}
+
+.nexus-mark-blade--left {
+  clip-path: polygon(0% 0%, 55.5% 0%, 55.5% 51.8%, 0% 81.7%);
+  transform-origin: 24.2% 48.9%;
+  transition-delay: 24ms;
+}
+
+.nexus-mark-blade--bottom {
+  clip-path: polygon(0% 81.8%, 55.6% 52%, 55.6% 57.6%, 100% 57.6%, 100% 100%, 0% 100%);
+  transform-origin: 63% 80.1%;
+  transition-delay: 48ms;
+}
+
+/* Subtle hover poise inviting click */
+.nexus-mark-button:hover .nexus-mark-rotor {
+  transform: rotate(8deg) scale(1.05);
+}
+
+.nexus-mark-button:hover .nexus-mark-blade--top {
+  transform: translate(4.5%, -4%) rotate(7deg);
+}
+
+.nexus-mark-button:hover .nexus-mark-blade--left {
+  transform: translate(-5.5%, -1.5%) rotate(-7deg);
+}
+
+.nexus-mark-button:hover .nexus-mark-blade--bottom {
+  transform: translate(2.5%, 5.5%) rotate(7deg);
+}
+
+.nexus-mark-button:active .nexus-mark-rotor {
+  transform: scale(0.94);
+}
+
+/* Pressed / open state: blades spin 360deg in pinwheel orbit & flare outward apart */
+.nexus-mark-button--open .nexus-mark-rotor,
+.nexus-mark-button--open:hover .nexus-mark-rotor {
+  transform: rotate(360deg) scale(1.06);
+  filter: drop-shadow(0 0 8px rgba(240, 181, 74, 0.38));
+}
+
+.nexus-mark-button--open .nexus-mark-blade--top,
+.nexus-mark-button--open:hover .nexus-mark-blade--top {
+  transform: translate(23%, -21%) rotate(28deg);
+}
+
+.nexus-mark-button--open .nexus-mark-blade--left,
+.nexus-mark-button--open:hover .nexus-mark-blade--left {
+  transform: translate(-26%, -6%) rotate(-30deg);
+}
+
+.nexus-mark-button--open .nexus-mark-blade--bottom,
+.nexus-mark-button--open:hover .nexus-mark-blade--bottom {
+  transform: translate(14%, 25%) rotate(26deg);
+}
+
+.nexus-mark-dot {
+  position: absolute;
+  right: -4px;
+  bottom: -2px;
+  width: 6px;
+  height: 6px;
   border-radius: 999px;
   background: var(--land-gold);
-  box-shadow: 0 0 6px rgba(240, 181, 74, 0.75);
+  box-shadow: 0 0 8px rgba(240, 181, 74, 0.85);
 }
 
 .node-menu {
@@ -3156,13 +3242,19 @@ select.research-field option {
   }
 
   .word,
+  .nexus-mark-rotor,
+  .nexus-mark-blade,
   .node-menu--floating,
-  .node-menu-trigger,
   .node-rail-bar,
   .node-rail--sliding,
   .node-rail-button,
   .node-panel {
     transition: none;
+  }
+
+  .nexus-mark-button--open .nexus-mark-rotor,
+  .nexus-mark-button--open:hover .nexus-mark-rotor {
+    transform: scale(1.04);
   }
 }
 
@@ -6084,23 +6176,9 @@ html[data-dash-theme="light"] {
 }
 
 /* Left Node Menu, Right Quick Rail, and Side Panels in Light Mode */
-.dash[data-theme="light"] .node-menu-trigger {
-  border-color: rgba(9, 9, 11, 0.13);
-  background: rgba(255, 255, 255, 0.84);
-  color: #52525b;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
-}
-
-.dash[data-theme="light"] .node-menu-trigger:hover {
-  color: #09090b;
-  background: #ffffff;
-  border-color: rgba(9, 9, 11, 0.28);
-}
-
-.dash[data-theme="light"] .node-menu-trigger--open {
-  color: #966008;
-  border-color: rgba(184, 120, 16, 0.5);
-  background: rgba(255, 249, 235, 0.96);
+.dash[data-theme="light"] .nexus-mark-button--open .nexus-mark-rotor,
+.dash[data-theme="light"] .nexus-mark-button--open:hover .nexus-mark-rotor {
+  filter: drop-shadow(0 2px 6px rgba(142, 78, 4, 0.28));
 }
 
 .dash[data-theme="light"] .node-menu--floating {

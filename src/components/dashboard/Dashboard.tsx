@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { NexusMark } from "@/components/landing/NexusLogo";
+import { NexusMark, NexusMenuButton } from "@/components/landing/NexusLogo";
 import { CommandView, type CommandTab } from "@/components/command/CommandView";
 import { ResearchView } from "@/components/research/ResearchView";
 import type { Viewer } from "@/lib/auth/types";
@@ -22,7 +22,7 @@ import { getConnector } from "@/lib/connectors/catalog";
 import { researchIntent } from "@/lib/nexus/brain";
 import { ExtensionHub } from "./ExtensionHub";
 import { ExtensionPanel } from "./ExtensionPanel";
-import { ChevronUpIcon, CloseIcon, MenuPanelIcon } from "./icons";
+import { CloseIcon } from "./icons";
 import {
   NeuralStage,
   type SocketVisual,
@@ -399,30 +399,21 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
       </section>
 
       <header className="landing-enter pointer-events-none absolute inset-x-0 top-0 z-40 flex h-16 items-center">
-        <Link
-          href="/"
-          aria-label="Nexus home"
-          className={`pointer-events-auto inline-flex shrink-0 items-center justify-center ${
-            isNetworkHome ? "ml-4 mr-2 w-10" : "w-[76px]"
-          }`}
-        >
-          <NexusMark className="dash-brand-mark h-7 w-auto" />
-        </Link>
         {isNetworkHome ? (
-          <button
-            ref={menuTriggerRef}
-            type="button"
-            onClick={() => setMenuOpen((v) => !v)}
-            aria-expanded={menuOpen}
-            aria-controls="nexus-network-menu"
-            aria-label={menuOpen ? "Minimize menu" : "Extend navigation menu"}
-            title={menuOpen ? "Minimize menu" : "Menu"}
-            className={`node-menu-trigger pointer-events-auto ${menuOpen ? "node-menu-trigger--open" : ""}`}
-          >
-            {menuOpen ? <ChevronUpIcon size={15} /> : <MenuPanelIcon size={15} />}
-            {panel && !menuOpen ? <span className="node-menu-trigger-dot" aria-hidden /> : null}
-          </button>
-        ) : null}
+          <div className="pointer-events-auto ml-[14px] inline-flex w-[74px] shrink-0 justify-center">
+            <NexusMenuButton
+              buttonRef={menuTriggerRef}
+              open={menuOpen}
+              hasActivePanel={Boolean(panel)}
+              controlsId="nexus-network-menu"
+              onClick={() => setMenuOpen((v) => !v)}
+            />
+          </div>
+        ) : (
+          <Link href="/" aria-label="Nexus home" className="pointer-events-auto inline-flex w-[76px] shrink-0 justify-center">
+            <NexusMark className="dash-brand-mark h-7 w-auto" />
+          </Link>
+        )}
       </header>
 
       <NodeMenu
