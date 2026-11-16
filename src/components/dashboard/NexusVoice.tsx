@@ -28,7 +28,7 @@ export function NexusVoice({ firstName, brain, current, pendingPrompt, revealed,
   const [waking, setWaking] = useState(true);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setWaking(false), 2100);
+    const timer = window.setTimeout(() => setWaking(false), 1600);
     return () => window.clearTimeout(timer);
   }, []);
 
