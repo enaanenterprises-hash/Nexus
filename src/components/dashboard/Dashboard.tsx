@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { NexusMark, NexusMenuButton } from "@/components/landing/NexusLogo";
+import { NexusMark } from "@/components/landing/NexusLogo";
+import { NexusMenuButton } from "./NexusMenuButton";
 import { CommandView, type CommandTab } from "@/components/command/CommandView";
 import { ResearchView } from "@/components/research/ResearchView";
 import type { Viewer } from "@/lib/auth/types";
