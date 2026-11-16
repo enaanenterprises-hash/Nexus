@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { LocationInput } from "@/components/command/ConnectionsView";
-import { SourceGlyph, StatusDot } from "@/components/command/parts";
+import { SourceGlyph } from "@/components/command/parts";
 import { useCommand, type CommandController } from "@/components/command/use-command";
 import { SAMPLE_EXTENSIONS } from "@/extensions/samples";
 import { connectGoogleServices } from "@/lib/command/google-connect";
@@ -17,23 +17,24 @@ import {
 import { CONNECTOR_CATALOG } from "@/lib/connectors/catalog";
 import type { ConnectorManifest } from "@/lib/connectors/types";
 import {
-  EXTENSION_SLOT_BLUEPRINT,
   FREE_ACTIVE_EXTENSION_SLOTS,
-  PLANNED_EXTENSIONS,
   type ExtensionHubSnapshot,
   type ExtensionId,
 } from "@/lib/extensions";
-import { ArrowRight, CheckIcon, ChevronLeft, CloseIcon, LockIcon, PlusIcon } from "./icons";
+import { useTheme, type ThemeMode } from "@/lib/theme";
+import { ArrowRight, CheckIcon, ChevronLeft, CloseIcon, MoonIcon, SunIcon } from "./icons";
 import { SetupCanvas, type SetupStagePhase } from "./SetupCanvas";
 
-export type SetupStep = "apps" | "widgets" | "nodes";
+export type SetupStep = "name" | "theme" | "apps" | "widgets" | "nodes";
 
 export const SETUP_RESUME_KEY = "nexus:setup-resume.v1";
 
 const STEPS: { id: SetupStep; num: number; label: string }[] = [
-  { id: "apps", num: 1, label: "Connect apps" },
-  { id: "widgets", num: 2, label: "Widgets" },
-  { id: "nodes", num: 3, label: "Nodes" },
+  { id: "name", num: 1, label: "Name" },
+  { id: "theme", num: 2, label: "Theme" },
+  { id: "apps", num: 3, label: "Apps" },
+  { id: "widgets", num: 4, label: "Widgets" },
+  { id: "nodes", num: 5, label: "Nodes" },
 ];
 
 const DEFAULT_SAMPLE_NODES: ExtensionId[] = [
@@ -48,7 +49,6 @@ function computeSuggestedWidgets(connectedConnectorIds: Set<string>): string[] {
       candidates.push(w.id);
     }
   }
-  // Ensure a rich starter layout if user connected only 0-1 services
   if (!candidates.includes("weather")) candidates.push("weather");
   if (candidates.length < 3) {
     for (const fallback of ["calendar", "tasks", "crypto"]) {
@@ -64,36 +64,51 @@ function defaultSettingsFor(m: ConnectorManifest): Record<string, string> {
   );
 }
 
+function rememberSetupResume() {
+  try {
+    document.cookie = "nexus_setup_resume=apps; path=/; max-age=600; SameSite=Lax";
+    window.sessionStorage.setItem(SETUP_RESUME_KEY, "apps");
+    window.localStorage.setItem(SETUP_RESUME_KEY, "apps");
+  } catch {
+    // Ignore storage failures
+  }
+}
+
 export function SetupExperience({
-  firstName,
+  initialName,
   theme,
   hub,
   initialStep,
   oauthNotice,
   onDismissNotice,
+  onNameSaved,
   onComplete,
   onSkip,
 }: {
-  firstName: string;
-  theme: "dark" | "light";
+  initialName: string;
+  theme: ThemeMode;
   hub: ExtensionHubSnapshot;
   initialStep: SetupStep | null;
   oauthNotice: { ok: boolean; text: string } | null;
   onDismissNotice: () => void;
+  onNameSaved: (name: string) => void;
   onComplete: (nodeIds: ExtensionId[]) => Promise<void>;
   onSkip: () => Promise<void>;
 }) {
   const command = useCommand();
+  const { setTheme } = useTheme();
   const [stage, setStage] = useState<SetupStagePhase>(initialStep ? "modal" : "singularity");
-  const [step, setStep] = useState<SetupStep>(initialStep ?? "apps");
+  const [step, setStep] = useState<SetupStep>(initialStep ?? "name");
   const [impulseSerial, setImpulseSerial] = useState(0);
   const [finishing, setFinishing] = useState(false);
 
-  // Track widgets locally during organization, then persist smoothly
+  const [nameInput, setNameInput] = useState(initialName);
+  const [nameSaving, setNameSaving] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
+
   const [widgetIds, setWidgetIds] = useState<string[] | null>(null);
   const [widgetsTouched, setWidgetsTouched] = useState(false);
 
-  // Selected sample nodes for free sockets (up to FREE_ACTIVE_EXTENSION_SLOTS)
   const [selectedNodes, setSelectedNodes] = useState<ExtensionId[]>(() => {
     const active = hub.slots.flatMap((s) => (s.occupiedBy ? [s.occupiedBy] : []));
     return active.length > 0 ? active.slice(0, FREE_ACTIVE_EXTENSION_SLOTS) : DEFAULT_SAMPLE_NODES;
@@ -138,8 +153,53 @@ export function SetupExperience({
       void command.setOverview(normalized);
       setWidgetsTouched(false);
     }
+    setNameError(null);
     setStep(next);
     pulse();
+  }
+
+  async function saveNameAndContinue(target: SetupStep = "theme") {
+    if (nameSaving) return;
+    const trimmed = nameInput.trim();
+    if (!trimmed) {
+      setNameError("Enter a name to continue, or skip setup.");
+      return;
+    }
+    if (trimmed.length > 80) {
+      setNameError("Keep your name under 80 characters.");
+      return;
+    }
+    setNameError(null);
+
+    if (trimmed === initialName.trim()) {
+      onNameSaved(trimmed);
+      goToStep(target);
+      return;
+    }
+
+    setNameSaving(true);
+    try {
+      const res = await fetch("/api/account", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: trimmed }),
+      });
+      const body = (await res.json().catch(() => null)) as
+        | { ok?: boolean; name?: string; error?: string }
+        | null;
+      if (!res.ok) {
+        setNameError(body?.error ?? "Could not save your name.");
+        return;
+      }
+      const saved = body?.name?.trim() || trimmed;
+      setNameInput(saved);
+      onNameSaved(saved);
+      goToStep(target);
+    } catch {
+      setNameError("Network error while saving your name.");
+    } finally {
+      setNameSaving(false);
+    }
   }
 
   async function handleFinish() {
@@ -166,6 +226,8 @@ export function SetupExperience({
     }
   }
 
+  const currentStepIndex = STEPS.findIndex((s) => s.id === step);
+
   return (
     <div
       className="dash setup-root relative h-[100svh] w-full flex-1 overflow-hidden"
@@ -187,93 +249,126 @@ export function SetupExperience({
             onClick={handleStart}
             className="setup-start-button pointer-events-auto"
           >
-            <span className="setup-start-kicker">Nexus · New workspace</span>
-            <span className="setup-start-cta">Press to get Started</span>
+            Click to get Started
           </button>
         </div>
       ) : null}
 
       {stage === "modal" ? (
-        <div className="setup-modal-wrap pointer-events-none absolute inset-0 z-30 flex items-center justify-center p-4 sm:p-6">
+        <div className="setup-modal-backdrop fixed inset-0 z-30 flex items-center justify-center p-4 sm:p-6">
           <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="setup-dialog-title"
-            className="setup-card pointer-events-auto"
+            aria-label="Workspace setup"
+            className="setup-card relative flex max-h-[86svh] w-full max-w-[660px] flex-col overflow-hidden"
           >
-            <header className="setup-card-header">
-              <div className="min-w-0">
-                <p className="dash-eyebrow">
-                  {step === "apps"
-                    ? `Set up Command · Welcome, ${firstName}`
-                    : step === "widgets"
-                      ? "Set up Command · Step 2 of 3"
-                      : "Network setup · Step 3 of 3"}
-                </p>
-                <h1 id="setup-dialog-title" className="setup-card-title">
-                  {step === "apps"
-                    ? "Which apps would you like to connect?"
-                    : step === "widgets"
-                      ? "Organize your widgets page"
-                      : "Which nodes would you like to install?"}
-                </h1>
+            <header className="setup-card-head flex flex-wrap items-center justify-between gap-3 px-6 py-4">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {STEPS.map((s) => {
+                  const active = s.id === step;
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => {
+                        if (step === "name" && s.id !== "name") {
+                          const trimmed = nameInput.trim();
+                          if (trimmed && trimmed !== initialName.trim()) {
+                            void saveNameAndContinue(s.id);
+                            return;
+                          }
+                        }
+                        goToStep(s.id);
+                      }}
+                      className="setup-step-pill"
+                      data-active={active ? "true" : "false"}
+                    >
+                      <span className="setup-step-num">{s.num}</span>
+                      <span>{s.label}</span>
+                    </button>
+                  );
+                })}
               </div>
 
               <button
                 type="button"
                 onClick={() => void handleSkip()}
                 disabled={finishing}
-                className="setup-skip-btn"
+                className="setup-skip-link"
               >
                 Skip setup
               </button>
             </header>
 
-            <nav className="setup-steps" aria-label="Setup steps">
-              {STEPS.map((s) => {
-                const active = step === s.id;
-                const currentIdx = STEPS.findIndex((item) => item.id === step);
-                const itemIdx = STEPS.findIndex((item) => item.id === s.id);
-                const done = itemIdx < currentIdx;
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => goToStep(s.id)}
-                    aria-current={active ? "step" : undefined}
-                    className={`setup-step-pill ${active ? "setup-step-pill--active" : ""} ${
-                      done ? "setup-step-pill--done" : ""
-                    }`}
-                  >
-                    <span className="setup-step-num">
-                      {done ? <CheckIcon size={11} /> : s.num}
-                    </span>
-                    <span>{s.label}</span>
-                  </button>
-                );
-              })}
-            </nav>
+            <div className="px-6 pt-5 pb-3">
+              <h1 className="setup-title text-[20px] font-medium tracking-[-0.02em]">
+                {step === "name"
+                  ? "What should Nexus call you?"
+                  : step === "theme"
+                    ? "Choose your appearance"
+                    : step === "apps"
+                      ? "Connect apps"
+                      : step === "widgets"
+                        ? "Organize widgets"
+                        : "Install nodes"}
+              </h1>
+              <p className="setup-subtitle mt-1 text-[13px]">
+                {step === "name"
+                  ? "Your workspace greets you by this name."
+                  : step === "theme"
+                    ? "Pick the look that fits your workspace."
+                    : step === "apps"
+                      ? "Enable feeds or link accounts for Command."
+                      : step === "widgets"
+                        ? "Drag to reorder your 4×2 Command board, or toggle tiles below."
+                        : `Select up to ${FREE_ACTIVE_EXTENSION_SLOTS} starter nodes (${selectedNodes.length}/${FREE_ACTIVE_EXTENSION_SLOTS} active).`}
+              </p>
+            </div>
 
             {oauthNotice ? (
-              <div
-                className={`setup-notice ${oauthNotice.ok ? "setup-notice--ok" : "setup-notice--warn"}`}
-                role="status"
-              >
-                <span>{oauthNotice.text}</span>
-                <button
-                  type="button"
-                  onClick={onDismissNotice}
-                  className="research-icon-button h-6 w-6"
-                  aria-label="Dismiss notice"
+              <div className="mx-6 mb-2">
+                <div
+                  role="status"
+                  className="setup-notice flex items-center justify-between gap-3 px-3.5 py-2 text-[12.5px]"
+                  data-ok={oauthNotice.ok ? "true" : "false"}
                 >
-                  <CloseIcon size={12} />
-                </button>
+                  <span>{oauthNotice.text}</span>
+                  <button
+                    type="button"
+                    onClick={onDismissNotice}
+                    className="setup-icon-btn"
+                    aria-label="Dismiss notice"
+                  >
+                    <CloseIcon size={13} />
+                  </button>
+                </div>
               </div>
             ) : null}
 
-            <div className="setup-card-body dash-panel">
-              {step === "apps" ? (
-                <SetupAppsStep command={command} connectedIds={connectedIds} onPulse={pulse} />
+            <div className="setup-card-body min-h-0 flex-1 overflow-y-auto px-6 py-3">
+              {step === "name" ? (
+                <SetupNameStep
+                  value={nameInput}
+                  error={nameError}
+                  busy={nameSaving}
+                  onChange={(v) => {
+                    setNameInput(v);
+                    if (nameError) setNameError(null);
+                  }}
+                  onSubmit={() => void saveNameAndContinue("theme")}
+                />
+              ) : step === "theme" ? (
+                <SetupThemeStep
+                  theme={theme}
+                  onSelect={(next) => {
+                    setTheme(next);
+                    pulse();
+                  }}
+                />
+              ) : step === "apps" ? (
+                <SetupAppsStep
+                  command={command}
+                  connectedIds={connectedIds}
+                  onPulse={pulse}
+                />
               ) : step === "widgets" ? (
                 <SetupWidgetsStep
                   widgetIds={effectiveWidgetIds}
@@ -295,47 +390,54 @@ export function SetupExperience({
               )}
             </div>
 
-            <footer className="setup-card-footer">
-              <div className="flex items-center gap-2">
-                {step !== "apps" ? (
+            <footer className="setup-card-foot flex items-center justify-between gap-3 px-6 py-4">
+              <div>
+                {currentStepIndex > 0 ? (
                   <button
                     type="button"
-                    onClick={() => goToStep(step === "nodes" ? "widgets" : "apps")}
-                    className="dash-button inline-flex items-center gap-1.5"
+                    onClick={() => goToStep(STEPS[currentStepIndex - 1]!.id)}
+                    className="setup-btn setup-btn--ghost"
                   >
                     <ChevronLeft size={14} />
                     <span>Back</span>
                   </button>
-                ) : null}
-                <span className="text-[12px] text-[color:var(--land-faint)]">
-                  {step === "apps"
-                    ? `${connectedIds.size} connected · you can adjust anytime in Command`
-                    : step === "widgets"
-                      ? `${placeWidgets(effectiveWidgetIds).length} placed on 4×2 board`
-                      : `${selectedNodes.length} of ${FREE_ACTIVE_EXTENSION_SLOTS} free sockets selected`}
-                </span>
+                ) : (
+                  <span />
+                )}
               </div>
 
-              {step !== "nodes" ? (
-                <button
-                  type="button"
-                  onClick={() => goToStep(step === "apps" ? "widgets" : "nodes")}
-                  className="dash-button dash-button--gold inline-flex items-center gap-1.5 px-4"
-                >
-                  <span>{step === "apps" ? "Next: Widgets" : "Next: Nodes"}</span>
-                  <ArrowRight size={14} />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled={finishing}
-                  onClick={() => void handleFinish()}
-                  className="dash-button dash-button--gold inline-flex items-center gap-1.5 px-4"
-                >
-                  <span>{finishing ? "Launching…" : "Launch Nexus"}</span>
-                  <ArrowRight size={14} />
-                </button>
-              )}
+              <div className="flex items-center gap-2.5">
+                {step === "name" ? (
+                  <button
+                    type="button"
+                    disabled={nameSaving}
+                    onClick={() => void saveNameAndContinue("theme")}
+                    className="setup-btn setup-btn--primary"
+                  >
+                    <span>{nameSaving ? "Saving…" : "Continue"}</span>
+                    <ArrowRight size={14} />
+                  </button>
+                ) : currentStepIndex < STEPS.length - 1 ? (
+                  <button
+                    type="button"
+                    onClick={() => goToStep(STEPS[currentStepIndex + 1]!.id)}
+                    className="setup-btn setup-btn--primary"
+                  >
+                    <span>Continue</span>
+                    <ArrowRight size={14} />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={finishing}
+                    onClick={() => void handleFinish()}
+                    className="setup-btn setup-btn--primary"
+                  >
+                    <span>{finishing ? "Preparing workspace…" : "Enter Nexus"}</span>
+                    <ArrowRight size={14} />
+                  </button>
+                )}
+              </div>
             </footer>
           </section>
         </div>
@@ -345,18 +447,145 @@ export function SetupExperience({
 }
 
 /* ============================================================================
-   STEP 1: CONNECT APPS
+   STEP 1: NAME
    ============================================================================ */
 
-function rememberSetupResume() {
-  try {
-    document.cookie = "nexus_setup_resume=apps; path=/; max-age=600; SameSite=Lax";
-    window.sessionStorage.setItem(SETUP_RESUME_KEY, "apps");
-    window.localStorage.setItem(SETUP_RESUME_KEY, "apps");
-  } catch {
-    // Ignore storage failures
+function SetupNameStep({
+  value,
+  error,
+  busy,
+  onChange,
+  onSubmit,
+}: {
+  value: string;
+  error: string | null;
+  busy: boolean;
+  onChange: (value: string) => void;
+  onSubmit: () => void;
+}) {
+  function handleFormSubmit(e: FormEvent) {
+    e.preventDefault();
+    onSubmit();
   }
+
+  return (
+    <form onSubmit={handleFormSubmit} className="py-4">
+      <label className="block">
+        <span className="setup-label">Name</span>
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Your name"
+          maxLength={80}
+          disabled={busy}
+          autoFocus
+          autoComplete="given-name"
+          className="setup-input mt-2"
+        />
+      </label>
+      {error ? (
+        <p className="setup-error mt-2.5" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </form>
+  );
 }
+
+/* ============================================================================
+   STEP 2: THEME
+   ============================================================================ */
+
+function SetupThemeStep({
+  theme,
+  onSelect,
+}: {
+  theme: ThemeMode;
+  onSelect: (next: ThemeMode) => void;
+}) {
+  const options: { id: ThemeMode; title: string; note: string }[] = [
+    { id: "dark", title: "Dark", note: "Deep obsidian surface" },
+    { id: "light", title: "Light", note: "Clean paper white" },
+  ];
+
+  return (
+    <div className="grid grid-cols-1 gap-3 py-2 sm:grid-cols-2">
+      {options.map((opt) => {
+        const active = theme === opt.id;
+        const isDark = opt.id === "dark";
+        return (
+          <button
+            key={opt.id}
+            type="button"
+            onClick={() => onSelect(opt.id)}
+            className="setup-theme-card text-left"
+            data-active={active ? "true" : "false"}
+            aria-pressed={active}
+          >
+            <div
+              className="setup-theme-preview"
+              style={{
+                background: isDark ? "#08080a" : "#f7f7f9",
+                borderColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)",
+              }}
+            >
+              <div className="flex items-center justify-between">
+                <span
+                  className="h-2 w-10 rounded-full"
+                  style={{ background: isDark ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.16)" }}
+                />
+                <span
+                  className="h-2 w-2 rounded-full"
+                  style={{ background: isDark ? "#f4f4f6" : "#111113" }}
+                />
+              </div>
+              <div className="mt-4 space-y-1.5">
+                <div
+                  className="h-2 w-3/4 rounded-full"
+                  style={{ background: isDark ? "rgba(255,255,255,0.68)" : "rgba(0,0,0,0.72)" }}
+                />
+                <div
+                  className="h-2 w-1/2 rounded-full"
+                  style={{ background: isDark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.14)" }}
+                />
+              </div>
+              <div className="mt-4 grid grid-cols-3 gap-1.5">
+                {[0, 1, 2].map((idx) => (
+                  <div
+                    key={idx}
+                    className="h-5 rounded-[5px]"
+                    style={{
+                      background: isDark ? "rgba(255,255,255,0.06)" : "#ffffff",
+                      border: `1px solid ${isDark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)"}`,
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                {isDark ? <MoonIcon size={14} /> : <SunIcon size={14} />}
+                <div>
+                  <div className="setup-row-title">{opt.title}</div>
+                  <div className="setup-row-sub">{opt.note}</div>
+                </div>
+              </div>
+              <span className="setup-check-ring" data-checked={active ? "true" : "false"}>
+                {active ? <CheckIcon size={11} /> : null}
+              </span>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ============================================================================
+   STEP 3: CONNECT APPS (SIMPLIFIED MONOCHROME LIST)
+   ============================================================================ */
 
 function SetupAppsStep({
   command,
@@ -368,15 +597,10 @@ function SetupAppsStep({
   onPulse: () => void;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [showPlanned, setShowPlanned] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   const available = useMemo(
     () => CONNECTOR_CATALOG.filter((m) => m.live.status === "available"),
-    [],
-  );
-  const planned = useMemo(
-    () => CONNECTOR_CATALOG.filter((m) => m.live.status === "planned"),
     [],
   );
   const instantApps = available.filter((m) => m.auth.type === "none");
@@ -408,86 +632,58 @@ function SetupAppsStep({
   }
 
   return (
-    <div className="space-y-5">
-      <p className="text-[13.5px] leading-relaxed text-[color:var(--land-muted)]">
-        Connect feeds and accounts for Command. Instant feeds turn on with one tap; accounts use OAuth or an encrypted token.
-      </p>
-
+    <div className="space-y-4">
       {formError ? (
-        <p className="cmd-error" role="alert">
+        <p className="setup-error" role="alert">
           {formError}
         </p>
       ) : null}
 
-      {googleConnectable && unconnectedGoogleIds.length > 0 ? (
-        <div className="setup-google-banner">
-          <div className="min-w-0">
-            <p className="text-[13.5px] font-medium text-[color:var(--land-ink)]">
-              Connect Google Workspace in one step
-            </p>
-            <p className="text-[12px] text-[color:var(--land-muted)]">
-              Grant Calendar, Gmail, Tasks, and Mail sending scopes together ({unconnectedGoogleIds.length} remaining).
-            </p>
-          </div>
-          <button
-            type="button"
-            className="dash-button dash-button--gold shrink-0"
-            onClick={() => {
-              rememberSetupResume();
-              void connectGoogleServices(unconnectedGoogleIds);
-            }}
-          >
-            Connect Google ({unconnectedGoogleIds.length})
-          </button>
-        </div>
-      ) : null}
-
       <div>
-        <p className="dash-eyebrow mb-2.5">Instant feeds · no API key needed</p>
-        <div className="grid gap-2.5 sm:grid-cols-2">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <span className="setup-label">Instant feeds</span>
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {instantApps.map((m) => {
             const isConnected = connectedIds.has(m.id);
-            const busy = command.pending === `connect:${m.id}` || command.pending === `disconnect:${m.id}`;
-            const hasSettings = (m.settings?.length ?? 0) > 0;
             const isExpanded = expandedId === m.id;
+            const busy =
+              command.pending === `connect:${m.id}` ||
+              command.pending === `disconnect:${m.id}`;
+            const hasSettings = (m.settings?.length ?? 0) > 0;
             return (
               <div
                 key={m.id}
-                className={`setup-item-card ${isConnected ? "setup-item-card--on" : ""}`}
+                className="setup-item-card"
+                data-selected={isConnected ? "true" : "false"}
               >
-                <div className="flex items-start gap-3">
-                  <SourceGlyph connectorId={m.id} size="lg" />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-[14px] font-medium text-[color:var(--land-ink)]">
-                        {m.name}
-                      </span>
-                      <StatusDot tone={isConnected ? "ok" : "idle"} />
+                <div className="flex items-center justify-between gap-2.5">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <SourceGlyph connectorId={m.id} />
+                    <div className="min-w-0">
+                      <div className="setup-row-title truncate">{m.name}</div>
+                      <div className="setup-row-sub truncate">{m.description}</div>
                     </div>
-                    <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-[color:var(--land-faint)]">
-                      {m.description}
-                    </p>
-                    <div className="mt-2.5 flex items-center gap-2">
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {isConnected && hasSettings ? (
                       <button
                         type="button"
-                        disabled={busy || !command.state}
-                        onClick={() => void toggleInstant(m)}
-                        className={`dash-button h-7 px-2.5 text-[11.5px] ${
-                          isConnected ? "" : "dash-button--gold"
-                        }`}
+                        onClick={() => setExpandedId(isExpanded ? null : m.id)}
+                        className="setup-text-btn"
                       >
-                        {busy ? "Saving…" : isConnected ? "Connected · Remove" : "Connect"}
+                        {isExpanded ? "Close" : "Edit"}
                       </button>
-                      {hasSettings ? (
-                        <button
-                          type="button"
-                          onClick={() => setExpandedId(isExpanded ? null : m.id)}
-                          className="text-[11.5px] font-medium text-[color:var(--land-muted)] hover:text-[color:var(--land-ink)]"
-                        >
-                          {isExpanded ? "Hide options" : "Options"}
-                        </button>
-                      ) : null}
-                    </div>
+                    ) : null}
+                    <button
+                      type="button"
+                      disabled={busy || !command.state}
+                      onClick={() => void toggleInstant(m)}
+                      className="setup-pill-btn"
+                      data-active={isConnected ? "true" : "false"}
+                    >
+                      {busy ? "…" : isConnected ? "Connected" : "Connect"}
+                    </button>
                   </div>
                 </div>
                 {isExpanded ? (
@@ -508,95 +704,107 @@ function SetupAppsStep({
       </div>
 
       <div>
-        <p className="dash-eyebrow mb-2.5">Accounts & developer tools</p>
-        <div className="grid gap-2.5 sm:grid-cols-2">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <span className="setup-label">Accounts &amp; APIs</span>
+          {googleConnectable && unconnectedGoogleIds.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => {
+                rememberSetupResume();
+                void connectGoogleServices(unconnectedGoogleIds);
+              }}
+              className="setup-text-btn"
+            >
+              Connect all Google ({unconnectedGoogleIds.length})
+            </button>
+          ) : null}
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {accountApps.map((m) => {
-            const conn = command.state?.connections.find((c) => c.connectorId === m.id) ?? null;
-            const isConnected = Boolean(conn);
-            const avail = availability[m.id];
-            const connectable = avail ? avail.connectable : true;
+            const isConnected = connectedIds.has(m.id);
             const isExpanded = expandedId === m.id;
-            const busy = command.pending === `disconnect:${m.id}`;
+            const busy =
+              command.pending === `connect:${m.id}` ||
+              command.pending === `disconnect:${m.id}`;
+            const connectable = availability[m.id]?.connectable ?? false;
+            const conn = command.state?.connections.find((c) => c.connectorId === m.id) ?? null;
 
             return (
               <div
                 key={m.id}
-                className={`setup-item-card ${isConnected ? "setup-item-card--on" : ""}`}
+                className="setup-item-card"
+                data-selected={isConnected ? "true" : "false"}
               >
-                <div className="flex items-start gap-3">
-                  <SourceGlyph connectorId={m.id} size="lg" />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-[14px] font-medium text-[color:var(--land-ink)]">
-                        {m.name}
-                      </span>
-                      <StatusDot tone={isConnected ? "ok" : "idle"} />
+                <div className="flex items-center justify-between gap-2.5">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <SourceGlyph connectorId={m.id} />
+                    <div className="min-w-0">
+                      <div className="setup-row-title truncate">{m.name}</div>
+                      <div className="setup-row-sub truncate">
+                        {m.auth.type === "oauth" ? "OAuth" : "API token"}
+                      </div>
                     </div>
-                    <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-[color:var(--land-faint)]">
-                      {m.description}
-                    </p>
-                    <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                      {!command.state ? (
-                        <span className="text-[11.5px] text-[color:var(--land-faint)]">Loading…</span>
-                      ) : !connectable && !isConnected ? (
-                        <span className="text-[11.5px] text-[color:var(--land-faint)]">
-                          Needs server config
-                        </span>
-                      ) : isConnected ? (
-                        <>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {!command.state ? (
+                      <span className="setup-row-sub">Loading</span>
+                    ) : !connectable && !isConnected ? (
+                      <span className="setup-row-sub">Unconfigured</span>
+                    ) : isConnected ? (
+                      <>
+                        {(m.settings?.length ?? 0) > 0 ? (
                           <button
                             type="button"
-                            disabled={busy}
-                            onClick={async () => {
-                              const err = await command.disconnect(m.id);
-                              if (err) setFormError(err);
-                              else onPulse();
-                            }}
-                            className="dash-button h-7 px-2.5 text-[11.5px]"
+                            onClick={() => setExpandedId(isExpanded ? null : m.id)}
+                            className="setup-text-btn"
                           >
-                            {busy ? "Removing…" : "Connected · Disconnect"}
+                            {isExpanded ? "Close" : "Edit"}
                           </button>
-                          {(m.settings?.length ?? 0) > 0 ? (
-                            <button
-                              type="button"
-                              onClick={() => setExpandedId(isExpanded ? null : m.id)}
-                              className="text-[11.5px] font-medium text-[color:var(--land-muted)] hover:text-[color:var(--land-ink)]"
-                            >
-                              {isExpanded ? "Close" : "Edit"}
-                            </button>
-                          ) : null}
-                        </>
-                      ) : m.auth.type === "oauth" ? (
-                        m.auth.provider === "google" ? (
-                          <button
-                            type="button"
-                            className="dash-button dash-button--gold h-7 px-2.5 text-[11.5px]"
-                            onClick={() => {
-                              rememberSetupResume();
-                              void connectGoogleServices([m.id]);
-                            }}
-                          >
-                            Connect Google
-                          </button>
-                        ) : (
-                          <a
-                            href={`/api/command/oauth/${m.id}/start`}
-                            onClick={rememberSetupResume}
-                            className="dash-button dash-button--gold inline-flex h-7 items-center px-2.5 text-[11.5px]"
-                          >
-                            Connect {m.name}
-                          </a>
-                        )
-                      ) : (
+                        ) : null}
                         <button
                           type="button"
-                          onClick={() => setExpandedId(isExpanded ? null : m.id)}
-                          className="dash-button dash-button--gold h-7 px-2.5 text-[11.5px]"
+                          disabled={busy}
+                          onClick={async () => {
+                            const err = await command.disconnect(m.id);
+                            if (err) setFormError(err);
+                            else onPulse();
+                          }}
+                          className="setup-pill-btn"
+                          data-active="true"
                         >
-                          {isExpanded ? "Cancel" : "Add token"}
+                          {busy ? "…" : "Connected"}
                         </button>
-                      )}
-                    </div>
+                      </>
+                    ) : m.auth.type === "oauth" ? (
+                      m.auth.provider === "google" ? (
+                        <button
+                          type="button"
+                          className="setup-pill-btn"
+                          onClick={() => {
+                            rememberSetupResume();
+                            void connectGoogleServices([m.id]);
+                          }}
+                        >
+                          Connect
+                        </button>
+                      ) : (
+                        <a
+                          href={`/api/command/oauth/${m.id}/start`}
+                          onClick={rememberSetupResume}
+                          className="setup-pill-btn"
+                        >
+                          Connect
+                        </a>
+                      )
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setExpandedId(isExpanded ? null : m.id)}
+                        className="setup-pill-btn"
+                      >
+                        {isExpanded ? "Cancel" : "Add key"}
+                      </button>
+                    )}
                   </div>
                 </div>
                 {isExpanded ? (
@@ -614,29 +822,6 @@ function SetupAppsStep({
             );
           })}
         </div>
-      </div>
-
-      <div className="border-t border-[color:var(--land-hair)] pt-3">
-        <button
-          type="button"
-          onClick={() => setShowPlanned((v) => !v)}
-          aria-expanded={showPlanned}
-          className="flex w-full items-center justify-between text-left"
-        >
-          <span className="dash-eyebrow">Planned apps · {planned.length} coming later</span>
-          <span className="text-[12px] text-[color:var(--land-faint)]">
-            {showPlanned ? "Hide" : "Show"}
-          </span>
-        </button>
-        {showPlanned ? (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {planned.map((p) => (
-              <span key={p.id} className="dash-chip h-7 px-2.5 text-[11.5px] opacity-75">
-                {p.name}
-              </span>
-            ))}
-          </div>
-        ) : null}
       </div>
     </div>
   );
@@ -677,17 +862,17 @@ function SetupConnectorInlineForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="mt-3 space-y-2.5 border-t border-[color:var(--land-hair)] pt-3">
+    <form onSubmit={onSubmit} className="setup-inline-form mt-2.5 space-y-2 pt-2.5">
       {m.auth.type === "api_key"
         ? m.auth.fields.map((f) => (
             <label key={f.key} className="block">
-              <span className="cmd-label">{f.label}</span>
+              <span className="setup-label">{f.label}</span>
               <input
                 type={f.secret ? "password" : "text"}
                 value={credentials[f.key] ?? ""}
                 onChange={(e) => setCredentials((c) => ({ ...c, [f.key]: e.target.value }))}
                 placeholder={connection?.hasCredentials ? "Saved · enter to replace" : f.placeholder}
-                className="cmd-field mt-1 h-8 w-full text-[12.5px]"
+                className="setup-input setup-input--sm mt-1"
                 autoComplete="off"
                 spellCheck={false}
               />
@@ -704,22 +889,22 @@ function SetupConnectorInlineForm({
           />
         ) : (
           <label key={s.key} className="block">
-            <span className="cmd-label">{s.label}</span>
+            <span className="setup-label">{s.label}</span>
             <input
               type="text"
               value={settings[s.key] ?? ""}
               onChange={(e) => setSettings((prev) => ({ ...prev, [s.key]: e.target.value }))}
               placeholder={s.placeholder}
-              className="cmd-field mt-1 h-8 w-full text-[12.5px]"
+              className="setup-input setup-input--sm mt-1"
               autoComplete="off"
               spellCheck={false}
             />
           </label>
         ),
       )}
-      {error ? <p className="cmd-error">{error}</p> : null}
+      {error ? <p className="setup-error">{error}</p> : null}
       <div className="flex justify-end">
-        <button type="submit" disabled={busy} className="dash-button dash-button--gold h-7 px-3 text-[11.5px]">
+        <button type="submit" disabled={busy} className="setup-pill-btn" data-active="true">
           {busy ? "Saving…" : "Save"}
         </button>
       </div>
@@ -728,7 +913,7 @@ function SetupConnectorInlineForm({
 }
 
 /* ============================================================================
-   STEP 2: ORGANIZE THE WIDGETS PAGE (4x2 DRAGGABLE BOARD)
+   STEP 4: ORGANIZE WIDGETS (SIMPLIFIED 4x2 BOARD + TOGGLE PILLS)
    ============================================================================ */
 
 function buildEmptyGridCells(placed: readonly { x: number; y: number; w: number; h: number }[]) {
@@ -776,16 +961,6 @@ function SetupWidgetsStep({
     onChange(placedIds.filter((item) => item !== id));
   }
 
-  function moveWidget(id: string, delta: -1 | 1) {
-    const idx = placedIds.indexOf(id);
-    const target = idx + delta;
-    if (idx < 0 || target < 0 || target >= placedIds.length) return;
-    const copy = [...placedIds];
-    const [item] = copy.splice(idx, 1);
-    copy.splice(target, 0, item!);
-    onChange(copy);
-  }
-
   function swapOrReorder(sourceId: string, targetId: string) {
     if (sourceId === targetId) return;
     const fromIdx = placedIds.indexOf(sourceId);
@@ -798,169 +973,109 @@ function SetupWidgetsStep({
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[13.5px] leading-relaxed text-[color:var(--land-muted)]">
-          Drag tiles to reorder your 4×2 Command board, or pick widgets below.
-        </p>
-        <div className="flex flex-wrap items-center gap-1.5">
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <span className="setup-label">Board layout (4×2)</span>
+        <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => onChange(computeSuggestedWidgets(connectedIds))}
-            className="dash-button h-7 px-2.5 text-[11.5px]"
+            className="setup-text-btn"
           >
             Suggested
           </button>
           <button
             type="button"
-            onClick={() => onChange(placeWidgets(["gmail", "calendar", "tasks", "weather"]).map((p) => p.id))}
-            className="dash-button h-7 px-2.5 text-[11.5px]"
-          >
-            Focus set
-          </button>
-          <button
-            type="button"
             onClick={() => onChange([])}
-            className="dash-button h-7 px-2.5 text-[11.5px]"
+            className="setup-text-btn"
           >
             Clear
           </button>
         </div>
       </div>
 
-      {/* Live interactive 4x2 board preview */}
-      <div className="setup-board" aria-label="4 by 2 Command widgets layout organizer">
-        {placed.map((p, idx) => {
+      <div className="setup-board" role="region" aria-label="4 by 2 Command widget board">
+        {placed.map((p) => {
           const def = widgetDef(p.id);
-          if (!def) return null;
-          const isAppConnected = !def.needsConnection || connectedIds.has(def.connectorId);
           return (
             <div
               key={p.id}
               draggable
-              onDragStart={(e) => {
-                setDraggingId(p.id);
-                e.dataTransfer.effectAllowed = "move";
-                e.dataTransfer.setData("text/plain", p.id);
+              onDragStart={() => setDraggingId(p.id)}
+              onDragEnd={() => {
+                setDraggingId(null);
+                setDragOverId(null);
               }}
               onDragOver={(e) => {
                 e.preventDefault();
-                if (draggingId && draggingId !== p.id) setDragOverId(p.id);
+                if (dragOverId !== p.id) setDragOverId(p.id);
               }}
               onDragLeave={() => {
                 if (dragOverId === p.id) setDragOverId(null);
               }}
               onDrop={(e) => {
                 e.preventDefault();
-                const src = draggingId ?? e.dataTransfer.getData("text/plain");
-                if (src) swapOrReorder(src, p.id);
+                if (draggingId) swapOrReorder(draggingId, p.id);
                 setDraggingId(null);
                 setDragOverId(null);
               }}
-              onDragEnd={() => {
-                setDraggingId(null);
-                setDragOverId(null);
-              }}
+              className="setup-board-tile"
+              data-dragging={draggingId === p.id ? "true" : "false"}
+              data-drop-target={dragOverId === p.id && draggingId !== p.id ? "true" : "false"}
               style={{
                 gridColumn: `${p.x + 1} / span ${p.w}`,
                 gridRow: `${p.y + 1} / span ${p.h}`,
               }}
-              className={`setup-board-tile ${draggingId === p.id ? "setup-board-tile--dragging" : ""} ${
-                dragOverId === p.id ? "setup-board-tile--over" : ""
-              }`}
             >
-              <div className="flex items-center justify-between gap-1.5">
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <StatusDot tone={isAppConnected ? "ok" : "idle"} />
-                  <span className="truncate text-[12px] font-semibold uppercase tracking-wider text-[color:var(--land-ink)]">
-                    {def.name}
-                  </span>
-                </div>
-                <span className="rounded-full border border-[color:var(--land-hair)] px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--land-faint)]">
-                  {def.w}×{def.h}
-                </span>
-              </div>
-
-              <p className="mt-1 line-clamp-2 text-[11.5px] leading-snug text-[color:var(--land-muted)]">
-                {def.blurb}
-              </p>
-
-              <div className="mt-auto flex items-center justify-between gap-1 pt-2">
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    disabled={idx === 0}
-                    onClick={() => moveWidget(p.id, -1)}
-                    aria-label={`Move ${def.name} earlier`}
-                    className="setup-tile-ctrl"
-                  >
-                    ←
-                  </button>
-                  <button
-                    type="button"
-                    disabled={idx === placed.length - 1}
-                    onClick={() => moveWidget(p.id, 1)}
-                    aria-label={`Move ${def.name} later`}
-                    className="setup-tile-ctrl"
-                  >
-                    →
-                  </button>
-                </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="setup-row-title truncate">{def?.name ?? p.id}</span>
                 <button
                   type="button"
                   onClick={() => removeWidget(p.id)}
-                  aria-label={`Remove ${def.name}`}
-                  className="setup-tile-ctrl"
+                  className="setup-icon-btn"
+                  aria-label={`Remove ${def?.name ?? p.id}`}
                 >
-                  ×
+                  <CloseIcon size={11} />
                 </button>
               </div>
+              <span className="setup-row-sub">
+                {p.w}×{p.h}
+              </span>
             </div>
           );
         })}
 
         {openCells.map((cell) => (
           <div
-            key={`${cell.x}-${cell.y}`}
+            key={`empty-${cell.x}-${cell.y}`}
+            className="setup-board-empty"
             style={{
               gridColumn: `${cell.x + 1} / span 1`,
               gridRow: `${cell.y + 1} / span 1`,
             }}
-            className="setup-board-empty"
-            aria-hidden
-          >
-            <span>Open slot</span>
-          </div>
+          />
         ))}
       </div>
 
-      {/* Widget picker list */}
       <div>
-        <p className="dash-eyebrow mb-2.5">Available widgets</p>
-        <div className="grid gap-2 sm:grid-cols-3">
+        <span className="setup-label mb-2 block">Widgets</span>
+        <div className="flex flex-wrap gap-2">
           {COMMAND_WIDGETS.map((w) => {
             const onBoard = placedIds.includes(w.id);
-            const canFit = !onBoard && overviewAccepts(placedIds, w.id);
-            const ready = !w.needsConnection || connectedIds.has(w.connectorId);
+            const canAdd = onBoard || overviewAccepts(placedIds, w.id);
             return (
               <button
                 key={w.id}
                 type="button"
-                disabled={!onBoard && !canFit}
+                disabled={!canAdd}
                 onClick={() => (onBoard ? removeWidget(w.id) : addWidget(w.id))}
-                className={`setup-widget-pick ${onBoard ? "setup-widget-pick--on" : ""}`}
+                className="setup-widget-chip"
+                data-selected={onBoard ? "true" : "false"}
               >
-                <div className="flex w-full items-center justify-between gap-2">
-                  <span className="flex items-center gap-1.5 truncate text-[13px] font-medium text-[color:var(--land-ink)]">
-                    <StatusDot tone={onBoard ? "ok" : ready ? "live" : "idle"} />
-                    {w.name}
-                  </span>
-                  <span className="text-[10.5px] font-medium text-[color:var(--land-faint)]">
-                    {w.w}×{w.h}
-                  </span>
-                </div>
-                <span className="mt-0.5 line-clamp-1 w-full text-left text-[11px] text-[color:var(--land-faint)]">
-                  {onBoard ? "On board · click to remove" : canFit ? w.blurb : "Board full for this size"}
+                {onBoard ? <CheckIcon size={11} /> : null}
+                <span>{w.name}</span>
+                <span className="setup-chip-dim">
+                  {w.w}×{w.h}
                 </span>
               </button>
             );
@@ -972,7 +1087,7 @@ function SetupWidgetsStep({
 }
 
 /* ============================================================================
-   STEP 3: INSTALL SAMPLE NODES
+   STEP 5: INSTALL NODES (SIMPLIFIED 2x2 SAMPLE EXTENSIONS)
    ============================================================================ */
 
 function SetupNodesStep({
@@ -982,147 +1097,55 @@ function SetupNodesStep({
   selectedNodes: ExtensionId[];
   onChange: (next: ExtensionId[]) => void;
 }) {
-  const [notice, setNotice] = useState<string | null>(null);
-  const sampleMap = useMemo(
-    () => new Map(SAMPLE_EXTENSIONS.map((e) => [e.manifest.id, e])),
-    [],
-  );
-
   function toggleNode(id: ExtensionId) {
-    setNotice(null);
     if (selectedNodes.includes(id)) {
-      onChange(selectedNodes.filter((item) => item !== id));
+      onChange(selectedNodes.filter((n) => n !== id));
       return;
     }
     if (selectedNodes.length >= FREE_ACTIVE_EXTENSION_SLOTS) {
-      setNotice(`Free plan includes ${FREE_ACTIVE_EXTENSION_SLOTS} active sockets. Deselect one to swap.`);
+      onChange([...selectedNodes.slice(1), id]);
       return;
     }
     onChange([...selectedNodes, id]);
   }
 
   return (
-    <div className="space-y-5">
-      <p className="text-[13.5px] leading-relaxed text-[color:var(--land-muted)]">
-        Pick up to {FREE_ACTIVE_EXTENSION_SLOTS} sample nodes to wire onto your Nexus network. Functional nodes will be added here soon.
-      </p>
-
-      {/* Visual socket bar mirroring Laniakea arms */}
-      <div className="setup-socket-bar">
-        {EXTENSION_SLOT_BLUEPRINT.map((slot, idx) => {
-          const isFree = slot.tier === "free";
-          const assignedId = isFree ? selectedNodes[idx] : undefined;
-          const assigned = assignedId ? sampleMap.get(assignedId) : undefined;
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        {SAMPLE_EXTENSIONS.map((ext) => {
+          const { id, name, monogram, description } = ext.manifest;
+          const active = selectedNodes.includes(id);
           return (
-            <div
-              key={slot.id}
-              className={`setup-socket-pill ${
-                assigned
-                  ? "setup-socket-pill--filled"
-                  : isFree
-                    ? "setup-socket-pill--open"
-                    : "setup-socket-pill--locked"
-              }`}
+            <button
+              key={id}
+              type="button"
+              onClick={() => toggleNode(id)}
+              className="setup-item-card text-left"
+              data-selected={active ? "true" : "false"}
+              aria-pressed={active}
             >
-              {assigned ? (
-                <>
-                  <span className="font-semibold text-[color:var(--land-gold-soft)]">
-                    {assigned.manifest.monogram ?? assigned.manifest.name.slice(0, 2)}
+              <div className="flex items-start justify-between gap-2.5">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="setup-node-monogram" data-active={active ? "true" : "false"}>
+                    {monogram ?? name.slice(0, 2).toUpperCase()}
                   </span>
-                  <span className="truncate">{assigned.manifest.name}</span>
-                </>
-              ) : isFree ? (
-                <>
-                  <PlusIcon size={12} />
-                  <span>Free socket</span>
-                </>
-              ) : (
-                <>
-                  <LockIcon size={11} />
-                  <span className="capitalize">{slot.placeholderKey}</span>
-                </>
-              )}
-            </div>
+                  <div className="min-w-0">
+                    <div className="setup-row-title truncate">{name}</div>
+                    <div className="setup-row-sub truncate">{description}</div>
+                  </div>
+                </div>
+                <span className="setup-check-ring shrink-0" data-checked={active ? "true" : "false"}>
+                  {active ? <CheckIcon size={11} /> : null}
+                </span>
+              </div>
+            </button>
           );
         })}
       </div>
 
-      {notice ? (
-        <p className="text-[12.5px] font-medium text-[color:var(--land-gold-soft)]" role="status">
-          {notice}
-        </p>
-      ) : null}
-
-      <div>
-        <div className="mb-2.5 flex items-baseline justify-between gap-2">
-          <p className="dash-eyebrow">Sample nodes · install now</p>
-          <span className="text-[11.5px] text-[color:var(--land-faint)]">
-            {selectedNodes.length} / {FREE_ACTIVE_EXTENSION_SLOTS} sockets filled
-          </span>
-        </div>
-        <div className="grid gap-2.5 sm:grid-cols-2">
-          {SAMPLE_EXTENSIONS.map((ext) => {
-            const installed = selectedNodes.includes(ext.manifest.id);
-            const atCap = !installed && selectedNodes.length >= FREE_ACTIVE_EXTENSION_SLOTS;
-            return (
-              <button
-                key={ext.manifest.id}
-                type="button"
-                onClick={() => toggleNode(ext.manifest.id)}
-                className={`setup-item-card text-left ${installed ? "setup-item-card--on" : ""}`}
-              >
-                <div className="flex items-start gap-3">
-                  <span className={`setup-node-glyph ${installed ? "setup-node-glyph--on" : ""}`}>
-                    {ext.manifest.monogram ?? ext.manifest.name.slice(0, 2)}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[14px] font-medium text-[color:var(--land-ink)]">
-                        {ext.manifest.name}
-                      </span>
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
-                          installed
-                            ? "bg-[color:var(--land-gold)] text-[#09090b]"
-                            : atCap
-                              ? "border border-[color:var(--land-hair)] text-[color:var(--land-faint)]"
-                              : "border border-[color:var(--land-line)] text-[color:var(--land-muted)]"
-                        }`}
-                      >
-                        {installed ? "Installed" : atCap ? "Full" : "Install"}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[12px] leading-snug text-[color:var(--land-muted)]">
-                      {ext.manifest.description}
-                    </p>
-                    <p className="mt-1.5 text-[11px] text-[color:var(--land-faint)]">
-                      Sample node · {ext.manifest.capabilities.join(", ")}
-                    </p>
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="border-t border-[color:var(--land-hair)] pt-4">
-        <p className="dash-eyebrow">Coming soon · functional nodes</p>
-        <p className="mt-1 text-[12px] text-[color:var(--land-faint)]">
-          Full first-party & community functional nodes will roll into these slots in future releases.
-        </p>
-        <div className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {PLANNED_EXTENSIONS.map((p) => (
-            <div
-              key={p.key}
-              className="rounded-xl border border-dashed border-[color:var(--land-line)] px-3 py-2"
-            >
-              <p className="text-[12.5px] font-medium text-[color:var(--land-muted)]">{p.name}</p>
-              <p className="text-[11px] text-[color:var(--land-faint)]">{p.tagline}</p>
-            </div>
-          ))}
-        </div>
-      </div>
+      <p className="setup-footer-note">
+        Showing sample starter nodes for now. Functional nodes will be added here in later updates.
+      </p>
     </div>
   );
 }

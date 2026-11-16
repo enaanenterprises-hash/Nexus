@@ -41,15 +41,6 @@ type RayFilament = {
   layer: number;
 };
 
-type OrbitMote = {
-  angle: number;
-  speed: number;
-  radius: number;
-  tilt: number;
-  size: number;
-  alpha: number;
-};
-
 type BurstPhoton = {
   rayIdx: number;
   u: number;
@@ -114,15 +105,6 @@ function createBurstField() {
     layerBatches[layer]!.push(idx);
   }
 
-  const motes: OrbitMote[] = Array.from({ length: 110 }, () => ({
-    angle: rnd() * TAU,
-    speed: between(0.14, 0.42) * (rnd() > 0.2 ? 1 : -1),
-    radius: between(0.18, 1.05),
-    tilt: between(0.32, 0.85),
-    size: between(0.65, 1.65),
-    alpha: between(0.28, 0.82),
-  }));
-
   const photons: BurstPhoton[] = Array.from({ length: 300 }, (_, i) => ({
     rayIdx: i % rays.length,
     u: rnd(),
@@ -131,7 +113,7 @@ function createBurstField() {
     alpha: between(0.38, 0.92),
   }));
 
-  return { rays, layerBatches, motes, photons };
+  return { rays, layerBatches, photons };
 }
 
 export function SetupCanvas({
@@ -314,16 +296,16 @@ export function SetupCanvas({
       const cx = width * 0.5;
       const explodeAge = curPhase === "singularity" ? 0 : Math.max(0, time - explodeStartTime);
       const centerShift = curPhase === "singularity" ? 0 : clamp(explodeAge / 0.9, 0, 1);
-      const cy = height * lerp(0.43, 0.5, centerShift * centerShift * (3 - 2 * centerShift));
+      const cy = height * lerp(0.45, 0.5, centerShift * centerShift * (3 - 2 * centerShift));
 
       const minDim = Math.min(width, height);
-      const coreBaseR = clamp(minDim * 0.24, 96, 210);
+      const coreBaseR = clamp(minDim * 0.14, 58, 118);
 
-      // Smooth hover pulse when cursor approaches the golden singularity
+      // Smooth hover pulse when cursor approaches the golden orb
       let targetHover = 0;
       if (pointerActive && curPhase === "singularity") {
         const d = Math.hypot(pointerSmooth.x - cx, pointerSmooth.y - cy);
-        targetHover = clamp(1 - d / (coreBaseR * 1.15), 0, 1);
+        targetHover = clamp(1 - d / (coreBaseR * 1.6), 0, 1);
       }
       hoverFocus = lerp(hoverFocus, targetHover, reduceMotion ? 1 : 1 - Math.exp(-dt * 4.5));
 
@@ -457,111 +439,45 @@ export function SetupCanvas({
         ctx.stroke();
       }
 
-      // 3. The Golden Glowing Singularity Nucleus (16-stop Moffat PSF + Spiral Involutes + Orbital Motes)
+      // 3. The Singular Golden Glowing Dot (clean symmetrical Moffat PSF orb in the void)
       ctx.save();
       ctx.translate(cx, cy);
       ctx.globalCompositeOperation = isLight ? "source-over" : "lighter";
       ctx.globalAlpha = 1;
 
-      const fieldScale = curPhase === "singularity" ? 1.12 + 0.14 * hoverFocus : 0.86;
-      const wideR = coreBaseR * 1.9 * coreScale * fieldScale;
-      const haloInner: Rgb = isLight ? [228, 168, 42] : [255, 226, 154];
-      const haloMid: Rgb = isLight ? [204, 134, 14] : [242, 172, 56];
       const haloOuter: Rgb = isLight ? [174, 102, 6] : [188, 102, 20];
+      const haloMid: Rgb = isLight ? [204, 134, 14] : [242, 172, 56];
+      const haloInner: Rgb = isLight ? [228, 168, 42] : [255, 226, 154];
 
-      ctx.save();
-      ctx.scale(1.24, 0.92);
+      // Wide calm atmospheric halo
+      const haloR = coreBaseR * (1.28 + 0.14 * hoverFocus + 0.35 * coreFlash) * coreScale;
       ctx.fillStyle = createMoffat(
-        wideR,
-        wideR * 0.24,
-        1.82,
-        (isLight ? 0.3 : 0.28) + 0.12 * hoverFocus + 0.18 * coreFlash,
+        haloR,
+        haloR * 0.22,
+        1.85,
+        (isLight ? 0.36 : 0.42) + 0.14 * hoverFocus + 0.25 * coreFlash,
         haloInner,
         haloMid,
         haloOuter,
       );
       ctx.beginPath();
-      ctx.arc(0, 0, wideR, 0, TAU);
+      ctx.arc(0, 0, haloR, 0, TAU);
       ctx.fill();
-      ctx.restore();
 
-      // Logarithmic spiral plasma involutes inside/around the core
-      const involutes = 44;
-      const invReach = coreBaseR * 0.78 * coreScale;
-      const invStr = isLight ? "184, 112, 10" : "255, 228, 162";
-      const invGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, invReach);
-      invGrad.addColorStop(0, `rgba(${invStr}, ${0.32 + 0.16 * hoverFocus + 0.2 * coreFlash})`);
-      invGrad.addColorStop(0.5, `rgba(${invStr}, ${0.12 + 0.08 * hoverFocus})`);
-      invGrad.addColorStop(1, `rgba(${invStr}, 0)`);
-
-      ctx.beginPath();
-      for (let i = 0; i < involutes; i++) {
-        const dir = i % 2 === 0 ? 1 : -1;
-        const theta = (i / involutes) * TAU + time * 0.12 * dir;
-        const curl = dir * (0.48 + 0.15 * hoverFocus);
-        const r1 = invReach * 0.34;
-        const r2 = invReach * (0.68 + 0.25 * Math.sin(i * 1.9 + time * 0.45));
-        ctx.moveTo(0, 0);
-        ctx.bezierCurveTo(
-          Math.cos(theta + curl * 0.35) * r1,
-          Math.sin(theta + curl * 0.35) * r1 * 0.85,
-          Math.cos(theta + curl * 0.78) * r2 * 0.9,
-          Math.sin(theta + curl * 0.78) * r2 * 0.78,
-          Math.cos(theta + curl) * r2,
-          Math.sin(theta + curl) * r2 * 0.88,
-        );
-      }
-      ctx.lineWidth = isLight ? 0.75 : 0.62;
-      ctx.strokeStyle = invGrad;
-      ctx.stroke();
-
-      // Anamorphic golden caustic lens flare across waist
-      ctx.save();
-      ctx.scale(2.4, 0.24);
-      const anaR = coreBaseR * 0.92 * coreScale;
+      // Singular bright golden orb core
+      const orbR = coreBaseR * (0.34 + 0.05 * hoverFocus + 0.15 * coreFlash) * coreScale;
       ctx.fillStyle = createMoffat(
-        anaR,
-        anaR * 0.24,
-        2.15,
-        (isLight ? 0.36 : 0.34) + 0.16 * hoverFocus + 0.22 * coreFlash,
-        isLight ? [196, 124, 12] : [255, 244, 210],
-        isLight ? [218, 152, 28] : [248, 192, 86],
-        haloOuter,
-      );
-      ctx.beginPath();
-      ctx.arc(0, 0, anaR, 0, TAU);
-      ctx.fill();
-      ctx.restore();
-
-      // Incandescent golden nucleus heart
-      const heartR = coreBaseR * 0.62 * coreScale;
-      ctx.fillStyle = createMoffat(
-        heartR,
-        heartR * 0.22,
+        orbR,
+        orbR * 0.28,
         2.35,
-        clamp((isLight ? 0.72 : 0.78) + 0.15 * hoverFocus + 0.2 * coreFlash, 0, 1),
-        isLight ? [156, 88, 6] : [255, 251, 236],
-        isLight ? [198, 128, 16] : [255, 216, 122],
-        isLight ? [228, 168, 42] : [236, 156, 42],
+        clamp((isLight ? 0.88 : 0.96) + 0.1 * hoverFocus + 0.15 * coreFlash, 0, 1),
+        isLight ? [156, 88, 6] : [255, 252, 238],
+        isLight ? [198, 128, 16] : [255, 218, 124],
+        isLight ? [228, 168, 42] : [236, 158, 44],
       );
       ctx.beginPath();
-      ctx.arc(0, 0, heartR, 0, TAU);
+      ctx.arc(0, 0, orbR, 0, TAU);
       ctx.fill();
-
-      // Orbital golden dust motes around the suspended singularity before explosion
-      if (curPhase === "singularity") {
-        for (const m of field.motes) {
-          const theta = m.angle + time * m.speed;
-          const orbR = coreBaseR * (0.45 + m.radius * (1.25 - 0.15 * hoverFocus));
-          const mx = Math.cos(theta) * orbR;
-          const my = Math.sin(theta) * orbR * m.tilt;
-          ctx.fillStyle = `rgb(${goldCore[0]}, ${goldCore[1]}, ${goldCore[2]})`;
-          ctx.globalAlpha = m.alpha * (0.7 + 0.3 * hoverFocus);
-          ctx.beginPath();
-          ctx.arc(mx, my, m.size, 0, TAU);
-          ctx.fill();
-        }
-      }
 
       ctx.restore();
     };

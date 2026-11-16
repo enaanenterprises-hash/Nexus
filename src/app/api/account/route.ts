@@ -14,6 +14,40 @@ const SESSION_COOKIE_NAMES = [
   "command_oauth_state",
 ] as const
 
+export async function PATCH(request: Request) {
+  const session = await auth()
+  const userId = session?.user?.id
+  if (!userId) {
+    return NextResponse.json({ error: "Sign in to update your profile." }, { status: 401 })
+  }
+
+  let body: { name?: unknown } | null = null
+  try {
+    body = (await request.json()) as { name?: unknown }
+  } catch {
+    body = null
+  }
+
+  const rawName = typeof body?.name === "string" ? body.name.trim() : ""
+  const cleanName = rawName.slice(0, 80)
+  if (!cleanName) {
+    return NextResponse.json({ error: "Please enter a name." }, { status: 400 })
+  }
+
+  if (databaseUrl()) {
+    try {
+      await ensureAuthSchema()
+      const sql = getSql()
+      await sql`UPDATE "user" SET "name" = ${cleanName} WHERE "id" = ${userId}`
+    } catch (error) {
+      console.error("[account] name update failed", error instanceof Error ? error.message : error)
+      return NextResponse.json({ error: "Could not save your name." }, { status: 500 })
+    }
+  }
+
+  return NextResponse.json({ ok: true, name: cleanName })
+}
+
 export async function DELETE() {
   const session = await auth()
   const userId = session?.user?.id

@@ -107,6 +107,7 @@ export function Dashboard({
   const hub = useExtensionHub();
   const { theme } = useTheme();
   const viewerKey = viewer.email ?? "signed-in";
+  const [viewerName, setViewerName] = useState<string | null>(viewer.name);
 
   const [setupDone, setSetupDone] = useState(initialSetupDone);
   const [setupResumeStep, setSetupResumeStep] = useState<SetupStep | null>(initialSetupStep);
@@ -315,7 +316,7 @@ export function Dashboard({
   }, [session.brain, visuals, theme, hub.lastSnapped, hub.slots, hub.extensions, hub.entitlement, transfer, surface.view, surface.panel, selected]);
 
   const firstName = useMemo(() => {
-    const rawName = viewer.name?.trim();
+    const rawName = viewerName?.trim();
     if (rawName) {
       const first = rawName.split(/\s+/)[0];
       if (first) return first;
@@ -325,7 +326,7 @@ export function Dashboard({
       return emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1);
     }
     return "Friend";
-  }, [viewer.name, viewer.email]);
+  }, [viewerName, viewer.email]);
 
   function flash(message: string) {
     setNotice(message);
@@ -501,12 +502,13 @@ export function Dashboard({
   if (!setupDone) {
     return (
       <SetupExperience
-        firstName={firstName}
+        initialName={viewerName ?? ""}
         theme={theme}
         hub={hub}
         initialStep={setupResumeStep}
         oauthNotice={setupNotice}
         onDismissNotice={() => setSetupNotice(null)}
+        onNameSaved={(name) => setViewerName(name)}
         onComplete={completeSetup}
         onSkip={skipSetup}
       />
@@ -635,7 +637,7 @@ export function Dashboard({
               />
             ) : panel === "settings" ? (
               <SettingsPanel
-                viewer={viewer}
+                viewer={{ ...viewer, name: viewerName }}
                 isPro={hub.entitlement.isPro}
                 onTogglePro={() => setStubPro(!hub.entitlement.isPro)}
                 onOpenCommandConnections={() => openCommand({ tab: "connections", service: null, notice: null })}

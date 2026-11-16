@@ -8,7 +8,7 @@ export const SETUP_RESUME_COOKIE = "nexus_setup_resume"
 
 export type InitialSetupState = {
   done: boolean
-  resumeStep: "apps" | "widgets" | "nodes" | null
+  resumeStep: "name" | "theme" | "apps" | "widgets" | "nodes" | null
 }
 
 /** Reads whether the signed-in user completed onboarding and whether OAuth interrupted setup. */
@@ -16,7 +16,11 @@ export async function readInitialSetupState(): Promise<InitialSetupState> {
   const cookieStore = await cookies()
   const rawResume = cookieStore.get(SETUP_RESUME_COOKIE)?.value
   const resumeStep =
-    rawResume === "apps" || rawResume === "widgets" || rawResume === "nodes"
+    rawResume === "name" ||
+    rawResume === "theme" ||
+    rawResume === "apps" ||
+    rawResume === "widgets" ||
+    rawResume === "nodes"
       ? rawResume
       : null
 
