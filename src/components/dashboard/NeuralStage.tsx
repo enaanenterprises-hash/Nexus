@@ -1079,31 +1079,6 @@ export function NeuralStage({ signal, className = "" }: { signal: StageSignal; c
             ]);
             drawSpikes(head, R * 0.1, "255, 246, 224", 0.45 * fade);
           }
-
-          // Label, fading in and out with the journey.
-          const labelA = clamp(Math.min((p - 0.06) / 0.12, (0.94 - p) / 0.12), 0, 1) * fade;
-          if (labelA > 0.01) {
-            ctx.save();
-            ctx.globalCompositeOperation = "source-over";
-            ctx.globalAlpha = labelA * ease;
-            ctx.font = '500 11.5px Manrope, -apple-system, "Segoe UI", sans-serif';
-            ctx.textAlign = "center";
-            const lx = clamp(head.x, 90, width - 90);
-            const ly = clamp(head.y - 20, 24, height - 24);
-            const tw = ctx.measureText(tr.label).width;
-            const halo = ctx.createRadialGradient(lx, ly - 4, 2, lx, ly - 4, tw * 0.7 + 18);
-            halo.addColorStop(0, isLight ? "rgba(252, 248, 238, 0.94)" : "rgba(2, 4, 10, 0.8)");
-            halo.addColorStop(1, isLight ? "rgba(252, 248, 238, 0)" : "rgba(2, 4, 10, 0)");
-            ctx.fillStyle = halo;
-            ctx.fillRect(lx - tw, ly - 24, tw * 2, 36);
-            ctx.shadowColor = isLight ? "rgba(255, 252, 245, 0.95)" : "rgba(0, 0, 0, 0.9)";
-            ctx.shadowBlur = 8;
-            ctx.fillStyle = isLight ? "rgba(28, 22, 12, 0.95)" : "rgba(255, 238, 206, 0.95)";
-            ctx.fillText(tr.label, lx, ly);
-            ctx.restore();
-            ctx.globalCompositeOperation = blendMode;
-            ctx.globalAlpha = ease;
-          }
         }
       }
     };

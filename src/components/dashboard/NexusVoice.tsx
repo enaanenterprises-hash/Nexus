@@ -28,37 +28,36 @@ export function NexusVoice({ firstName, brain, current, pendingPrompt, revealed,
   const prompt = pendingPrompt ?? current?.prompt ?? null;
   const fromExtension = current && current.source !== "nexus" ? current.source : null;
 
+  const hasConversation = Boolean(prompt || current);
+
   return (
     <div className="flex w-full flex-col items-center text-center">
       <div className="dash-voice-stage flex w-full flex-col items-center justify-center">
-        <p className="dash-eyebrow flex items-center gap-2" aria-live="polite">
-          <span className={`state-dot ${brain === "thinking" ? "state-dot--thinking" : ""}`} />
-          {fromExtension ? `${fromExtension} · via Nexus` : `Nexus · ${STATE_LABEL[brain]}`}
-        </p>
+        <p className="dash-welcome">Hello, {firstName}</p>
 
-        <p className="dash-welcome mt-1.5">Hello {firstName}</p>
-
-        <div className="mt-2 flex min-h-[4.25rem] w-full flex-col items-center justify-center sm:min-h-[5.5rem]">
-          {prompt ? (
-            <p key={`p-${prompt}`} className="dash-fade-in mb-2 max-w-full truncate text-[14px] text-[color:var(--land-muted)]">
-              <span className="text-[color:var(--land-faint)]">You — </span>
-              {prompt}
-            </p>
-          ) : null}
-          {current ? (
-            <p key={current.id} className="dash-utterance text-[color:var(--land-ink)]" aria-live="polite">
-              {current.text.split(/\s+/).map((word, i) => (
-                <span key={i} className={`word ${i < revealed ? "" : "word--hidden"}`}>
-                  {word}{" "}
-                </span>
-              ))}
-            </p>
-          ) : (
-            <p className="dash-utterance text-[color:var(--land-faint)]">
-              {brain === "thinking" ? "Working through your network…" : "Waking the network…"}
-            </p>
-          )}
-        </div>
+        {hasConversation ? (
+          <div className="mt-2.5 flex w-full flex-col items-center justify-center">
+            {prompt ? (
+              <p key={`p-${prompt}`} className="dash-fade-in mb-2 max-w-full truncate text-[14px] text-[color:var(--land-muted)]">
+                <span className="text-[color:var(--land-faint)]">You — </span>
+                {prompt}
+              </p>
+            ) : null}
+            {current ? (
+              <p key={current.id} className="dash-utterance text-[color:var(--land-ink)]" aria-live="polite">
+                {current.text.split(/\s+/).map((word, i) => (
+                  <span key={i} className={`word ${i < revealed ? "" : "word--hidden"}`}>
+                    {word}{" "}
+                  </span>
+                ))}
+              </p>
+            ) : (
+              <p className="dash-utterance text-[color:var(--land-faint)]">
+                Working through your network…
+              </p>
+            )}
+          </div>
+        ) : null}
       </div>
 
       {followUps.length > 0 ? (
@@ -93,6 +92,11 @@ export function NexusVoice({ firstName, brain, current, pendingPrompt, revealed,
           ) : null}
         </div>
       ) : null}
+
+      <p className="dash-eyebrow mt-3.5 flex items-center gap-2" aria-live="polite">
+        <span className={`state-dot ${brain === "thinking" ? "state-dot--thinking" : ""}`} />
+        {fromExtension ? `${fromExtension} · via Nexus` : `Nexus · ${STATE_LABEL[brain]}`}
+      </p>
     </div>
   );
 }

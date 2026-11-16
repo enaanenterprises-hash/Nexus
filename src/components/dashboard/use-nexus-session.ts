@@ -9,8 +9,6 @@ import {
 } from "@/data/mock-tasks";
 import { extensionRegistry, nexusBus, type NexusBrainState } from "@/lib/extensions";
 import {
-  DEFAULT_FOLLOW_UPS,
-  openingLine,
   organizeTasks,
   think,
   type BrainAction,
@@ -47,15 +45,6 @@ type Action =
   | { type: "apply"; actions: BrainAction[] }
   | { type: "toggle-task"; id: string }
   | { type: "settle" };
-
-const NUDGES: Array<(s: Session) => string | null> = [
-  (s) => {
-    const t = s.tasks.find((x) => x.status === "active" && x.priority === "high" && !x.block);
-    return t ? `“${t.title}” doesn't have a slot yet. Want me to fit it in before lunch?` : null;
-  },
-  (s) => (s.organized ? null : "Your afternoon is still unplanned. I can organize the day in one pass."),
-  () => "Two sockets on your network are free. Snap in an extension and I'll route context to it.",
-];
 
 const words = (text: string) => text.split(/\s+/).filter(Boolean).length;
 
@@ -137,7 +126,7 @@ const INITIAL: Session = {
   pendingPrompt: null,
   revealed: 0,
   history: [],
-  followUps: DEFAULT_FOLLOW_UPS,
+  followUps: [],
   tasks: INITIAL_TASKS,
   threads: INITIAL_CONTEXT_THREADS,
   touched: [],
@@ -150,8 +139,7 @@ export function useNexusSession() {
   const [state, dispatch] = useReducer(reduce, INITIAL);
   const stateRef = useRef(state);
   const proactiveQueue = useRef<Array<{ text: string; source: string }>>([]);
-  const lastInteraction = useRef(0);
-  const nudgeIndex = useRef(0);
+  const hasInteracted = useRef(false);
 
   useEffect(() => {
     stateRef.current = state;
@@ -203,37 +191,15 @@ export function useNexusSession() {
     }
   }, [state.brain]);
 
-  const onNudgeTick = useEffectEvent(() => {
-    const s = stateRef.current;
-    if (s.brain !== "idle" || performance.now() - lastInteraction.current < 30000) return;
-    for (let i = 0; i < NUDGES.length; i++) {
-      const line = NUDGES[(nudgeIndex.current + i) % NUDGES.length]!(s);
-      if (line) {
-        nudgeIndex.current += i + 1;
-        lastInteraction.current = performance.now();
-        speak(line, "nexus", "proactive", null, DEFAULT_FOLLOW_UPS);
-        nexusBus.emit("nexus:proactive", { suggestion: line, at: new Date().toISOString() });
-        return;
-      }
-    }
-  });
-
   useEffect(() => {
     nexusBus.emit("nexus:ready", { version: "0.2.0" });
-    lastInteraction.current = performance.now();
-    const opening = window.setTimeout(() => {
-      speak(openingLine(new Date().getHours(), stateRef.current.tasks), "nexus", "proactive", null, DEFAULT_FOLLOW_UPS);
-    }, 1400);
-    const nudges = window.setInterval(onNudgeTick, 5000);
     const off = nexusBus.subscribe("nexus:proactive", (event) => {
-      if (event.source === "nexus") return;
+      if (event.source === "nexus" || !hasInteracted.current) return;
       const name = extensionRegistry.get(event.source)?.manifest.name ?? "Nexus";
       proactiveQueue.current.push({ text: event.payload.suggestion, source: name });
       flushProactive();
     });
     return () => {
-      window.clearTimeout(opening);
-      window.clearInterval(nudges);
       off();
     };
   }, [speak]);
@@ -242,7 +208,7 @@ export function useNexusSession() {
     (raw: string) => {
       const prompt = raw.trim();
       if (!prompt || stateRef.current.brain === "thinking") return;
-      lastInteraction.current = performance.now();
+      hasInteracted.current = true;
       dispatch({ type: "ask", prompt });
       nexusBus.emit("nexus:message", { role: "user", text: prompt, at: new Date().toISOString() });
       window.setTimeout(() => {
@@ -259,13 +225,12 @@ export function useNexusSession() {
   );
 
   const toggleTask = useCallback((id: string) => {
-    lastInteraction.current = performance.now();
     dispatch({ type: "toggle-task", id });
   }, []);
 
   const announce = useCallback(
     (text: string) => {
-      lastInteraction.current = performance.now();
+      hasInteracted.current = true;
       if (stateRef.current.brain === "idle") speak(text, "nexus", "proactive", null);
       else proactiveQueue.current.push({ text, source: "nexus" });
     },

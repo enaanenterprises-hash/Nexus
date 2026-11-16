@@ -1,5 +1,6 @@
 "use client";
 
+import { signOutAction } from "@/lib/auth/actions";
 import {
   FREE_ACTIVE_EXTENSION_SLOTS,
   PLANNED_EXTENSIONS,
@@ -52,9 +53,16 @@ export function ExtensionHub({ hub, selected, notice, onSnap, onRelease, onToggl
                 : `${active.length} of ${FREE_ACTIVE_EXTENSION_SLOTS} free sockets in use`}
             </p>
           </div>
-          <button type="button" onClick={onTogglePro} className={`dash-button ${entitlement.isPro ? "" : "dash-button--gold"}`}>
-            {entitlement.isPro ? "Back to Free" : "Preview Pro"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={onTogglePro} className={`dash-button ${entitlement.isPro ? "" : "dash-button--gold"}`}>
+              {entitlement.isPro ? "Back to Free" : "Preview Pro"}
+            </button>
+            <form action={signOutAction}>
+              <button type="submit" className="dash-button" title="Sign out">
+                Sign out
+              </button>
+            </form>
+          </div>
         </div>
         <div className="mt-3 flex gap-1.5" aria-hidden>
           {slots.map((s) => (

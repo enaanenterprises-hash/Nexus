@@ -22,7 +22,7 @@ import { getConnector } from "@/lib/connectors/catalog";
 import { researchIntent } from "@/lib/nexus/brain";
 import { ExtensionHub } from "./ExtensionHub";
 import { ExtensionPanel } from "./ExtensionPanel";
-import { CloseIcon, MoonIcon, SunIcon } from "./icons";
+import { CloseIcon } from "./icons";
 import {
   NeuralStage,
   type SocketVisual,
@@ -31,7 +31,6 @@ import {
 } from "./NeuralStage";
 import { NodeMenu, NodeRail, type PanelId, type Surface } from "./NodeNav";
 import { NexusInput, NexusVoice } from "./NexusVoice";
-import { computeStageLayout } from "./stage-layout";
 import { TodayPanel } from "./TodayPanel";
 import { useNexusSession } from "./use-nexus-session";
 import { useTheme } from "@/lib/theme";
@@ -57,7 +56,7 @@ const PRODUCT_PAYLOAD_LABELS: Record<string, string> = {
 export function Dashboard({ viewer }: { viewer: Viewer }) {
   const session = useNexusSession();
   const hub = useExtensionHub();
-  const { theme, toggleTheme } = useTheme();
+  const { theme } = useTheme();
   const [surface, setSurface] = useState<Surface>({ view: "home", panel: null });
   const [researchMounted, setResearchMounted] = useState(false);
   const [researchRequest, setResearchRequest] = useState<{ input: string; serial: number } | null>(null);
@@ -71,11 +70,10 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
   const [selected, setSelected] = useState<SlotId | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [transfer, setTransfer] = useState<StageTransfer | null>(null);
-  const [stageSize, setStageSize] = useState<{ width: number; height: number }>({ width: 1280, height: 800 });
 
-  const stageWrapRef = useRef<HTMLElement>(null);
   const noticeTimer = useRef<number | undefined>(undefined);
   const bootedRef = useRef(false);
+  const bootCompleteRef = useRef(false);
 
   // Register sample extensions and wire the first two free Laniakea arms on initial boot
   useEffect(() => {
@@ -95,25 +93,10 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
           await extensionRegistry.activate("dev.nexus.sample.focus-guard");
         }
       }
+      bootCompleteRef.current = true;
     }
     void bootExtensions();
     return () => window.clearTimeout(timer);
-  }, []);
-
-  // Track stage dimensions so DOM attractor callout pins align 1:1 with the Laniakea canvas
-  useEffect(() => {
-    const el = stageWrapRef.current;
-    if (!el) return;
-    const update = () => {
-      const rect = el.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        setStageSize({ width: rect.width, height: rect.height });
-      }
-    };
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(el);
-    return () => observer.disconnect();
   }, []);
 
   useEffect(
@@ -147,6 +130,7 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
     });
 
     const unsubProactive = nexusBus.subscribe("nexus:proactive", (event) => {
+      if (!bootCompleteRef.current) return;
       if (event.source === "nexus" || event.source === "system") return;
       const snap = extensionRegistry.getSnapshot();
       const fromIdx = snap.slots.findIndex((s) => s.occupiedBy === event.source);
@@ -231,11 +215,6 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
       paused: surface.view !== "home",
     };
   }, [session.brain, visuals, theme, hub.lastSnapped, hub.slots, hub.extensions, hub.entitlement, transfer, surface.view]);
-
-  const stageLayout = useMemo(
-    () => computeStageLayout(stageSize.width, stageSize.height, hub.slots.length),
-    [stageSize.width, stageSize.height, hub.slots.length],
-  );
 
   const firstName = useMemo(() => {
     const rawName = viewer.name?.trim();
@@ -363,73 +342,18 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
   return (
     <div className="dash relative h-[100svh] w-full flex-1 overflow-hidden" data-theme={theme}>
       <section
-        ref={stageWrapRef}
         aria-label="Nexus Laniakea network"
         className="absolute inset-0"
         hidden={surface.view === "command"}
       >
         <NeuralStage signal={signal} />
         <div className="dash-scrim--home pointer-events-none absolute inset-0" />
-
-        {/* Minimal Node Indicators anchored on each Laniakea arm */}
-        {surface.view === "home" ? (
-          <div className="laniakea-hud pointer-events-none absolute inset-0 z-10 overflow-hidden">
-            {hub.slots.map((slot, idx) => {
-              const pos = stageLayout.sockets[idx];
-              if (!pos) return null;
-              const ext = slot.occupiedBy
-                ? hub.extensions.find((e) => e.manifest.id === slot.occupiedBy)
-                : undefined;
-              const open = canUseSlot(slot, hub.entitlement);
-              const isLeftHalf = pos.x < stageLayout.core.x;
-              const stateClass = ext
-                ? "laniakea-node-marker--live"
-                : open
-                  ? "laniakea-node-marker--open"
-                  : "laniakea-node-marker--locked";
-
-              return (
-                <button
-                  key={slot.id}
-                  type="button"
-                  onClick={() => (ext ? openPanel({ extension: ext.manifest.id }) : selectSlot(slot.id))}
-                  className={`laniakea-node-marker pointer-events-auto ${stateClass} ${
-                    isLeftHalf ? "laniakea-node-marker--left" : ""
-                  }`}
-                  style={{
-                    left: `${pos.x}px`,
-                    top: `${pos.y}px`,
-                  }}
-                  title={ext ? `Open ${ext.manifest.name}` : open ? "Open Nodes to connect" : "Locked Pro socket"}
-                >
-                  <span className="laniakea-node-dot" aria-hidden />
-                  <span className="laniakea-node-tick" aria-hidden />
-                  <span className="laniakea-node-label">
-                    {ext ? ext.manifest.name : open ? "Open socket" : "Pro socket"}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
       </section>
 
-      <header className="landing-enter pointer-events-none absolute inset-x-0 top-0 z-30 flex h-16 items-center justify-between gap-3 pr-4 sm:pr-6">
+      <header className="landing-enter pointer-events-none absolute inset-x-0 top-0 z-40 flex h-16 items-center">
         <Link href="/" aria-label="Nexus home" className="pointer-events-auto inline-flex w-[76px] shrink-0 justify-center">
           <NexusMark className="dash-brand-mark h-7 w-auto" />
         </Link>
-        <div className="pointer-events-auto flex min-w-0 items-center gap-2 sm:gap-3">
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className="dash-theme-toggle"
-            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-          >
-            {theme === "dark" ? <SunIcon size={14} /> : <MoonIcon size={14} />}
-            <span className="max-sm:hidden">{theme === "dark" ? "Light" : "Dark"}</span>
-          </button>
-        </div>
       </header>
 
       <NodeMenu
