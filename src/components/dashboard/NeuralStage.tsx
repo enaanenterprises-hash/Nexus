@@ -57,6 +57,8 @@ const SOCKET_U = 0.33; // Parametric position of the node socket waist along eac
 const SPINE_SAMPLES = 72;
 const FILAMENTS_PER_ARM = 76;
 const HORIZON_STRANDS = 124;
+const CURVE_STEPS = 40;
+const SAMPLE_US = Array.from({ length: CURVE_STEPS + 1 }, (_, k) => k / CURVE_STEPS);
 
 const GOLD_CORE: Rgb = [255, 250, 232];
 const GOLD_BRIGHT: Rgb = [255, 224, 156];
@@ -373,28 +375,29 @@ function sampleArmSpine(
   const unfurlInner = singularityUnfurl(intro, 0.04);
   const unfurlOuter = singularityUnfurl(intro, 0.18);
 
-  const slowWave = Math.sin(time * 0.34 + arm.index * 1.45);
-  const deepWave = Math.cos(time * 0.22 + arm.index * 2.1);
+  const slowWave = Math.sin(time * 0.28 + arm.index * 1.45);
+  const deepWave = Math.cos(time * 0.18 + arm.index * 2.1);
 
   const perpAngle = arm.coreAngle + Math.PI * 0.5;
-  const socketSway = polar(R * 0.02 * slowWave, perpAngle);
+  const socketSway = polar(R * 0.014 * slowWave, perpAngle);
 
-  // Local magnetic attraction/parting & velocity brush drag on the arm socket when cursor flows over it
+  // Light, silky cursor breathing on the arm spine (never snaps or pulls violently)
   let localPullX = 0;
   let localPullY = 0;
   if (pointer.presence > 0.005) {
     const dx = arm.socket.x - pointer.pos.x;
     const dy = arm.socket.y - pointer.pos.y;
     const distSq = dx * dx + dy * dy;
-    const sigma = R * 0.52;
+    const sigma = R * 0.56;
     const k = pointer.presence * Math.exp(-distSq / (2 * sigma * sigma));
-    localPullX = pointer.vel.x * 0.28 * k - (dx / (Math.sqrt(distSq) + 40)) * R * 0.035 * k;
-    localPullY = pointer.vel.y * 0.28 * k - (dy / (Math.sqrt(distSq) + 40)) * R * 0.035 * k;
+    const dist = Math.sqrt(distSq) + 48;
+    localPullX = pointer.vel.x * 0.035 * k - (dx / dist) * R * 0.008 * k;
+    localPullY = pointer.vel.y * 0.035 * k - (dy / dist) * R * 0.008 * k;
   }
 
   const rawSocket = add(arm.socket, {
-    x: socketSway.x + pointer.parallax.x * 0.15 + localPullX,
-    y: socketSway.y + pointer.parallax.y * 0.15 + localPullY,
+    x: socketSway.x + pointer.parallax.x * 0.08 + localPullX,
+    y: socketSway.y + pointer.parallax.y * 0.08 + localPullY,
   });
 
   const socketPt: Vec = {
@@ -403,13 +406,13 @@ function sampleArmSpine(
   };
 
   const tangentAngle =
-    Math.atan2(arm.socketTangent.y, arm.socketTangent.x) + 0.028 * deepWave;
+    Math.atan2(arm.socketTangent.y, arm.socketTangent.x) + 0.018 * deepWave;
   const T_sock = { x: Math.cos(tangentAngle), y: Math.sin(tangentAngle) };
 
   const innerDist = Math.hypot(socketPt.x - core.x, socketPt.y - core.y);
   const c1 = add(
     core,
-    polar(innerDist * 0.46, arm.coreAngle + 0.04 * slowWave),
+    polar(innerDist * 0.46, arm.coreAngle + 0.025 * slowWave),
   );
   const c2: Vec = {
     x: socketPt.x - T_sock.x * innerDist * 0.38,
@@ -418,7 +421,7 @@ function sampleArmSpine(
 
   const rawTip = add(
     arm.cornerTip,
-    polar(R * 0.12 * deepWave, arm.cornerAngle + Math.PI * 0.5),
+    polar(R * 0.075 * deepWave, arm.cornerAngle + Math.PI * 0.5),
   );
   const tipPt: Vec = {
     x: lerp(socketPt.x, rawTip.x, unfurlOuter),
@@ -478,7 +481,7 @@ function evaluateArmFilamentPoint(
   spine: SpineFrame,
   u: number,
   R: number,
-  time: number,
+  armPhase: number,
   armLevel: number,
   callHeat: number,
   solitonBoost: number,
@@ -499,7 +502,7 @@ function evaluateArmFilamentPoint(
   const ny = lerp(n0.y, n1.y, frac);
 
   // Fuller, sculptural caustic waist at the node socket so the nodes have rich volume and presence
-  const waistRadius = R * lerp(0.064, 0.038, armLevel) * (1 - 0.16 * callHeat);
+  const waistRadius = R * lerp(0.064, 0.038, armLevel) * (1 - 0.07 * callHeat);
 
   let envelope = 0;
   let braidSign = f.xi;
@@ -522,55 +525,38 @@ function evaluateArmFilamentPoint(
     envelope = waistRadius + flare;
   }
 
-  // Ultra-smooth, liquid-silk travelling biharmonic wave along the filament
-  const waveSpeed = (0.72 + 0.75 * callHeat) * f.freqMul;
-  const wave1 = Math.sin(u * 5.6 * f.freqMul - time * waveSpeed + f.phase);
-  const wave2 = Math.cos(u * 9.2 * f.freqMul - time * waveSpeed * 1.38 - f.phase * 1.15);
+  // Monotonically integrated biharmonic silk wave (zero time-multiplier phase jumps when nodes activate)
+  const uWave = u * f.freqMul;
+  const phase = armPhase * f.freqMul;
+  const wave1 = Math.sin(uWave * 4.6 - phase + f.phase);
+  const wave2 = Math.cos(uWave * 6.8 - phase * 1.18 - f.phase * 0.9);
   const waveAmp =
     R *
-    (0.012 + 0.052 * Math.pow(u, 1.15)) *
-    (1 + 0.32 * callHeat + 0.45 * solitonBoost);
+    (0.011 + 0.042 * Math.pow(u, 1.15)) *
+    (1 + 0.16 * callHeat + 0.14 * solitonBoost);
 
-  const offset = braidSign * envelope + (wave1 * 0.74 + wave2 * 0.26) * waveAmp;
+  const offset = braidSign * envelope + (wave1 * 0.76 + wave2 * 0.24) * waveAmp;
 
   let px = cx + nx * offset;
   let py = cy + ny * offset;
 
-  // Fluid-magnetic cursor interaction: filaments part around the cursor, comb along its velocity vector,
-  // and ripple with harmonic wake waves as the mouse flows over them
+  // Light, silky cursor interaction: filaments part delicately (~5-7px) with soft velocity breeze
   if (pointer.presence > 0.005 && u > 0.02) {
     const dx = px - pointer.pos.x;
     const dy = py - pointer.pos.y;
     const distSq = dx * dx + dy * dy;
-    const sigma = R * 0.38;
+    const sigma = R * 0.46;
     const twoSigmaSq = 2 * sigma * sigma;
 
-    if (distSq < twoSigmaSq * 3.2) {
+    if (distSq < twoSigmaSq * 3.4) {
       const k = pointer.presence * Math.exp(-distSq / twoSigmaSq);
-      const corePin = smoothstep(0.02, 0.12, u);
-      const elasticity = 0.58 + 0.55 * Math.abs(f.xi);
-      const dist = Math.sqrt(distSq) + 22;
+      const corePin = smoothstep(0.02, 0.14, u);
+      const elasticity = 0.65 + 0.4 * Math.abs(f.xi);
+      const dist = Math.sqrt(distSq) + 28;
 
-      // 1) Soft magnetic parting away from cursor center + strand-specific vortex swirl
-      const partMag = R * 0.095 * k * corePin * elasticity;
-      const partX = (dx / dist) * partMag;
-      const partY = (dy / dist) * partMag;
-
-      // 2) Viscous brush drag along the cursor's velocity vector
-      const dragX = pointer.vel.x * 0.45 * k * corePin * elasticity;
-      const dragY = pointer.vel.y * 0.45 * k * corePin * elasticity;
-
-      // 3) Local harmonic wake ripple along the filament normal
-      const wakeRipple =
-        Math.sin(dist * 0.065 - time * 3.8 + f.phase) *
-        R *
-        0.028 *
-        k *
-        corePin *
-        (0.5 + 0.015 * Math.hypot(pointer.vel.x, pointer.vel.y));
-
-      px += partX + dragX + nx * wakeRipple;
-      py += partY + dragY + ny * wakeRipple;
+      const partMag = R * 0.022 * k * corePin * elasticity;
+      px += (dx / dist) * partMag + pointer.vel.x * 0.09 * k * corePin * elasticity;
+      py += (dy / dist) * partMag + pointer.vel.y * 0.09 * k * corePin * elasticity;
     }
   }
 
@@ -616,8 +602,8 @@ function evaluateHorizonCurve(
     y: core.y + h.waistOffset * R * reach,
   };
 
-  const lAngle = h.leftAngle + 0.034 * swayA * (1 + 0.35 * wingBoost);
-  const rAngle = h.rightAngle + 0.034 * swayB * (1 + 0.35 * wingBoost);
+  const lAngle = h.leftAngle + 0.028 * swayA * (1 + 0.2 * wingBoost);
+  const rAngle = h.rightAngle + 0.028 * swayB * (1 + 0.2 * wingBoost);
 
   const lDist = h.leftReach * S * reach;
   const rDist = h.rightReach * S * reach;
@@ -625,7 +611,7 @@ function evaluateHorizonCurve(
   const pLeft = add(core, polar(lDist, lAngle));
   const pRight = add(core, polar(rDist, rAngle));
 
-  const bridgeAngle = (rAngle + (lAngle - Math.PI)) * 0.5 + 0.025 * swayA;
+  const bridgeAngle = (rAngle + (lAngle - Math.PI)) * 0.5 + 0.018 * swayA;
   const pull = Math.min(lDist, rDist) * 0.34;
   const tVec = { x: Math.cos(bridgeAngle) * pull, y: Math.sin(bridgeAngle) * pull };
 
@@ -634,13 +620,13 @@ function evaluateHorizonCurve(
     const dx = pt.x - pointer.pos.x;
     const dy = pt.y - pointer.pos.y;
     const distSq = dx * dx + dy * dy;
-    const sigma = R * 0.48;
+    const sigma = R * 0.52;
     const k = pointer.presence * Math.exp(-distSq / (2 * sigma * sigma));
     if (k < 0.002) return pt;
-    const dist = Math.sqrt(distSq) + 30;
+    const dist = Math.sqrt(distSq) + 36;
     return {
-      x: pt.x + (dx / dist) * R * 0.08 * k + pointer.vel.x * 0.38 * k,
-      y: pt.y + (dy / dist) * R * 0.08 * k + pointer.vel.y * 0.38 * k,
+      x: pt.x + (dx / dist) * R * 0.018 * k + pointer.vel.x * 0.07 * k,
+      y: pt.y + (dy / dist) * R * 0.018 * k + pointer.vel.y * 0.07 * k,
     };
   };
 
@@ -861,6 +847,10 @@ export function NeuralStage({
     const armTrailingEdgeHeat: number[] = signalRef.current.sockets.map((s) =>
       s === "occupied" ? 0.65 : 0,
     );
+    const armTrailingImpulse: number[] = new Array<number>(socketCount).fill(0);
+    const armWaveHeat: number[] = new Array<number>(socketCount).fill(0);
+    // Integrated monotonic wave phases prevent phase jumps (t * dω/dt) when node activity changes
+    const armWavePhases: number[] = new Array<number>(socketCount).fill(0);
     const prevStates: SocketVisual[] = [...signalRef.current.sockets];
     const solitons: SolitonWave[] = [];
     const ripples: CoreRipple[] = [];
@@ -872,6 +862,7 @@ export function NeuralStage({
 
     let energy = BRAIN_TARGET_ENERGY[signalRef.current.brain];
     let globalCallHeat = 0;
+    let globalCallImpulse = 0;
     let autoTransferClock = 3.8;
     let autoTransferIdx = 0;
     let rippleClock = 0;
@@ -901,8 +892,8 @@ export function NeuralStage({
         pointerPosSmooth.y = y;
       }
       pointerClient = { x, y };
-      pointerTarget.x = ((x / rect.width) - 0.5) * 28;
-      pointerTarget.y = ((y / rect.height) - 0.5) * 28;
+      pointerTarget.x = ((x / rect.width) - 0.5) * 10;
+      pointerTarget.y = ((y / rect.height) - 0.5) * 10;
     };
 
     const onPointerLeave = () => {
@@ -934,26 +925,26 @@ export function NeuralStage({
      * (no orbs — the flowing lines themselves turn crimson red where the information travels).
      */
     const launchInformationWave = (fromSocket: number, toSocket: number) => {
-      globalCallHeat = Math.max(globalCallHeat, 1);
+      globalCallImpulse = 1;
       if (fromSocket >= 0 && fromSocket < socketCount) {
-        armTrailingEdgeHeat[fromSocket] = 1;
+        armTrailingImpulse[fromSocket] = 1;
         if (!reduceMotion) {
           solitons.push({
             arm: fromSocket,
             u: 0.72,
-            speed: 0.65,
+            speed: 0.55,
             direction: -1,
             intensity: 1,
           });
         }
       }
       if (toSocket >= 0 && toSocket < socketCount) {
-        armTrailingEdgeHeat[toSocket] = 1;
+        armTrailingImpulse[toSocket] = 1;
         if (!reduceMotion) {
           solitons.push({
             arm: toSocket,
             u: fromSocket >= 0 ? -0.35 : 0,
-            speed: 0.68,
+            speed: 0.58,
             direction: 1,
             intensity: 1,
           });
@@ -961,12 +952,12 @@ export function NeuralStage({
       } else if (toSocket < 0 && fromSocket < 0) {
         signalRef.current.sockets.forEach((s, idx) => {
           if (s === "occupied") {
-            armTrailingEdgeHeat[idx] = 1;
+            armTrailingImpulse[idx] = 1;
             if (!reduceMotion) {
               solitons.push({
                 arm: idx,
                 u: idx * -0.08,
-                speed: 0.68,
+                speed: 0.58,
                 direction: 1,
                 intensity: 1,
               });
@@ -1008,24 +999,30 @@ export function NeuralStage({
       const intro = reduceMotion ? 1 : Math.min(1, activeTime / INTRO_SPRING_SECONDS);
       const introEase = 1 - Math.pow(1 - intro, 3);
 
-      // Smooth pointer parallax, position, and velocity wake field
-      const pFollow = reduceMotion ? 1 : 1 - Math.exp(-dt * 4.5);
+      // Smooth pointer parallax, position, and doubly-damped drift velocity (zero polling jitter)
+      const pFollow = reduceMotion ? 1 : 1 - Math.exp(-dt * 3.5);
       pointerSmooth.x = lerp(pointerSmooth.x, pointerTarget.x, pFollow);
       pointerSmooth.y = lerp(pointerSmooth.y, pointerTarget.y, pFollow);
 
-      const posFollow = reduceMotion ? 1 : 1 - Math.exp(-dt * 14);
+      const posFollow = reduceMotion ? 1 : 1 - Math.exp(-dt * 8.5);
       if (pointerClient) {
-        const instVx = clamp(pointerClient.x - pointerPosSmooth.x, -90, 90);
-        const instVy = clamp(pointerClient.y - pointerPosSmooth.y, -90, 90);
-        pointerPosSmooth.x = lerp(pointerPosSmooth.x, pointerClient.x, posFollow);
-        pointerPosSmooth.y = lerp(pointerPosSmooth.y, pointerClient.y, posFollow);
-        pointerVelSmooth.x = lerp(pointerVelSmooth.x, instVx, 1 - Math.exp(-dt * 10));
-        pointerVelSmooth.y = lerp(pointerVelSmooth.y, instVy, 1 - Math.exp(-dt * 10));
-        pointerPresence = lerp(pointerPresence, 1, 1 - Math.exp(-dt * 8));
+        const prevPx = pointerPosSmooth.x;
+        const prevPy = pointerPosSmooth.y;
+        pointerPosSmooth.x = lerp(prevPx, pointerClient.x, posFollow);
+        pointerPosSmooth.y = lerp(prevPy, pointerClient.y, posFollow);
+
+        const invDt = dt > 0.001 ? 1 / dt : 60;
+        const smoothVx = clamp((pointerPosSmooth.x - prevPx) * invDt * 0.055, -24, 24);
+        const smoothVy = clamp((pointerPosSmooth.y - prevPy) * invDt * 0.055, -24, 24);
+        const velFollow = reduceMotion ? 1 : 1 - Math.exp(-dt * 5.0);
+        pointerVelSmooth.x = lerp(pointerVelSmooth.x, smoothVx, velFollow);
+        pointerVelSmooth.y = lerp(pointerVelSmooth.y, smoothVy, velFollow);
+        pointerPresence = lerp(pointerPresence, 1, 1 - Math.exp(-dt * 4.5));
       } else {
-        pointerVelSmooth.x *= Math.exp(-dt * 6);
-        pointerVelSmooth.y *= Math.exp(-dt * 6);
-        pointerPresence = lerp(pointerPresence, 0, 1 - Math.exp(-dt * 3.5));
+        const decay = Math.exp(-dt * 4.5);
+        pointerVelSmooth.x *= decay;
+        pointerVelSmooth.y *= decay;
+        pointerPresence = lerp(pointerPresence, 0, 1 - Math.exp(-dt * 2.4));
       }
 
       const pointerField: PointerField = {
@@ -1083,26 +1080,27 @@ export function NeuralStage({
         brain === "responding" ||
         (activeSocket !== null && activeSocket !== undefined && activeSocket >= 0);
 
-      const targetGlobalCall = isCallingAnyNode ? 1 : 0;
+      globalCallImpulse *= Math.exp(-dt * 0.72);
+      const targetGlobalCall = Math.max(isCallingAnyNode ? 1 : 0, globalCallImpulse);
       globalCallHeat = lerp(
         globalCallHeat,
         targetGlobalCall,
-        reduceMotion ? 1 : 1 - Math.exp(-dt * (targetGlobalCall > globalCallHeat ? 4.8 : 1.4)),
+        reduceMotion ? 1 : 1 - Math.exp(-dt * (targetGlobalCall > globalCallHeat ? 3.2 : 1.15)),
       );
 
       energy = lerp(
         energy,
         BRAIN_TARGET_ENERGY[brain],
-        reduceMotion ? 1 : 1 - Math.exp(-dt * 3.0),
+        reduceMotion ? 1 : 1 - Math.exp(-dt * 2.0),
       );
 
-      // Update per-arm levels (1.0 when connected, dark ~0.10 when disconnected) & trailing-edge crimson heat
+      // Update per-arm levels, smooth trailing-edge crimson heat, and monotonic wave phases
       sockets.forEach((s, i) => {
         const prev = prevStates[i];
         if (prev !== s) {
           prevStates[i] = s;
           if (s === "occupied") {
-            armTrailingEdgeHeat[i] = 1.0;
+            armTrailingImpulse[i] = 1.0;
             launchInformationWave(-1, i);
           }
         }
@@ -1110,26 +1108,35 @@ export function NeuralStage({
         let hoverBoost = 0;
         if (pointerClient && L.sockets[i]) {
           const d = Math.hypot(pointerClient.x - L.sockets[i]!.x, pointerClient.y - L.sockets[i]!.y);
-          hoverBoost = clamp(1 - d / (R * 0.45), 0, 1) * (s === "occupied" ? 0.16 : 0.08);
+          hoverBoost = clamp(1 - d / (R * 0.45), 0, 1) * (s === "occupied" ? 0.12 : 0.06);
         }
         const targetLevel = clamp(SOCKET_TARGET_LEVEL[s] + hoverBoost, 0, 1.15);
         armLevels[i] = lerp(
           armLevels[i] ?? targetLevel,
           targetLevel,
-          reduceMotion ? 1 : 1 - Math.exp(-dt * 3.5),
+          reduceMotion ? 1 : 1 - Math.exp(-dt * 3.0),
         );
 
         const armIsCalled =
           activeSocket === i || ((brain === "thinking" || brain === "responding") && s === "occupied");
-        // Connected arms maintain a crimson transition near their outer trailing edges (0.65),
-        // surging to 1.0 when newly connected or actively transferring information
+        armTrailingImpulse[i] = (armTrailingImpulse[i] ?? 0) * Math.exp(-dt * 0.72);
         const targetEdgeCrimson =
-          s === "occupied" ? (armIsCalled ? 1.0 : Math.max(0.65, globalCallHeat * 0.9)) : 0;
+          s === "occupied"
+            ? armIsCalled
+              ? 1.0
+              : Math.max(0.65, globalCallHeat * 0.85, armTrailingImpulse[i]!)
+            : 0;
         armTrailingEdgeHeat[i] = lerp(
           armTrailingEdgeHeat[i] ?? 0,
           targetEdgeCrimson,
-          reduceMotion ? 1 : 1 - Math.exp(-dt * (targetEdgeCrimson > (armTrailingEdgeHeat[i] ?? 0) ? 5.0 : 1.4)),
+          reduceMotion ? 1 : 1 - Math.exp(-dt * (targetEdgeCrimson > (armTrailingEdgeHeat[i] ?? 0) ? 3.4 : 1.2)),
         );
+
+        if (!reduceMotion) {
+          armWavePhases[i] =
+            (armWavePhases[i] ?? 0) +
+            dt * (0.52 + 0.24 * (armTrailingEdgeHeat[i] ?? 0) + 0.18 * energy);
+        }
       });
 
       // Advance crimson information waves along the arms
@@ -1263,13 +1270,11 @@ export function NeuralStage({
       // - Connected nodes are lit up in rich molten gold, transitioning near the outer edges to crimson red.
       // - Disconnected nodes go dark (muted dim bronze in dark mode, subtle warm platinum in light mode).
       // - When sending information between nodes, a crimson wave flows directly along the lines!
-      const CURVE_STEPS = 28;
-      const sampleUs = Array.from({ length: CURVE_STEPS + 1 }, (_, k) => k / CURVE_STEPS);
-
       for (let armIdx = 0; armIdx < socketCount; armIdx++) {
         const spine = spines[armIdx]!;
         const level = armLevels[armIdx] ?? 0.1;
         const edgeRed = armTrailingEdgeHeat[armIdx] ?? 0;
+        const armPhase = reduceMotion ? 4 : (armWavePhases[armIdx] ?? 0);
         const isConnected = level > 0.35;
 
         // Check active crimson information wave position along this arm
@@ -1283,10 +1288,18 @@ export function NeuralStage({
             const distFromSocket = Math.abs(sol.u - SOCKET_U);
             armSolitonBoost = Math.max(
               armSolitonBoost,
-              Math.exp(-(distFromSocket * distFromSocket) / 0.035) * sol.intensity,
+              Math.exp(-(distFromSocket * distFromSocket) / 0.085) * sol.intensity,
             );
           }
         }
+
+        const targetArmWaveHeat = clamp(edgeRed * 0.45 + waveStrength * 0.55, 0, 1);
+        armWaveHeat[armIdx] = lerp(
+          armWaveHeat[armIdx] ?? targetArmWaveHeat,
+          targetArmWaveHeat,
+          reduceMotion ? 1 : 1 - Math.exp(-dt * 2.8),
+        );
+        const smoothWaveHeat = armWaveHeat[armIdx]!;
 
         for (let layerIdx = 0; layerIdx < DEPTH_LAYERS.length; layerIdx++) {
           const layer = DEPTH_LAYERS[layerIdx]!;
@@ -1305,7 +1318,7 @@ export function NeuralStage({
             layer.alpha *
             alphaScale *
             (isConnected ? 0.36 + 1.04 * level : level * (isLight ? 0.85 : 0.65)) *
-            (1 + 0.25 * energy + 0.38 * waveStrength);
+            (1 + 0.2 * energy + 0.32 * waveStrength);
 
           const armGrad = ctx.createLinearGradient(
             core.x,
@@ -1361,15 +1374,15 @@ export function NeuralStage({
             const fReach = Math.min(1, singularityUnfurl(intro, f.stagger));
             const pts: Vec[] = new Array(CURVE_STEPS + 1);
             for (let k = 0; k <= CURVE_STEPS; k++) {
-              const u = sampleUs[k]! * fReach;
+              const u = SAMPLE_US[k]! * fReach;
               pts[k] = evaluateArmFilamentPoint(
                 f,
                 spine,
                 u,
                 R,
-                activeTime,
+                armPhase,
                 level,
-                edgeRed * 0.5 + waveStrength * 0.5,
+                smoothWaveHeat,
                 armSolitonBoost,
                 pointerField,
               );
@@ -1377,7 +1390,7 @@ export function NeuralStage({
             traceSmoothPolyline(ctx, pts);
           }
 
-          ctx.lineWidth = layer.width * (0.85 + 0.45 * level + 0.2 * waveStrength) * (isLight ? 1.18 : 1);
+          ctx.lineWidth = layer.width * (0.85 + 0.45 * level + 0.14 * waveStrength) * (isLight ? 1.18 : 1);
           ctx.strokeStyle = armGrad;
           ctx.stroke();
 
@@ -1415,16 +1428,17 @@ export function NeuralStage({
       }
 
       // ——— 9. Flowing Photons Along the Connected Node Arms & Horizon Wings ———
-      const flowSpeedMul = 1 + 1.85 * energy;
+      const flowSpeedMul = 1 + 0.9 * energy;
       for (const pt of field.armPhotons) {
         const level = armLevels[pt.arm] ?? 0.1;
         if (level < 0.25) continue; // Keep disconnected arms dark
         const edgeRed = armTrailingEdgeHeat[pt.arm] ?? 0;
+        const armPhase = reduceMotion ? 4 : (armWavePhases[pt.arm] ?? 0);
         const f = field.armFilaments[pt.filamentIdx]!;
         const spine = spines[pt.arm]!;
 
         const distFromWaist = Math.abs(pt.u - SOCKET_U);
-        const venturiBoost = 1 + 0.65 * Math.exp(-(distFromWaist * distFromWaist) / 0.025);
+        const venturiBoost = 1 + 0.5 * Math.exp(-(distFromWaist * distFromWaist) / 0.025);
 
         if (!reduceMotion) {
           pt.u = (pt.u + pt.speed * dt * flowSpeedMul * venturiBoost * (0.45 + 0.75 * level)) % 1;
@@ -1436,9 +1450,9 @@ export function NeuralStage({
           spine,
           uEff,
           R,
-          activeTime,
+          armPhase,
           level,
-          edgeRed * 0.4,
+          armWaveHeat[pt.arm] ?? 0,
           0,
           pointerField,
         );
@@ -1497,10 +1511,10 @@ export function NeuralStage({
 
     const loop = (now: number) => {
       if (!start) start = last = now;
-      const rawDt = Math.min(0.05, Math.max(0.001, (now - last) / 1000));
+      const rawDt = Math.min(0.033, Math.max(0.001, (now - last) / 1000));
       last = now;
       // Exponentially smoothed delta-time for silky, jitter-free 60-120fps animation
-      smoothDt = lerp(smoothDt, rawDt, 0.22);
+      smoothDt = lerp(smoothDt, rawDt, 0.16);
       smoothTime += smoothDt;
       if (!signalRef.current.paused) draw(smoothTime, smoothDt);
       frame = requestAnimationFrame(loop);
