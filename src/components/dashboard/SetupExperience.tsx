@@ -241,6 +241,7 @@ export function SetupExperience({
   const nameTransitionTimerRef = useRef<number | undefined>(undefined);
   const finaleFallbackRef = useRef<number | undefined>(undefined);
   const persistPromiseRef = useRef<Promise<void> | null>(null);
+  const explosionHandledRef = useRef(false);
   const finaleHandledRef = useRef(false);
 
   useEffect(
@@ -286,13 +287,21 @@ export function SetupExperience({
     setImpulseSerial((s) => s + 1);
   }
 
+  function completeOpeningExplosion() {
+    if (explosionHandledRef.current) return;
+    explosionHandledRef.current = true;
+    window.clearTimeout(modalTimerRef.current);
+    setStage((cur) => (cur === "exploding" ? "modal" : cur));
+  }
+
   function handleStart() {
     if (stage !== "singularity") return;
+    explosionHandledRef.current = false;
     setStage("exploding");
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     modalTimerRef.current = window.setTimeout(
-      () => setStage("modal"),
-      reduceMotion ? 120 : 1080,
+      completeOpeningExplosion,
+      reduceMotion ? 120 : 2500,
     );
   }
 
@@ -442,17 +451,23 @@ export function SetupExperience({
           theme={theme}
           impulseSerial={impulseSerial}
           onClickSingularity={handleStart}
+          onExplosionComplete={completeOpeningExplosion}
           onFinaleComplete={() => void finalizeAfterAnimation()}
           onCoreLayout={(y) => rootRef.current?.style.setProperty("--setup-core-y", `${y}px`)}
         />
       </div>
 
-      {stage === "singularity" ? (
-        <div className="setup-start-layer pointer-events-none absolute inset-0 z-20">
+      {stage === "singularity" || stage === "exploding" ? (
+        <div
+          className="setup-start-layer pointer-events-none absolute inset-0 z-20"
+          data-leaving={stage === "exploding" ? "true" : "false"}
+        >
           <div className="setup-start-pos">
             <button
               type="button"
               onClick={handleStart}
+              disabled={stage !== "singularity"}
+              tabIndex={stage === "singularity" ? undefined : -1}
               className="setup-start-button pointer-events-auto"
             >
               Press Singularity to Continue

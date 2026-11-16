@@ -686,10 +686,11 @@ function renderOpticalSingularityCore(
   introEase: number,
   globalCallHeat: number,
   isLight: boolean,
+  explosionAfterglow = 0,
 ) {
   if (introEase <= 0.005) return;
 
-  const breathe = 1 + 0.032 * Math.sin(time * 0.65) + 0.05 * energy;
+  const breathe = 1 + 0.032 * Math.sin(time * 0.65) + 0.05 * energy + 0.08 * explosionAfterglow;
 
   // Helper to build a 16-stop Moffat PSF gradient with zero Mach banding
   const createMoffatGradient = (
@@ -780,17 +781,17 @@ function renderOpticalSingularityCore(
   ctx.strokeStyle = invGrad;
   ctx.stroke();
 
-  // 3. Subtle Anamorphic Horizontal Caustic Whisper (cinema optical lens waist)
+  // 3. Subtle Anamorphic Horizontal Caustic Whisper (stretches cleanly from setup explosion tail)
   ctx.save();
-  ctx.scale(2.65, 0.22);
-  const anamorphicR = R * 0.28 * breathe * introEase;
+  ctx.scale(2.65 + 2.4 * explosionAfterglow, 0.22 - 0.05 * explosionAfterglow);
+  const anamorphicR = R * (0.28 + 0.14 * explosionAfterglow) * breathe * introEase;
   const anaInner: Rgb = isLight ? [196, 124, 12] : [255, 242, 206];
   const anaMid: Rgb = isLight ? [218, 152, 28] : [248, 192, 86];
   ctx.fillStyle = createMoffatGradient(
     anamorphicR,
     anamorphicR * 0.22,
     2.2,
-    (isLight ? 0.32 : 0.28) * (1 + 0.22 * energy) * introEase,
+    clamp((isLight ? 0.32 : 0.28) * (1 + 0.22 * energy) * introEase + 0.38 * explosionAfterglow, 0, 1),
     anaInner,
     anaMid,
     fieldOuter,
@@ -1029,10 +1030,11 @@ export const NeuralStage = memo(function NeuralStage({
       const intro = reduceMotion
         ? 1
         : fromExplosion
-          ? Math.min(1, 0.07 + activeTime / INTRO_SPRING_SECONDS)
+          ? Math.min(1, 0.78 + activeTime / 1.15 * 0.22)
           : Math.min(1, activeTime / INTRO_SPRING_SECONDS);
       const introEase = 1 - Math.pow(1 - intro, 3);
-      const coreIntro = fromExplosion ? clamp(0.45 + introEase * 0.55, 0.45, 1) : introEase;
+      const coreIntro = fromExplosion ? 1 : introEase;
+      const explosionAfterglow = fromExplosion && !reduceMotion ? Math.exp(-activeTime * 2.8) : 0;
 
       // Smooth pointer parallax, position, and doubly-damped drift velocity (zero polling jitter)
       const pFollow = reduceMotion ? 1 : 1 - Math.exp(-dt * 3.5);
@@ -1557,6 +1559,7 @@ export const NeuralStage = memo(function NeuralStage({
         coreIntro,
         globalCallHeat,
         isLight,
+        explosionAfterglow,
       );
     };
 

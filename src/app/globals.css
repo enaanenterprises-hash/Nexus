@@ -7092,6 +7092,12 @@ html[data-dash-theme="light"] .cmd-gallery-badge {
 .setup-start-layer {
   position: absolute;
   inset: 0;
+  opacity: 1;
+  transition: opacity 340ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.setup-start-layer[data-leaving="true"] {
+  opacity: 0;
 }
 
 .setup-start-pos {
@@ -8359,23 +8365,39 @@ html[data-dash-theme="light"] .setup-card {
    ========================================================================== */
 .dash-finale-reveal {
   background: radial-gradient(
-    circle at 50% var(--dash-core-y, 60%),
-    rgba(255, 250, 236, 0.72) 0%,
-    rgba(248, 212, 128, 0.42) 26%,
-    rgba(220, 150, 44, 0.14) 55%,
-    rgba(0, 0, 0, 0) 82%
+    ellipse 86% 36% at 50% var(--dash-core-y, 60%),
+    rgba(255, 250, 236, 0.36) 0%,
+    rgba(248, 212, 128, 0.22) 28%,
+    rgba(220, 150, 44, 0.08) 58%,
+    rgba(0, 0, 0, 0) 84%
   );
-  animation: dash-finale-fade 540ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: dash-finale-fade 820ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .dash[data-theme="light"] .dash-finale-reveal {
   background: radial-gradient(
-    circle at 50% var(--dash-core-y, 60%),
-    rgba(255, 250, 238, 0.74) 0%,
-    rgba(232, 178, 72, 0.38) 28%,
-    rgba(204, 134, 14, 0.12) 56%,
-    rgba(247, 246, 242, 0) 82%
+    ellipse 86% 36% at 50% var(--dash-core-y, 60%),
+    rgba(255, 250, 238, 0.42) 0%,
+    rgba(232, 178, 72, 0.22) 30%,
+    rgba(204, 134, 14, 0.08) 58%,
+    rgba(247, 246, 242, 0) 84%
   );
+}
+
+.dash--from-setup .dash-chat,
+.dash--from-setup .node-rail-dock {
+  animation: dash-morph-ui-in 680ms cubic-bezier(0.22, 1, 0.36, 1) 100ms both;
+}
+
+@keyframes dash-morph-ui-in {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes dash-finale-fade {
@@ -8388,8 +8410,17 @@ html[data-dash-theme="light"] .setup-card {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .setup-start-layer {
+    transition: none;
+  }
+
   .dash-finale-reveal {
     animation-duration: 180ms;
+  }
+
+  .dash--from-setup .dash-chat,
+  .dash--from-setup .node-rail-dock {
+    animation: none;
   }
 }
 

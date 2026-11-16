@@ -600,7 +600,7 @@ export function Dashboard({
 
   return (
     <div
-      className={`dash ${theme === "dark" ? "dark" : "light"} relative h-[100svh] w-full flex-1 overflow-hidden`}
+      className={`dash ${theme === "dark" ? "dark" : "light"} ${setupReveal ? "dash--from-setup" : ""} relative h-[100svh] w-full flex-1 overflow-hidden`}
       data-theme={theme}
       data-nav-open={isNetworkHome ? (menuOpen ? "true" : "false") : "true"}
     >
