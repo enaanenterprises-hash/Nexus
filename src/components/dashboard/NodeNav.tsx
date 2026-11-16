@@ -12,9 +12,9 @@ import {
   type SlotId,
 } from "@/lib/extensions";
 import { useTheme } from "@/lib/theme";
-import { CommandIcon, LockIcon, MoonIcon, NetworkIcon, NodesIcon, PlusIcon, ReloadIcon, SignOutIcon, SunIcon, TodayIcon } from "./icons";
+import { CommandIcon, LockIcon, MoonIcon, NetworkIcon, NodesIcon, PlusIcon, ReloadIcon, SettingsIcon, SignOutIcon, SunIcon, TodayIcon } from "./icons";
 
-export type PanelId = "today" | "nodes" | { extension: ExtensionId };
+export type PanelId = "today" | "nodes" | "settings" | { extension: ExtensionId };
 
 export type Surface = { view: "home" | "research" | "command"; panel: PanelId | null };
 
@@ -224,6 +224,19 @@ export function NodeMenu({
                 <span>Setup wizard</span>
               </button>
             ) : null}
+
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setTierMenuOpen(false);
+                onPanel("settings");
+              }}
+              className="node-tier-menu-item"
+            >
+              <SettingsIcon size={15} />
+              <span>Settings</span>
+            </button>
 
             <div className="my-1 h-px bg-white/10" />
 

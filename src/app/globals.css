@@ -7370,4 +7370,119 @@ html[data-dash-theme="light"] {
   }
 }
 
+/* ==========================================================================
+   SETTINGS PANEL & DELETE ACCOUNT DANGER ZONE
+   ========================================================================== */
+.settings-theme-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  height: 2.35rem;
+  border-radius: 11px;
+  border: 1px solid var(--land-hair);
+  background: rgba(255, 255, 255, 0.025);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--land-muted);
+  cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    color 180ms ease;
+}
+
+.settings-theme-btn:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--land-ink);
+}
+
+.settings-theme-btn--on {
+  border-color: rgba(240, 181, 74, 0.55);
+  background: rgba(240, 181, 74, 0.12);
+  color: #fff6e0;
+}
+
+.settings-danger-card {
+  border: 1px solid rgba(248, 113, 113, 0.24);
+  background: rgba(248, 113, 113, 0.045);
+}
+
+.settings-delete-btn {
+  height: 2rem;
+  padding: 0 0.9rem;
+  border-radius: 999px;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  background: rgba(248, 113, 113, 0.1);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #fca5a5;
+  cursor: pointer;
+  transition:
+    background 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease;
+}
+
+.settings-delete-btn:hover {
+  border-color: rgba(248, 113, 113, 0.75);
+  background: rgba(248, 113, 113, 0.18);
+  color: #fecaca;
+}
+
+.settings-confirm-btn {
+  height: 2rem;
+  padding: 0 0.95rem;
+  border-radius: 999px;
+  border: 1px solid #ef4444;
+  background: #dc2626;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #ffffff;
+  cursor: pointer;
+  transition:
+    background 180ms ease,
+    opacity 180ms ease;
+}
+
+.settings-confirm-btn:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.settings-confirm-btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.dash[data-theme="light"] .settings-theme-btn {
+  background: rgba(9, 9, 11, 0.03);
+}
+
+.dash[data-theme="light"] .settings-theme-btn:hover {
+  border-color: rgba(9, 9, 11, 0.25);
+}
+
+.dash[data-theme="light"] .settings-theme-btn--on {
+  border-color: rgba(184, 120, 16, 0.55);
+  background: rgba(184, 120, 16, 0.12);
+  color: #09090b;
+}
+
+.dash[data-theme="light"] .settings-danger-card {
+  border-color: rgba(220, 38, 38, 0.25);
+  background: rgba(220, 38, 38, 0.04);
+}
+
+.dash[data-theme="light"] .settings-delete-btn {
+  border-color: rgba(220, 38, 38, 0.4);
+  background: rgba(220, 38, 38, 0.08);
+  color: #b91c1c;
+}
+
+.dash[data-theme="light"] .settings-delete-btn:hover {
+  border-color: rgba(220, 38, 38, 0.72);
+  background: rgba(220, 38, 38, 0.15);
+  color: #991b1b;
+}
+
 

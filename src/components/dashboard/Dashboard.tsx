@@ -33,6 +33,7 @@ import {
 import { NodeMenu, NodeRail, type PanelId, type Surface } from "./NodeNav";
 import { NexusInput, NexusVoice } from "./NexusVoice";
 import { SETUP_RESUME_KEY, SetupExperience, type SetupStep } from "./SetupExperience";
+import { SettingsPanel } from "./SettingsPanel";
 import { TodayPanel } from "./TodayPanel";
 import { useNexusSession } from "./use-nexus-session";
 import { useTheme } from "@/lib/theme";
@@ -631,6 +632,14 @@ export function Dashboard({
                 onSnap={snap}
                 onRelease={release}
                 onTogglePro={() => setStubPro(!hub.entitlement.isPro)}
+              />
+            ) : panel === "settings" ? (
+              <SettingsPanel
+                viewer={viewer}
+                isPro={hub.entitlement.isPro}
+                onTogglePro={() => setStubPro(!hub.entitlement.isPro)}
+                onOpenCommandConnections={() => openCommand({ tab: "connections", service: null, notice: null })}
+                onReplaySetup={() => void replaySetup()}
               />
             ) : (
               <ExtensionPanel

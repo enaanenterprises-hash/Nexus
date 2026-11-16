@@ -188,4 +188,11 @@ export const ArrowRight = (p: IconProps) => (
   </Icon>
 );
 
+export const SettingsIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="3" />
+    <path d="M12 3.5v2M12 18.5v2M4.8 7.8l1.7 1M17.5 15.2l1.7 1M3.5 12h2M18.5 12h2M4.8 16.2l1.7-1M17.5 8.8l1.7-1" />
+  </Icon>
+);
+
 
