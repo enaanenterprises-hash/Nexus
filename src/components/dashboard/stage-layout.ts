@@ -60,18 +60,18 @@ export function computeStageLayout(width: number, height: number, socketCount: n
   const compact = width < WIDE_MIN_WIDTH;
   const diag = Math.hypot(width, height);
 
-  // Lower the central singularity core so the entire network and outer nodes sit in the middle of the screen
+  // Center the singularity core in the middle of the stage
   const core: Vec = compact
     ? { x: width * 0.5, y: height * 0.5 }
-    : { x: width * 0.5, y: clamp(height * 0.52, 340, height - 245) };
+    : { x: width * 0.5, y: clamp(height * 0.51, 340, height - 245) };
 
+  // Vast, commanding radius so the 5 node waists fill the stage without wasted space
   const radius = compact
-    ? clamp(Math.min(width * 0.34, height * 0.28), 125, 215)
-    : clamp(Math.min(height * 0.26, width * 0.21), 165, 265);
+    ? clamp(Math.min(width * 0.38, height * 0.32), 145, 260)
+    : clamp(Math.min(width * 0.28, height * 0.34), 210, 370);
 
-  // 5 functional node arms fanning across the middle and upper-corner quadrants (-158 deg to -22 deg),
-  // sweeping all the way past the corners and edges of the screen.
-  const spread = compact ? 0.82 : 0.78;
+  // Wide 166-degree arch (-173 deg to -7 deg) so the 5 arms span the full width and height of the viewport
+  const spread = compact ? 0.92 : 0.9;
   const socketAngles: number[] = [];
   const sockets: Vec[] = [];
   const arms: ArmGeometry[] = [];
@@ -81,23 +81,23 @@ export function computeStageLayout(width: number, height: number, socketCount: n
     const centered = (t - 0.5) * 2; // -1 .. +1
     const baseAngle = -Math.PI / 2 + centered * (Math.PI * 0.5 * spread);
 
-    // Subtle S-curve inflection so outer arms sweep gracefully toward the screen corners
-    const cornerDeflection = centered * 0.16;
-    const coreAngle = baseAngle - cornerDeflection * 0.35;
-    const cornerAngle = baseAngle + cornerDeflection;
+    // Sweeping S-curve inflection guiding each arm into the viewport corners
+    const cornerDeflection = centered * 0.18;
+    const coreAngle = baseAngle - cornerDeflection * 0.32;
+    const cornerAngle = baseAngle + cornerDeflection * 0.85;
 
-    // Lateral arms have a wider horizontal span to fill the middle of the screen
-    const socketDist = radius * (1 + 0.18 * Math.abs(centered));
+    // Wide elliptical horizontal reach so lateral nodes command the left and right wings
+    const socketDist = radius * (1 + 0.26 * Math.abs(centered));
     const socket = add(core, polar(socketDist, baseAngle));
 
-    const tangentAngle = baseAngle + cornerDeflection * 0.55;
+    const tangentAngle = baseAngle + cornerDeflection * 0.48;
     const socketTangent = {
       x: Math.cos(tangentAngle),
       y: Math.sin(tangentAngle),
     };
 
-    // Extend far past the viewport corner/edge (0.68 * diagonal) so arms never terminate on screen
-    const outerReach = Math.max(diag * 0.68, socketDist * 2.85);
+    // Extend well beyond the viewport corners so the vast plumes sweep off-screen seamlessly
+    const outerReach = Math.max(diag * 0.74, socketDist * 3.0);
     const cornerTip = add(socket, polar(outerReach, cornerAngle));
 
     const innerControl = add(core, polar(socketDist * 0.52, coreAngle));
@@ -120,11 +120,10 @@ export function computeStageLayout(width: number, height: number, socketCount: n
     });
   }
 
-  // Two lower-lateral horizon wings that sweep into the bottom-left and bottom-right corners
-  // while leaving the central-bottom negative space completely dark and open.
-  const wingReach = diag * 0.66;
-  const leftWingAngle = Math.PI - 0.28;
-  const rightWingAngle = 0.28;
+  // Two vast lower-lateral horizon wings sweeping into the bottom-left and bottom-right corners
+  const wingReach = diag * 0.72;
+  const leftWingAngle = Math.PI - 0.26;
+  const rightWingAngle = 0.26;
 
   const horizonWings: [HorizonWingGeometry, HorizonWingGeometry] = [
     {
@@ -155,6 +154,6 @@ export function computeStageLayout(width: number, height: number, socketCount: n
     socketAngles,
     arms,
     horizonWings,
-    scale: diag * 0.68,
+    scale: diag * 0.74,
   };
 }

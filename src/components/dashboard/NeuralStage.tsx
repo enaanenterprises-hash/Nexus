@@ -53,11 +53,11 @@ type Rgb = readonly [number, number, number];
 const TAU = Math.PI * 2;
 /** Phase I (0..1.6s): "Waking up Nexus…" on pure black before the neural network pops to life. */
 const WAKE_SILENCE_SECONDS = 1.6;
-const INTRO_SPRING_SECONDS = 2.1;
-const SOCKET_U = 0.34; // Parametric position of the node socket waist along each arm (0 = core, 1 = beyond screen corner)
-const SPINE_SAMPLES = 56;
-const FILAMENTS_PER_ARM = 44;
-const HORIZON_STRANDS = 72;
+const INTRO_SPRING_SECONDS = 2.4;
+const SOCKET_U = 0.33; // Parametric position of the node socket waist along each arm (0 = core, 1 = beyond screen corner)
+const SPINE_SAMPLES = 72;
+const FILAMENTS_PER_ARM = 76;
+const HORIZON_STRANDS = 124;
 
 const GOLD_CORE: Rgb = [255, 250, 232];
 const GOLD_BRIGHT: Rgb = [255, 224, 156];
@@ -99,10 +99,10 @@ const BRAIN_TARGET_ENERGY: Record<NexusBrainState, number> = {
 
 /** Four optical depth layers per arm: wide atmospheric bloom -> medium silk -> crisp filament -> specular core hair. */
 const DEPTH_LAYERS = [
-  { width: 2.3, alpha: 0.055, hot: 0.0 },
-  { width: 1.02, alpha: 0.16, hot: 0.35 },
-  { width: 0.6, alpha: 0.31, hot: 0.7 },
-  { width: 0.38, alpha: 0.52, hot: 1.0 },
+  { width: 2.8, alpha: 0.075, hot: 0.0 },
+  { width: 1.25, alpha: 0.19, hot: 0.35 },
+  { width: 0.72, alpha: 0.34, hot: 0.7 },
+  { width: 0.44, alpha: 0.56, hot: 1.0 },
 ] as const;
 
 const mixRgb = (a: Rgb, b: Rgb, t: number): string => {
@@ -228,21 +228,26 @@ function createNeuralField(armCount: number) {
 
   for (let arm = 0; arm < armCount; arm++) {
     for (let i = 0; i < FILAMENTS_PER_ARM; i++) {
-      // Stratified laminar distribution across [-1, 1] with smooth coherent phase
+      // Stratified laminar distribution across [-1, 1] with an inner core + wide outer harmonic sheath
       const stratified = ((i + 0.5) / FILAMENTS_PER_ARM) * 2 - 1;
-      const xi = clamp(stratified * 0.88 + gauss() * 0.1, -1.1, 1.1);
+      const isOuterSheath = i % 4 === 0;
+      const xi = clamp(
+        stratified * (isOuterSheath ? 1.32 : 0.94) + gauss() * 0.08,
+        -1.45,
+        1.45,
+      );
       const layer = pickLayer(i);
       const idx = armFilaments.length;
       armFilaments.push({
         arm,
         layer,
         xi,
-        crossover: i % 3 === 0 ? -0.82 : 0.65,
-        flareSpread: (0.75 + 0.45 * Math.abs(xi)) * between(0.88, 1.15),
-        // Coherent phase across xi with gentle variation so lines flow smoothly without looking messy
-        phase: arm * 1.3 + xi * 1.45 + gauss() * 0.28,
-        freqMul: between(0.92, 1.1),
-        stagger: clamp(Math.abs(xi) * 0.32 + rnd() * 0.18, 0, 0.55),
+        crossover: i % 3 === 0 ? -0.86 : i % 3 === 1 ? 0.72 : -0.42,
+        flareSpread: (0.88 + 0.68 * Math.abs(xi)) * between(0.9, 1.18),
+        // Coherent phase across xi with gentle variation so lines flow as a lush, unified wave
+        phase: arm * 1.25 + xi * 1.35 + gauss() * 0.2,
+        freqMul: between(0.94, 1.08),
+        stagger: clamp(Math.abs(xi) * 0.26 + rnd() * 0.14, 0, 0.52),
       });
       armLayerBatches[arm]![layer]!.push(idx);
     }
@@ -256,58 +261,58 @@ function createNeuralField(armCount: number) {
     const layer = pickLayer(i);
     const chirality: -1 | 1 = i % 2 === 0 ? 1 : -1;
     const stratified = ((i + 0.5) / HORIZON_STRANDS) * 2 - 1;
-    const leftLift = stratified * 0.48 + gauss() * 0.06;
-    const rightLift = stratified * 0.48 + gauss() * 0.06;
+    const leftLift = stratified * 0.64 + gauss() * 0.06;
+    const rightLift = stratified * 0.64 + gauss() * 0.06;
     const idx = horizonFilaments.length;
     horizonFilaments.push({
       layer,
       chirality,
-      waistOffset: stratified * 0.015,
+      waistOffset: stratified * 0.028,
       leftAngle: Math.PI - leftLift * chirality,
       rightAngle: rightLift * chirality,
-      leftReach: between(0.96, 1.36),
-      rightReach: between(0.96, 1.36),
-      curvature: stratified * 0.18,
-      phase: stratified * 1.4 + rnd() * 0.5,
-      stagger: clamp(Math.abs(stratified) * 0.38 + 0.08, 0.06, 0.62),
+      leftReach: between(1.02, 1.48),
+      rightReach: between(1.02, 1.48),
+      curvature: stratified * 0.24,
+      phase: stratified * 1.35 + rnd() * 0.4,
+      stagger: clamp(Math.abs(stratified) * 0.34 + 0.06, 0.04, 0.56),
     });
     horizonLayerBatches[layer]!.push(idx);
   }
 
-  // Delicate harmonic bridges between adjacent connected node sockets
+  // Lush harmonic bridges between adjacent connected node sockets
   const bridges: SynapticBridge[] = [];
   for (let a = 0; a < armCount - 1; a++) {
-    for (let k = 0; k < 5; k++) {
+    for (let k = 0; k < 9; k++) {
       bridges.push({
         fromArm: a,
         toArm: a + 1,
-        archLift: between(-0.12, 0.06) + (k - 2) * 0.03,
-        phase: k * 0.8 + a,
+        archLift: between(-0.14, 0.08) + (k - 4) * 0.028,
+        phase: k * 0.65 + a,
       });
     }
   }
 
   // Photons flowing along the 5 functional node arms
-  const armPhotons: FlowPhoton[] = Array.from({ length: 280 }, (_, i) => {
+  const armPhotons: FlowPhoton[] = Array.from({ length: 380 }, (_, i) => {
     const filamentIdx = i % armFilaments.length;
     const f = armFilaments[filamentIdx]!;
     return {
       arm: f.arm,
       filamentIdx,
       u: rnd(),
-      speed: between(0.06, 0.14),
-      size: between(0.55, 1.55),
-      alpha: between(0.45, 0.96),
+      speed: between(0.055, 0.13),
+      size: between(0.6, 1.75),
+      alpha: between(0.48, 0.98),
     };
   });
 
   // Photons gliding along the horizon corner wings
-  const horizonPhotons: HorizonPhoton[] = Array.from({ length: 90 }, () => ({
+  const horizonPhotons: HorizonPhoton[] = Array.from({ length: 130 }, () => ({
     strandIdx: Math.floor(rnd() * horizonFilaments.length),
     u: rnd(),
-    speed: between(0.04, 0.09),
-    size: between(0.45, 1.25),
-    alpha: between(0.32, 0.78),
+    speed: between(0.038, 0.085),
+    size: between(0.5, 1.4),
+    alpha: between(0.35, 0.82),
   }));
 
   return {
@@ -330,19 +335,21 @@ function createNeuralField(armCount: number) {
  * that begins only AFTER the "Waking up Nexus…" silence completes.
  */
 function singularityUnfurl(intro: number, stagger: number): number {
-  const u = clamp((intro - stagger * 0.24) / (1 - stagger * 0.24), 0, 1);
+  const u = clamp((intro - stagger * 0.22) / (1 - stagger * 0.22), 0, 1);
   if (u <= 0) return 0.001;
-  const zeta = 0.74;
-  const omegaN = 4.8;
+  // Softly damped harmonic spring combined with C2 quintic smootherstep for ultra-smooth expansion
+  const zeta = 0.8;
+  const omegaN = 3.9;
   const omegaD = omegaN * Math.sqrt(1 - zeta * zeta);
-  const tau = u * 1.85;
+  const tau = u * 1.9;
   const decay = Math.exp(-zeta * omegaN * tau);
-  const response =
+  const spring =
     1 -
     decay *
       (Math.cos(omegaD * tau) +
         (zeta / Math.sqrt(1 - zeta * zeta)) * Math.sin(omegaD * tau));
-  return clamp(response, 0.001, 1.04);
+  const quintic = u * u * u * (u * (u * 6 - 15) + 10);
+  return clamp(lerp(quintic, spring, 0.65), 0.001, 1.03);
 }
 
 /**
@@ -471,36 +478,40 @@ function evaluateArmFilamentPoint(
   const nx = lerp(n0.x, n1.x, frac);
   const ny = lerp(n0.y, n1.y, frac);
 
-  // Tightness of the caustic waist at the node socket (tightens when occupied & called)
-  const waistRadius = R * lerp(0.028, 0.013, armLevel) * (1 - 0.22 * callHeat);
+  // Fuller, sculptural caustic waist at the node socket so the nodes have rich volume and presence
+  const waistRadius = R * lerp(0.064, 0.038, armLevel) * (1 - 0.16 * callHeat);
 
   let envelope = 0;
   let braidSign = f.xi;
 
   if (u <= SOCKET_U) {
     const s = u / SOCKET_U; // 0 .. 1 from core to socket
-    const spindleBell = Math.sin(Math.PI * Math.pow(s, 0.86));
-    const bellyWidth = R * (0.118 + 0.02 * (1 - armLevel));
+    // Lush, wide cathedral-lens spindle belly between the core and the node waist
+    const spindleBell = Math.sin(Math.PI * Math.pow(s, 0.84));
+    const bellyWidth = R * (0.24 + 0.035 * (1 - armLevel));
     const crossoverBlend = lerp(1, f.crossover, 0.5 - 0.5 * Math.cos(Math.PI * s));
     braidSign = f.xi * crossoverBlend;
     envelope = bellyWidth * spindleBell + waistRadius * Math.sin(s * Math.PI * 0.5);
   } else {
     const s = (u - SOCKET_U) / (1 - SOCKET_U); // 0 .. 1 from socket out past the viewport corner
     braidSign = f.xi * f.crossover;
-    const flare = Math.pow(s, 1.32) * R * 1.42 * f.flareSpread;
+    // Vast, sweeping trumpet fan that fills the upper and corner quadrants of the stage
+    const smoothStart = s * s * (3 - 2 * s);
+    const powerFlare = Math.pow(s, 1.24);
+    const flare = (smoothStart * 0.28 + powerFlare * 0.72) * R * 2.55 * f.flareSpread;
     envelope = waistRadius + flare;
   }
 
-  // Smooth, natural travelling biharmonic wave along the filament
-  const waveSpeed = (0.88 + 0.95 * callHeat) * f.freqMul;
-  const wave1 = Math.sin(u * 6.8 * f.freqMul - time * waveSpeed + f.phase);
-  const wave2 = Math.cos(u * 11.2 * f.freqMul - time * waveSpeed * 1.45 - f.phase * 1.2);
+  // Ultra-smooth, liquid-silk travelling biharmonic wave along the filament
+  const waveSpeed = (0.72 + 0.75 * callHeat) * f.freqMul;
+  const wave1 = Math.sin(u * 5.6 * f.freqMul - time * waveSpeed + f.phase);
+  const wave2 = Math.cos(u * 9.2 * f.freqMul - time * waveSpeed * 1.38 - f.phase * 1.15);
   const waveAmp =
     R *
-    (0.006 + 0.032 * Math.pow(u, 1.2)) *
-    (1 + 0.35 * callHeat + 0.48 * solitonBoost);
+    (0.012 + 0.052 * Math.pow(u, 1.15)) *
+    (1 + 0.32 * callHeat + 0.45 * solitonBoost);
 
-  const offset = braidSign * envelope + (wave1 * 0.72 + wave2 * 0.28) * waveAmp;
+  const offset = braidSign * envelope + (wave1 * 0.74 + wave2 * 0.26) * waveAmp;
 
   return {
     x: cx + nx * offset,
@@ -637,6 +648,8 @@ export function NeuralStage({
     let frame = 0;
     let start = 0;
     let last = 0;
+    let smoothDt = 1 / 60;
+    let smoothTime = 0;
 
     const onPointerMove = (e: PointerEvent) => {
       const rect = canvas.getBoundingClientRect();
@@ -1000,7 +1013,7 @@ export function NeuralStage({
       // - Connected nodes are lit up in rich molten gold, transitioning near the outer edges to crimson red.
       // - Disconnected nodes go dark (muted dim bronze in dark mode, subtle warm platinum in light mode).
       // - When sending information between nodes, a crimson wave flows directly along the lines!
-      const CURVE_STEPS = 22;
+      const CURVE_STEPS = 28;
       const sampleUs = Array.from({ length: CURVE_STEPS + 1 }, (_, k) => k / CURVE_STEPS);
 
       for (let armIdx = 0; armIdx < socketCount; armIdx++) {
@@ -1253,9 +1266,12 @@ export function NeuralStage({
 
     const loop = (now: number) => {
       if (!start) start = last = now;
-      const dt = Math.min(0.05, (now - last) / 1000);
+      const rawDt = Math.min(0.05, Math.max(0.001, (now - last) / 1000));
       last = now;
-      if (!signalRef.current.paused) draw((now - start) / 1000, dt);
+      // Exponentially smoothed delta-time for silky, jitter-free 60-120fps animation
+      smoothDt = lerp(smoothDt, rawDt, 0.22);
+      smoothTime += smoothDt;
+      if (!signalRef.current.paused) draw(smoothTime, smoothDt);
       frame = requestAnimationFrame(loop);
     };
 
