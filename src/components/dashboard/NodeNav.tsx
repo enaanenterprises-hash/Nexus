@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { signOutAction } from "@/lib/auth/actions";
 import {
   FREE_ACTIVE_EXTENSION_SLOTS,
@@ -40,16 +40,24 @@ function MenuItem({
   );
 }
 
-/** Left menu: opens core nodes as full views and everything else as panels. */
+/** Left menu: docked on full-screen views; extends from the top-left button on the network stage. */
 export function NodeMenu({
+  id,
   hub,
   surface,
+  floating = false,
+  open = true,
+  navRef,
   onHome,
   onCommand,
   onPanel,
 }: {
+  id?: string;
   hub: ExtensionHubSnapshot;
   surface: Surface;
+  floating?: boolean;
+  open?: boolean;
+  navRef?: RefObject<HTMLElement | null>;
   onHome: () => void;
   onCommand: () => void;
   onPanel: (panel: PanelId) => void;
@@ -57,6 +65,8 @@ export function NodeMenu({
   const { theme, toggleTheme } = useTheme();
   const [tierMenuOpen, setTierMenuOpen] = useState(false);
   const tierMenuRef = useRef<HTMLDivElement>(null);
+
+  const showTierMenu = tierMenuOpen && (!floating || open);
 
   const live = hub.slots.flatMap((slot) => {
     const ext = slot.occupiedBy ? hub.extensions.find((e) => e.manifest.id === slot.occupiedBy) : undefined;
@@ -66,7 +76,7 @@ export function NodeMenu({
   const cap = hub.entitlement.isPro ? hub.slots.length : FREE_ACTIVE_EXTENSION_SLOTS;
 
   useEffect(() => {
-    if (!tierMenuOpen) return;
+    if (!showTierMenu) return;
     function onPointerDown(event: MouseEvent) {
       if (tierMenuRef.current && !tierMenuRef.current.contains(event.target as Node)) {
         setTierMenuOpen(false);
@@ -81,10 +91,20 @@ export function NodeMenu({
       window.removeEventListener("mousedown", onPointerDown);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [tierMenuOpen]);
+  }, [showTierMenu]);
+
+  const floatingClass = floating
+    ? `node-menu--floating ${open ? "node-menu--open" : "node-menu--collapsed"}`
+    : "";
 
   return (
-    <nav aria-label="Nexus nodes" className="node-menu">
+    <nav
+      ref={navRef}
+      id={id}
+      aria-label="Nexus nodes"
+      aria-hidden={floating && !open ? true : undefined}
+      className={`node-menu ${floatingClass}`}
+    >
       <MenuItem label="Network" active={surface.view === "home" && !surface.panel} onClick={onHome}>
         <NetworkIcon />
       </MenuItem>
@@ -108,7 +128,7 @@ export function NodeMenu({
           <span className="text-[11px] font-semibold">{ext.manifest.monogram ?? ext.manifest.name.slice(0, 2)}</span>
         </MenuItem>
       ))}
-      <div className="flex-1" />
+      {floating ? <span className="node-menu-divider" aria-hidden /> : <div className="flex-1" />}
       <MenuItem label={theme === "dark" ? "Light" : "Dark"} active={false} onClick={toggleTheme}>
         {theme === "dark" ? <SunIcon /> : <MoonIcon />}
       </MenuItem>
@@ -116,9 +136,9 @@ export function NodeMenu({
         <button
           type="button"
           onClick={() => setTierMenuOpen((v) => !v)}
-          aria-expanded={tierMenuOpen}
+          aria-expanded={showTierMenu}
           aria-haspopup="menu"
-          className={`node-menu-plan ${tierMenuOpen ? "node-menu-plan--on" : ""}`}
+          className={`node-menu-plan ${showTierMenu ? "node-menu-plan--on" : ""}`}
           title={`${used} of ${cap} sockets in use`}
         >
           <span className="flex gap-[3px]" aria-hidden>
@@ -129,7 +149,7 @@ export function NodeMenu({
           <span>{hub.entitlement.isPro ? "Pro" : "Free"}</span>
         </button>
 
-        {tierMenuOpen ? (
+        {showTierMenu ? (
           <div role="menu" aria-label="Free tier menu" className="node-tier-menu">
             <div className="px-2.5 py-2">
               <div className="flex items-center justify-between gap-2">
@@ -203,7 +223,7 @@ export function NodeMenu({
   );
 }
 
-/** Right rail: one-tap access to Command and every hub socket. */
+/** Right rail: minimizes into a slim bar at the right edge and slides out on mouse hover. */
 export function NodeRail({
   hub,
   surface,
@@ -215,43 +235,109 @@ export function NodeRail({
   onCommand: () => void;
   onSlot: (slotId: SlotId) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const dockRef = useRef<HTMLDivElement>(null);
+  const closeTimerRef = useRef<number | undefined>(undefined);
+
+  function openRail() {
+    window.clearTimeout(closeTimerRef.current);
+    setOpen(true);
+  }
+
+  function scheduleClose() {
+    window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = window.setTimeout(() => setOpen(false), 160);
+  }
+
+  useEffect(() => () => window.clearTimeout(closeTimerRef.current), []);
+
+  useEffect(() => {
+    if (!open) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    function onPointerDown(event: PointerEvent) {
+      if (dockRef.current && !dockRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [open]);
+
   return (
-    <nav aria-label="Quick access" className="node-rail">
+    <div
+      ref={dockRef}
+      className={`node-rail-dock ${open ? "node-rail-dock--open" : ""}`}
+      onMouseEnter={openRail}
+      onMouseLeave={scheduleClose}
+      onFocusCapture={openRail}
+      onBlurCapture={(event) => {
+        if (!dockRef.current?.contains(event.relatedTarget as Node | null)) {
+          setOpen(false);
+        }
+      }}
+    >
       <button
         type="button"
-        onClick={onCommand}
-        className={`node-rail-button node-rail-button--core ${surface.view === "command" ? "node-rail-button--on" : ""}`}
-        title="Command"
-        aria-label="Command"
+        onMouseEnter={openRail}
+        onClick={() => (open ? setOpen(false) : openRail())}
+        aria-label="Show node quick rail"
+        aria-expanded={open}
+        className="node-rail-bar"
       >
-        <CommandIcon size={17} />
+        <span className="node-rail-pill" aria-hidden>
+          <span className="node-rail-pip node-rail-pip--core" />
+          {hub.slots.map((slot) => {
+            const state = slot.occupiedBy ? "live" : canUseSlot(slot, hub.entitlement) ? "open" : "locked";
+            return <span key={slot.id} className={`node-rail-pip node-rail-pip--${state}`} />;
+          })}
+        </span>
       </button>
-      <span className="node-menu-divider" aria-hidden />
-      {hub.slots.map((slot) => {
-        const ext = slot.occupiedBy ? hub.extensions.find((e) => e.manifest.id === slot.occupiedBy) : undefined;
-        const open = canUseSlot(slot, hub.entitlement);
-        const name = ext?.manifest.name ?? placeholderName(slot.placeholderKey);
-        const state = ext ? "live" : open ? "open" : "locked";
-        const selected = ext && isPanel(surface.panel, { extension: ext.manifest.id });
-        return (
-          <button
-            key={slot.id}
-            type="button"
-            onClick={() => onSlot(slot.id)}
-            className={`node-rail-button node-rail-button--${state} ${selected ? "node-rail-button--on" : ""}`}
-            title={ext ? `${name} · live` : open ? `${slot.tier === "pro" ? "Pro" : "Free"} socket · open (${name})` : `Pro socket · ${name}`}
-            aria-label={ext ? `${name}, wired in` : open ? `Open ${slot.tier} socket, reserved for ${name}` : `Locked Pro socket, reserved for ${name}`}
-          >
-            {ext ? (
-              <span className="text-[11px] font-semibold">{ext.manifest.monogram ?? name.slice(0, 2)}</span>
-            ) : open ? (
-              <PlusIcon size={14} />
-            ) : (
-              <LockIcon size={13} />
-            )}
-          </button>
-        );
-      })}
-    </nav>
+
+      <nav aria-label="Quick access" aria-hidden={!open} className="node-rail node-rail--sliding">
+        <button
+          type="button"
+          onClick={onCommand}
+          tabIndex={open ? 0 : -1}
+          className={`node-rail-button node-rail-button--core ${surface.view === "command" ? "node-rail-button--on" : ""}`}
+          title="Command"
+          aria-label="Command"
+        >
+          <CommandIcon size={17} />
+        </button>
+        <span className="node-menu-divider" aria-hidden />
+        {hub.slots.map((slot) => {
+          const ext = slot.occupiedBy ? hub.extensions.find((e) => e.manifest.id === slot.occupiedBy) : undefined;
+          const openSlot = canUseSlot(slot, hub.entitlement);
+          const name = ext?.manifest.name ?? placeholderName(slot.placeholderKey);
+          const state = ext ? "live" : openSlot ? "open" : "locked";
+          const selected = ext && isPanel(surface.panel, { extension: ext.manifest.id });
+          return (
+            <button
+              key={slot.id}
+              type="button"
+              tabIndex={open ? 0 : -1}
+              onClick={() => onSlot(slot.id)}
+              className={`node-rail-button node-rail-button--${state} ${selected ? "node-rail-button--on" : ""}`}
+              title={ext ? `${name} · live` : openSlot ? `${slot.tier === "pro" ? "Pro" : "Free"} socket · open (${name})` : `Pro socket · ${name}`}
+              aria-label={ext ? `${name}, wired in` : openSlot ? `Open ${slot.tier} socket, reserved for ${name}` : `Locked Pro socket, reserved for ${name}`}
+            >
+              {ext ? (
+                <span className="text-[11px] font-semibold">{ext.manifest.monogram ?? name.slice(0, 2)}</span>
+              ) : openSlot ? (
+                <PlusIcon size={14} />
+              ) : (
+                <LockIcon size={13} />
+              )}
+            </button>
+          );
+        })}
+      </nav>
+    </div>
   );
 }

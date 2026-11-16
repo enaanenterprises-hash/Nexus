@@ -176,4 +176,17 @@ export const SignOutIcon = (p: IconProps) => (
   </Icon>
 );
 
+export const MenuPanelIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <rect x="3.5" y="4.5" width="17" height="15" rx="3" />
+    <path d="M9.2 4.5v15" />
+  </Icon>
+);
+
+export const ChevronUpIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="m6 14.5 6-6 6 6" />
+  </Icon>
+);
+
 

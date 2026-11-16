@@ -22,7 +22,7 @@ import { getConnector } from "@/lib/connectors/catalog";
 import { researchIntent } from "@/lib/nexus/brain";
 import { ExtensionHub } from "./ExtensionHub";
 import { ExtensionPanel } from "./ExtensionPanel";
-import { CloseIcon } from "./icons";
+import { ChevronUpIcon, CloseIcon, MenuPanelIcon } from "./icons";
 import {
   NeuralStage,
   type SocketVisual,
@@ -70,10 +70,14 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
   const [selected, setSelected] = useState<SlotId | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [transfer, setTransfer] = useState<StageTransfer | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const noticeTimer = useRef<number | undefined>(undefined);
   const bootedRef = useRef(false);
   const bootCompleteRef = useRef(false);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
+  const menuNavRef = useRef<HTMLElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
 
   // Register sample extensions and wire the first two free Laniakea arms on initial boot
   useEffect(() => {
@@ -180,11 +184,35 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
-      setSurface((s) => (s.panel ? { ...s, panel: null } : s.view === "command" ? { view: "home", panel: null } : s));
+      if (surface.panel) {
+        setSurface((s) => ({ ...s, panel: null }));
+      } else if (surface.view === "command" || surface.view === "research") {
+        setSurface({ view: "home", panel: null });
+      } else if (menuOpen) {
+        setMenuOpen(false);
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [surface.panel, surface.view, menuOpen]);
+
+  useEffect(() => {
+    if (surface.view !== "home" || !menuOpen) return;
+    function onPointerDown(event: PointerEvent) {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (
+        menuTriggerRef.current?.contains(target) ||
+        menuNavRef.current?.contains(target) ||
+        panelRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setMenuOpen(false);
+    }
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, [surface.view, menuOpen]);
 
   const visuals = useMemo<SocketVisual[]>(
     () =>
@@ -244,12 +272,14 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
 
   function openResearch(input?: string) {
     setResearchMounted(true);
+    setMenuOpen(false);
     setSurface({ view: "research", panel: null });
     if (input !== undefined) setResearchRequest((r) => ({ input, serial: (r?.serial ?? 0) + 1 }));
   }
 
   function openCommand(request?: { tab: CommandTab; service: string | null; notice: string | null }) {
     setCommandMounted(true);
+    setMenuOpen(false);
     setSurface({ view: "command", panel: null });
     if (request) setCommandRequest((r) => ({ ...request, serial: (r?.serial ?? 0) + 1 }));
   }
@@ -345,9 +375,14 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
   }
 
   const panel = surface.panel;
+  const isNetworkHome = surface.view === "home";
 
   return (
-    <div className="dash relative h-[100svh] w-full flex-1 overflow-hidden" data-theme={theme}>
+    <div
+      className="dash relative h-[100svh] w-full flex-1 overflow-hidden"
+      data-theme={theme}
+      data-nav-open={isNetworkHome ? (menuOpen ? "true" : "false") : "true"}
+    >
       <section
         aria-label="Nexus Laniakea network"
         className="absolute inset-0"
@@ -364,19 +399,47 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
       </section>
 
       <header className="landing-enter pointer-events-none absolute inset-x-0 top-0 z-40 flex h-16 items-center">
-        <Link href="/" aria-label="Nexus home" className="pointer-events-auto inline-flex w-[76px] shrink-0 justify-center">
+        <Link
+          href="/"
+          aria-label="Nexus home"
+          className={`pointer-events-auto inline-flex shrink-0 items-center justify-center ${
+            isNetworkHome ? "ml-4 mr-2 w-10" : "w-[76px]"
+          }`}
+        >
           <NexusMark className="dash-brand-mark h-7 w-auto" />
         </Link>
+        {isNetworkHome ? (
+          <button
+            ref={menuTriggerRef}
+            type="button"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-expanded={menuOpen}
+            aria-controls="nexus-network-menu"
+            aria-label={menuOpen ? "Minimize menu" : "Extend navigation menu"}
+            title={menuOpen ? "Minimize menu" : "Menu"}
+            className={`node-menu-trigger pointer-events-auto ${menuOpen ? "node-menu-trigger--open" : ""}`}
+          >
+            {menuOpen ? <ChevronUpIcon size={15} /> : <MenuPanelIcon size={15} />}
+            {panel && !menuOpen ? <span className="node-menu-trigger-dot" aria-hidden /> : null}
+          </button>
+        ) : null}
       </header>
 
       <NodeMenu
+        id="nexus-network-menu"
+        navRef={menuNavRef}
         hub={hub}
         surface={surface}
-        onHome={() => setSurface({ view: "home", panel: null })}
+        floating={isNetworkHome}
+        open={isNetworkHome ? menuOpen : true}
+        onHome={() => {
+          setSurface({ view: "home", panel: null });
+          setMenuOpen(false);
+        }}
         onCommand={() => openCommand()}
         onPanel={openPanel}
       />
-      {surface.view === "home" ? (
+      {isNetworkHome ? (
         <NodeRail hub={hub} surface={surface} onCommand={() => openCommand()} onSlot={selectSlot} />
       ) : null}
 
@@ -415,7 +478,7 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
       ) : null}
 
       {panel ? (
-        <aside className="node-panel" aria-label="Node panel">
+        <aside ref={panelRef} className="node-panel" aria-label="Node panel">
           <button
             type="button"
             className="research-icon-button absolute right-3 top-3 z-10"

@@ -1166,9 +1166,6 @@ export function NeuralStage({
       const blendOp: GlobalCompositeOperation = isLight ? "source-over" : "lighter";
       const alphaScale = isLight ? 1.65 : 1.0;
 
-      const thinkingBeat = brain === "thinking" ? 0.5 + 0.5 * Math.sin(time * 6.5) : 0;
-      const breathe = 1 + 0.045 * Math.sin(time * (0.6 + energy)) + 0.08 * energy + 0.04 * thinkingBeat;
-
       ctx.globalCompositeOperation = blendOp;
       ctx.globalAlpha = Math.min(1, intro * 2.4);
 
@@ -1490,22 +1487,6 @@ export function NeuralStage({
         globalCallHeat,
         isLight,
       );
-
-      // ——— 11. Soft Left-Sidebar Readability Scrim (Keeps Left Sidebar Crisp Without Clipping Arms) ———
-      ctx.globalCompositeOperation = "source-over";
-      ctx.globalAlpha = 1;
-      const leftScrim = ctx.createLinearGradient(0, 0, 92, 0);
-      if (isLight) {
-        leftScrim.addColorStop(0, "rgba(247, 246, 242, 0.86)");
-        leftScrim.addColorStop(0.65, "rgba(247, 246, 242, 0.45)");
-        leftScrim.addColorStop(1, "rgba(247, 246, 242, 0)");
-      } else {
-        leftScrim.addColorStop(0, "rgba(0, 0, 0, 0.86)");
-        leftScrim.addColorStop(0.65, "rgba(0, 0, 0, 0.45)");
-        leftScrim.addColorStop(1, "rgba(0, 0, 0, 0)");
-      }
-      ctx.fillStyle = leftScrim;
-      ctx.fillRect(0, 0, 92, height);
     };
 
     const resize = () => {
