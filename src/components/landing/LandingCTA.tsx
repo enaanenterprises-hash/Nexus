@@ -11,6 +11,7 @@ import {
   seededHelpers,
   type Vec,
 } from "@/lib/network/geometry";
+import { Badge } from "@/components/ui/badge";
 import { WaitlistForm } from "./WaitlistForm";
 
 export function LandingCTA() {
@@ -168,9 +169,9 @@ export function LandingCTA() {
           >
             <div className="nx-pillar-top">
               <span className="nx-pillar-num">Nexus Core · Free</span>
-              <span className="rounded-full border border-white/15 px-2.5 py-0.5 font-mono text-[11px] text-[color:var(--land-ink)]">
+              <Badge variant="outline" className="border-white/15 px-2.5 font-mono text-[11px] font-normal text-[color:var(--land-ink)]">
                 $0 Forever
-              </span>
+              </Badge>
             </div>
             <h3 className="nx-pillar-heading">Full Network, Command &amp; 2 Active Node Sockets</h3>
             <p className="nx-pillar-body">
@@ -186,9 +187,9 @@ export function LandingCTA() {
           >
             <div className="nx-pillar-top">
               <span className="nx-pillar-num">Nexus Pro · Unlimited</span>
-              <span className="rounded-full border border-[rgba(240,181,74,0.45)] bg-[rgba(240,181,74,0.14)] px-2.5 py-0.5 font-mono text-[11px] text-[color:var(--land-gold-soft)]">
+              <Badge className="border border-[rgba(240,181,74,0.45)] bg-[rgba(240,181,74,0.14)] px-2.5 font-mono text-[11px] font-normal text-[color:var(--land-gold-soft)]">
                 All 5+ Orbital Sockets
-              </span>
+              </Badge>
             </div>
             <h3 className="nx-pillar-heading">Unlimited Concurrent Nodes &amp; Third-Party SDK</h3>
             <p className="nx-pillar-body">

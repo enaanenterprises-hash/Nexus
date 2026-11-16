@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 import { connectGoogleService } from "@/lib/command/google-connect";
 import type { CommandItemOf } from "@/lib/command/kinds";
 import { getConnector } from "@/lib/connectors/catalog";
@@ -37,13 +38,23 @@ function Gate({
         <p>{manifest?.name ?? "This service"} is not connected. Nothing is shown until it is.</p>
         {scope ? <p className="cmd-scope">{scope}</p> : null}
         {google ? (
-          <button type="button" className="dash-button dash-button--gold h-8 w-fit px-3 text-[13px]" onClick={() => void connectGoogleService(connectorId)}>
+          <Button
+            type="button"
+            size="sm"
+            className="w-fit border border-[color:var(--land-gold)]/55 bg-[color:var(--land-gold)]/18 text-[color:var(--land-ink)] hover:bg-[color:var(--land-gold)]/28"
+            onClick={() => void connectGoogleService(connectorId)}
+          >
             Connect {manifest?.name}
-          </button>
+          </Button>
         ) : quick ? (
-          <button type="button" className="dash-button dash-button--gold h-8 w-fit px-3 text-[13px]" onClick={() => void command.connect(connectorId, {})}>
+          <Button
+            type="button"
+            size="sm"
+            className="w-fit border border-[color:var(--land-gold)]/55 bg-[color:var(--land-gold)]/18 text-[color:var(--land-ink)] hover:bg-[color:var(--land-gold)]/28"
+            onClick={() => void command.connect(connectorId, {})}
+          >
             Connect {manifest?.name}
-          </button>
+          </Button>
         ) : (
           <button type="button" className="cmd-link text-[13px]" onClick={onConnections}>
             Set up in Connections

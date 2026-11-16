@@ -2,10 +2,27 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { ArrowRight, LogOut, Moon, RotateCcw, ShieldAlert, Sun } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { signOutAction } from "@/lib/auth/actions";
 import type { Viewer } from "@/lib/auth/types";
 import { useTheme } from "@/lib/theme";
-import { MoonIcon, SignOutIcon, SunIcon } from "./icons";
 
 type Props = {
   viewer: Viewer;
@@ -53,6 +70,7 @@ export function SettingsPanel({
       } catch {
         // Ignore storage errors
       }
+      setConfirmOpen(false);
       router.replace("/");
       router.refresh();
     } catch {
@@ -62,174 +80,209 @@ export function SettingsPanel({
   }
 
   return (
-    <section aria-labelledby="settings-heading" className="flex flex-col gap-7">
-      <header>
-        <p className="dash-eyebrow">Account & workspace</p>
-        <h2 id="settings-heading" className="dash-heading mt-2">
+    <section aria-labelledby="settings-heading" className="flex flex-col gap-5">
+      <header className="space-y-1">
+        <h2 id="settings-heading" className="dash-heading">
           Settings
         </h2>
-        <p className="mt-1 text-[13px] leading-snug text-[color:var(--land-muted)]">
+        <p className="text-[13px] leading-snug text-muted-foreground">
           Manage your profile, appearance, connected apps, and account data.
         </p>
       </header>
 
       {/* Profile & Tier */}
-      <div className="dash-card-subtle rounded-2xl border border-[color:var(--land-hair)] p-4">
-        <p className="dash-eyebrow">Profile</p>
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate text-[14.5px] font-medium text-[color:var(--land-ink)]">
-              {viewer.name?.trim() || "Nexus member"}
-            </p>
-            {viewer.email ? (
-              <p className="truncate text-[12.5px] text-[color:var(--land-muted)]">{viewer.email}</p>
-            ) : null}
+      <Card size="sm" className="rounded-2xl border border-border/80 bg-card/60 ring-0 shadow-none">
+        <CardHeader className="pb-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <CardTitle className="font-sans text-[14.5px] font-medium truncate">
+                {viewer.name?.trim() || "Nexus member"}
+              </CardTitle>
+              {viewer.email ? (
+                <CardDescription className="truncate text-[12.5px]">
+                  {viewer.email}
+                </CardDescription>
+              ) : null}
+            </div>
+            <Badge
+              variant="outline"
+              className="shrink-0 border-[color:var(--land-line)] px-2.5 text-[11px] font-semibold uppercase tracking-wider text-[color:var(--land-gold-soft)]"
+            >
+              {isPro ? "Pro" : "Free"}
+            </Badge>
           </div>
-          <span className="shrink-0 rounded-full border border-[color:var(--land-line)] px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-[color:var(--land-gold-soft)]">
-            {isPro ? "Pro" : "Free"}
-          </span>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[color:var(--land-hair)] pt-3">
-          <button
-            type="button"
-            onClick={onTogglePro}
-            className={`dash-button ${isPro ? "" : "dash-button--gold"}`}
-          >
-            {isPro ? "Back to Free tier" : "Preview Pro"}
-          </button>
-          <form action={signOutAction}>
-            <button type="submit" className="dash-button inline-flex items-center gap-1.5">
-              <SignOutIcon size={13} />
-              <span>Sign out</span>
-            </button>
-          </form>
-        </div>
-      </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Separator />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={isPro ? "outline" : "default"}
+              onClick={onTogglePro}
+              className={
+                !isPro
+                  ? "border border-[color:var(--land-gold)]/55 bg-[color:var(--land-gold)]/18 text-[color:var(--land-ink)] hover:bg-[color:var(--land-gold)]/28"
+                  : undefined
+              }
+            >
+              {isPro ? "Back to Free tier" : "Preview Pro"}
+            </Button>
+            <form action={signOutAction}>
+              <Button type="submit" size="sm" variant="outline" className="gap-1.5">
+                <LogOut className="size-3.5" />
+                <span>Sign out</span>
+              </Button>
+            </form>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Appearance */}
-      <div className="dash-card-subtle rounded-2xl border border-[color:var(--land-hair)] p-4">
-        <p className="dash-eyebrow">Appearance</p>
-        <p className="mt-1 text-[12.5px] text-[color:var(--land-muted)]">
-          Choose how Nexus renders across the Laniakea canvas and panels.
-        </p>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => setTheme("dark")}
-            aria-pressed={theme === "dark"}
-            className={`settings-theme-btn ${theme === "dark" ? "settings-theme-btn--on" : ""}`}
-          >
-            <MoonIcon size={14} />
-            <span>Dark mode</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setTheme("light")}
-            aria-pressed={theme === "light"}
-            className={`settings-theme-btn ${theme === "light" ? "settings-theme-btn--on" : ""}`}
-          >
-            <SunIcon size={14} />
-            <span>Light mode</span>
-          </button>
-        </div>
-      </div>
+      <Card size="sm" className="rounded-2xl border border-border/80 bg-card/60 ring-0 shadow-none">
+        <CardHeader>
+          <CardTitle className="font-sans text-[14px] font-medium">Appearance</CardTitle>
+          <CardDescription className="text-[12.5px]">
+            Choose how Nexus renders across the canvas, panels, and menus.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              type="button"
+              variant={theme === "dark" ? "default" : "outline"}
+              onClick={() => setTheme("dark")}
+              aria-pressed={theme === "dark"}
+              className="h-9 justify-center gap-2 rounded-xl"
+            >
+              <Moon className="size-3.5" />
+              <span>Dark mode</span>
+            </Button>
+            <Button
+              type="button"
+              variant={theme === "light" ? "default" : "outline"}
+              onClick={() => setTheme("light")}
+              aria-pressed={theme === "light"}
+              className="h-9 justify-center gap-2 rounded-xl"
+            >
+              <Sun className="size-3.5" />
+              <span>Light mode</span>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Workspace tools */}
-      <div className="dash-card-subtle rounded-2xl border border-[color:var(--land-hair)] p-4">
-        <p className="dash-eyebrow">Workspace setup</p>
-        <div className="mt-3 flex flex-col gap-2">
-          <button
+      <Card size="sm" className="rounded-2xl border border-border/80 bg-card/60 ring-0 shadow-none">
+        <CardHeader>
+          <CardTitle className="font-sans text-[14px] font-medium">Workspace setup</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2">
+          <Button
             type="button"
+            variant="outline"
             onClick={onOpenCommandConnections}
-            className="dash-button flex h-9 w-full items-center justify-between px-3 text-left text-[13px]"
+            className="h-9 w-full justify-between rounded-xl px-3 font-normal"
           >
-            <span>Manage Command apps & tokens</span>
-            <span className="text-[11.5px] text-[color:var(--land-faint)]">Command →</span>
-          </button>
-          <button
+            <span>Manage Command apps &amp; tokens</span>
+            <span className="inline-flex items-center gap-1 text-[11.5px] text-muted-foreground">
+              Command <ArrowRight className="size-3" />
+            </span>
+          </Button>
+          <Button
             type="button"
+            variant="outline"
             onClick={onReplaySetup}
-            className="dash-button flex h-9 w-full items-center justify-between px-3 text-left text-[13px]"
+            className="h-9 w-full justify-between rounded-xl px-3 font-normal"
           >
             <span>Run onboarding setup wizard</span>
-            <span className="text-[11.5px] text-[color:var(--land-faint)]">Restart →</span>
-          </button>
-        </div>
-      </div>
+            <span className="inline-flex items-center gap-1 text-[11.5px] text-muted-foreground">
+              Restart <RotateCcw className="size-3" />
+            </span>
+          </Button>
+        </CardContent>
+      </Card>
 
-      {/* Danger zone: Delete Account */}
-      <div className="settings-danger-card rounded-2xl p-4">
-        <p className="dash-eyebrow text-[#f87171]">Danger zone</p>
-        <h3 className="mt-2 text-[14.5px] font-medium text-[color:var(--land-ink)]">
-          Delete account
-        </h3>
-        <p className="mt-1 text-[12.5px] leading-relaxed text-[color:var(--land-muted)]">
-          Permanently remove your Nexus profile, encrypted app tokens, Command history, Research library, and active sessions. This cannot be undone.
-        </p>
-
-        {!confirmOpen ? (
-          <div className="mt-3.5">
-            <button
-              type="button"
-              onClick={() => {
-                setConfirmOpen(true);
-                setError(null);
+      {/* Danger zone: Delete Account with AlertDialog */}
+      <Card
+        size="sm"
+        className="rounded-2xl border border-destructive/30 bg-destructive/5 ring-0 shadow-none"
+      >
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 font-sans text-[14px] font-medium text-destructive">
+            <ShieldAlert className="size-4" />
+            <span>Delete account</span>
+          </CardTitle>
+          <CardDescription className="text-[12.5px] leading-relaxed">
+            Permanently remove your Nexus profile, encrypted app tokens, Command history, Research
+            library, and active sessions. This cannot be undone.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AlertDialog
+            open={confirmOpen}
+            onOpenChange={(next) => {
+              if (deleting) return;
+              setConfirmOpen(next);
+              if (!next) {
                 setConfirmText("");
-              }}
-              className="settings-delete-btn"
-            >
-              Delete my account
-            </button>
-          </div>
-        ) : (
-          <form onSubmit={handleDeleteAccount} className="mt-4 space-y-3 border-t border-red-500/20 pt-3.5">
-            <label htmlFor="delete-account-confirm" className="block">
-              <span className="text-[12px] font-medium text-[color:var(--land-ink)]">
-                Type <code className="dash-code font-semibold">DELETE</code> to confirm
-              </span>
-              <input
-                id="delete-account-confirm"
-                type="text"
-                value={confirmText}
-                onChange={(e) => setConfirmText(e.target.value)}
-                placeholder="DELETE"
-                autoComplete="off"
-                spellCheck={false}
-                className="cmd-field mt-1.5 w-full"
-              />
-            </label>
+                setError(null);
+              }
+            }}
+          >
+            <AlertDialogTrigger
+              render={
+                <Button type="button" variant="destructive" size="sm">
+                  Delete my account
+                </Button>
+              }
+            />
+            <AlertDialogContent className="border border-border bg-popover text-popover-foreground ring-0 sm:max-w-md">
+              <AlertDialogHeader className="place-items-start text-left">
+                <AlertDialogTitle className="font-heading text-xl font-normal">
+                  Permanently delete your account?
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  This wipes your account, encrypted tokens, Command data, and saved Research
+                  sources immediately.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
 
-            {error ? (
-              <p className="cmd-error" role="alert">
-                {error}
-              </p>
-            ) : null}
+              <form onSubmit={handleDeleteAccount} className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="delete-account-confirm" className="text-xs">
+                    Type <code className="dash-code font-semibold">DELETE</code> to confirm
+                  </Label>
+                  <Input
+                    id="delete-account-confirm"
+                    type="text"
+                    value={confirmText}
+                    onChange={(e) => setConfirmText(e.target.value)}
+                    placeholder="DELETE"
+                    autoComplete="off"
+                    spellCheck={false}
+                    disabled={deleting}
+                    className="h-9 rounded-xl border border-border bg-background/50"
+                  />
+                </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="submit"
-                disabled={!canConfirmDelete}
-                className="settings-confirm-btn"
-              >
-                {deleting ? "Deleting account…" : "Permanently delete account"}
-              </button>
-              <button
-                type="button"
-                disabled={deleting}
-                onClick={() => {
-                  setConfirmOpen(false);
-                  setConfirmText("");
-                  setError(null);
-                }}
-                className="dash-button"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        )}
-      </div>
+                {error ? (
+                  <Alert variant="destructive" className="rounded-xl py-2.5">
+                    <AlertDescription className="text-xs">{error}</AlertDescription>
+                  </Alert>
+                ) : null}
+
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+                  <Button type="submit" variant="destructive" disabled={!canConfirmDelete}>
+                    {deleting ? "Deleting account…" : "Permanently delete account"}
+                  </Button>
+                </AlertDialogFooter>
+              </form>
+            </AlertDialogContent>
+          </AlertDialog>
+        </CardContent>
+      </Card>
     </section>
   );
 }

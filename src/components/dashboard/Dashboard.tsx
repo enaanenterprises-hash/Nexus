@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { X } from "lucide-react";
 import { NexusMark } from "@/components/landing/NexusLogo";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { NexusMenuButton } from "./NexusMenuButton";
 import { CommandView, type CommandTab } from "@/components/command/CommandView";
 import { ResearchView } from "@/components/research/ResearchView";
@@ -23,7 +27,6 @@ import { getConnector } from "@/lib/connectors/catalog";
 import { researchIntent } from "@/lib/nexus/brain";
 import { ExtensionHub } from "./ExtensionHub";
 import { ExtensionPanel } from "./ExtensionPanel";
-import { CloseIcon } from "./icons";
 import {
   NeuralStage,
   type SocketVisual,
@@ -337,7 +340,14 @@ export function Dashboard({
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (
+        document.querySelector(
+          '[data-slot="dialog-content"][data-open], [data-slot="alert-dialog-content"][data-open], [data-slot="sheet-content"][data-open], [data-slot="dropdown-menu-content"][data-open], [data-slot="popover-content"][data-open], [data-slot="select-content"][data-open]',
+        )
+      ) {
+        return;
+      }
       if (surface.panel) {
         setSurface((s) => ({ ...s, panel: null }));
       } else if (surface.view === "command" || surface.view === "research") {
@@ -355,6 +365,13 @@ export function Dashboard({
     function onPointerDown(event: PointerEvent) {
       const target = event.target as Node | null;
       if (!target) return;
+      if (
+        (target as Element).closest?.(
+          '[data-slot="dropdown-menu-content"], [data-slot="alert-dialog-content"], [data-slot="alert-dialog-overlay"], [data-slot="dialog-content"], [data-slot="dialog-overlay"], [data-slot="sheet-content"], [data-slot="sheet-overlay"], [data-slot="popover-content"], [data-slot="select-content"], [data-base-ui-inert]',
+        )
+      ) {
+        return;
+      }
       if (
         menuTriggerRef.current?.contains(target) ||
         menuNavRef.current?.contains(target) ||
@@ -583,7 +600,7 @@ export function Dashboard({
 
   return (
     <div
-      className="dash relative h-[100svh] w-full flex-1 overflow-hidden"
+      className={`dash ${theme === "dark" ? "dark" : "light"} relative h-[100svh] w-full flex-1 overflow-hidden`}
       data-theme={theme}
       data-nav-open={isNetworkHome ? (menuOpen ? "true" : "false") : "true"}
     >
@@ -679,49 +696,60 @@ export function Dashboard({
 
       {panel ? (
         <aside ref={panelRef} className="node-panel" aria-label="Node panel">
-          <button
-            type="button"
-            className="research-icon-button absolute right-3 top-3 z-10"
-            onClick={() => setSurface((s) => ({ ...s, panel: null }))}
-            aria-label="Close panel"
-          >
-            <CloseIcon size={15} />
-          </button>
-          <div className="dash-panel h-full overflow-y-auto p-6 pt-7">
-            {panel === "today" ? (
-              <TodayPanel
-                tasks={session.tasks}
-                threads={session.threads}
-                touched={session.touched}
-                organized={session.organized}
-                onToggle={session.toggleTask}
-              />
-            ) : panel === "nodes" ? (
-              <ExtensionHub
-                hub={hub}
-                selected={selected}
-                notice={notice}
-                onSnap={snap}
-                onRelease={release}
-                onTogglePro={() => setStubPro(!hub.entitlement.isPro)}
-              />
-            ) : panel === "settings" ? (
-              <SettingsPanel
-                viewer={{ ...viewer, name: viewerName }}
-                isPro={hub.entitlement.isPro}
-                onTogglePro={() => setStubPro(!hub.entitlement.isPro)}
-                onOpenCommandConnections={() => openCommand({ tab: "connections", service: null, notice: null })}
-                onReplaySetup={() => void replaySetup()}
-              />
-            ) : (
-              <ExtensionPanel
-                hub={hub}
-                id={panel.extension}
-                onRelease={release}
-                onTransfer={(fromId, toId) => triggerNodeTransfer(fromId, toId)}
-              />
-            )}
-          </div>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="absolute right-3 top-3 z-10 rounded-full text-muted-foreground hover:text-foreground"
+                  onClick={() => setSurface((s) => ({ ...s, panel: null }))}
+                  aria-label="Close panel"
+                >
+                  <X className="size-4" />
+                </Button>
+              }
+            />
+            <TooltipContent side="left">Close panel</TooltipContent>
+          </Tooltip>
+          <ScrollArea className="h-full">
+            <div className="p-6 pt-7">
+              {panel === "today" ? (
+                <TodayPanel
+                  tasks={session.tasks}
+                  threads={session.threads}
+                  touched={session.touched}
+                  organized={session.organized}
+                  onToggle={session.toggleTask}
+                />
+              ) : panel === "nodes" ? (
+                <ExtensionHub
+                  hub={hub}
+                  selected={selected}
+                  notice={notice}
+                  onSnap={snap}
+                  onRelease={release}
+                  onTogglePro={() => setStubPro(!hub.entitlement.isPro)}
+                />
+              ) : panel === "settings" ? (
+                <SettingsPanel
+                  viewer={{ ...viewer, name: viewerName }}
+                  isPro={hub.entitlement.isPro}
+                  onTogglePro={() => setStubPro(!hub.entitlement.isPro)}
+                  onOpenCommandConnections={() => openCommand({ tab: "connections", service: null, notice: null })}
+                  onReplaySetup={() => void replaySetup()}
+                />
+              ) : (
+                <ExtensionPanel
+                  hub={hub}
+                  id={panel.extension}
+                  onRelease={release}
+                  onTransfer={(fromId, toId) => triggerNodeTransfer(fromId, toId)}
+                />
+              )}
+            </div>
+          </ScrollArea>
         </aside>
       ) : null}
     </div>

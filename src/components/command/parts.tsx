@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { Switch } from "@/components/ui/switch";
 import type { CommandKind } from "@/lib/command/kinds";
 import { sourceMonogram, sourceName } from "./format";
 
@@ -13,11 +14,24 @@ export function SourceGlyph({ connectorId, size = "sm" }: { connectorId: string;
   );
 }
 
-export function Toggle({ on, onChange, label, disabled }: { on: boolean; onChange: (next: boolean) => void; label: string; disabled?: boolean }) {
+export function Toggle({
+  on,
+  onChange,
+  label,
+  disabled,
+}: {
+  on: boolean;
+  onChange: (next: boolean) => void;
+  label: string;
+  disabled?: boolean;
+}) {
   return (
-    <button type="button" role="switch" aria-checked={on} aria-label={label} disabled={disabled} onClick={() => onChange(!on)} className={`cmd-toggle ${on ? "cmd-toggle--on" : ""}`}>
-      <span />
-    </button>
+    <Switch
+      checked={on}
+      onCheckedChange={onChange}
+      aria-label={label}
+      disabled={disabled}
+    />
   );
 }
 

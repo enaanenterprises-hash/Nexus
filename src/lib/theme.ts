@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 
 export type ThemeMode = "dark" | "light";
 
@@ -22,14 +22,16 @@ function readStoredTheme(): ThemeMode {
 
 function syncDocumentAttr(theme: ThemeMode) {
   if (typeof document === "undefined") return;
-  document.documentElement.dataset.dashTheme = theme;
+  const root = document.documentElement;
+  root.dataset.dashTheme = theme;
+  root.classList.toggle("dark", theme === "dark");
+  root.classList.toggle("light", theme === "light");
 }
 
 function ensureInit() {
   if (initialized || typeof window === "undefined") return;
   initialized = true;
   cachedTheme = readStoredTheme();
-  syncDocumentAttr(cachedTheme);
 }
 
 export function getTheme(): ThemeMode {
@@ -56,6 +58,7 @@ export function toggleTheme() {
 
 function subscribe(listener: () => void) {
   ensureInit();
+  syncDocumentAttr(cachedTheme);
   listeners.add(listener);
   const onStorage = (event: StorageEvent) => {
     if (event.key === STORAGE_KEY && (event.newValue === "light" || event.newValue === "dark")) {
@@ -77,5 +80,8 @@ export function useTheme(): {
   toggleTheme: () => void;
 } {
   const theme = useSyncExternalStore<ThemeMode>(subscribe, getTheme, () => "dark");
+  useEffect(() => {
+    syncDocumentAttr(theme);
+  }, [theme]);
   return { theme, setTheme, toggleTheme };
 }

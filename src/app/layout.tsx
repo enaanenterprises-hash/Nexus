@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Cormorant_Garamond, Manrope } from "next/font/google";
-import "./globals.css";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import "./globals.css";
 
 const manrope = Manrope({
   variable: "--font-manrope",
@@ -29,9 +30,12 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={cn("h-full", "antialiased", manrope.variable, displaySerif.variable, "font-sans")}
+      suppressHydrationWarning
+      className={cn("dark h-full antialiased", manrope.variable, displaySerif.variable, "font-sans")}
     >
-      <body className="flex min-h-full flex-col">{children}</body>
+      <body className="flex min-h-full flex-col">
+        <TooltipProvider delay={240}>{children}</TooltipProvider>
+      </body>
     </html>
   );
 }

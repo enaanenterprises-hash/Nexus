@@ -1,9 +1,13 @@
 "use client";
 
 import { useState, type CSSProperties, type FormEvent } from "react";
-import { connectGoogleService, connectGoogleServices } from "@/lib/command/google-connect";
-import { GMAIL_READ_SCOPE, GMAIL_SEND_SCOPE } from "@/lib/command/widgets";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { connectGoogleServices } from "@/lib/command/google-connect";
 import type { CommandItemOf } from "@/lib/command/kinds";
+import { GMAIL_READ_SCOPE, GMAIL_SEND_SCOPE } from "@/lib/command/widgets";
 import { CommandRequestError, commandApi, type GmailLetter } from "../command-client";
 import { relative } from "../format";
 import { useNow } from "../parts";
@@ -22,16 +26,31 @@ type Draft = {
   reply: boolean;
 };
 
-const senderName = (from: string) => (/^([^<]+)</.exec(from)?.[1] ?? from).replace(/"/g, "").trim() || from;
-const senderEmail = (from: string) => /<([^>]+)>/.exec(from)?.[1]?.trim() ?? (from.includes("@") ? from.trim() : "");
+const senderName = (from: string) =>
+  (/^([^<]+)</.exec(from)?.[1] ?? from).replace(/"/g, "").trim() || from;
+const senderEmail = (from: string) =>
+  /<([^>]+)>/.exec(from)?.[1]?.trim() ?? (from.includes("@") ? from.trim() : "");
 
-export function GmailWidget({ command, onRemove, style }: { command: CommandController; onRemove: () => void; style: CSSProperties }) {
+export function GmailWidget({
+  command,
+  onRemove,
+  style,
+}: {
+  command: CommandController;
+  onRemove: () => void;
+  style: CSSProperties;
+}) {
   const state = command.state!;
   const now = useNow(30_000);
   const gmail = state.connections.find((c) => c.connectorId === "gmail") ?? null;
   const sending = state.connections.find((c) => c.connectorId === "gmail-send") ?? null;
   const messages = state.items
-    .filter((item): item is MailItem => item.kind === "command.message" && item.data.connectorId === "gmail" && item.data.channel === "email")
+    .filter(
+      (item): item is MailItem =>
+        item.kind === "command.message" &&
+        item.data.connectorId === "gmail" &&
+        item.data.channel === "email",
+    )
     .sort((a, b) => Date.parse(b.data.receivedAt) - Date.parse(a.data.receivedAt));
   const [openId, setOpenId] = useState<string | null>(null);
   const [letter, setLetter] = useState<GmailLetter | null>(null);
@@ -61,7 +80,9 @@ export function GmailWidget({ command, onRemove, style }: { command: CommandCont
     } catch (error) {
       const code = error instanceof CommandRequestError ? error.code : undefined;
       const messageText = error instanceof Error ? error.message : "The message could not be read.";
-      setReadError(code === "needs_auth" ? `Reading needs ${GMAIL_READ_SCOPE}. ${messageText}` : messageText);
+      setReadError(
+        code === "needs_auth" ? `Reading needs ${GMAIL_READ_SCOPE}. ${messageText}` : messageText,
+      );
     }
   }
 
@@ -70,7 +91,15 @@ export function GmailWidget({ command, onRemove, style }: { command: CommandCont
     const subject = letter.subject.startsWith("Re:") ? letter.subject : `Re: ${letter.subject}`;
     setSendError(null);
     setSent(null);
-    setDraft({ to: senderEmail(letter.from), cc: "", subject, body: "", threadId: letter.threadId, inReplyTo: letter.rfcMessageId, reply: true });
+    setDraft({
+      to: senderEmail(letter.from),
+      cc: "",
+      subject,
+      body: "",
+      threadId: letter.threadId,
+      inReplyTo: letter.rfcMessageId,
+      reply: true,
+    });
   }
 
   async function submit(event: FormEvent) {
@@ -86,7 +115,9 @@ export function GmailWidget({ command, onRemove, style }: { command: CommandCont
       inReplyTo: draft.inReplyTo,
     });
     if (failure) {
-      setSendError(failure.includes(GMAIL_SEND_SCOPE) ? failure : `Sending needs ${GMAIL_SEND_SCOPE}. ${failure}`);
+      setSendError(
+        failure.includes(GMAIL_SEND_SCOPE) ? failure : `Sending needs ${GMAIL_SEND_SCOPE}. ${failure}`,
+      );
       return;
     }
     setSent(draft.reply ? `Reply sent to ${draft.to}.` : `Sent to ${draft.to}.`);
@@ -99,18 +130,40 @@ export function GmailWidget({ command, onRemove, style }: { command: CommandCont
         <div className="cmd-widget-empty">
           <p>Your inbox shows here after Gmail is connected. Nothing is invented before that.</p>
           <p className="cmd-scope">Reading needs {GMAIL_READ_SCOPE}</p>
-          <button type="button" className="dash-button dash-button--gold mt-1 h-8 w-fit px-3 text-[13px]" onClick={() => void connectGoogleServices(["gmail"])}>
+          <Button
+            type="button"
+            size="sm"
+            className="mt-1 w-fit border border-[color:var(--land-gold)]/55 bg-[color:var(--land-gold)]/18 text-[color:var(--land-ink)] hover:bg-[color:var(--land-gold)]/28"
+            onClick={() => void connectGoogleServices(["gmail"])}
+          >
             Connect Gmail
-          </button>
+          </Button>
         </div>
       ) : (
         <div className="cmd-gmail">
           <div className="cmd-gmail-list">
-            {gmail.status === "needs_auth" ? <p className="cmd-error mb-2">Reading needs {GMAIL_READ_SCOPE}. {gmail.lastError ?? "Reconnect Gmail."}</p> : null}
-            {gmail.status !== "ok" && gmail.status !== "needs_auth" && gmail.lastError ? <p className="cmd-error mb-2">{gmail.lastError}</p> : null}
-            {messages.length === 0 ? <p className="cmd-empty">No inbox messages from the last week.</p> : null}
+            {gmail.status === "needs_auth" ? (
+              <Alert variant="destructive" className="mb-2 rounded-xl py-2">
+                <AlertDescription className="text-xs">
+                  Reading needs {GMAIL_READ_SCOPE}. {gmail.lastError ?? "Reconnect Gmail."}
+                </AlertDescription>
+              </Alert>
+            ) : null}
+            {gmail.status !== "ok" && gmail.status !== "needs_auth" && gmail.lastError ? (
+              <Alert variant="destructive" className="mb-2 rounded-xl py-2">
+                <AlertDescription className="text-xs">{gmail.lastError}</AlertDescription>
+              </Alert>
+            ) : null}
+            {messages.length === 0 ? (
+              <p className="cmd-empty">No inbox messages from the last week.</p>
+            ) : null}
             {messages.map((message) => (
-              <button key={message.id} type="button" className={`cmd-gmail-row ${openId === message.id ? "cmd-gmail-row--on" : ""}`} onClick={() => void openMessage(message)}>
+              <button
+                key={message.id}
+                type="button"
+                className={`cmd-gmail-row ${openId === message.id ? "cmd-gmail-row--on" : ""}`}
+                onClick={() => void openMessage(message)}
+              >
                 <span className="cmd-gmail-from">{senderName(message.data.from)}</span>
                 <span className="cmd-gmail-time">{relative(message.data.receivedAt, now)}</span>
                 <span className="cmd-gmail-subject">{message.data.subject || "(no subject)"}</span>
@@ -128,7 +181,15 @@ export function GmailWidget({ command, onRemove, style }: { command: CommandCont
                   setOpenId(null);
                   setSendError(null);
                   setSent(null);
-                  setDraft({ to: "", cc: "", subject: "", body: "", threadId: null, inReplyTo: null, reply: false });
+                  setDraft({
+                    to: "",
+                    cc: "",
+                    subject: "",
+                    body: "",
+                    threadId: null,
+                    inReplyTo: null,
+                    reply: false,
+                  });
                 }}
               >
                 New message
@@ -136,29 +197,63 @@ export function GmailWidget({ command, onRemove, style }: { command: CommandCont
             </div>
             {draft ? (
               canSend ? (
-                <form onSubmit={(event) => void submit(event)}>
-                  <p className="mt-2 text-[13px] font-medium">{draft.reply ? "Reply" : "New message"}</p>
+                <form onSubmit={(event) => void submit(event)} className="space-y-2">
+                  <p className="mt-2 text-[13px] font-medium">
+                    {draft.reply ? "Reply" : "New message"}
+                  </p>
                   <label className="cmd-gmail-field">
                     <span>To</span>
-                    <input className="cmd-field" value={draft.to} onChange={(e) => setDraft({ ...draft, to: e.target.value })} required autoComplete="off" />
+                    <Input
+                      className="cmd-field h-8 rounded-lg border border-border bg-background/40"
+                      value={draft.to}
+                      onChange={(e) => setDraft({ ...draft, to: e.target.value })}
+                      required
+                      autoComplete="off"
+                    />
                   </label>
                   <label className="cmd-gmail-field">
                     <span>Subject</span>
-                    <input className="cmd-field" value={draft.subject} onChange={(e) => setDraft({ ...draft, subject: e.target.value })} maxLength={300} autoComplete="off" />
+                    <Input
+                      className="cmd-field h-8 rounded-lg border border-border bg-background/40"
+                      value={draft.subject}
+                      onChange={(e) => setDraft({ ...draft, subject: e.target.value })}
+                      maxLength={300}
+                      autoComplete="off"
+                    />
                   </label>
-                  <textarea className="cmd-field mt-2 min-h-24 w-full" value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })} placeholder="Write your message" maxLength={50000} />
-                  {sendError ? <p className="cmd-error mt-2">{sendError}</p> : null}
-                  <button type="submit" className="dash-button dash-button--gold mt-2 h-8 px-3 text-[13px]" disabled={command.pending === "mail" || !draft.to.trim()}>
+                  <Textarea
+                    className="cmd-field mt-2 min-h-24 w-full rounded-xl border border-border bg-background/40"
+                    value={draft.body}
+                    onChange={(e) => setDraft({ ...draft, body: e.target.value })}
+                    placeholder="Write your message"
+                    maxLength={50000}
+                  />
+                  {sendError ? (
+                    <Alert variant="destructive" className="rounded-xl py-2">
+                      <AlertDescription className="text-xs">{sendError}</AlertDescription>
+                    </Alert>
+                  ) : null}
+                  <Button
+                    type="submit"
+                    size="sm"
+                    className="border border-[color:var(--land-gold)]/55 bg-[color:var(--land-gold)]/18 text-[color:var(--land-ink)] hover:bg-[color:var(--land-gold)]/28"
+                    disabled={command.pending === "mail" || !draft.to.trim()}
+                  >
                     {command.pending === "mail" ? "Sending…" : "Send"}
-                  </button>
+                  </Button>
                 </form>
               ) : (
                 <div className="cmd-widget-empty">
                   <p>Sending and replying need their own Google permission. Reading stays read-only.</p>
                   <p className="cmd-scope">Sending needs {GMAIL_SEND_SCOPE}</p>
-                  <button type="button" className="dash-button dash-button--gold mt-1 h-8 w-fit px-3 text-[13px]" onClick={() => void connectGoogleService("gmail-send")}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="mt-1 w-fit border border-[color:var(--land-gold)]/55 bg-[color:var(--land-gold)]/18 text-[color:var(--land-ink)] hover:bg-[color:var(--land-gold)]/28"
+                    onClick={() => void connectGoogleServices(["gmail-send"])}
+                  >
                     Allow sending
-                  </button>
+                  </Button>
                 </div>
               )
             ) : letter ? (

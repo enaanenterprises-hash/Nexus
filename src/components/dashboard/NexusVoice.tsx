@@ -1,6 +1,11 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { ArrowUp, ChevronDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { NexusBrainState } from "@/lib/extensions";
 import { ResearchIcon } from "./icons";
 import type { Utterance } from "./use-nexus-session";
@@ -24,7 +29,17 @@ const STATE_LABEL: Record<NexusBrainState, string> = {
 };
 
 /** Nexus speaks in one calm voice in the negative space beneath the core. */
-export function NexusVoice({ firstName, brain, current, pendingPrompt, revealed, history, followUps, skipWake = false, onAsk }: Props) {
+export function NexusVoice({
+  firstName,
+  brain,
+  current,
+  pendingPrompt,
+  revealed,
+  history,
+  followUps,
+  skipWake = false,
+  onAsk,
+}: Props) {
   const [showEarlier, setShowEarlier] = useState(false);
   const [waking, setWaking] = useState(!skipWake);
 
@@ -77,36 +92,59 @@ export function NexusVoice({ firstName, brain, current, pendingPrompt, revealed,
       </div>
 
       {followUps.length > 0 ? (
-        <div className={`mt-3 flex flex-wrap justify-center gap-2 transition-opacity duration-500 ${brain === "idle" ? "opacity-100" : "pointer-events-none opacity-0"}`}>
+        <div
+          className={`mt-3 flex flex-wrap justify-center gap-2 transition-opacity duration-500 ${
+            brain === "idle" ? "opacity-100" : "pointer-events-none opacity-0"
+          }`}
+        >
           {followUps.map((f) => (
-            <button key={f} type="button" className="dash-chip" onClick={() => onAsk(f)} disabled={brain !== "idle"}>
+            <Button
+              key={f}
+              type="button"
+              variant="outline"
+              size="sm"
+              className="dash-chip h-8 rounded-full px-3.5 text-[13px]"
+              onClick={() => onAsk(f)}
+              disabled={brain !== "idle"}
+            >
               {f}
-            </button>
+            </Button>
           ))}
         </div>
       ) : null}
 
       {history.length > 0 ? (
-        <div className="mt-3 w-full">
-          <button
-            type="button"
-            onClick={() => setShowEarlier((v) => !v)}
-            className="text-[12px] font-medium text-[color:var(--land-faint)] transition-colors hover:text-[color:var(--land-muted)]"
-            aria-expanded={showEarlier}
+        <Collapsible open={showEarlier} onOpenChange={setShowEarlier} className="mt-3 w-full">
+          <CollapsibleTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                className="h-7 gap-1 px-2.5 text-[12px] text-muted-foreground hover:text-foreground"
+              />
+            }
           >
-            {showEarlier ? "Hide earlier" : `Earlier (${history.length})`}
-          </button>
-          {showEarlier ? (
-            <ol className="dash-earlier-list mx-auto mt-2.5 max-h-40 max-w-md space-y-3 overflow-y-auto text-left dash-panel">
-              {history.map((u) => (
-                <li key={u.id} className="text-[13px] leading-relaxed text-[color:var(--land-muted)]">
-                  {u.prompt ? <span className="block text-[color:var(--land-faint)]">You — {u.prompt}</span> : null}
-                  {u.text}
-                </li>
-              ))}
-            </ol>
-          ) : null}
-        </div>
+            <ChevronDown
+              className={`size-3.5 transition-transform duration-150 ${showEarlier ? "rotate-180" : ""}`}
+            />
+            <span>{showEarlier ? "Hide earlier" : `Earlier (${history.length})`}</span>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <ScrollArea className="dash-earlier-list mx-auto mt-2.5 max-h-40 max-w-md text-left">
+              <ol className="space-y-3 pr-2">
+                {history.map((u) => (
+                  <li key={u.id} className="text-[13px] leading-relaxed text-[color:var(--land-muted)]">
+                    {u.prompt ? (
+                      <span className="block text-[color:var(--land-faint)]">You — {u.prompt}</span>
+                    ) : null}
+                    {u.text}
+                  </li>
+                ))}
+              </ol>
+            </ScrollArea>
+          </CollapsibleContent>
+        </Collapsible>
       ) : null}
 
       <p className="dash-eyebrow mt-4 flex items-center gap-2" aria-live="polite">
@@ -157,24 +195,42 @@ export function NexusInput({
         autoComplete="off"
       />
       {onResearch ? (
-        <button
-          type="button"
-          className="dash-research"
-          onClick={() => {
-            onResearch(draft);
-            setDraft("");
-          }}
-          aria-label={draft.trim() ? `Research “${draft.trim()}”` : "Open Research"}
-          title={draft.trim() ? "Search the web with Research" : "Open Research"}
-        >
-          <ResearchIcon size={18} />
-        </button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                type="button"
+                className="dash-research"
+                onClick={() => {
+                  onResearch(draft);
+                  setDraft("");
+                }}
+                aria-label={draft.trim() ? `Research “${draft.trim()}”` : "Open Research"}
+              >
+                <ResearchIcon size={18} />
+              </button>
+            }
+          />
+          <TooltipContent side="top">
+            {draft.trim() ? "Search the web with Research" : "Open Research"}
+          </TooltipContent>
+        </Tooltip>
       ) : null}
-      <button type="submit" className="dash-send" disabled={disabled || !draft.trim()} aria-label="Send to Nexus">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-          <path d="M8 13V3M3.5 7.5 8 3l4.5 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              type="submit"
+              className="dash-send"
+              disabled={disabled || !draft.trim()}
+              aria-label="Send to Nexus"
+            >
+              <ArrowUp className="size-4" />
+            </button>
+          }
+        />
+        <TooltipContent side="top">Send to Nexus</TooltipContent>
+      </Tooltip>
     </form>
   );
 }

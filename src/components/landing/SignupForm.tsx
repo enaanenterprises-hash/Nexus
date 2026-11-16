@@ -1,4 +1,8 @@
 import { redirect } from "next/navigation"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Separator } from "@/components/ui/separator"
 import { signInWithEmail, signInWithGoogle } from "@/lib/auth/actions"
 import { firstParam, safeCallback } from "@/lib/auth/callback"
 import { signupErrorMessage } from "@/lib/auth/messages"
@@ -48,27 +52,31 @@ export async function SignupForm({
       </p>
 
       {message ? (
-        <p className="landing-alert" role="alert">
-          {message}
-        </p>
+        <Alert className="landing-alert text-left" role="alert">
+          <AlertDescription className="text-[color:var(--land-gold-soft)]">{message}</AlertDescription>
+        </Alert>
       ) : null}
 
       <form action={signInWithGoogle} className="mt-10">
         <input type="hidden" name="callbackUrl" value={callbackUrl} />
-        <SubmitButton className="landing-google" pendingLabel="Redirecting to Google…">
+        <SubmitButton className="landing-google h-auto" pendingLabel="Redirecting to Google…">
           <GoogleMark />
           Continue with Google
         </SubmitButton>
       </form>
 
-      <p className="landing-or">or</p>
+      <div className="my-6 flex items-center gap-3 text-xs uppercase tracking-[0.16em] text-[color:var(--land-faint)]">
+        <Separator className="flex-1 bg-[color:var(--land-hair)]" />
+        <span>or</span>
+        <Separator className="flex-1 bg-[color:var(--land-hair)]" />
+      </div>
 
       <form action={signInWithEmail}>
         <input type="hidden" name="callbackUrl" value={callbackUrl} />
-        <label htmlFor="signup-email" className="sr-only">
+        <Label htmlFor="signup-email" className="sr-only">
           Email
-        </label>
-        <input
+        </Label>
+        <Input
           id="signup-email"
           name="email"
           type="email"
@@ -76,9 +84,9 @@ export async function SignupForm({
           autoComplete="email"
           inputMode="email"
           placeholder="Email address"
-          className="landing-input"
+          className="landing-input h-auto"
         />
-        <SubmitButton className="landing-primary mt-3 w-full" pendingLabel="Sending link…">
+        <SubmitButton className="landing-primary mt-3 h-auto w-full" pendingLabel="Sending link…">
           Email me a sign-in link
         </SubmitButton>
       </form>

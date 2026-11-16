@@ -1,17 +1,25 @@
 "use client";
 
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type FormEvent,
-  type KeyboardEvent,
-  type RefObject,
-} from "react";
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type RefObject } from "react";
+import { ArrowRight, Check, ChevronLeft, Moon, Sun, X } from "lucide-react";
 import { LocationInput } from "@/components/command/ConnectionsView";
 import { SourceGlyph } from "@/components/command/parts";
 import { useCommand, type CommandController } from "@/components/command/use-command";
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Kbd } from "@/components/ui/kbd";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SAMPLE_EXTENSIONS } from "@/extensions/samples";
 import { connectGoogleServices } from "@/lib/command/google-connect";
 import {
@@ -30,7 +38,6 @@ import {
   type ExtensionId,
 } from "@/lib/extensions";
 import { useTheme, type ThemeMode } from "@/lib/theme";
-import { ArrowRight, CheckIcon, ChevronLeft, CloseIcon, MoonIcon, SunIcon } from "./icons";
 import { SetupCanvas, type SetupStagePhase } from "./SetupCanvas";
 
 export type SetupStep = "name" | "theme" | "apps" | "widgets" | "nodes";
@@ -235,19 +242,6 @@ export function SetupExperience({
     goToStep(next);
   }
 
-  function handleTabKeyDown(e: KeyboardEvent<HTMLButtonElement>, idx: number) {
-    let targetIdx: number | null = null;
-    if (e.key === "ArrowRight") targetIdx = (idx + 1) % STEPS.length;
-    else if (e.key === "ArrowLeft") targetIdx = (idx - 1 + STEPS.length) % STEPS.length;
-    else if (e.key === "Home") targetIdx = 0;
-    else if (e.key === "End") targetIdx = STEPS.length - 1;
-    if (targetIdx === null) return;
-    e.preventDefault();
-    const target = STEPS[targetIdx]!;
-    tabRefs.current[targetIdx]?.focus();
-    navigateToStep(target.id);
-  }
-
   async function saveNameAndContinue(target: SetupStep = "theme") {
     if (nameSaving) return;
     const trimmed = nameInput.trim();
@@ -345,7 +339,7 @@ export function SetupExperience({
   return (
     <div
       ref={rootRef}
-      className="dash setup-root relative h-[100svh] w-full flex-1 overflow-hidden"
+      className={`dash setup-root ${theme === "dark" ? "dark" : "light"} relative h-[100svh] w-full flex-1 overflow-hidden`}
       data-theme={theme}
     >
       <div className="absolute inset-0">
@@ -373,42 +367,42 @@ export function SetupExperience({
         </div>
       ) : null}
 
-      {stage === "modal" ? (
-        <div className="setup-modal-backdrop fixed inset-0 z-30 flex items-center justify-center p-2.5 sm:p-6">
-          <section
-            aria-label="Workspace setup"
-            className="setup-card relative flex max-h-[88svh] w-full max-w-[720px] flex-col overflow-hidden"
+      <Dialog open={stage === "modal"} onOpenChange={() => {}}>
+        <DialogContent
+          overlayClassName="setup-modal-backdrop"
+          showCloseButton={false}
+          data-theme={theme}
+          aria-label="Workspace setup"
+          className="setup-card flex max-h-[88svh] w-[calc(100%-1.25rem)] max-w-[720px] flex-col gap-0 overflow-hidden p-0 ring-0 sm:max-w-[720px]"
+        >
+          <Tabs
+            value={step}
+            onValueChange={(next) => navigateToStep(next as SetupStep)}
+            className="flex min-h-0 flex-1 flex-col gap-0"
           >
             <header className="setup-card-head flex items-stretch justify-between gap-2 px-4 sm:gap-4 sm:px-8">
-              <div
-                role="tablist"
+              <TabsList
+                variant="line"
                 aria-label="Setup steps"
-                className="setup-tabs flex min-w-0 items-stretch gap-3.5 sm:gap-7"
+                className="setup-tabs flex h-auto min-w-0 items-stretch justify-start gap-3.5 rounded-none bg-transparent p-0 group-data-horizontal/tabs:h-auto sm:gap-7"
               >
                 {STEPS.map((s, idx) => {
                   const active = s.id === step;
                   return (
-                    <button
+                    <TabsTrigger
                       key={s.id}
                       ref={(el) => {
                         tabRefs.current[idx] = el;
                       }}
-                      id={`setup-tab-${s.id}`}
-                      role="tab"
-                      type="button"
-                      aria-selected={active}
-                      aria-controls={`setup-panel-${s.id}`}
-                      tabIndex={active ? 0 : -1}
-                      onClick={() => navigateToStep(s.id)}
-                      onKeyDown={(e) => handleTabKeyDown(e, idx)}
-                      className="setup-tab"
+                      value={s.id}
+                      className="setup-tab flex-none rounded-none border-0 bg-transparent shadow-none after:hidden"
                       data-active={active ? "true" : "false"}
                     >
-                      <span>{s.label}</span>
-                    </button>
+                      {s.label}
+                    </TabsTrigger>
                   );
                 })}
-              </div>
+              </TabsList>
 
               <button
                 type="button"
@@ -421,96 +415,98 @@ export function SetupExperience({
               </button>
             </header>
 
-            <div className="px-4 pt-5 pb-3 sm:px-8 sm:pt-7">
-              <h1 className="setup-title">{stepMeta.title}</h1>
-              <p className="setup-subtitle mt-1.5">{stepMeta.subtitle}</p>
-            </div>
+            <DialogHeader className="gap-1.5 px-4 pt-5 pb-3 text-left sm:px-8 sm:pt-7">
+              <DialogTitle className="setup-title font-normal">{stepMeta.title}</DialogTitle>
+              <DialogDescription className="setup-subtitle">{stepMeta.subtitle}</DialogDescription>
+            </DialogHeader>
 
             {oauthNotice ? (
               <div className="mx-4 mb-2 sm:mx-8">
-                <div
+                <Alert
                   role="status"
-                  className="setup-notice flex items-center justify-between gap-3 px-3.5 py-2 text-[12.5px]"
+                  className="setup-notice rounded-xl px-3.5 py-2 text-[12.5px]"
                   data-ok={oauthNotice.ok ? "true" : "false"}
                 >
-                  <span>{oauthNotice.text}</span>
-                  <button
-                    type="button"
-                    onClick={onDismissNotice}
-                    className="setup-icon-btn shrink-0"
-                    aria-label="Dismiss notice"
-                  >
-                    <CloseIcon size={13} />
-                  </button>
-                </div>
+                  <AlertDescription className="text-[12.5px] text-current">
+                    {oauthNotice.text}
+                  </AlertDescription>
+                  <AlertAction>
+                    <button
+                      type="button"
+                      onClick={onDismissNotice}
+                      className="setup-icon-btn shrink-0"
+                      aria-label="Dismiss notice"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </AlertAction>
+                </Alert>
               </div>
             ) : null}
 
-            <div
-              id={`setup-panel-${step}`}
-              role="tabpanel"
-              aria-labelledby={`setup-tab-${step}`}
-              className="setup-card-body min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-5 sm:px-8"
-            >
-              {step === "name" ? (
-                <SetupNameStep
-                  inputRef={nameInputRef}
-                  value={nameInput}
-                  error={nameError}
-                  busy={nameSaving}
-                  onChange={(v) => {
-                    setNameInput(v);
-                    if (nameError) setNameError(null);
-                  }}
-                  onSubmit={() => void saveNameAndContinue("theme")}
-                />
-              ) : step === "theme" ? (
-                <SetupThemeStep
-                  theme={theme}
-                  onSelect={(next) => {
-                    setTheme(next);
-                    pulse();
-                  }}
-                />
-              ) : step === "apps" ? (
-                <SetupAppsStep
-                  command={command}
-                  connections={connections}
-                  connectedIds={connectedIds}
-                  onPulse={pulse}
-                />
-              ) : step === "widgets" ? (
-                <SetupWidgetsStep
-                  widgetIds={effectiveWidgetIds}
-                  connectedIds={connectedIds}
-                  onChange={(next) => {
-                    setWidgetIds(next);
-                    setWidgetsTouched(true);
-                    pulse();
-                  }}
-                />
-              ) : (
-                <SetupNodesStep
-                  selectedNodes={selectedNodes}
-                  onChange={(next) => {
-                    setSelectedNodes(next);
-                    pulse();
-                  }}
-                />
-              )}
-            </div>
+            <ScrollArea className="setup-card-body min-h-0 flex-1">
+              <div className="px-4 pt-2 pb-5 sm:px-8">
+                {step === "name" ? (
+                  <SetupNameStep
+                    inputRef={nameInputRef}
+                    value={nameInput}
+                    error={nameError}
+                    busy={nameSaving}
+                    onChange={(v) => {
+                      setNameInput(v);
+                      if (nameError) setNameError(null);
+                    }}
+                    onSubmit={() => void saveNameAndContinue("theme")}
+                  />
+                ) : step === "theme" ? (
+                  <SetupThemeStep
+                    theme={theme}
+                    onSelect={(next) => {
+                      setTheme(next);
+                      pulse();
+                    }}
+                  />
+                ) : step === "apps" ? (
+                  <SetupAppsStep
+                    command={command}
+                    connections={connections}
+                    connectedIds={connectedIds}
+                    onPulse={pulse}
+                  />
+                ) : step === "widgets" ? (
+                  <SetupWidgetsStep
+                    widgetIds={effectiveWidgetIds}
+                    connectedIds={connectedIds}
+                    onChange={(next) => {
+                      setWidgetIds(next);
+                      setWidgetsTouched(true);
+                      pulse();
+                    }}
+                  />
+                ) : (
+                  <SetupNodesStep
+                    selectedNodes={selectedNodes}
+                    onChange={(next) => {
+                      setSelectedNodes(next);
+                      pulse();
+                    }}
+                  />
+                )}
+              </div>
+            </ScrollArea>
 
             <footer className="setup-card-foot flex items-center justify-between gap-3 px-4 py-4 sm:px-8">
               <div>
                 {currentStepIndex > 0 ? (
-                  <button
+                  <Button
                     type="button"
+                    variant="outline"
                     onClick={() => goToStep(STEPS[currentStepIndex - 1]!.id)}
-                    className="setup-btn setup-btn--ghost"
+                    className="setup-btn setup-btn--ghost shadow-none"
                   >
-                    <ChevronLeft size={14} />
+                    <ChevronLeft className="size-3.5" />
                     <span>Back</span>
-                  </button>
+                  </Button>
                 ) : (
                   <span className="setup-step-meta">1 of {STEPS.length}</span>
                 )}
@@ -518,40 +514,40 @@ export function SetupExperience({
 
               <div className="flex items-center gap-2.5">
                 {step === "name" ? (
-                  <button
+                  <Button
                     type="button"
                     disabled={nameSaving}
                     onClick={() => void saveNameAndContinue("theme")}
-                    className="setup-btn setup-btn--primary"
+                    className="setup-btn setup-btn--primary shadow-none"
                   >
                     <span>{nameSaving ? "Saving…" : "Continue"}</span>
-                    <ArrowRight size={14} />
-                  </button>
+                    <ArrowRight className="size-3.5" />
+                  </Button>
                 ) : currentStepIndex < STEPS.length - 1 ? (
-                  <button
+                  <Button
                     type="button"
                     onClick={() => goToStep(STEPS[currentStepIndex + 1]!.id)}
-                    className="setup-btn setup-btn--primary"
+                    className="setup-btn setup-btn--primary shadow-none"
                   >
                     <span>Continue</span>
-                    <ArrowRight size={14} />
-                  </button>
+                    <ArrowRight className="size-3.5" />
+                  </Button>
                 ) : (
-                  <button
+                  <Button
                     type="button"
                     disabled={finishing}
                     onClick={() => void handleFinish()}
-                    className="setup-btn setup-btn--primary"
+                    className="setup-btn setup-btn--primary shadow-none"
                   >
                     <span>{finishing ? "Preparing workspace…" : "Enter Nexus"}</span>
-                    <ArrowRight size={14} />
-                  </button>
+                    <ArrowRight className="size-3.5" />
+                  </Button>
                 )}
               </div>
             </footer>
-          </section>
-        </div>
-      ) : null}
+          </Tabs>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -585,11 +581,11 @@ function SetupNameStep({
   return (
     <form onSubmit={handleFormSubmit} className="space-y-6 pt-3 pb-2">
       <div>
-        <label htmlFor="setup-name-input" className="setup-label block">
+        <Label htmlFor="setup-name-input" className="setup-label block">
           Display name
-        </label>
+        </Label>
         <div className="setup-name-field mt-2">
-          <input
+          <Input
             ref={inputRef}
             id="setup-name-input"
             type="text"
@@ -599,11 +595,11 @@ function SetupNameStep({
             maxLength={80}
             disabled={busy}
             autoComplete="given-name"
-            className="setup-name-input"
+            className="setup-name-input rounded-none border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
           />
-          <kbd className="setup-kbd hidden sm:inline-flex" aria-hidden>
+          <Kbd className="setup-kbd hidden h-auto shadow-none sm:inline-flex" aria-hidden>
             Enter
-          </kbd>
+          </Kbd>
         </div>
         {error ? (
           <p className="setup-error mt-2.5" role="alert">
@@ -729,7 +725,7 @@ function SetupThemeStep({
             <div className="mt-3.5 flex items-center justify-between gap-2.5">
               <div className="flex min-w-0 items-center gap-2.5">
                 <span className="setup-theme-icon" aria-hidden>
-                  {isDark ? <MoonIcon size={14} /> : <SunIcon size={14} />}
+                  {isDark ? <Moon className="size-3.5" /> : <Sun className="size-3.5" />}
                 </span>
                 <div className="min-w-0">
                   <div className="setup-row-title">{opt.title}</div>
@@ -737,7 +733,7 @@ function SetupThemeStep({
                 </div>
               </div>
               <span className="setup-check-ring shrink-0" data-checked={active ? "true" : "false"}>
-                {active ? <CheckIcon size={11} /> : null}
+                {active ? <Check className="size-3" strokeWidth={2.5} /> : null}
               </span>
             </div>
           </button>
@@ -748,7 +744,7 @@ function SetupThemeStep({
 }
 
 /* ============================================================================
-   STEP 3: CONNECT APPS (HAIRLINE ARCHITECTURAL LIST)
+   STEP 3: CONNECT APPS (HAIRLINE ARCHITECTURAL LIST + COLLAPSIBLE FORMS)
    ============================================================================ */
 
 function SetupAppsStep({
@@ -801,9 +797,9 @@ function SetupAppsStep({
   return (
     <div className="space-y-6 py-1">
       {formError ? (
-        <p className="setup-error" role="alert">
-          {formError}
-        </p>
+        <Alert variant="destructive" className="rounded-xl py-2" role="alert">
+          <AlertDescription className="text-xs">{formError}</AlertDescription>
+        </Alert>
       ) : null}
 
       <section aria-label="Instant feeds">
@@ -824,8 +820,10 @@ function SetupAppsStep({
             const hasSettings = (m.settings?.length ?? 0) > 0;
 
             return (
-              <div
+              <Collapsible
                 key={m.id}
+                open={isExpanded}
+                onOpenChange={(open) => setExpandedId(open ? m.id : null)}
                 className="setup-row"
                 data-selected={isConnected ? "true" : "false"}
               >
@@ -859,7 +857,7 @@ function SetupAppsStep({
                   </div>
                 </div>
 
-                {isExpanded ? (
+                <CollapsibleContent>
                   <SetupConnectorInlineForm
                     manifest={m}
                     connection={connections.get(m.id) ?? null}
@@ -869,8 +867,8 @@ function SetupAppsStep({
                       onPulse();
                     }}
                   />
-                ) : null}
-              </div>
+                </CollapsibleContent>
+              </Collapsible>
             );
           })}
         </div>
@@ -910,8 +908,10 @@ function SetupAppsStep({
                 : "API token";
 
             return (
-              <div
+              <Collapsible
                 key={m.id}
+                open={isExpanded}
+                onOpenChange={(open) => setExpandedId(open ? m.id : null)}
                 className="setup-row"
                 data-selected={isConnected ? "true" : "false"}
               >
@@ -988,7 +988,7 @@ function SetupAppsStep({
                   </div>
                 </div>
 
-                {isExpanded ? (
+                <CollapsibleContent>
                   <SetupConnectorInlineForm
                     manifest={m}
                     connection={conn}
@@ -998,8 +998,8 @@ function SetupAppsStep({
                       onPulse();
                     }}
                   />
-                ) : null}
-              </div>
+                </CollapsibleContent>
+              </Collapsible>
             );
           })}
         </div>
@@ -1026,6 +1026,7 @@ function SetupConnectorInlineForm({
   );
   const [credentials, setCredentials] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const formId = useId();
   const busy = command.pending === `connect:${m.id}`;
 
   async function onSubmit(e: FormEvent) {
@@ -1045,44 +1046,53 @@ function SetupConnectorInlineForm({
   return (
     <form onSubmit={onSubmit} className="setup-inline-form mt-3 space-y-2.5 pt-3">
       {m.auth.type === "api_key"
-        ? m.auth.fields.map((f) => (
-            <label key={f.key} className="block">
-              <span className="setup-label">{f.label}</span>
-              <input
-                type={f.secret ? "password" : "text"}
-                value={credentials[f.key] ?? ""}
-                onChange={(e) => setCredentials((c) => ({ ...c, [f.key]: e.target.value }))}
-                placeholder={connection?.hasCredentials ? "Saved · enter to replace" : f.placeholder}
-                className="setup-input setup-input--sm mt-1.5"
-                autoComplete="off"
-                spellCheck={false}
-              />
-            </label>
-          ))
+        ? m.auth.fields.map((f) => {
+            const fieldId = `${formId}-cred-${f.key}`;
+            return (
+              <div key={f.key} className="space-y-1">
+                <Label htmlFor={fieldId} className="setup-label">{f.label}</Label>
+                <Input
+                  id={fieldId}
+                  type={f.secret ? "password" : "text"}
+                  value={credentials[f.key] ?? ""}
+                  onChange={(e) => setCredentials((c) => ({ ...c, [f.key]: e.target.value }))}
+                  placeholder={connection?.hasCredentials ? "Saved · enter to replace" : f.placeholder}
+                  className="setup-input setup-input--sm"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </div>
+            );
+          })
         : null}
-      {(m.settings ?? []).map((s) =>
-        s.type === "location" ? (
-          <LocationInput
-            key={s.key}
-            field={s}
-            value={settings[s.key] ?? ""}
-            onChange={(v) => setSettings((prev) => ({ ...prev, [s.key]: v }))}
-          />
-        ) : (
-          <label key={s.key} className="block">
-            <span className="setup-label">{s.label}</span>
-            <input
+      {(m.settings ?? []).map((s) => {
+        if (s.type === "location") {
+          return (
+            <LocationInput
+              key={s.key}
+              field={s}
+              value={settings[s.key] ?? ""}
+              onChange={(v) => setSettings((prev) => ({ ...prev, [s.key]: v }))}
+            />
+          );
+        }
+        const settingId = `${formId}-set-${s.key}`;
+        return (
+          <div key={s.key} className="space-y-1">
+            <Label htmlFor={settingId} className="setup-label">{s.label}</Label>
+            <Input
+              id={settingId}
               type="text"
               value={settings[s.key] ?? ""}
               onChange={(e) => setSettings((prev) => ({ ...prev, [s.key]: e.target.value }))}
               placeholder={s.placeholder}
-              className="setup-input setup-input--sm mt-1.5"
+              className="setup-input setup-input--sm"
               autoComplete="off"
               spellCheck={false}
             />
-          </label>
-        ),
-      )}
+          </div>
+        );
+      })}
       {error ? <p className="setup-error">{error}</p> : null}
       <div className="flex justify-end pt-0.5">
         <button type="submit" disabled={busy} className="setup-pill-btn" data-active="true">
@@ -1198,11 +1208,7 @@ function SetupWidgetsStep({
           >
             Suggested
           </button>
-          <button
-            type="button"
-            onClick={() => onChange([])}
-            className="setup-text-btn"
-          >
+          <button type="button" onClick={() => onChange([])} className="setup-text-btn">
             Clear
           </button>
         </div>
@@ -1253,7 +1259,7 @@ function SetupWidgetsStep({
                   className="setup-icon-btn"
                   aria-label={`Remove ${def?.name ?? p.id}`}
                 >
-                  <CloseIcon size={11} />
+                  <X className="size-3" />
                 </button>
               </div>
               <span className="setup-row-sub">
@@ -1293,7 +1299,7 @@ function SetupWidgetsStep({
                 className="setup-widget-chip"
                 data-selected={onBoard ? "true" : "false"}
               >
-                {onBoard ? <CheckIcon size={11} /> : null}
+                {onBoard ? <Check className="size-3" strokeWidth={2.5} /> : null}
                 <span>{w.name}</span>
                 <span className="setup-chip-dim">
                   {w.w}×{w.h}
@@ -1363,7 +1369,7 @@ function SetupNodesStep({
                   </div>
                 </div>
                 <span className="setup-check-ring mt-0.5 shrink-0" data-checked={active ? "true" : "false"}>
-                  {active ? <CheckIcon size={11} /> : null}
+                  {active ? <Check className="size-3" strokeWidth={2.5} /> : null}
                 </span>
               </div>
             </button>

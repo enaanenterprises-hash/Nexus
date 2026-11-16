@@ -1,22 +1,27 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
+import {
+  Bookmark,
+  BookOpen,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  Globe,
+  Library,
+  Plus,
+  RotateCw,
+  Search,
+  X,
+} from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "cn";
 import { nexusBus } from "@/lib/extensions";
 import { RESEARCH_NODE_ID } from "@/extensions/research/node";
 import type { ReaderDocument, ResearchSourceSummary } from "@/lib/research/types";
-import {
-  BookmarkIcon,
-  ChevronLeft,
-  ChevronRight,
-  CloseIcon,
-  ExternalIcon,
-  LibraryIcon,
-  LiveIcon,
-  PlusIcon,
-  ReaderIcon,
-  ReloadIcon,
-  SearchIcon,
-} from "@/components/dashboard/icons";
 import { LibraryPanel } from "./LibraryPanel";
 import { ReaderView } from "./ReaderView";
 import { displayHost, parseAddress, sourceToDocument } from "./research-client";
@@ -36,6 +41,16 @@ function addressText(entry: Entry): string {
   return "";
 }
 
+function subscribeDesktop(onChange: () => void) {
+  const mql = window.matchMedia("(min-width: 768px)");
+  mql.addEventListener("change", onChange);
+  return () => mql.removeEventListener("change", onChange);
+}
+
+function getIsDesktop() {
+  return window.matchMedia("(min-width: 768px)").matches;
+}
+
 /** The browser built into Nexus: search, clean reader, tabs, and research collections. */
 export function ResearchView({ request, onClose }: Props) {
   const browser = useResearchBrowser();
@@ -44,9 +59,10 @@ export function ResearchView({ request, onClose }: Props) {
   const [address, setAddress] = useState("");
   const [editing, setEditing] = useState(false);
   const [liveFor, setLiveFor] = useState<string | null>(null);
+  const isDesktop = useSyncExternalStore(subscribeDesktop, getIsDesktop, () => true);
   const [showLibrary, setShowLibrary] = useState(true);
   const [libraryOverlay, setLibraryOverlay] = useState(false);
-  const openLibrary = () => (window.innerWidth < 768 ? setLibraryOverlay(true) : setShowLibrary(true));
+  const openLibrary = () => (isDesktop ? setShowLibrary(true) : setLibraryOverlay(true));
   const [saving, setSaving] = useState(false);
   const [focusQuote, setFocusQuote] = useState<{ quote: string; serial: number } | null>(null);
   const addressRef = useRef<HTMLInputElement>(null);
@@ -54,7 +70,13 @@ export function ResearchView({ request, onClose }: Props) {
   const handled = useRef<number | null>(null);
 
   const doc: ReaderDocument | null =
-    load?.status === "ready" ? (load.kind === "page" ? load.data : load.kind === "source" ? sourceToDocument(load.data) : null) : null;
+    load?.status === "ready"
+      ? load.kind === "page"
+        ? load.data
+        : load.kind === "source"
+          ? sourceToDocument(load.data)
+          : null
+      : null;
   const storedSource = load?.status === "ready" && load.kind === "source" ? load.data : null;
   const currentSource = storedSource
     ? (library.sources.find((s) => s.id === storedSource.id) ?? storedSource)
@@ -67,7 +89,10 @@ export function ResearchView({ request, onClose }: Props) {
     const parsed = parseAddress(input);
     if (!parsed) return;
     nexusBus.emit("research:query", { query: input.trim(), kind: parsed.kind }, RESEARCH_NODE_ID);
-    browser.navigate(parsed.kind === "url" ? { kind: "page", url: parsed.url } : { kind: "search", query: parsed.query }, { newTab });
+    browser.navigate(
+      parsed.kind === "url" ? { kind: "page", url: parsed.url } : { kind: "search", query: parsed.query },
+      { newTab },
+    );
     setEditing(false);
     addressRef.current?.blur();
   }
@@ -82,7 +107,10 @@ export function ResearchView({ request, onClose }: Props) {
     }
     nexusBus.emit("research:query", { query: request.input.trim(), kind: parsed.kind }, RESEARCH_NODE_ID);
     const fresh = browser.entry.kind === "start";
-    browser.navigate(parsed.kind === "url" ? { kind: "page", url: parsed.url } : { kind: "search", query: parsed.query }, { newTab: !fresh });
+    browser.navigate(
+      parsed.kind === "url" ? { kind: "page", url: parsed.url } : { kind: "search", query: parsed.query },
+      { newTab: !fresh },
+    );
   }, [request, browser]);
 
   const viewKey = `${browser.activeId}|${key}`;
@@ -95,7 +123,11 @@ export function ResearchView({ request, onClose }: Props) {
 
   useEffect(() => {
     if (!doc) return;
-    nexusBus.emit("research:page-opened", { url: doc.url, title: doc.title, siteName: doc.siteName, sourceId: currentSource?.id ?? null }, RESEARCH_NODE_ID);
+    nexusBus.emit(
+      "research:page-opened",
+      { url: doc.url, title: doc.title, siteName: doc.siteName, sourceId: currentSource?.id ?? null },
+      RESEARCH_NODE_ID,
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc?.url, doc?.fetchedAt]);
 
@@ -135,19 +167,38 @@ export function ResearchView({ request, onClose }: Props) {
   if (entry.kind === "start") {
     body = <StartPage library={library} onGo={(input) => go(input)} onOpenSource={openSource} />;
   } else if (!load || load.status === "loading") {
-    body = <LoadingState label={entry.kind === "search" ? `Searching for “${entry.query}”` : `Reading ${displayHost(addressText(entry))}`} />;
+    body = (
+      <LoadingState
+        label={
+          entry.kind === "search"
+            ? `Searching for “${entry.query}”`
+            : `Reading ${displayHost(addressText(entry))}`
+        }
+      />
+    );
   } else if (load.status === "error") {
     body = (
       <div className="mx-auto w-full max-w-[46rem] px-6 pt-10 sm:px-10">
-        <SearchNotice title={load.code === "blocked" ? "That address can't be opened" : "This page didn't come through"}>
+        <SearchNotice
+          title={load.code === "blocked" ? "That address can't be opened" : "This page didn't come through"}
+        >
           <p>{load.message}</p>
           {entry.kind === "page" && load.code !== "blocked" ? (
             <p className="mt-2">
-              <a href={entry.url} target="_blank" rel="noopener noreferrer" className="font-medium text-[color:var(--land-gold-soft)] hover:underline">
+              <a
+                href={entry.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-[color:var(--land-gold-soft)] hover:underline"
+              >
                 Open the original in a new tab
               </a>{" "}
               or{" "}
-              <button type="button" onClick={browser.reload} className="font-medium text-[color:var(--land-gold-soft)] hover:underline">
+              <button
+                type="button"
+                onClick={browser.reload}
+                className="font-medium text-[color:var(--land-gold-soft)] hover:underline"
+              >
                 try again
               </button>
               .
@@ -157,7 +208,12 @@ export function ResearchView({ request, onClose }: Props) {
       </div>
     );
   } else if (load.kind === "search") {
-    body = <SearchResults response={load.data} onOpen={(url, newTab) => browser.navigate({ kind: "page", url }, { newTab })} />;
+    body = (
+      <SearchResults
+        response={load.data}
+        onOpen={(url, newTab) => browser.navigate({ kind: "page", url }, { newTab })}
+      />
+    );
   } else {
     body = (
       <ReaderView
@@ -183,46 +239,131 @@ export function ResearchView({ request, onClose }: Props) {
           const title = tabTitle(tab, browser.loads);
           return (
             <div key={tab.id} className={`research-tab ${selected ? "research-tab--on" : ""}`}>
-              <button type="button" role="tab" aria-selected={selected} onClick={() => browser.selectTab(tab.id)} className="min-w-0 flex-1 truncate text-left" title={title}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                onClick={() => browser.selectTab(tab.id)}
+                className="min-w-0 flex-1 truncate text-left"
+                title={title}
+              >
                 {title}
               </button>
-              <button type="button" onClick={() => browser.closeTab(tab.id)} aria-label={`Close ${title}`} className="research-tab-close">
-                <CloseIcon size={12} />
+              <button
+                type="button"
+                onClick={() => browser.closeTab(tab.id)}
+                aria-label={`Close ${title}`}
+                className="research-tab-close"
+              >
+                <X className="size-3" />
               </button>
             </div>
           );
         })}
-        <button
-          type="button"
-          onClick={() => {
-            browser.newTab();
-            window.setTimeout(() => addressRef.current?.focus(), 0);
-          }}
-          disabled={browser.tabs.length >= MAX_TABS}
-          className="research-icon-button mb-1"
-          aria-label="New tab"
-          title="New tab"
-        >
-          <PlusIcon size={15} />
-        </button>
+
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => {
+                  browser.newTab();
+                  window.setTimeout(() => addressRef.current?.focus(), 0);
+                }}
+                disabled={browser.tabs.length >= MAX_TABS}
+                className="mb-1 rounded-lg"
+                aria-label="New tab"
+              >
+                <Plus className="size-4" />
+              </Button>
+            }
+          />
+          <TooltipContent side="bottom">New tab</TooltipContent>
+        </Tooltip>
+
         <div className="flex-1" />
-        <button type="button" onClick={onClose} className="research-icon-button mb-1" aria-label="Close Research" title="Back to the network">
-          <CloseIcon size={15} />
-        </button>
+
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={onClose}
+                className="mb-1 rounded-lg"
+                aria-label="Close Research"
+              >
+                <X className="size-4" />
+              </Button>
+            }
+          />
+          <TooltipContent side="bottom">Back to the network</TooltipContent>
+        </Tooltip>
       </div>
 
-      <div className="research-toolbar flex items-center gap-1.5 border-y border-[color:var(--land-hair)] px-3 py-2">
-        <button type="button" className="research-icon-button" onClick={browser.back} disabled={!browser.canBack} aria-label="Back">
-          <ChevronLeft />
-        </button>
-        <button type="button" className="research-icon-button" onClick={browser.forward} disabled={!browser.canForward} aria-label="Forward">
-          <ChevronRight />
-        </button>
-        <button type="button" className="research-icon-button max-sm:hidden" onClick={browser.reload} disabled={entry.kind === "start"} aria-label="Reload">
-          <ReloadIcon size={16} />
-        </button>
+      <div className="research-toolbar flex items-center gap-1.5 border-y border-border/70 px-3 py-2">
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="rounded-lg"
+                onClick={browser.back}
+                disabled={!browser.canBack}
+                aria-label="Back"
+              >
+                <ChevronLeft className="size-4" />
+              </Button>
+            }
+          />
+          <TooltipContent side="bottom">Back</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="rounded-lg"
+                onClick={browser.forward}
+                disabled={!browser.canForward}
+                aria-label="Forward"
+              >
+                <ChevronRight className="size-4" />
+              </Button>
+            }
+          />
+          <TooltipContent side="bottom">Forward</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="rounded-lg max-sm:hidden"
+                onClick={browser.reload}
+                disabled={entry.kind === "start"}
+                aria-label="Reload"
+              >
+                <RotateCw className="size-4" />
+              </Button>
+            }
+          />
+          <TooltipContent side="bottom">Reload page</TooltipContent>
+        </Tooltip>
+
         <form onSubmit={submit} className="research-address mx-1 min-w-0 flex-1">
-          <SearchIcon size={15} className="shrink-0 text-[color:var(--land-faint)]" />
+          <Search className="size-3.5 shrink-0 text-muted-foreground" />
           <label htmlFor="research-address" className="sr-only">
             Search or enter address
           </label>
@@ -243,54 +384,132 @@ export function ResearchView({ request, onClose }: Props) {
             spellCheck={false}
           />
         </form>
+
         {doc?.embeddable ? (
-          <div className="research-segment" role="group" aria-label="View">
-            <button type="button" aria-pressed={mode === "reader"} onClick={() => setMode("reader")} title="Reader view">
-              <ReaderIcon size={15} />
-            </button>
-            <button type="button" aria-pressed={mode === "live"} onClick={() => setMode("live")} title="Live page">
-              <LiveIcon size={15} />
-            </button>
-          </div>
+          <Tabs value={mode} onValueChange={(v) => setMode(v as "reader" | "live")}>
+            <TabsList aria-label="View" className="h-8 rounded-lg bg-muted/60 p-0.5">
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <TabsTrigger value="reader" className="h-7 rounded-md px-2">
+                      <BookOpen className="size-3.5" />
+                      <span className="sr-only">Reader view</span>
+                    </TabsTrigger>
+                  }
+                />
+                <TooltipContent side="bottom">Reader view</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <TabsTrigger value="live" className="h-7 rounded-md px-2">
+                      <Globe className="size-3.5" />
+                      <span className="sr-only">Live page</span>
+                    </TabsTrigger>
+                  }
+                />
+                <TooltipContent side="bottom">Live page</TooltipContent>
+              </Tooltip>
+            </TabsList>
+          </Tabs>
         ) : null}
-        <button
-          type="button"
-          className={`research-icon-button ${currentSource ? "text-[color:var(--land-gold)]" : ""}`}
-          onClick={() => (currentSource ? openLibrary() : void save())}
-          disabled={!doc || !library.available || saving}
-          aria-label={currentSource ? "Saved to collection" : "Save to collection"}
-          title={!library.available ? "Saving needs the research library (DATABASE_URL)" : currentSource ? "Saved" : "Save to collection"}
-        >
-          <BookmarkIcon size={16} filled={Boolean(currentSource)} />
-        </button>
+
+        <Tooltip>
+          <TooltipTrigger render={<span className="inline-flex" />}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className={`rounded-lg ${currentSource ? "text-[color:var(--land-gold)]" : ""}`}
+              onClick={() => (currentSource ? openLibrary() : void save())}
+              disabled={!doc || !library.available || saving}
+              aria-label={currentSource ? "Saved to collection" : "Save to collection"}
+            >
+              <Bookmark className="size-4" fill={currentSource ? "currentColor" : "none"} />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            {!library.available
+              ? "Saving needs the research library (DATABASE_URL)"
+              : currentSource
+                ? "Saved"
+                : "Save to collection"}
+          </TooltipContent>
+        </Tooltip>
+
         {originalUrl ? (
-          <a href={originalUrl} target="_blank" rel="noopener noreferrer" className="research-icon-button" aria-label="Open original" title="Open original">
-            <ExternalIcon size={16} />
-          </a>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <a
+                  href={originalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Open original"
+                  className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }), "rounded-lg")}
+                >
+                  <ExternalLink className="size-4" />
+                </a>
+              }
+            />
+            <TooltipContent side="bottom">Open original</TooltipContent>
+          </Tooltip>
         ) : null}
-        <button
-          type="button"
-          className={`research-icon-button ${showLibrary ? "md:text-[color:var(--land-gold-soft)]" : ""}`}
-          onClick={() => (window.innerWidth < 768 ? setLibraryOverlay((v) => !v) : setShowLibrary((v) => !v))}
-          aria-pressed={showLibrary}
-          aria-label="Collections"
-          title="Collections"
-        >
-          <LibraryIcon size={16} />
-        </button>
+
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className={`rounded-lg ${showLibrary ? "md:text-[color:var(--land-gold-soft)]" : ""}`}
+                onClick={() =>
+                  isDesktop ? setShowLibrary((v) => !v) : setLibraryOverlay((v) => !v)
+                }
+                aria-pressed={showLibrary}
+                aria-label="Collections"
+              >
+                <Library className="size-4" />
+              </Button>
+            }
+          />
+          <TooltipContent side="bottom">Collections</TooltipContent>
+        </Tooltip>
       </div>
 
       <div className="relative flex min-h-0 flex-1">
         <div ref={scrollRef} data-reader-scroll className="relative min-w-0 flex-1 overflow-y-auto">
           {body}
         </div>
-        {showLibrary || libraryOverlay ? (
+
+        {showLibrary ? (
           <aside
-            className={`research-library-aside shrink-0 border-l border-[color:var(--land-hair)] md:static md:w-[300px] ${
-              libraryOverlay ? "absolute inset-y-0 right-0 z-10 w-[min(320px,100%)]" : "hidden"
-            } ${showLibrary ? "md:block" : "md:hidden"}`}
+            className="research-library-aside hidden shrink-0 border-l border-border/70 md:block md:w-[300px]"
             aria-label="Collections"
           >
+            <LibraryPanel
+              library={library}
+              doc={doc}
+              currentSource={currentSource}
+              activeSourceId={storedSource?.id ?? null}
+              onOpenSource={openSource}
+              onFocusQuote={(quote) => setFocusQuote((f) => ({ quote, serial: (f?.serial ?? 0) + 1 }))}
+              onSave={() => void save()}
+              saving={saving}
+            />
+          </aside>
+        ) : null}
+
+        <Sheet open={libraryOverlay && !isDesktop} onOpenChange={setLibraryOverlay}>
+          <SheetContent
+            side="right"
+            showCloseButton={true}
+            className="w-[min(340px,100%)] border-l border-border bg-popover p-0 text-popover-foreground md:hidden"
+          >
+            <SheetHeader className="sr-only">
+              <SheetTitle>Collections</SheetTitle>
+            </SheetHeader>
             <LibraryPanel
               library={library}
               doc={doc}
@@ -300,12 +519,15 @@ export function ResearchView({ request, onClose }: Props) {
                 setLibraryOverlay(false);
                 openSource(source);
               }}
-              onFocusQuote={(quote) => setFocusQuote((f) => ({ quote, serial: (f?.serial ?? 0) + 1 }))}
+              onFocusQuote={(quote) => {
+                setLibraryOverlay(false);
+                setFocusQuote((f) => ({ quote, serial: (f?.serial ?? 0) + 1 }));
+              }}
               onSave={() => void save()}
               saving={saving}
             />
-          </aside>
-        ) : null}
+          </SheetContent>
+        </Sheet>
       </div>
     </section>
   );
@@ -360,18 +582,20 @@ function StartPage({
           id="research-start"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder={searchReady === false ? "Enter an address, e.g. apnews.com" : "Search the web or enter an address"}
+          placeholder={
+            searchReady === false ? "Enter an address, e.g. apnews.com" : "Search the web or enter an address"
+          }
           autoComplete="off"
         />
         <button type="submit" className="dash-send" disabled={!draft.trim()} aria-label="Go">
-          <SearchIcon size={16} />
+          <Search className="size-4" />
         </button>
       </form>
       {searchReady === false ? (
         <div className="mt-5">
           <SearchNotice title="Web search isn't set up">
-            Add <code className="dash-code text-[color:var(--land-ink)]">BRAVE_SEARCH_API_KEY</code> on the server to search. Entering an
-            address works now.
+            Add <code className="dash-code text-foreground">BRAVE_SEARCH_API_KEY</code> on the server to
+            search. Entering an address works now.
           </SearchNotice>
         </div>
       ) : null}
@@ -380,10 +604,18 @@ function StartPage({
           <p className="dash-eyebrow">Recent in {library.active?.name}</p>
           <ul className="mt-2">
             {recent.map((s) => (
-              <li key={s.id} className="border-b border-[color:var(--land-hair)] last:border-b-0">
-                <button type="button" onClick={() => onOpenSource(s)} className="group block w-full py-3 text-left">
-                  <span className="block truncate text-[15px] font-medium group-hover:text-[color:var(--land-gold-soft)]">{s.title}</span>
-                  <span className="block truncate text-[12px] text-[color:var(--land-faint)]">{s.siteName ?? displayHost(s.url)}</span>
+              <li key={s.id} className="border-b border-border/70 last:border-b-0">
+                <button
+                  type="button"
+                  onClick={() => onOpenSource(s)}
+                  className="group block w-full py-3 text-left"
+                >
+                  <span className="block truncate text-[15px] font-medium group-hover:text-[color:var(--land-gold-soft)]">
+                    {s.title}
+                  </span>
+                  <span className="block truncate text-[12px] text-muted-foreground">
+                    {s.siteName ?? displayHost(s.url)}
+                  </span>
                 </button>
               </li>
             ))}

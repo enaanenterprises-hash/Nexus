@@ -214,7 +214,7 @@ export function ReaderView({ doc, mode, savedCopy, highlights, canHighlight, foc
       {selection ? (
         <button
           type="button"
-          className="reader-highlight-button"
+          className="reader-highlight-button shadow-md"
           style={{ left: selection.x, top: selection.y }}
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => {

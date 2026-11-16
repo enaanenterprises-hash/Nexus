@@ -1,7 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { CloseIcon, PlusIcon } from "@/components/dashboard/icons";
+import { useMemo, useState, type CSSProperties } from "react";
+import { Plus } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   COMMAND_WIDGETS,
   OVERVIEW_COLUMNS,
@@ -54,18 +63,6 @@ export function OverviewView({ command, onConnections }: { command: CommandContr
   );
   const openCell = useMemo(() => findFirstOpenCell(placed), [placed]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        setOpen(false);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
-
   function add(id: string) {
     if (!overviewAccepts(ids, id)) return;
     setOpen(false);
@@ -109,7 +106,7 @@ export function OverviewView({ command, onConnections }: { command: CommandContr
               </div>
               <div className="cmd-add-tile-body">
                 <span className="cmd-add-tile-plus">
-                  <PlusIcon size={20} />
+                  <Plus className="size-5" />
                 </span>
                 <span className="cmd-add-tile-title">Add widget</span>
                 <span className="cmd-add-tile-sub">Browse visual widgets</span>
@@ -123,35 +120,19 @@ export function OverviewView({ command, onConnections }: { command: CommandContr
         ) : null}
       </div>
 
-      {open ? (
-        <div
-          className="cmd-gallery-backdrop"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="cmd-gallery-title"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setOpen(false);
-          }}
-        >
-          <div className="cmd-gallery">
-            <header className="cmd-gallery-header">
-              <div>
-                <p className="dash-eyebrow">Command overview</p>
-                <h3 id="cmd-gallery-title" className="mt-1 text-[20px] font-medium tracking-[-0.02em] text-[color:var(--land-ink)]">
-                  Select a widget
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="research-icon-button"
-                aria-label="Close widget gallery"
-              >
-                <CloseIcon size={16} />
-              </button>
-            </header>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="gap-0 overflow-hidden border border-border bg-popover p-0 text-popover-foreground shadow-2xl ring-0 sm:max-w-[920px]">
+          <DialogHeader className="border-b border-border px-6 pt-5 pb-4">
+            <DialogTitle className="font-heading text-2xl font-normal tracking-tight">
+              Select a widget
+            </DialogTitle>
+            <DialogDescription className="text-[13px]">
+              Choose a live tile to place onto your 4×2 Command overview board.
+            </DialogDescription>
+          </DialogHeader>
 
-            <div className="cmd-gallery-grid dash-panel">
+          <ScrollArea className="max-h-[72svh]">
+            <div className="cmd-gallery-grid">
               {COMMAND_WIDGETS.map((widget) => {
                 const alreadyAdded = ids.includes(widget.id);
                 const accepted = overviewAccepts(ids, widget.id);
@@ -168,9 +149,12 @@ export function OverviewView({ command, onConnections }: { command: CommandContr
                       <header className="cmd-widget-bar">
                         <h3>{widget.name}</h3>
                         <span className="cmd-widget-hint">{widget.blurb}</span>
-                        <span className="cmd-gallery-badge">
+                        <Badge
+                          variant={alreadyAdded ? "secondary" : "outline"}
+                          className="ml-auto h-5 shrink-0 px-2 text-[10.5px] font-semibold tabular-nums"
+                        >
                           {alreadyAdded ? "Added" : !accepted ? "No room" : `${widget.w}×${widget.h}`}
-                        </span>
+                        </Badge>
                       </header>
                       <div className="cmd-widget-body">
                         <WidgetVisualPreview id={widget.id} />
@@ -180,9 +164,9 @@ export function OverviewView({ command, onConnections }: { command: CommandContr
                 );
               })}
             </div>
-          </div>
-        </div>
-      ) : null}
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

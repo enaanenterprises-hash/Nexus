@@ -1,12 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { ACTION_DEFINITIONS } from "@/lib/command/actions";
 import type { CommandItem, CommandItemOf } from "@/lib/command/kinds";
 import { connectGoogleServices } from "@/lib/command/google-connect";
 import { buildTimeline, type TimelineEntry } from "@/lib/command/timeline";
 import { getConnector } from "@/lib/connectors/catalog";
-import { CloseIcon, ExternalIcon } from "@/components/dashboard/icons";
+import { ExternalIcon } from "@/components/dashboard/icons";
 import { commandApi, viewerTimeZone, type LiveWeather } from "./command-client";
 import { clock, countdown, dayLabel, money, relative, sourceName } from "./format";
 import { KindIcon, Section, SourceGlyph, StatusDot, useNow } from "./parts";
@@ -393,6 +399,7 @@ function ComposeMail({
   onClose: () => void;
   onSend: () => Promise<string | null>;
 }) {
+  const formId = useId();
   const [error, setError] = useState<string | null>(null);
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -401,48 +408,87 @@ function ComposeMail({
     if (failure) setError(failure);
   }
   return (
-    <div className="cmd-compose-backdrop" role="presentation" onMouseDown={onClose}>
-      <form className="cmd-compose" role="dialog" aria-labelledby="cmd-compose-title" onMouseDown={(e) => e.stopPropagation()} onSubmit={(e) => void submit(e)}>
-        <div className="flex items-center justify-between gap-3">
-          <h3 id="cmd-compose-title" className="text-[15px] font-medium">
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent className="gap-4 border border-border bg-popover p-6 text-popover-foreground shadow-2xl ring-0 sm:max-w-[520px]">
+        <DialogHeader>
+          <DialogTitle className="font-sans text-[15px] font-medium">
             {draft.reply ? "Reply" : "New message"}
-          </h3>
-          <button type="button" className="research-icon-button h-7 w-7" onClick={onClose} aria-label="Close compose">
-            <CloseIcon size={13} />
-          </button>
-        </div>
+          </DialogTitle>
+        </DialogHeader>
+
         {canSend ? (
-          <>
-            <label className="cmd-compose-field">
-              <span>To</span>
-              <input className="cmd-field" value={draft.to} onChange={(e) => onChange({ ...draft, to: e.target.value })} required autoComplete="off" />
-            </label>
-            <label className="cmd-compose-field">
-              <span>Cc</span>
-              <input className="cmd-field" value={draft.cc} onChange={(e) => onChange({ ...draft, cc: e.target.value })} autoComplete="off" />
-            </label>
-            <label className="cmd-compose-field">
-              <span>Subject</span>
-              <input className="cmd-field" value={draft.subject} onChange={(e) => onChange({ ...draft, subject: e.target.value })} maxLength={300} autoComplete="off" />
-            </label>
-            <textarea className="cmd-field cmd-compose-body" value={draft.body} onChange={(e) => onChange({ ...draft, body: e.target.value })} placeholder="Write your message" maxLength={50000} />
-            {error ? <p className="cmd-error">{error}</p> : null}
-            <div className="mt-3 flex justify-end">
-              <button type="submit" className="dash-button dash-button--gold h-8 px-3 text-[13px]" disabled={sending || !draft.to.trim()}>
-                {sending ? "Sending…" : "Send"}
-              </button>
+          <form className="space-y-3" onSubmit={(e) => void submit(e)}>
+            <div className="space-y-1">
+              <Label htmlFor={`${formId}-to`} className="cmd-label">To</Label>
+              <Input
+                id={`${formId}-to`}
+                className="cmd-field h-9 rounded-lg border border-border bg-background/50"
+                value={draft.to}
+                onChange={(e) => onChange({ ...draft, to: e.target.value })}
+                required
+                autoComplete="off"
+              />
             </div>
-          </>
+            <div className="space-y-1">
+              <Label htmlFor={`${formId}-cc`} className="cmd-label">Cc</Label>
+              <Input
+                id={`${formId}-cc`}
+                className="cmd-field h-9 rounded-lg border border-border bg-background/50"
+                value={draft.cc}
+                onChange={(e) => onChange({ ...draft, cc: e.target.value })}
+                autoComplete="off"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor={`${formId}-subject`} className="cmd-label">Subject</Label>
+              <Input
+                id={`${formId}-subject`}
+                className="cmd-field h-9 rounded-lg border border-border bg-background/50"
+                value={draft.subject}
+                onChange={(e) => onChange({ ...draft, subject: e.target.value })}
+                maxLength={300}
+                autoComplete="off"
+              />
+            </div>
+            <Textarea
+              aria-label="Message body"
+              className="cmd-field min-h-32 w-full rounded-xl border border-border bg-background/50 p-3"
+              value={draft.body}
+              onChange={(e) => onChange({ ...draft, body: e.target.value })}
+              placeholder="Write your message"
+              maxLength={50000}
+            />
+            {error ? (
+              <Alert variant="destructive" className="rounded-xl py-2">
+                <AlertDescription className="text-xs">{error}</AlertDescription>
+              </Alert>
+            ) : null}
+            <div className="flex justify-end pt-1">
+              <Button
+                type="submit"
+                size="sm"
+                className="border border-[color:var(--land-gold)]/55 bg-[color:var(--land-gold)]/18 text-[color:var(--land-ink)] hover:bg-[color:var(--land-gold)]/28"
+                disabled={sending || !draft.to.trim()}
+              >
+                {sending ? "Sending…" : "Send"}
+              </Button>
+            </div>
+          </form>
         ) : (
-          <div className="cmd-connect-empty">
+          <div className="cmd-connect-empty space-y-3">
             <p>Sending needs its own Google permission. Reading your inbox stays on the read-only scope.</p>
-            <button type="button" className="dash-button dash-button--gold mt-3 h-8 px-3 text-[13px]" onClick={() => void connectGoogleServices(["gmail-send"])}>
+            <Button
+              type="button"
+              size="sm"
+              className="border border-[color:var(--land-gold)]/55 bg-[color:var(--land-gold)]/18 text-[color:var(--land-ink)] hover:bg-[color:var(--land-gold)]/28"
+              onClick={() => void connectGoogleServices(["gmail-send"])}
+            >
               Allow sending
-            </button>
+            </Button>
           </div>
         )}
-      </form>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -624,10 +670,18 @@ function FocusPanel({ command, now }: { command: CommandController; now: number 
   return (
     <Section title="Deep work">
       <form onSubmit={start} className="cmd-focus">
-        <label htmlFor="cmd-focus-title" className="sr-only">
+        <Label htmlFor="cmd-focus-title" className="sr-only">
           What are you working on?
-        </label>
-        <input id="cmd-focus-title" className="cmd-field w-full" value={title} onChange={(e) => (setTitle(e.target.value), setTarget(null))} placeholder="What are you working on?" maxLength={200} autoComplete="off" />
+        </Label>
+        <Input
+          id="cmd-focus-title"
+          className="cmd-field h-9 w-full rounded-lg border border-border bg-background/40"
+          value={title}
+          onChange={(e) => (setTitle(e.target.value), setTarget(null))}
+          placeholder="What are you working on?"
+          maxLength={200}
+          autoComplete="off"
+        />
         {candidates.length ? (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {candidates.map((c) => (
@@ -646,19 +700,35 @@ function FocusPanel({ command, now }: { command: CommandController; now: number 
         <div className="mt-3 flex items-center gap-2">
           <div className="research-segment" role="group" aria-label="Duration">
             {DURATIONS.map((d) => (
-              <button key={d} type="button" aria-pressed={minutes === d} onClick={() => setMinutes(d)} className="!w-auto px-2.5 text-[12px] font-medium">
+              <button
+                key={d}
+                type="button"
+                aria-pressed={minutes === d}
+                onClick={() => setMinutes(d)}
+                className="!w-auto px-2.5 text-[12px] font-medium"
+              >
                 {d}m
               </button>
             ))}
           </div>
-          <button type="submit" className="dash-button dash-button--gold ml-auto" disabled={!title.trim() || busy}>
+          <Button
+            type="submit"
+            size="sm"
+            className="ml-auto border border-[color:var(--land-gold)]/55 bg-[color:var(--land-gold)]/18 text-[color:var(--land-ink)] hover:bg-[color:var(--land-gold)]/28"
+            disabled={!title.trim() || busy}
+          >
             {busy ? "Starting…" : "Start"}
-          </button>
+          </Button>
         </div>
         {plan.length ? (
           <ul className="mt-4 space-y-1.5" aria-label="What Deep work will do">
             {plan.map((p) => (
-              <li key={p.label} className={`flex items-center gap-2 text-[12px] ${p.by.length ? "text-[color:var(--land-muted)]" : "text-[color:var(--land-faint)]"}`}>
+              <li
+                key={p.label}
+                className={`flex items-center gap-2 text-[12px] ${
+                  p.by.length ? "text-[color:var(--land-muted)]" : "text-[color:var(--land-faint)]"
+                }`}
+              >
                 <StatusDot tone={p.by.length ? "ok" : "idle"} />
                 <span className="truncate">
                   {p.label}
@@ -669,7 +739,11 @@ function FocusPanel({ command, now }: { command: CommandController; now: number 
           </ul>
         ) : null}
       </form>
-      {error ? <p className="cmd-error mt-2">{error}</p> : null}
+      {error ? (
+        <Alert variant="destructive" className="mt-2 rounded-xl py-2">
+          <AlertDescription className="text-xs">{error}</AlertDescription>
+        </Alert>
+      ) : null}
     </Section>
   );
 }
@@ -689,7 +763,9 @@ function GoalsPanel({ command, goals }: { command: CommandController; goals: Com
             return (
               <li key={g.id}>
                 <div className="flex items-baseline justify-between gap-3 text-[14px]">
-                  <span className={g.data.status === "done" ? "text-[color:var(--land-gold-soft)]" : ""}>{g.title}</span>
+                  <span className={g.data.status === "done" ? "text-[color:var(--land-gold-soft)]" : ""}>
+                    {g.title}
+                  </span>
                   <span className="text-[12px] tabular-nums text-[color:var(--land-faint)]">
                     {goal.progress.toFixed(1)} / {goal.target} {goal.unit}
                   </span>
@@ -711,14 +787,30 @@ function GoalsPanel({ command, goals }: { command: CommandController; goals: Com
           }}
         >
           <span className="text-[13px] text-[color:var(--land-muted)]">Run</span>
-          <input className="cmd-field w-16 text-center tabular-nums" inputMode="decimal" value={target} onChange={(e) => setTarget(e.target.value)} aria-label="Kilometres" />
+          <Input
+            className="cmd-field h-8 w-16 rounded-lg border border-border bg-background/40 text-center tabular-nums"
+            inputMode="decimal"
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
+            aria-label="Kilometres"
+          />
           <span className="text-[13px] text-[color:var(--land-muted)]">km today</span>
-          <button type="submit" className="dash-button ml-auto" disabled={command.pending === "goal" || !(Number(target) > 0)}>
+          <Button
+            type="submit"
+            size="sm"
+            variant="outline"
+            className="ml-auto"
+            disabled={command.pending === "goal" || !(Number(target) > 0)}
+          >
             Set
-          </button>
+          </Button>
         </form>
       ) : null}
-      {error ? <p className="cmd-error mt-2">{error}</p> : null}
+      {error ? (
+        <Alert variant="destructive" className="mt-2 rounded-xl py-2">
+          <AlertDescription className="text-xs">{error}</AlertDescription>
+        </Alert>
+      ) : null}
     </Section>
   );
 }

@@ -1,8 +1,13 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
+import { RefreshCw, X } from "lucide-react";
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getConnector } from "@/lib/connectors/catalog";
-import { CloseIcon, SyncIcon } from "@/components/dashboard/icons";
 import { ConnectionsView } from "./ConnectionsView";
 import { relative } from "./format";
 import { OverviewView } from "./OverviewView";
@@ -17,7 +22,8 @@ const TABS: { id: CommandTab; label: string }[] = [
 ];
 
 const noopSubscribe = () => () => {};
-const todayLabel = () => new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+const todayLabel = () =>
+  new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
 
 type Props = {
   /** Set by the dashboard after an OAuth round trip, e.g. `{ tab: "connections", service: "strava", notice }`. */
@@ -49,43 +55,107 @@ export function CommandView({ request, onClose }: Props) {
           <p className="dash-eyebrow">{date || "Today"}</p>
           <h2 className="mt-1 text-[19px] font-medium tracking-[-0.015em]">Command</h2>
         </div>
-        <nav className="cmd-tabs" aria-label="Command views">
-          {TABS.map((t) => (
-            <button key={t.id} type="button" aria-current={tab === t.id ? "page" : undefined} className={`cmd-tab ${tab === t.id ? "cmd-tab--on" : ""}`} onClick={() => setTab(t.id)}>
-              {t.label}
-              {t.id === "connections" && state?.connections.length ? <span className="cmd-tab-count">{state.connections.length}</span> : null}
-            </button>
-          ))}
-        </nav>
-        <div className="flex items-center gap-1">
+
+        <Tabs value={tab} onValueChange={(v) => setTab(v as CommandTab)} className="max-sm:order-3 max-sm:w-full">
+          <TabsList variant="line" aria-label="Command views" className="gap-1 max-sm:w-full max-sm:justify-start">
+            {TABS.map((t) => (
+              <TabsTrigger
+                key={t.id}
+                value={t.id}
+                className="gap-1.5 rounded-none px-2.5 py-1.5 text-[13.5px] font-medium"
+              >
+                <span>{t.label}</span>
+                {t.id === "connections" && state?.connections.length ? (
+                  <Badge variant="secondary" className="h-4 min-w-4 px-1.5 text-[10px] tabular-nums">
+                    {state.connections.length}
+                  </Badge>
+                ) : null}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+
+        <div className="flex items-center gap-1.5">
           {state?.connections.length ? (
-            <button type="button" className="cmd-sync" onClick={() => void command.sync()} disabled={command.syncing} title="Refresh every connected service">
-              <SyncIcon size={14} className={command.syncing ? "cmd-spin" : ""} />
-              <span className="max-sm:hidden">{command.syncing ? "Syncing" : lastSync ? relative(lastSync, now) : "Sync"}</span>
-            </button>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1.5 rounded-full px-3 text-[12.5px] text-muted-foreground hover:text-foreground"
+                    onClick={() => void command.sync()}
+                    disabled={command.syncing}
+                  >
+                    <RefreshCw className={`size-3.5 ${command.syncing ? "animate-spin" : ""}`} />
+                    <span className="max-sm:hidden">
+                      {command.syncing ? "Syncing" : lastSync ? relative(lastSync, now) : "Sync"}
+                    </span>
+                  </Button>
+                }
+              />
+              <TooltipContent side="bottom">Refresh every connected service</TooltipContent>
+            </Tooltip>
           ) : null}
-          <button type="button" onClick={onClose} className="research-icon-button" aria-label="Close Command" title="Back to the network">
-            <CloseIcon size={15} />
-          </button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={onClose}
+                  aria-label="Close Command"
+                  className="rounded-full"
+                >
+                  <X className="size-4" />
+                </Button>
+              }
+            />
+            <TooltipContent side="bottom">Back to the network</TooltipContent>
+          </Tooltip>
         </div>
       </header>
 
       {notice ? (
-        <div className="cmd-notice" role="status">
-          <span>{notice}</span>
-          <button type="button" className="research-icon-button h-6 w-6" onClick={() => setNotice(null)} aria-label="Dismiss">
-            <CloseIcon size={12} />
-          </button>
+        <div className="px-6 pt-3 sm:px-8">
+          <Alert role="status" className="rounded-xl border-border/80 bg-card/80 py-2.5">
+            <AlertDescription className="text-[13px] text-foreground">{notice}</AlertDescription>
+            <AlertAction>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => setNotice(null)}
+                aria-label="Dismiss"
+              >
+                <X className="size-3.5" />
+              </Button>
+            </AlertAction>
+          </Alert>
         </div>
       ) : null}
+
       {state && command.error ? (
-        <div className="cmd-notice cmd-notice--warn" role="status">
-          Could not refresh: {command.error}
+        <div className="px-6 pt-3 sm:px-8">
+          <Alert variant="destructive" role="status" className="rounded-xl py-2.5">
+            <AlertDescription className="text-[13px]">
+              Could not refresh: {command.error}
+            </AlertDescription>
+          </Alert>
         </div>
       ) : null}
+
       {state?.errors.length ? (
-        <div className="cmd-notice cmd-notice--warn" role="status">
-          {state.errors.map((e) => `${getConnector(e.connectorId)?.name ?? e.connectorId}: ${e.message}`).join(" · ")}
+        <div className="px-6 pt-3 sm:px-8">
+          <Alert variant="destructive" role="status" className="rounded-xl py-2.5">
+            <AlertDescription className="text-[13px]">
+              {state.errors
+                .map((e) => `${getConnector(e.connectorId)?.name ?? e.connectorId}: ${e.message}`)
+                .join(" · ")}
+            </AlertDescription>
+          </Alert>
         </div>
       ) : null}
 
