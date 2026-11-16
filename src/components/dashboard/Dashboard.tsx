@@ -353,7 +353,13 @@ export function Dashboard({ viewer }: { viewer: Viewer }) {
         className="absolute inset-0"
         hidden={surface.view === "command"}
       >
-        <NeuralStage signal={signal} />
+        <NeuralStage
+          signal={signal}
+          onSelectSocket={(idx) => {
+            const slot = hub.slots[idx];
+            if (slot) selectSlot(slot.id);
+          }}
+        />
         <div className="dash-scrim--home pointer-events-none absolute inset-0" />
       </section>
 

@@ -3,52 +3,46 @@ import { add, clamp, polar, type Vec } from "@/lib/network/geometry";
 export type ArmGeometry = {
   /** Index of the arm (0..4). */
   index: number;
-  /** Departure angle from the singularity core (radians). */
+  /** Departure angle from the central singularity orb (radians). */
   coreAngle: number;
   /** Asymptotic outward angle toward the viewport corner/edge (radians). */
   cornerAngle: number;
-  /** Curvature inflection control point between core and socket. */
-  innerControl: Vec;
-  /** Exact coordinate of the node's focal caustic waist (socket). */
+  /** Exact coordinate of the node orb (socket). */
   socket: Vec;
-  /** Outward tangent unit vector at the socket waist. */
+  /** Outward unit tangent vector at the node orb. */
   socketTangent: Vec;
-  /** Outer curvature control point between socket and viewport corner. */
-  outerControl1: Vec;
-  /** Second outer curvature control point approaching the viewport corner. */
-  outerControl2: Vec;
-  /** Terminal anchor well past the viewport corner/edge so arms never cut off. */
+  /** Terminal anchor well past the viewport corner/edge so flowing waves extend to the corners. */
   cornerTip: Vec;
-  /** Total reach distance from core to cornerTip. */
-  totalReach: number;
+  /** Distance from core to the node orb. */
+  socketDist: number;
+  /** Distance from the node orb out to cornerTip. */
+  outerReach: number;
 };
 
 export type HorizonWingGeometry = {
-  /** -1 for left corner wing, +1 for right corner wing. */
   side: -1 | 1;
-  /** Sweeping control points from core out to the lower-lateral corner. */
+  angle: number;
+  reach: number;
   c1: Vec;
   c2: Vec;
   tip: Vec;
-  angle: number;
-  reach: number;
 };
 
 export type StageLayout = {
   width: number;
   height: number;
   compact: boolean;
-  /** Primary Singularity Nucleus of the neural network. */
+  /** Central Singularity Orb sitting in the middle of the screen. */
   core: Vec;
-  /** Characteristic radius from core to the 5 node socket waists. */
+  /** Characteristic radius from the central orb to the 5 node orbs. */
   radius: number;
-  /** Coordinates of each node socket waist (0..4). */
+  /** Coordinates of each node orb (0..4). */
   sockets: Vec[];
-  /** Angles of each node socket waist (0..4). */
+  /** Angles of each node orb (0..4). */
   socketAngles: number[];
-  /** Complete C2-continuous spine geometry for each of the 5 node arms. */
+  /** Complete C2 spine geometry for each of the 5 functional node arms. */
   arms: ArmGeometry[];
-  /** Sweeping lower-lateral horizon wings that extend into the lower corners while keeping center-bottom negative space clear. */
+  /** Lower-lateral corner waves sweeping into the bottom-left and bottom-right corners. */
   horizonWings: [HorizonWingGeometry, HorizonWingGeometry];
   /** Overall diagonal scale of the viewport. */
   scale: number;
@@ -57,28 +51,26 @@ export type StageLayout = {
 export const WIDE_MIN_WIDTH = 1100;
 
 /**
- * Computes the mathematical topology of the Nexus neural stage:
- * - Singularity core at upper-center (x = 50%, y = ~40%)
- * - 5 primary functional node arms that pinch at their socket coordinates and
- *   sweep continuously all the way past the corners and top edges of the screen
- * - 2 lower-lateral horizon wings sweeping into the lower corners while carving
- *   a deep negative-space sanctuary below the core for the greeting and input bar
+ * Places the neural network right in the middle of the screen (core.y ≈ 49% height),
+ * with 5 functional node arms radiating across the middle & upper-corner quadrants
+ * and sweeping all the way into the corners of the screen.
  */
 export function computeStageLayout(width: number, height: number, socketCount: number): StageLayout {
   const compact = width < WIDE_MIN_WIDTH;
   const diag = Math.hypot(width, height);
 
+  // Sit the singularity core right in the middle of the screen
   const core: Vec = compact
-    ? { x: width * 0.5, y: height * 0.38 }
-    : { x: width * 0.5, y: clamp(height * 0.4, 270, height * 0.43) };
+    ? { x: width * 0.5, y: height * 0.47 }
+    : { x: width * 0.5, y: clamp(height * 0.485, 320, height * 0.52) };
 
   const radius = compact
-    ? clamp(Math.min(width * 0.34, height * 0.32), 130, 230)
-    : clamp(Math.min(height * 0.27, width * 0.21), 175, 280);
+    ? clamp(Math.min(width * 0.33, height * 0.28), 125, 215)
+    : clamp(Math.min(height * 0.26, width * 0.21), 165, 265);
 
-  // 5 functional node arms fanning from left-horizon (-154 deg) through zenith (-90 deg)
-  // to right-horizon (-26 deg), engineered to sweep into the corners and top edges.
-  const spread = compact ? 0.78 : 0.74;
+  // Wide, balanced arch around the middle of the screen (-166 deg to -14 deg)
+  // so the side arms sit across the middle-left and middle-right and sweep into the corners.
+  const spread = compact ? 0.86 : 0.84;
   const socketAngles: number[] = [];
   const sockets: Vec[] = [];
   const arms: ArmGeometry[] = [];
@@ -88,28 +80,23 @@ export function computeStageLayout(width: number, height: number, socketCount: n
     const centered = (t - 0.5) * 2; // -1 .. +1
     const baseAngle = -Math.PI / 2 + centered * (Math.PI * 0.5 * spread);
 
-    // Subtle S-curve inflection so outer arms sweep gracefully toward the screen corners
-    const cornerDeflection = centered * 0.16;
-    const coreAngle = baseAngle - cornerDeflection * 0.35;
-    const cornerAngle = baseAngle + cornerDeflection;
+    // Gentle outward S-curve deflection so the arms sweep naturally toward the screen corners
+    const cornerDeflection = centered * 0.18;
+    const coreAngle = baseAngle - cornerDeflection * 0.28;
+    const cornerAngle = baseAngle + cornerDeflection * 0.85;
 
-    // Give lateral arms slightly longer socket radius so the crown forms a natural elliptical arch
-    const socketDist = radius * (1 + 0.14 * Math.abs(centered));
+    // Lateral arms reach wider horizontally to fill the middle of the widescreen stage
+    const socketDist = radius * (1 + 0.22 * Math.abs(centered));
     const socket = add(core, polar(socketDist, baseAngle));
 
-    const tangentAngle = baseAngle + cornerDeflection * 0.55;
+    const tangentAngle = baseAngle + cornerDeflection * 0.42;
     const socketTangent = {
       x: Math.cos(tangentAngle),
       y: Math.sin(tangentAngle),
     };
 
-    // Extend far past the viewport corner/edge (0.72 * diagonal) so arms never terminate on screen
-    const outerReach = Math.max(diag * 0.68, socketDist * 2.85);
+    const outerReach = Math.max(diag * 0.66, socketDist * 2.8);
     const cornerTip = add(socket, polar(outerReach, cornerAngle));
-
-    const innerControl = add(core, polar(socketDist * 0.52, coreAngle));
-    const outerControl1 = add(socket, polar(outerReach * 0.28, tangentAngle));
-    const outerControl2 = add(socket, polar(outerReach * 0.66, (tangentAngle + cornerAngle) * 0.5));
 
     socketAngles.push(baseAngle);
     sockets.push(socket);
@@ -117,37 +104,35 @@ export function computeStageLayout(width: number, height: number, socketCount: n
       index: i,
       coreAngle,
       cornerAngle,
-      innerControl,
       socket,
       socketTangent,
-      outerControl1,
-      outerControl2,
       cornerTip,
-      totalReach: socketDist + outerReach,
+      socketDist,
+      outerReach,
     });
   }
 
-  // Two lower-lateral horizon wings that sweep into the bottom-left and bottom-right corners
-  // while leaving the central-bottom negative space completely dark and open.
-  const wingReach = diag * 0.66;
-  const leftWingAngle = Math.PI - 0.22; // ~167 deg (sweeping into lower-left corner above bottom-left controls)
-  const rightWingAngle = 0.22; // ~13 deg (sweeping into lower-right corner)
+  // Two lower-corner waves that sweep into the bottom-left and bottom-right corners
+  // while leaving the bottom-center negative space open for the greeting and input bar.
+  const wingReach = diag * 0.64;
+  const leftWingAngle = Math.PI - 0.34; // ~160.5 deg (sweeps toward bottom-left corner)
+  const rightWingAngle = 0.34; // ~19.5 deg (sweeps toward bottom-right corner)
 
   const horizonWings: [HorizonWingGeometry, HorizonWingGeometry] = [
     {
       side: -1,
       angle: leftWingAngle,
       reach: wingReach,
-      c1: add(core, polar(wingReach * 0.26, leftWingAngle + 0.08)),
-      c2: add(core, polar(wingReach * 0.62, leftWingAngle - 0.04)),
+      c1: add(core, polar(wingReach * 0.28, leftWingAngle + 0.06)),
+      c2: add(core, polar(wingReach * 0.64, leftWingAngle - 0.03)),
       tip: add(core, polar(wingReach, leftWingAngle)),
     },
     {
       side: 1,
       angle: rightWingAngle,
       reach: wingReach,
-      c1: add(core, polar(wingReach * 0.26, rightWingAngle - 0.08)),
-      c2: add(core, polar(wingReach * 0.62, rightWingAngle + 0.04)),
+      c1: add(core, polar(wingReach * 0.28, rightWingAngle - 0.06)),
+      c2: add(core, polar(wingReach * 0.64, rightWingAngle + 0.03)),
       tip: add(core, polar(wingReach, rightWingAngle)),
     },
   ];
