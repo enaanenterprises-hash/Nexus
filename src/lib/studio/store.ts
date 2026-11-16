@@ -20,7 +20,7 @@ type Row = Record<string, unknown>;
 
 export const DEFAULT_STUDIO_COLLECTION_NAME = "Studio sessions";
 export const MAX_STUDIO_TAGS = 12;
-const MAX_TRACKS = 16;
+const MAX_TRACKS = 64;
 const MAX_MARKERS = 200;
 const MAX_PEAKS = 512;
 
@@ -94,13 +94,25 @@ export function sanitizeTracks(raw: unknown): StudioTrackV1[] {
     const role: StudioTrackRole = TRACK_ROLES.has(t.role as StudioTrackRole)
       ? (t.role as StudioTrackRole)
       : "voice";
+    const durationMs = Math.max(0, Math.round(Number(t.durationMs) || 0));
+    const trimStartMs =
+      t.trimStartMs !== undefined ? Math.max(0, Math.round(Number(t.trimStartMs) || 0)) : undefined;
+    const sourceDurationMs =
+      t.sourceDurationMs !== undefined
+        ? Math.max(durationMs + (trimStartMs ?? 0), Math.round(Number(t.sourceDurationMs) || 0))
+        : undefined;
+    const layerIndex =
+      t.layerIndex !== undefined ? Math.round(clamp(Number(t.layerIndex) || 0, 0, 15)) : undefined;
     out.push({
       id,
       name:
         typeof t.name === "string" && t.name.trim() ? t.name.trim().slice(0, 80) : `Track ${out.length + 1}`,
       role,
+      ...(layerIndex !== undefined ? { layerIndex } : {}),
       offsetMs: Math.max(0, Math.round(Number(t.offsetMs) || 0)),
-      durationMs: Math.max(0, Math.round(Number(t.durationMs) || 0)),
+      ...(trimStartMs !== undefined ? { trimStartMs } : {}),
+      durationMs,
+      ...(sourceDurationMs !== undefined ? { sourceDurationMs } : {}),
       gain: Math.round(clamp(Number(t.gain ?? 1), 0, 2) * 100) / 100,
       pan: Math.round(clamp(Number(t.pan ?? 0), -1, 1) * 100) / 100,
       muted: Boolean(t.muted),

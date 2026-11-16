@@ -78,6 +78,27 @@ export function encodeWavFromBuffer(buffer: AudioBuffer): Blob {
   return new Blob([out], { type: "audio/wav" });
 }
 
+/** Resamples a clip's `peaks` slice cleanly across a non-destructive sub-range. */
+export function slicePeaksForRange(
+  sourcePeaks: number[],
+  totalSourceDurationMs: number,
+  rangeStartMs: number,
+  rangeDurationMs: number,
+  targetBars = 120,
+): number[] {
+  if (sourcePeaks.length === 0 || totalSourceDurationMs <= 0 || rangeDurationMs <= 0) return [];
+  const startFrac = Math.max(0, Math.min(1, rangeStartMs / totalSourceDurationMs));
+  const endFrac = Math.max(startFrac, Math.min(1, (rangeStartMs + rangeDurationMs) / totalSourceDurationMs));
+  const count = Math.max(16, Math.min(targetBars, Math.round((endFrac - startFrac) * sourcePeaks.length * 1.4)));
+  const out: number[] = [];
+  for (let i = 0; i < count; i++) {
+    const f = startFrac + ((i + 0.5) / count) * (endFrac - startFrac);
+    const idx = Math.min(sourcePeaks.length - 1, Math.max(0, Math.floor(f * sourcePeaks.length)));
+    out.push(sourcePeaks[idx] ?? 0.1);
+  }
+  return out;
+}
+
 /** Renders all active (unmuted, honoring solo) studio tracks into one mixed master `AudioBuffer`. */
 export async function mixTracksOffline(
   items: Array<{ track: StudioTrackV1; buffer: AudioBuffer }>,
@@ -88,7 +109,7 @@ export async function mixTracksOffline(
   const active = items.filter((x) => (anySolo ? x.track.solo : !x.track.muted));
   const totalSec = Math.max(
     0.5,
-    ...active.map((x) => x.track.offsetMs / 1000 + x.buffer.duration),
+    ...active.map((x) => (x.track.offsetMs + x.track.durationMs) / 1000),
   );
   const frameCount = Math.max(1, Math.ceil(totalSec * sampleRate));
   const offline = new OfflineAudioContext(2, frameCount, sampleRate);
@@ -98,6 +119,11 @@ export async function mixTracksOffline(
   master.connect(offline.destination);
 
   for (const { track, buffer } of active) {
+    const trimStartSec = Math.max(0, (track.trimStartMs ?? 0) / 1000);
+    const availableSec = Math.max(0, buffer.duration - trimStartSec);
+    const clipDurSec = Math.min(availableSec, Math.max(0.01, track.durationMs / 1000));
+    if (clipDurSec <= 0.01) continue;
+
     const src = offline.createBufferSource();
     src.buffer = buffer;
     const gainNode = offline.createGain();
@@ -107,7 +133,7 @@ export async function mixTracksOffline(
     src.connect(gainNode);
     gainNode.connect(panNode);
     panNode.connect(master);
-    src.start(Math.max(0, track.offsetMs / 1000));
+    src.start(Math.max(0, track.offsetMs / 1000), trimStartSec, clipDurSec);
   }
 
   return offline.startRendering();

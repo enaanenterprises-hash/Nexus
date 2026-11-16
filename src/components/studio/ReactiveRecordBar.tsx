@@ -318,7 +318,7 @@ export function ReactiveRecordBar({
           </div>
         ) : !micReady && transport === "idle" ? (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-3 text-center">
-            <span className="truncate text-[11.5px] font-medium tracking-wide text-muted-foreground/85">
+            <span className="truncate rounded-full bg-background/85 px-3 py-0.5 text-[11.5px] font-medium tracking-wide text-muted-foreground">
               Voice-reactive crimson meter — arm mic or press Record (R)
             </span>
           </div>

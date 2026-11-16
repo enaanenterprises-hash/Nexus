@@ -23,8 +23,16 @@ export interface StudioTrackV1 {
   id: string;
   name: string;
   role: StudioTrackRole;
+  /** 0-based DAW lane index (`0` = Layer 1, `1` = Layer 2, ...). */
+  layerIndex?: number;
+  /** Timeline start offset in ms. */
   offsetMs: number;
+  /** Source audio crop start offset in ms (for non-destructive splits & trims). */
+  trimStartMs?: number;
+  /** Visible playback duration on the timeline in ms. */
   durationMs: number;
+  /** Uncropped underlying source audio duration in ms. */
+  sourceDurationMs?: number;
   gain: number;
   pan: number;
   muted: boolean;

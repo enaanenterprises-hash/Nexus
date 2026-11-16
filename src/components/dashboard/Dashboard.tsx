@@ -406,7 +406,7 @@ export function Dashboard({
   }, [surface.panel, surface.view, menuOpen]);
 
   useEffect(() => {
-    if (surface.view !== "home" || !menuOpen) return;
+    if ((surface.view !== "home" && surface.view !== "studio") || !menuOpen) return;
     function onPointerDown(event: PointerEvent) {
       const target = event.target as Node | null;
       if (!target) return;
@@ -692,7 +692,7 @@ export function Dashboard({
               cameFromSetup || finalePrewarm || setupReveal ? "" : "landing-enter "
             }dash-header pointer-events-none absolute inset-x-0 top-0 z-40 flex h-16 items-center`}
           >
-            {isNetworkHome ? (
+            {isNetworkHome || surface.view === "studio" ? (
               <div className="pointer-events-auto ml-[14px] inline-flex w-[74px] shrink-0 justify-center">
                 <NexusMenuButton
                   buttonRef={menuTriggerRef}
@@ -714,8 +714,8 @@ export function Dashboard({
             navRef={menuNavRef}
             hub={hub}
             surface={surface}
-            floating={isNetworkHome}
-            open={isNetworkHome ? menuOpen : true}
+            floating={isNetworkHome || surface.view === "studio"}
+            open={isNetworkHome || surface.view === "studio" ? menuOpen : true}
             onHome={goHome}
             onCommand={handleOpenCommand}
             onPanel={openPanel}

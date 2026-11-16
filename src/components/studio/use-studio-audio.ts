@@ -50,8 +50,8 @@ function makeTrackId(): string {
   return `trk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-/** Synthesizes a clean subtle click pulse via Web Audio oscillator (no network audio file needed). */
-function triggerClickPulse(ctx: AudioContext, atTime: number, accented: boolean) {
+/** Synthesizes a clean subtle click pulse via Web Audio oscillator routed through a dedicated metronome gain node. */
+function triggerClickPulse(ctx: AudioContext, destination: AudioNode, atTime: number, accented: boolean) {
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.type = "triangle";
@@ -60,7 +60,7 @@ function triggerClickPulse(ctx: AudioContext, atTime: number, accented: boolean)
   gain.gain.exponentialRampToValueAtTime(accented ? 0.24 : 0.14, atTime + 0.004);
   gain.gain.exponentialRampToValueAtTime(0.0001, atTime + 0.055);
   osc.connect(gain);
-  gain.connect(ctx.destination);
+  gain.connect(destination);
   osc.start(atTime);
   osc.stop(atTime + 0.065);
 }
@@ -107,6 +107,7 @@ export function useStudioAudio({
   const inputGainNodeRef = useRef<GainNode | null>(null);
   const monitorGainNodeRef = useRef<GainNode | null>(null);
   const masterGainNodeRef = useRef<GainNode | null>(null);
+  const metronomeGainNodeRef = useRef<GainNode | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
@@ -119,9 +120,13 @@ export function useStudioAudio({
   const recordAccumMsRef = useRef(0);
   const recordPunchOffsetMsRef = useRef(0);
   const recordRoleRef = useRef<StudioTrackRole>("voice");
+  const recordLayerRef = useRef<number>(0);
   const countInTimerRef = useRef<number | undefined>(undefined);
   const metronomeTimerRef = useRef<number | undefined>(undefined);
   const playheadRafRef = useRef<number>(0);
+  const metronomeEnabledRef = useRef(metronomeEnabled);
+  const bpmRef = useRef(bpm);
+  const transportRef = useRef<StudioTransportState>(transport);
 
   const telemetryRef = useRef<LiveAudioTelemetry>({
     rms: 0,
@@ -139,6 +144,18 @@ export function useStudioAudio({
   useEffect(() => {
     tracksRef.current = tracks;
   }, [tracks]);
+
+  useEffect(() => {
+    metronomeEnabledRef.current = metronomeEnabled;
+  }, [metronomeEnabled]);
+
+  useEffect(() => {
+    bpmRef.current = bpm;
+  }, [bpm]);
+
+  useEffect(() => {
+    transportRef.current = transport;
+  }, [transport]);
 
   useEffect(() => {
     masterGainRef.current = masterGain;
@@ -170,6 +187,10 @@ export function useStudioAudio({
       master.gain.value = masterGainRef.current;
       master.connect(ctx.destination);
 
+      const metronomeGain = ctx.createGain();
+      metronomeGain.gain.value = metronomeEnabledRef.current ? 1 : 0;
+      metronomeGain.connect(ctx.destination);
+
       const playbackAnalyser = ctx.createAnalyser();
       playbackAnalyser.fftSize = 256;
       playbackAnalyser.smoothingTimeConstant = 0.72;
@@ -177,6 +198,7 @@ export function useStudioAudio({
 
       audioCtxRef.current = ctx;
       masterGainNodeRef.current = master;
+      metronomeGainNodeRef.current = metronomeGain;
       if (!analyserRef.current) analyserRef.current = playbackAnalyser;
     }
     if (audioCtxRef.current.state === "suspended") {
@@ -226,11 +248,65 @@ export function useStudioAudio({
     };
   }, [refreshDevices]);
 
+  const stopMetronome = useCallback(() => {
+    window.clearInterval(metronomeTimerRef.current);
+    metronomeTimerRef.current = undefined;
+    const ctx = audioCtxRef.current;
+    const mg = metronomeGainNodeRef.current;
+    if (ctx && mg) {
+      mg.gain.cancelScheduledValues(ctx.currentTime);
+      mg.gain.setValueAtTime(0, ctx.currentTime);
+    }
+  }, []);
+
+  const startMetronomeLoop = useCallback(
+    (ctx: AudioContext, startBeatIdx = 0, playImmediateDownbeat = false) => {
+      window.clearInterval(metronomeTimerRef.current);
+      metronomeTimerRef.current = undefined;
+      if (!metronomeEnabledRef.current) return;
+      const mg = metronomeGainNodeRef.current;
+      if (mg) {
+        mg.gain.cancelScheduledValues(ctx.currentTime);
+        mg.gain.setValueAtTime(1, ctx.currentTime);
+      }
+      const beatMs = 60_000 / Math.max(40, bpmRef.current);
+      let beatIdx = startBeatIdx;
+      if (playImmediateDownbeat) {
+        triggerClickPulse(ctx, mg ?? ctx.destination, ctx.currentTime + 0.005, beatIdx % 4 === 0);
+      }
+      metronomeTimerRef.current = window.setInterval(() => {
+        const act = audioCtxRef.current;
+        if (!act || !metronomeEnabledRef.current) {
+          stopMetronome();
+          return;
+        }
+        beatIdx += 1;
+        const dest = metronomeGainNodeRef.current;
+        if (!dest) return;
+        triggerClickPulse(act, dest, act.currentTime + 0.01, beatIdx % 4 === 0);
+      }, beatMs);
+    },
+    [stopMetronome],
+  );
+
+  // Immediately stop/restart metronome when Click or BPM changes mid-playback or mid-recording.
+  useEffect(() => {
+    if (!metronomeEnabled) {
+      stopMetronome();
+      return;
+    }
+    if (transport === "playing" || transport === "recording") {
+      const ctx = audioCtxRef.current;
+      if (ctx) {
+        startMetronomeLoop(ctx, 0, false);
+      }
+    }
+  }, [bpm, metronomeEnabled, startMetronomeLoop, stopMetronome, transport]);
+
   const stopPlaybackSources = useCallback(() => {
     cancelAnimationFrame(playheadRafRef.current);
     playheadRafRef.current = 0;
-    window.clearInterval(metronomeTimerRef.current);
-    metronomeTimerRef.current = undefined;
+    stopMetronome();
     for (const node of playbackNodesRef.current) {
       try {
         node.source.stop();
@@ -242,7 +318,7 @@ export function useStudioAudio({
       }
     }
     playbackNodesRef.current = [];
-  }, []);
+  }, [stopMetronome]);
 
   const teardownMic = useCallback(() => {
     if (micStreamRef.current) {
@@ -352,7 +428,8 @@ export function useStudioAudio({
 
   const hydrateTrackBuffer = useCallback(
     async (track: StudioTrackV1): Promise<AudioBuffer | null> => {
-      const cached = bufferCacheRef.current.get(track.id);
+      const cacheKey = track.audioRef.idbKey || track.id;
+      const cached = bufferCacheRef.current.get(cacheKey);
       if (cached) return cached;
       try {
         const ctx = await ensureAudioContext();
@@ -364,7 +441,7 @@ export function useStudioAudio({
         if (!blob) return null;
         const ab = await blob.arrayBuffer();
         const decoded = await ctx.decodeAudioData(ab.slice(0));
-        bufferCacheRef.current.set(track.id, decoded);
+        bufferCacheRef.current.set(cacheKey, decoded);
         return decoded;
       } catch {
         return null;
@@ -389,11 +466,22 @@ export function useStudioAudio({
       let maxEndMs = loopToMaxMs ?? startMs;
 
       for (const tr of currentTracks) {
-        const buf = bufferCacheRef.current.get(tr.id);
+        const cacheKey = tr.audioRef.idbKey || tr.id;
+        const buf = bufferCacheRef.current.get(cacheKey);
         if (!buf) continue;
-        const trEnd = tr.offsetMs + buf.duration * 1000;
-        if (trEnd > maxEndMs) maxEndMs = trEnd;
-        if (trEnd <= startMs) continue;
+        const clipStartMs = tr.offsetMs;
+        const trimStartMs = Math.max(0, tr.trimStartMs ?? 0);
+        const rawDurMs = tr.durationMs > 0 ? tr.durationMs : Math.round(buf.duration * 1000);
+        const clipEndMs = clipStartMs + rawDurMs;
+        if (clipEndMs > maxEndMs) maxEndMs = clipEndMs;
+        if (clipEndMs <= startMs) continue;
+
+        const clipElapsedMs = Math.max(0, startMs - clipStartMs);
+        const srcOffsetSec = Math.max(0, (trimStartMs + clipElapsedMs) / 1000);
+        const availableSec = Math.max(0, buf.duration - srcOffsetSec);
+        const remainingClipSec = Math.max(0, (clipEndMs - Math.max(startMs, clipStartMs)) / 1000);
+        const playDurSec = Math.min(availableSec, remainingClipSec);
+        if (playDurSec <= 0.01) continue;
 
         const src = ctx.createBufferSource();
         src.buffer = buf;
@@ -407,22 +495,15 @@ export function useStudioAudio({
         gainNode.connect(panNode);
         panNode.connect(masterGainNodeRef.current ?? ctx.destination);
 
-        const relOffsetSec = Math.max(0, (startMs - tr.offsetMs) / 1000);
-        const delaySec = Math.max(0, (tr.offsetMs - startMs) / 1000);
-        src.start(startTime + delaySec, relOffsetSec);
+        const delaySec = Math.max(0, (clipStartMs - startMs) / 1000);
+        src.start(startTime + delaySec, srcOffsetSec, playDurSec);
         nodes.push({ trackId: tr.id, source: src, gainNode, panNode });
       }
       playbackNodesRef.current = nodes;
 
-      if (metronomeEnabled) {
-        const beatMs = 60_000 / Math.max(40, bpm);
-        let beatIdx = Math.floor(startMs / beatMs);
-        metronomeTimerRef.current = window.setInterval(() => {
-          const act = audioCtxRef.current;
-          if (!act) return;
-          beatIdx += 1;
-          triggerClickPulse(act, act.currentTime + 0.01, beatIdx % 4 === 0);
-        }, beatMs);
+      if (metronomeEnabledRef.current) {
+        const beatMs = 60_000 / Math.max(40, bpmRef.current);
+        startMetronomeLoop(ctx, Math.floor(startMs / beatMs), false);
       }
 
       const tickPlayhead = () => {
@@ -441,7 +522,7 @@ export function useStudioAudio({
       };
       playheadRafRef.current = requestAnimationFrame(tickPlayhead);
     },
-    [bpm, ensureAudioContext, hydrateTrackBuffer, metronomeEnabled, stopPlaybackSources],
+    [ensureAudioContext, hydrateTrackBuffer, startMetronomeLoop, stopPlaybackSources],
   );
 
   const play = useCallback(
@@ -476,7 +557,7 @@ export function useStudioAudio({
   );
 
   const beginLiveMediaRecorder = useCallback(
-    async (stream: MediaStream, punchInMs: number, role: StudioTrackRole) => {
+    async (stream: MediaStream, punchInMs: number, role: StudioTrackRole, layerIndex = 0) => {
       const ctx = await ensureAudioContext();
       const mime = chooseRecorderMime();
       const recorder = mime
@@ -488,6 +569,7 @@ export function useStudioAudio({
       recordStartPerfRef.current = performance.now();
       recordPunchOffsetMsRef.current = punchInMs;
       recordRoleRef.current = role;
+      recordLayerRef.current = Math.max(0, layerIndex);
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (ev) => {
@@ -521,7 +603,7 @@ export function useStudioAudio({
             let peaks: number[] = [];
             try {
               decoded = await ctx.decodeAudioData(ab.slice(0));
-              bufferCacheRef.current.set(trackId, decoded);
+              bufferCacheRef.current.set(idbKey, decoded);
               durationMs = Math.max(durationMs, Math.round(decoded.duration * 1000));
               sampleRate = decoded.sampleRate;
               peaks = computePeaksFromBuffer(decoded, 160);
@@ -543,8 +625,11 @@ export function useStudioAudio({
               id: trackId,
               name: roleLabel,
               role: recordRoleRef.current,
+              layerIndex: recordLayerRef.current,
               offsetMs: recordPunchOffsetMsRef.current,
+              trimStartMs: 0,
               durationMs,
+              sourceDurationMs: durationMs,
               gain: 1,
               pan: 0,
               muted: false,
@@ -571,26 +656,21 @@ export function useStudioAudio({
 
       if (overdubEnabled && tracksRef.current.length > 0) {
         void startTracksFrom(punchInMs, Number.MAX_SAFE_INTEGER);
-      } else if (metronomeEnabled) {
-        const beatMs = 60_000 / Math.max(40, bpm);
-        let beatIdx = 0;
-        triggerClickPulse(ctx, ctx.currentTime + 0.005, true);
-        metronomeTimerRef.current = window.setInterval(() => {
-          const act = audioCtxRef.current;
-          if (!act) return;
-          beatIdx += 1;
-          triggerClickPulse(act, act.currentTime + 0.01, beatIdx % 4 === 0);
-        }, beatMs);
+      } else if (metronomeEnabledRef.current) {
+        startMetronomeLoop(ctx, 0, true);
       }
 
       recorder.start(100);
       setTransport("recording");
     },
-    [bpm, ensureAudioContext, metronomeEnabled, onNotice, onTrackCaptured, overdubEnabled, startTracksFrom],
+    [ensureAudioContext, onNotice, onTrackCaptured, overdubEnabled, startMetronomeLoop, startTracksFrom],
   );
 
   const startRecording = useCallback(
-    async (role: StudioTrackRole = tracksRef.current.length > 0 ? "overdub" : "voice") => {
+    async (
+      role: StudioTrackRole = tracksRef.current.length > 0 ? "overdub" : "voice",
+      layerIndex = 0,
+    ) => {
       if (transport === "recording" || transport === "counting-in") return;
       stopPlaybackSources();
       const stream = micStreamRef.current ?? (await armMicrophone());
@@ -600,30 +680,38 @@ export function useStudioAudio({
       if (countInBars > 0) {
         const ctx = await ensureAudioContext();
         const totalBeats = countInBars * 4;
-        const beatMs = 60_000 / Math.max(40, bpm);
+        const beatMs = 60_000 / Math.max(40, bpmRef.current);
         let currentBeat = 1;
         setTransport("counting-in");
         setCountInBeat(totalBeats);
-        triggerClickPulse(ctx, ctx.currentTime + 0.01, true);
+        if (metronomeEnabledRef.current) {
+          const mg = metronomeGainNodeRef.current;
+          if (mg) mg.gain.setValueAtTime(1, ctx.currentTime);
+          triggerClickPulse(ctx, mg ?? ctx.destination, ctx.currentTime + 0.01, true);
+        }
 
         const stepCountIn = () => {
           currentBeat += 1;
           if (currentBeat > totalBeats) {
             setCountInBeat(null);
-            void beginLiveMediaRecorder(stream, punchInMs, role);
+            void beginLiveMediaRecorder(stream, punchInMs, role, layerIndex);
             return;
           }
           setCountInBeat(totalBeats - currentBeat + 1);
-          triggerClickPulse(ctx, ctx.currentTime + 0.01, (currentBeat - 1) % 4 === 0);
+          if (metronomeEnabledRef.current) {
+            const mg = metronomeGainNodeRef.current;
+            if (mg) mg.gain.setValueAtTime(1, ctx.currentTime);
+            triggerClickPulse(ctx, mg ?? ctx.destination, ctx.currentTime + 0.01, (currentBeat - 1) % 4 === 0);
+          }
           countInTimerRef.current = window.setTimeout(stepCountIn, beatMs);
         };
         countInTimerRef.current = window.setTimeout(stepCountIn, beatMs);
         return;
       }
 
-      await beginLiveMediaRecorder(stream, punchInMs, role);
+      await beginLiveMediaRecorder(stream, punchInMs, role, layerIndex);
     },
-    [armMicrophone, beginLiveMediaRecorder, bpm, countInBars, ensureAudioContext, playheadMs, stopPlaybackSources, transport],
+    [armMicrophone, beginLiveMediaRecorder, countInBars, ensureAudioContext, playheadMs, stopPlaybackSources, transport],
   );
 
   const pauseRecording = useCallback(() => {
@@ -649,10 +737,12 @@ export function useStudioAudio({
           recordPunchOffsetMsRef.current + recordAccumMsRef.current,
           Number.MAX_SAFE_INTEGER,
         );
+      } else if (metronomeEnabledRef.current && audioCtxRef.current) {
+        startMetronomeLoop(audioCtxRef.current, 0, true);
       }
       setTransport("recording");
     }
-  }, [overdubEnabled, startTracksFrom, transport]);
+  }, [overdubEnabled, startMetronomeLoop, startTracksFrom, transport]);
 
   const stopRecording = useCallback(() => {
     window.clearTimeout(countInTimerRef.current);
@@ -674,7 +764,7 @@ export function useStudioAudio({
   }, [stopPlaybackSources, transport]);
 
   const importAudioFile = useCallback(
-    async (file: File): Promise<StudioTrackV1 | null> => {
+    async (file: File, layerIndex = 0, offsetMs = 0): Promise<StudioTrackV1 | null> => {
       try {
         const ctx = await ensureAudioContext();
         const ab = await file.arrayBuffer();
@@ -682,15 +772,19 @@ export function useStudioAudio({
         const trackId = makeTrackId();
         const idbKey = `${trackId}-audio`;
         await saveAudioBlob(idbKey, file);
-        bufferCacheRef.current.set(trackId, decoded);
+        bufferCacheRef.current.set(idbKey, decoded);
 
+        const durationMs = Math.max(250, Math.round(decoded.duration * 1000));
         const baseName = file.name.replace(/\.[^.]+$/, "").slice(0, 60) || "Imported stem";
         return {
           id: trackId,
           name: baseName,
           role: "instrumental",
-          offsetMs: 0,
-          durationMs: Math.max(250, Math.round(decoded.duration * 1000)),
+          layerIndex: Math.max(0, layerIndex),
+          offsetMs: Math.max(0, offsetMs),
+          trimStartMs: 0,
+          durationMs,
+          sourceDurationMs: durationMs,
           gain: 0.9,
           pan: 0,
           muted: false,
@@ -731,10 +825,12 @@ export function useStudioAudio({
     };
   }, [hydrateTrackBuffer, onNotice]);
 
-  const removeCachedTrackAudio = useCallback(async (track: StudioTrackV1) => {
-    bufferCacheRef.current.delete(track.id);
-    if (track.audioRef.idbKey) {
-      await deleteAudioBlob(track.audioRef.idbKey);
+  const removeCachedTrackAudio = useCallback(async (track: StudioTrackV1, remainingTracks: StudioTrackV1[] = []) => {
+    const key = track.audioRef.idbKey;
+    const stillReferenced = key && remainingTracks.some((t) => t.audioRef.idbKey === key);
+    if (!stillReferenced) {
+      bufferCacheRef.current.delete(key || track.id);
+      if (key) await deleteAudioBlob(key);
     }
   }, []);
 
