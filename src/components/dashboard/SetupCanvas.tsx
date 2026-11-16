@@ -37,8 +37,8 @@ const FINALE_FILL_END = 0.9;
 const FINALE_COLLAPSE_START = 1.22;
 const FINALE_COLLAPSE_END = 1.88;
 const FINALE_EXPLODE_AT = 2.56;
-const FINALE_BLAST_DURATION = 1.12;
-const FINALE_COMPLETE_AT = FINALE_EXPLODE_AT + FINALE_BLAST_DURATION; // 3.68s
+const FINALE_BLAST_DURATION = 0.88;
+const FINALE_COMPLETE_AT = FINALE_EXPLODE_AT + FINALE_BLAST_DURATION; // 3.44s
 
 const DEPTH_LAYERS = [
   { width: 4.4, alpha: 0.058, hot: 0.08 },
@@ -1517,27 +1517,34 @@ export const SetupCanvas = memo(function SetupCanvas({
         ctx.restore();
       }
 
-      // Batched curved radial plasma sheaves across 4 DEPTH_LAYERS
-      const layerGrads = getRadialLayerGrads(cx, cy, reach * 1.15, mode, p, 0.9, false);
-      for (let layerIdx = 0; layerIdx < DEPTH_LAYERS.length; layerIdx++) {
-        const layer = DEPTH_LAYERS[layerIdx]!;
-        const batch = field.sheafBatches[layerIdx]!;
-        if (!batch.length) continue;
+      // Batched curved radial plasma sheaves across 4 DEPTH_LAYERS (attenuated cleanly to 0 by +0.40s in finale-blast)
+      const sheafEnv = isTerminal ? burstEnv * Math.pow(clamp(1 - starburstU / 0.4, 0, 1), 1.65) : burstEnv;
+      if (sheafEnv > 0.006) {
+        const layerGrads = getRadialLayerGrads(cx, cy, reach * 1.15, mode, p, 0.9, false);
+        for (let layerIdx = 0; layerIdx < DEPTH_LAYERS.length; layerIdx++) {
+          const layer = DEPTH_LAYERS[layerIdx]!;
+          const batch = field.sheafBatches[layerIdx]!;
+          if (!batch.length) continue;
 
-        ctx.beginPath();
-        for (const rIdx of batch) {
-          const ray = field.sheafRays[rIdx]!;
-          const maxLen = reach * ray.reachMul;
-          for (let k = 0; k <= SHEAF_STEPS; k++) {
-            writeSheafPoint(ray, k / SHEAF_STEPS, cx, cy, maxLen, waveTime, k);
+          ctx.beginPath();
+          for (const rIdx of batch) {
+            const ray = field.sheafRays[rIdx]!;
+            // Keep lower negative-space quadrant cleaner during finale-blast so "Hello, [Name]" stays clear
+            const maxLen =
+              isTerminal && Math.sin(ray.angle) > 0.35
+                ? reach * ray.reachMul * 0.55
+                : reach * ray.reachMul;
+            for (let k = 0; k <= SHEAF_STEPS; k++) {
+              writeSheafPoint(ray, k / SHEAF_STEPS, cx, cy, maxLen, waveTime, k);
+            }
+            traceSmoothPolylineScratch(ctx, scratchXs, scratchYs, SHEAF_STEPS + 1);
           }
-          traceSmoothPolylineScratch(ctx, scratchXs, scratchYs, SHEAF_STEPS + 1);
-        }
 
-        ctx.globalAlpha = clamp(layer.alpha * burstEnv * p.alphaScale * (isLight ? 1.05 : 1.55), 0, 1);
-        ctx.lineWidth = layer.width * (isLight ? 0.85 : 1.0 + burstEnv * 0.35);
-        ctx.strokeStyle = layerGrads[layerIdx]!;
-        ctx.stroke();
+          ctx.globalAlpha = clamp(layer.alpha * sheafEnv * p.alphaScale * (isLight ? 1.05 : 1.55), 0, 1);
+          ctx.lineWidth = layer.width * (isLight ? 0.85 : 1.0 + sheafEnv * 0.35);
+          ctx.strokeStyle = layerGrads[layerIdx]!;
+          ctx.stroke();
+        }
       }
 
       // Luminous pinpoint stardust motes & sparkles bursting radially outward (no stick needles!)
@@ -2045,8 +2052,8 @@ export const SetupCanvas = memo(function SetupCanvas({
         );
       }
 
-      // 5. Modal Impulse Shockwave Ripples
-      if (shockRings.length > 0) {
+      // 5. Modal Impulse Shockwave Ripples (modal step clicks only; zero hollow target rings during explosions)
+      if (curPhase === "modal" && shockRings.length > 0) {
         ctx.save();
         ctx.globalCompositeOperation = p.blendOp;
         ctx.lineWidth = 1.15;
@@ -2069,6 +2076,8 @@ export const SetupCanvas = memo(function SetupCanvas({
           ctx.stroke();
         }
         ctx.restore();
+      } else if (curPhase !== "modal" && shockRings.length > 0) {
+        shockRings.length = 0;
       }
 
       // 6. Central Singularity Core + Horizontal Anamorphic Optical Streak
