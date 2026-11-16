@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { NexusMark } from "@/components/landing/NexusLogo";
 import { Button } from "@/components/ui/button";
@@ -33,7 +33,6 @@ import {
   type StageSignal,
   type StageTransfer,
 } from "./NeuralStage";
-import { computeCoreCenter } from "./stage-layout";
 import { NodeMenu, NodeRail, type PanelId, type Surface } from "./NodeNav";
 import { NexusInput, NexusVoice } from "./NexusVoice";
 import { SETUP_RESUME_KEY, SetupExperience, type SetupStep } from "./SetupExperience";
@@ -114,10 +113,12 @@ export function Dashboard({
   const [viewerName, setViewerName] = useState<string | null>(viewer.name);
 
   const [setupDone, setSetupDone] = useState(initialSetupDone);
+  const [finalePrewarm, setFinalePrewarm] = useState(false);
+  const [finaleExploded, setFinaleExploded] = useState(false);
+  const [cameFromSetup, setCameFromSetup] = useState(false);
   const [setupResumeStep, setSetupResumeStep] = useState<SetupStep | null>(initialSetupStep);
   const [setupNotice, setSetupNotice] = useState<{ ok: boolean; text: string } | null>(initialOauthNotice);
   const [setupReveal, setSetupReveal] = useState(false);
-  const [setupRevealCoreY, setSetupRevealCoreY] = useState<number | null>(null);
 
   const [surface, setSurface] = useState<Surface>({ view: "home", panel: null });
   const [researchMounted, setResearchMounted] = useState(false);
@@ -418,10 +419,26 @@ export function Dashboard({
       snap: hub.lastSnapped && snapIndex >= 0 ? { index: snapIndex, serial: hub.lastSnapped.serial } : null,
       transfer,
       activeSocket: activeSocketIdx >= 0 ? activeSocketIdx : null,
-      paused: surface.view !== "home",
-      fromSetupExplosion: setupReveal,
+      paused: surface.view !== "home" || (finalePrewarm && !finaleExploded),
+      fromSetupExplosion: setupReveal || finalePrewarm || cameFromSetup,
     };
-  }, [session.brain, visuals, theme, hub.lastSnapped, hub.slots, hub.extensions, hub.entitlement, transfer, surface.view, surface.panel, selected, setupReveal]);
+  }, [
+    session.brain,
+    visuals,
+    theme,
+    hub.lastSnapped,
+    hub.slots,
+    hub.extensions,
+    hub.entitlement,
+    transfer,
+    surface.view,
+    surface.panel,
+    selected,
+    setupReveal,
+    finalePrewarm,
+    finaleExploded,
+    cameFromSetup,
+  ]);
 
   const firstName = useMemo(() => {
     const rawName = viewerName?.trim();
@@ -480,15 +497,31 @@ export function Dashboard({
     await fetch("/api/setup", { method: "POST" }).catch(() => null);
   }
 
+  const handleFinaleCollapsed = useCallback(() => {
+    setCameFromSetup(true);
+    setFinalePrewarm(true);
+  }, []);
+
+  const handleFinaleExplode = useCallback(() => {
+    setCameFromSetup(true);
+    setFinalePrewarm(true);
+    setFinaleExploded(true);
+    setSetupReveal(true);
+  }, []);
+
   async function completeSetup(nodeIds: ExtensionId[], options?: { fromFinale?: boolean }) {
     await persistSetup(nodeIds);
     setSetupNotice(null);
     setSetupResumeStep(null);
+    setFinalePrewarm(false);
     if (options?.fromFinale) {
-      if (typeof window !== "undefined") {
-        setSetupRevealCoreY(computeCoreCenter(window.innerWidth, window.innerHeight).y);
-      }
+      setFinaleExploded(true);
+      setCameFromSetup(true);
       setSetupReveal(true);
+    } else {
+      setFinaleExploded(false);
+      setCameFromSetup(false);
+      setSetupReveal(false);
     }
     setSetupDone(true);
   }
@@ -502,6 +535,9 @@ export function Dashboard({
   const replaySetup = useCallback(async () => {
     clearResumeSetupStep();
     persistedNodesRef.current = false;
+    setFinalePrewarm(false);
+    setFinaleExploded(false);
+    setCameFromSetup(false);
     setSetupReveal(false);
     try {
       window.localStorage.removeItem(SETUP_DONE_KEY);
@@ -518,7 +554,7 @@ export function Dashboard({
 
   useEffect(() => {
     if (!setupReveal) return;
-    const t = window.setTimeout(() => setSetupReveal(false), 950);
+    const t = window.setTimeout(() => setSetupReveal(false), 1400);
     return () => window.clearTimeout(t);
   }, [setupReveal]);
 
@@ -580,178 +616,180 @@ export function Dashboard({
 
   const panel = surface.panel;
   const isNetworkHome = surface.view === "home";
-
-  if (!setupDone) {
-    return (
-      <SetupExperience
-        initialName={viewerName ?? ""}
-        theme={theme}
-        hub={hub}
-        initialStep={setupResumeStep}
-        oauthNotice={setupNotice}
-        onDismissNotice={() => setSetupNotice(null)}
-        onNameSaved={(name) => setViewerName(name)}
-        onPersistSetup={persistSetup}
-        onComplete={completeSetup}
-        onSkip={skipSetup}
-      />
-    );
-  }
+  const showDashboardTree = setupDone || finalePrewarm;
+  const isPrewarmHidden = finalePrewarm && !finaleExploded;
 
   return (
-    <div
-      className={`dash ${theme === "dark" ? "dark" : "light"} ${setupReveal ? "dash--from-setup" : ""} relative h-[100svh] w-full flex-1 overflow-hidden`}
-      data-theme={theme}
-      data-nav-open={isNetworkHome ? (menuOpen ? "true" : "false") : "true"}
-    >
-      {setupReveal ? (
+    <>
+      {showDashboardTree ? (
         <div
-          className="dash-finale-reveal pointer-events-none fixed inset-0 z-50"
-          style={
-            setupRevealCoreY !== null
-              ? ({ "--dash-core-y": `${setupRevealCoreY}px` } as CSSProperties)
-              : undefined
-          }
-          aria-hidden
-          onAnimationEnd={() => setSetupReveal(false)}
-        />
-      ) : null}
-      <section
-        aria-label="Nexus Laniakea network"
-        className="absolute inset-0"
-        hidden={surface.view === "command"}
-      >
-        <NeuralStage signal={signal} onSelectSocket={handleSelectSocket} />
-        <div className="dash-scrim--home pointer-events-none absolute inset-0" />
-      </section>
+          className={`dash ${theme === "dark" ? "dark" : "light"} ${
+            isPrewarmHidden ? "dash--prewarm" : ""
+          } ${setupReveal ? "dash--from-setup" : ""} relative h-[100svh] w-full flex-1 overflow-hidden`}
+          data-theme={theme}
+          data-nav-open={isNetworkHome ? (menuOpen ? "true" : "false") : "true"}
+        >
+          <section
+            aria-label="Nexus Laniakea network"
+            className="absolute inset-0"
+            hidden={surface.view === "command"}
+          >
+            <NeuralStage signal={signal} onSelectSocket={handleSelectSocket} />
+            <div className="dash-scrim--home pointer-events-none absolute inset-0" />
+          </section>
 
-      <header className="landing-enter pointer-events-none absolute inset-x-0 top-0 z-40 flex h-16 items-center">
-        {isNetworkHome ? (
-          <div className="pointer-events-auto ml-[14px] inline-flex w-[74px] shrink-0 justify-center">
-            <NexusMenuButton
-              buttonRef={menuTriggerRef}
-              open={menuOpen}
-              hasActivePanel={Boolean(panel)}
-              controlsId="nexus-network-menu"
-              onClick={toggleMenu}
-            />
-          </div>
-        ) : (
-          <Link href="/" aria-label="Nexus home" className="pointer-events-auto inline-flex w-[76px] shrink-0 justify-center">
-            <NexusMark className="dash-brand-mark h-7 w-auto" />
-          </Link>
-        )}
-      </header>
-
-      <NodeMenu
-        id="nexus-network-menu"
-        navRef={menuNavRef}
-        hub={hub}
-        surface={surface}
-        floating={isNetworkHome}
-        open={isNetworkHome ? menuOpen : true}
-        onHome={goHome}
-        onCommand={handleOpenCommand}
-        onPanel={openPanel}
-        onReplaySetup={replaySetup}
-      />
-      {isNetworkHome ? (
-        <NodeRail hub={hub} surface={surface} onCommand={handleOpenCommand} onSlot={selectSlot} />
-      ) : null}
-
-      {surface.view === "home" ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-5 z-20 flex justify-center px-4 sm:bottom-8 sm:px-[88px]">
-          <div className="dash-chat pointer-events-auto flex w-full max-w-[620px] flex-col items-center gap-4">
-            <NexusVoice
-              firstName={firstName}
-              brain={session.brain}
-              current={session.current}
-              pendingPrompt={session.pendingPrompt}
-              revealed={session.revealed}
-              history={session.history}
-              followUps={session.followUps}
-              skipWake={setupReveal}
-              onAsk={chat}
-            />
-            <NexusInput
-              disabled={session.brain === "thinking"}
-              onAsk={chat}
-              onResearch={RESEARCH_VISIBLE ? (text) => openResearch(text) : undefined}
-            />
-          </div>
-        </div>
-      ) : null}
-
-      {researchMounted ? (
-        <div className="node-full" hidden={surface.view !== "research"}>
-          <ResearchView request={researchRequest} onClose={() => setSurface({ view: "home", panel: null })} />
-        </div>
-      ) : null}
-
-      {commandMounted ? (
-        <div className="command-screen" hidden={surface.view !== "command"}>
-          <CommandView request={commandRequest} onClose={() => setSurface({ view: "home", panel: null })} />
-        </div>
-      ) : null}
-
-      {panel ? (
-        <aside ref={panelRef} className="node-panel" aria-label="Node panel">
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  className="absolute right-3 top-3 z-10 rounded-full text-muted-foreground hover:text-foreground"
-                  onClick={() => setSurface((s) => ({ ...s, panel: null }))}
-                  aria-label="Close panel"
-                >
-                  <X className="size-4" />
-                </Button>
-              }
-            />
-            <TooltipContent side="left">Close panel</TooltipContent>
-          </Tooltip>
-          <ScrollArea className="h-full">
-            <div className="p-6 pt-7">
-              {panel === "today" ? (
-                <TodayPanel
-                  tasks={session.tasks}
-                  threads={session.threads}
-                  touched={session.touched}
-                  organized={session.organized}
-                  onToggle={session.toggleTask}
+          <header
+            className={`${
+              cameFromSetup || finalePrewarm || setupReveal ? "" : "landing-enter "
+            }dash-header pointer-events-none absolute inset-x-0 top-0 z-40 flex h-16 items-center`}
+          >
+            {isNetworkHome ? (
+              <div className="pointer-events-auto ml-[14px] inline-flex w-[74px] shrink-0 justify-center">
+                <NexusMenuButton
+                  buttonRef={menuTriggerRef}
+                  open={menuOpen}
+                  hasActivePanel={Boolean(panel)}
+                  controlsId="nexus-network-menu"
+                  onClick={toggleMenu}
                 />
-              ) : panel === "nodes" ? (
-                <ExtensionHub
-                  hub={hub}
-                  selected={selected}
-                  notice={notice}
-                  onSnap={snap}
-                  onRelease={release}
-                  onTogglePro={() => setStubPro(!hub.entitlement.isPro)}
+              </div>
+            ) : (
+              <Link href="/" aria-label="Nexus home" className="pointer-events-auto inline-flex w-[76px] shrink-0 justify-center">
+                <NexusMark className="dash-brand-mark h-7 w-auto" />
+              </Link>
+            )}
+          </header>
+
+          <NodeMenu
+            id="nexus-network-menu"
+            navRef={menuNavRef}
+            hub={hub}
+            surface={surface}
+            floating={isNetworkHome}
+            open={isNetworkHome ? menuOpen : true}
+            onHome={goHome}
+            onCommand={handleOpenCommand}
+            onPanel={openPanel}
+            onReplaySetup={replaySetup}
+          />
+          {isNetworkHome ? (
+            <NodeRail hub={hub} surface={surface} onCommand={handleOpenCommand} onSlot={selectSlot} />
+          ) : null}
+
+          {surface.view === "home" ? (
+            <div className="pointer-events-none absolute inset-x-0 bottom-5 z-20 flex justify-center px-4 sm:bottom-8 sm:px-[88px]">
+              <div className="dash-chat pointer-events-auto flex w-full max-w-[620px] flex-col items-center gap-4">
+                <NexusVoice
+                  firstName={firstName}
+                  brain={session.brain}
+                  current={session.current}
+                  pendingPrompt={session.pendingPrompt}
+                  revealed={session.revealed}
+                  history={session.history}
+                  followUps={session.followUps}
+                  skipWake={setupReveal || finalePrewarm || cameFromSetup}
+                  onAsk={chat}
                 />
-              ) : panel === "settings" ? (
-                <SettingsPanel
-                  viewer={{ ...viewer, name: viewerName }}
-                  isPro={hub.entitlement.isPro}
-                  onTogglePro={() => setStubPro(!hub.entitlement.isPro)}
-                  onOpenCommandConnections={() => openCommand({ tab: "connections", service: null, notice: null })}
-                  onReplaySetup={() => void replaySetup()}
+                <NexusInput
+                  disabled={session.brain === "thinking"}
+                  onAsk={chat}
+                  onResearch={RESEARCH_VISIBLE ? (text) => openResearch(text) : undefined}
                 />
-              ) : (
-                <ExtensionPanel
-                  hub={hub}
-                  id={panel.extension}
-                  onRelease={release}
-                  onTransfer={(fromId, toId) => triggerNodeTransfer(fromId, toId)}
-                />
-              )}
+              </div>
             </div>
-          </ScrollArea>
-        </aside>
+          ) : null}
+
+          {researchMounted ? (
+            <div className="node-full" hidden={surface.view !== "research"}>
+              <ResearchView request={researchRequest} onClose={() => setSurface({ view: "home", panel: null })} />
+            </div>
+          ) : null}
+
+          {commandMounted ? (
+            <div className="command-screen" hidden={surface.view !== "command"}>
+              <CommandView request={commandRequest} onClose={() => setSurface({ view: "home", panel: null })} />
+            </div>
+          ) : null}
+
+          {panel ? (
+            <aside ref={panelRef} className="node-panel" aria-label="Node panel">
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="absolute right-3 top-3 z-10 rounded-full text-muted-foreground hover:text-foreground"
+                      onClick={() => setSurface((s) => ({ ...s, panel: null }))}
+                      aria-label="Close panel"
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  }
+                />
+                <TooltipContent side="left">Close panel</TooltipContent>
+              </Tooltip>
+              <ScrollArea className="h-full">
+                <div className="p-6 pt-7">
+                  {panel === "today" ? (
+                    <TodayPanel
+                      tasks={session.tasks}
+                      threads={session.threads}
+                      touched={session.touched}
+                      organized={session.organized}
+                      onToggle={session.toggleTask}
+                    />
+                  ) : panel === "nodes" ? (
+                    <ExtensionHub
+                      hub={hub}
+                      selected={selected}
+                      notice={notice}
+                      onSnap={snap}
+                      onRelease={release}
+                      onTogglePro={() => setStubPro(!hub.entitlement.isPro)}
+                    />
+                  ) : panel === "settings" ? (
+                    <SettingsPanel
+                      viewer={{ ...viewer, name: viewerName }}
+                      isPro={hub.entitlement.isPro}
+                      onTogglePro={() => setStubPro(!hub.entitlement.isPro)}
+                      onOpenCommandConnections={() => openCommand({ tab: "connections", service: null, notice: null })}
+                      onReplaySetup={() => void replaySetup()}
+                    />
+                  ) : (
+                    <ExtensionPanel
+                      hub={hub}
+                      id={panel.extension}
+                      onRelease={release}
+                      onTransfer={(fromId, toId) => triggerNodeTransfer(fromId, toId)}
+                    />
+                  )}
+                </div>
+              </ScrollArea>
+            </aside>
+          ) : null}
+        </div>
       ) : null}
-    </div>
+
+      {!setupDone ? (
+        <div className={`fixed inset-0 z-50 ${finalePrewarm ? "pointer-events-none" : ""}`}>
+          <SetupExperience
+            initialName={viewerName ?? ""}
+            theme={theme}
+            hub={hub}
+            initialStep={setupResumeStep}
+            oauthNotice={setupNotice}
+            onDismissNotice={() => setSetupNotice(null)}
+            onNameSaved={(name) => setViewerName(name)}
+            onPersistSetup={persistSetup}
+            onComplete={completeSetup}
+            onSkip={skipSetup}
+            onFinaleCollapsed={handleFinaleCollapsed}
+            onFinaleExplode={handleFinaleExplode}
+          />
+        </div>
+      ) : null}
+    </>
   );
 }

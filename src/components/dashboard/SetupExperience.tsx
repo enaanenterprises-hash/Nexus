@@ -194,6 +194,8 @@ export function SetupExperience({
   onPersistSetup,
   onComplete,
   onSkip,
+  onFinaleCollapsed,
+  onFinaleExplode,
 }: {
   initialName: string;
   theme: ThemeMode;
@@ -205,6 +207,8 @@ export function SetupExperience({
   onPersistSetup?: (nodeIds: ExtensionId[]) => Promise<void>;
   onComplete: (nodeIds: ExtensionId[], options?: { fromFinale?: boolean }) => Promise<void>;
   onSkip: () => Promise<void>;
+  onFinaleCollapsed?: () => void;
+  onFinaleExplode?: () => void;
 }) {
   const command = useCommand();
   const { setTheme } = useTheme();
@@ -242,6 +246,8 @@ export function SetupExperience({
   const finaleFallbackRef = useRef<number | undefined>(undefined);
   const persistPromiseRef = useRef<Promise<void> | null>(null);
   const explosionHandledRef = useRef(false);
+  const finaleCollapsedHandledRef = useRef(false);
+  const finaleExplodeHandledRef = useRef(false);
   const finaleHandledRef = useRef(false);
 
   useEffect(
@@ -387,6 +393,22 @@ export function SetupExperience({
     }
   }
 
+  function handleFinaleCollapsed() {
+    if (finaleCollapsedHandledRef.current) return;
+    finaleCollapsedHandledRef.current = true;
+    onFinaleCollapsed?.();
+  }
+
+  function handleFinaleExplode() {
+    if (finaleExplodeHandledRef.current) return;
+    finaleExplodeHandledRef.current = true;
+    if (!finaleCollapsedHandledRef.current) {
+      handleFinaleCollapsed();
+    }
+    setStage((cur) => (cur === "finale" ? "finale-blast" : cur));
+    onFinaleExplode?.();
+  }
+
   async function finalizeAfterAnimation() {
     if (finaleHandledRef.current) return;
     finaleHandledRef.current = true;
@@ -398,6 +420,8 @@ export function SetupExperience({
       await onComplete(selectedNodes, { fromFinale: true });
     } catch {
       finaleHandledRef.current = false;
+      finaleCollapsedHandledRef.current = false;
+      finaleExplodeHandledRef.current = false;
       setFinishing(false);
       setStage("modal");
     }
@@ -406,6 +430,8 @@ export function SetupExperience({
   async function handleFinish() {
     if (finishing) return;
     setFinishing(true);
+    finaleCollapsedHandledRef.current = false;
+    finaleExplodeHandledRef.current = false;
     finaleHandledRef.current = false;
 
     persistPromiseRef.current = (async () => {
@@ -438,20 +464,26 @@ export function SetupExperience({
   const stepMeta = STEPS[currentStepIndex]!;
   const trimmedName = nameInput.trim();
   const displayTitle = step === "name" ? activeNamePrompt : stepMeta.title;
+  const isBlast = stage === "finale-blast";
 
   return (
     <div
       ref={rootRef}
-      className={`dash setup-root ${theme === "dark" ? "dark" : "light"} relative h-[100svh] w-full flex-1 overflow-hidden`}
+      className={`dash setup-root ${theme === "dark" ? "dark" : "light"} relative h-[100svh] w-full flex-1 overflow-hidden ${
+        isBlast ? "bg-transparent pointer-events-none" : ""
+      }`}
       data-theme={theme}
+      data-blast={isBlast ? "true" : "false"}
     >
-      <div className="absolute inset-0">
+      <div className={`absolute inset-0 ${isBlast ? "pointer-events-none" : ""}`}>
         <SetupCanvas
           phase={stage}
           theme={theme}
           impulseSerial={impulseSerial}
           onClickSingularity={handleStart}
           onExplosionComplete={completeOpeningExplosion}
+          onFinaleCollapsed={handleFinaleCollapsed}
+          onFinaleExplode={handleFinaleExplode}
           onFinaleComplete={() => void finalizeAfterAnimation()}
           onCoreLayout={(y) => rootRef.current?.style.setProperty("--setup-core-y", `${y}px`)}
         />

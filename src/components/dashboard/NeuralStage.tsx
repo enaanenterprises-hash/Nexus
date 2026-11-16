@@ -55,7 +55,7 @@ type Rgb = readonly [number, number, number];
 const TAU = Math.PI * 2;
 /** Phase I (0..1.6s): "Waking up Nexus…" on pure black before the neural network pops to life. */
 const WAKE_SILENCE_SECONDS = 1.6;
-const INTRO_SPRING_SECONDS = 2.4;
+const INTRO_SPRING_SECONDS = 1.65;
 const SOCKET_U = 0.33; // Parametric position of the node socket waist along each arm (0 = core, 1 = beyond screen corner)
 const SPINE_SAMPLES = 72;
 const FILAMENTS_PER_ARM = 76;
@@ -907,6 +907,7 @@ export const NeuralStage = memo(function NeuralStage({
     let last = 0;
     let smoothDt = 1 / 60;
     let smoothTime = 0;
+    let explodedStarted = false;
     let elementActive = true;
 
     const onPointerMove = (e: PointerEvent) => {
@@ -1029,12 +1030,10 @@ export const NeuralStage = memo(function NeuralStage({
           : Math.max(0, time - WAKE_SILENCE_SECONDS);
       const intro = reduceMotion
         ? 1
-        : fromExplosion
-          ? Math.min(1, 0.78 + activeTime / 1.15 * 0.22)
-          : Math.min(1, activeTime / INTRO_SPRING_SECONDS);
+        : Math.min(1, activeTime / INTRO_SPRING_SECONDS);
       const introEase = 1 - Math.pow(1 - intro, 3);
       const coreIntro = fromExplosion ? 1 : introEase;
-      const explosionAfterglow = fromExplosion && !reduceMotion ? Math.exp(-activeTime * 2.8) : 0;
+      const explosionAfterglow = fromExplosion && !reduceMotion ? Math.exp(-activeTime * 2.2) : 0;
 
       // Smooth pointer parallax, position, and doubly-damped drift velocity (zero polling jitter)
       const pFollow = reduceMotion ? 1 : 1 - Math.exp(-dt * 3.5);
@@ -1589,6 +1588,12 @@ export const NeuralStage = memo(function NeuralStage({
       const shouldRun = !reduceMotion && elementActive && !signalRef.current.paused;
       if (shouldRun && frame === 0) {
         last = 0;
+        smoothDt = 1 / 60;
+        if ((fromExplosion || signalRef.current.fromSetupExplosion) && !explodedStarted) {
+          explodedStarted = true;
+          smoothTime = 0;
+          draw(0, 0);
+        }
         frame = requestAnimationFrame(loop);
       } else if (!shouldRun && frame !== 0) {
         cancelAnimationFrame(frame);

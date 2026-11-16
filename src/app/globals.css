@@ -7093,11 +7093,12 @@ html[data-dash-theme="light"] .cmd-gallery-badge {
   position: absolute;
   inset: 0;
   opacity: 1;
-  transition: opacity 340ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity 320ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .setup-start-layer[data-leaving="true"] {
   opacity: 0;
+  pointer-events: none;
 }
 
 .setup-start-pos {
@@ -7215,6 +7216,11 @@ html[data-dash-theme="light"] .setup-card {
   --setup-selection: rgba(17, 17, 19, 0.15);
   --setup-scroll-thumb: rgba(17, 17, 19, 0.24);
   --setup-ring-empty: rgba(9, 9, 11, 0.28);
+}
+
+.dash.setup-root[data-blast="true"],
+.setup-root[data-blast="true"] {
+  background: transparent !important;
 }
 
 .dash[data-theme="light"] .setup-start-button {
@@ -8361,32 +8367,22 @@ html[data-dash-theme="light"] .setup-card {
 }
 
 /* ==========================================================================
-   FINALE EXPLOSION DISSIPATION REVEAL INTO DASHBOARD
+   FINALE EXPLOSION REVEAL INTO DASHBOARD
    ========================================================================== */
-.dash-finale-reveal {
-  background: radial-gradient(
-    ellipse 86% 36% at 50% var(--dash-core-y, 60%),
-    rgba(255, 250, 236, 0.36) 0%,
-    rgba(248, 212, 128, 0.22) 28%,
-    rgba(220, 150, 44, 0.08) 58%,
-    rgba(0, 0, 0, 0) 84%
-  );
-  animation: dash-finale-fade 820ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+.dash--prewarm .dash-header,
+.dash--prewarm .node-rail-dock,
+.dash--prewarm .dash-chat {
+  opacity: 0;
+  pointer-events: none;
 }
 
-.dash[data-theme="light"] .dash-finale-reveal {
-  background: radial-gradient(
-    ellipse 86% 36% at 50% var(--dash-core-y, 60%),
-    rgba(255, 250, 238, 0.42) 0%,
-    rgba(232, 178, 72, 0.22) 30%,
-    rgba(204, 134, 14, 0.08) 58%,
-    rgba(247, 246, 242, 0) 84%
-  );
+.dash--from-setup .dash-header,
+.dash--from-setup .dash-chat {
+  animation: dash-morph-ui-in 680ms cubic-bezier(0.22, 1, 0.36, 1) 340ms both;
 }
 
-.dash--from-setup .dash-chat,
 .dash--from-setup .node-rail-dock {
-  animation: dash-morph-ui-in 680ms cubic-bezier(0.22, 1, 0.36, 1) 100ms both;
+  animation: dash-morph-rail-in 680ms cubic-bezier(0.22, 1, 0.36, 1) 340ms both;
 }
 
 @keyframes dash-morph-ui-in {
@@ -8400,12 +8396,14 @@ html[data-dash-theme="light"] .setup-card {
   }
 }
 
-@keyframes dash-finale-fade {
+@keyframes dash-morph-rail-in {
   0% {
-    opacity: 1;
+    opacity: 0;
+    transform: translateY(calc(-50% + 10px));
   }
   100% {
-    opacity: 0;
+    opacity: 1;
+    transform: translateY(-50%);
   }
 }
 
@@ -8414,10 +8412,7 @@ html[data-dash-theme="light"] .setup-card {
     transition: none;
   }
 
-  .dash-finale-reveal {
-    animation-duration: 180ms;
-  }
-
+  .dash--from-setup .dash-header,
   .dash--from-setup .dash-chat,
   .dash--from-setup .node-rail-dock {
     animation: none;
