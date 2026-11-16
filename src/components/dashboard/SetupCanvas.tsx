@@ -13,9 +13,11 @@ const BASE_RAY_COUNT = 168;
 const EXTRA_RAY_COUNT = 290;
 const RAY_STEPS = 22;
 
-const FINALE_FILL_END = 1.40;
-const FINALE_EXPLODE_AT = 2.02;
-const FINALE_COMPLETE_AT = 2.18;
+const FINALE_FILL_END = 1.35;
+const FINALE_COLLAPSE_START = 2.25;
+const FINALE_COLLAPSE_END = 2.90;
+const FINALE_EXPLODE_AT = 3.95;
+const FINALE_COMPLETE_AT = 4.11;
 
 const GOLD_CORE: Rgb = [255, 250, 232];
 const GOLD_BRIGHT: Rgb = [255, 224, 156];
@@ -411,24 +413,30 @@ export const SetupCanvas = memo(function SetupCanvas({
       }
       hoverFocus = lerp(hoverFocus, targetHover, reduceMotion ? 1 : 1 - Math.exp(-dt * 4.5));
 
-      // Finale choreography phases
+      // Finale choreography phases: fill screen -> hold expanded -> collapse to point -> hold pinched point -> explode
       const isFinale = curPhase === "finale";
       const finaleAge = isFinale && finaleStartTime >= 0 ? Math.max(0, time - finaleStartTime) : 0;
       const fillU = isFinale ? clamp(finaleAge / FINALE_FILL_END, 0, 1) : 0;
       const fillEase = 1 - Math.pow(1 - fillU, 1.9);
       const collapseU =
-        isFinale && finaleAge > FINALE_FILL_END
-          ? clamp((finaleAge - FINALE_FILL_END) / (FINALE_EXPLODE_AT - FINALE_FILL_END), 0, 1)
+        isFinale && finaleAge > FINALE_COLLAPSE_START
+          ? clamp((finaleAge - FINALE_COLLAPSE_START) / (FINALE_COLLAPSE_END - FINALE_COLLAPSE_START), 0, 1)
           : 0;
-      const implode = Math.pow(collapseU, 2.35);
-      const blastU =
-        isFinale && finaleAge > FINALE_EXPLODE_AT
-          ? clamp((finaleAge - FINALE_EXPLODE_AT) / 0.44, 0, 1)
+      const implode = Math.pow(collapseU, 2.25);
+      const compressHoldU =
+        isFinale && finaleAge > FINALE_COLLAPSE_END
+          ? clamp((finaleAge - FINALE_COLLAPSE_END) / (FINALE_EXPLODE_AT - FINALE_COLLAPSE_END), 0, 1)
           : 0;
+      const raysCollapsed = isFinale && finaleAge >= FINALE_COLLAPSE_END;
+      const isCollapsedHold =
+        isFinale && finaleAge >= FINALE_COLLAPSE_END && finaleAge < FINALE_EXPLODE_AT;
+      const isBlasting = isFinale && finaleAge >= FINALE_EXPLODE_AT;
+      const blastU = isBlasting
+        ? clamp((finaleAge - FINALE_EXPLODE_AT) / 0.44, 0, 1)
+        : 0;
       const blastEase = blastU > 0 ? 1 - Math.pow(2, -9 * blastU) : 0;
-      const raysCollapsed = isFinale && finaleAge >= FINALE_EXPLODE_AT;
 
-      if (isFinale && !reduceMotion && finaleAge >= FINALE_EXPLODE_AT && !finaleBoomLaunched) {
+      if (isBlasting && !reduceMotion && !finaleBoomLaunched) {
         finaleBoomLaunched = true;
         shockRings.push({ u: 0.01, speed: 2.35, strength: 1.55, crimson: false });
         shockRings.push({ u: 0.0, speed: 1.75, strength: 1.15, crimson: false });
@@ -485,9 +493,19 @@ export const SetupCanvas = memo(function SetupCanvas({
 
       if (isFinale) {
         if (!raysCollapsed) {
-          const compressScale = 1 - implode * 0.76;
-          coreScale = lerp(1.0, 1.38, fillEase) * compressScale;
-          coreFlash = Math.max(coreFlash, lerp(0.18, 1.15, fillEase) + implode * 1.35);
+          const holdBreath =
+            finaleAge > FINALE_FILL_END && finaleAge < FINALE_COLLAPSE_START
+              ? 0.06 * Math.sin((finaleAge - FINALE_FILL_END) * 5.2)
+              : 0;
+          const expandedScale = lerp(1.0, 1.38, fillEase) + holdBreath;
+          const expandedFlash = lerp(0.18, 1.15, fillEase) + holdBreath;
+          coreScale = lerp(expandedScale, 0.24, implode);
+          coreFlash = lerp(Math.max(coreFlash, expandedFlash), 1.48, implode);
+        } else if (isCollapsedHold) {
+          const brace = Math.pow(compressHoldU, 2.8) * 0.04;
+          const tensionPulse = 0.024 * Math.sin(compressHoldU * Math.PI * 5);
+          coreScale = 0.24 + tensionPulse - brace;
+          coreFlash = 1.48 + 0.42 * compressHoldU;
         } else {
           coreScale = 0.25 + blastEase * 2.4;
           coreFlash = 2.4 * (1 - blastU * 0.45);
@@ -702,8 +720,8 @@ export const SetupCanvas = memo(function SetupCanvas({
         }
       }
 
-      // 2. Terminal Supernova Explosion & Nova Wash (Substage 3: after collapse -> regular dashboard)
-      if (isFinale && raysCollapsed) {
+      // 2. Terminal Supernova Explosion & Nova Wash (Substage 3: after point hold -> regular dashboard)
+      if (isBlasting) {
         ctx.globalCompositeOperation = blendOp;
         ctx.globalAlpha = 1;
 
@@ -745,7 +763,7 @@ export const SetupCanvas = memo(function SetupCanvas({
 
       // 3. Shockwave Rings expanding across viewport
       ctx.globalCompositeOperation = blendOp;
-      ctx.lineWidth = raysCollapsed ? 2.1 : 1.25;
+      ctx.lineWidth = isBlasting ? 2.1 : 1.25;
       for (let i = shockRings.length - 1; i >= 0; i--) {
         const ring = shockRings[i]!;
         if (!reduceMotion) ring.u += ring.speed * dt;
@@ -774,8 +792,17 @@ export const SetupCanvas = memo(function SetupCanvas({
       const haloMid: Rgb = isLight ? [204, 134, 14] : [242, 172, 56];
       const haloInner: Rgb = isLight ? [228, 168, 42] : [255, 226, 154];
 
-      // Omit outer atmospheric halo at start ("singularity"), fading it in smoothly upon explosion
-      const glowHaloIn = curPhase === "singularity" ? 0 : isFinale ? 1 : clamp(explodeAge / 0.28, 0, 1);
+      // Omit outer atmospheric halo at start ("singularity"), focus tightly while pinched, flare upon blast
+      const glowHaloIn =
+        curPhase === "singularity"
+          ? 0
+          : isFinale
+            ? isCollapsedHold
+              ? lerp(0.32, 0.56, Math.pow(compressHoldU, 2))
+              : isBlasting
+                ? 1
+                : clamp(1 - implode * 0.68, 0.32, 1)
+            : clamp(explodeAge / 0.28, 0, 1);
       if (glowHaloIn > 0.01) {
         const haloR = Math.max(2, coreBaseR * (1.28 + 0.35 * coreFlash) * coreScale);
         ctx.fillStyle = createMoffat(

@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+  type RefObject,
+} from "react";
 import { LocationInput } from "@/components/command/ConnectionsView";
 import { SourceGlyph } from "@/components/command/parts";
 import { useCommand, type CommandController } from "@/components/command/use-command";
@@ -29,12 +37,37 @@ export type SetupStep = "name" | "theme" | "apps" | "widgets" | "nodes";
 
 export const SETUP_RESUME_KEY = "nexus:setup-resume.v1";
 
-const STEPS: { id: SetupStep; num: number; label: string }[] = [
-  { id: "name", num: 1, label: "Name" },
-  { id: "theme", num: 2, label: "Theme" },
-  { id: "apps", num: 3, label: "Apps" },
-  { id: "widgets", num: 4, label: "Widgets" },
-  { id: "nodes", num: 5, label: "Nodes" },
+const STEPS: { id: SetupStep; label: string; title: string; subtitle: string }[] = [
+  {
+    id: "name",
+    label: "Name",
+    title: "What should Nexus call you?",
+    subtitle: "Your workspace greets you by this name across every view.",
+  },
+  {
+    id: "theme",
+    label: "Theme",
+    title: "Choose your appearance",
+    subtitle: "Sets both the neural canvas backdrop and monochrome surfaces.",
+  },
+  {
+    id: "apps",
+    label: "Apps",
+    title: "Connect apps",
+    subtitle: "Enable live feeds or link accounts to power Command.",
+  },
+  {
+    id: "widgets",
+    label: "Widgets",
+    title: "Organize widgets",
+    subtitle: "Drag tiles on the 4×2 board, use arrow keys when focused, or toggle below.",
+  },
+  {
+    id: "nodes",
+    label: "Nodes",
+    title: "Install starter nodes",
+    subtitle: `Activate up to ${FREE_ACTIVE_EXTENSION_SLOTS} starter nodes to share context in your network.`,
+  },
 ];
 
 const DEFAULT_SAMPLE_NODES: ExtensionId[] = [
@@ -73,6 +106,8 @@ function rememberSetupResume() {
     // Ignore storage failures
   }
 }
+
+type ConnectionRecord = NonNullable<CommandController["state"]>["connections"][number];
 
 export function SetupExperience({
   initialName,
@@ -117,10 +152,14 @@ export function SetupExperience({
   });
 
   const rootRef = useRef<HTMLDivElement>(null);
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const shouldFocusNameOnModalOpen = useRef(true);
   const modalTimerRef = useRef<number | undefined>(undefined);
   const finaleFallbackRef = useRef<number | undefined>(undefined);
   const persistPromiseRef = useRef<Promise<void> | null>(null);
   const finaleHandledRef = useRef(false);
+
   useEffect(
     () => () => {
       window.clearTimeout(modalTimerRef.current);
@@ -128,6 +167,20 @@ export function SetupExperience({
     },
     [],
   );
+
+  useEffect(() => {
+    if (stage !== "modal") return;
+    if (shouldFocusNameOnModalOpen.current) {
+      shouldFocusNameOnModalOpen.current = false;
+      if (step === "name") {
+        nameInputRef.current?.focus();
+      }
+    }
+    const idx = STEPS.findIndex((s) => s.id === step);
+    if (idx >= 0) {
+      tabRefs.current[idx]?.scrollIntoView({ inline: "nearest", block: "nearest" });
+    }
+  }, [stage, step]);
 
   const connectionsList = command.state?.connections;
   const connections = useMemo(
@@ -168,6 +221,31 @@ export function SetupExperience({
     setNameError(null);
     setStep(next);
     pulse();
+  }
+
+  function navigateToStep(next: SetupStep) {
+    if (next === step) return;
+    if (step === "name" && next !== "name") {
+      const trimmed = nameInput.trim();
+      if (trimmed && trimmed !== initialName.trim()) {
+        void saveNameAndContinue(next);
+        return;
+      }
+    }
+    goToStep(next);
+  }
+
+  function handleTabKeyDown(e: KeyboardEvent<HTMLButtonElement>, idx: number) {
+    let targetIdx: number | null = null;
+    if (e.key === "ArrowRight") targetIdx = (idx + 1) % STEPS.length;
+    else if (e.key === "ArrowLeft") targetIdx = (idx - 1 + STEPS.length) % STEPS.length;
+    else if (e.key === "Home") targetIdx = 0;
+    else if (e.key === "End") targetIdx = STEPS.length - 1;
+    if (targetIdx === null) return;
+    e.preventDefault();
+    const target = STEPS[targetIdx]!;
+    tabRefs.current[targetIdx]?.focus();
+    navigateToStep(target.id);
   }
 
   async function saveNameAndContinue(target: SetupStep = "theme") {
@@ -247,7 +325,7 @@ export function SetupExperience({
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     finaleFallbackRef.current = window.setTimeout(
       () => void finalizeAfterAnimation(),
-      reduceMotion ? 260 : 3200,
+      reduceMotion ? 260 : 5000,
     );
   }
 
@@ -262,6 +340,7 @@ export function SetupExperience({
   }
 
   const currentStepIndex = STEPS.findIndex((s) => s.id === step);
+  const stepMeta = STEPS[currentStepIndex]!;
 
   return (
     <div
@@ -295,33 +374,36 @@ export function SetupExperience({
       ) : null}
 
       {stage === "modal" ? (
-        <div className="setup-modal-backdrop fixed inset-0 z-30 flex items-center justify-center p-4 sm:p-6">
+        <div className="setup-modal-backdrop fixed inset-0 z-30 flex items-center justify-center p-2.5 sm:p-6">
           <section
             aria-label="Workspace setup"
-            className="setup-card relative flex max-h-[86svh] w-full max-w-[660px] flex-col overflow-hidden"
+            className="setup-card relative flex max-h-[88svh] w-full max-w-[720px] flex-col overflow-hidden"
           >
-            <header className="setup-card-head flex flex-wrap items-center justify-between gap-3 px-6 py-4">
-              <div className="flex flex-wrap items-center gap-1.5">
-                {STEPS.map((s) => {
+            <header className="setup-card-head flex items-stretch justify-between gap-2 px-4 sm:gap-4 sm:px-8">
+              <div
+                role="tablist"
+                aria-label="Setup steps"
+                className="setup-tabs flex min-w-0 items-stretch gap-3.5 sm:gap-7"
+              >
+                {STEPS.map((s, idx) => {
                   const active = s.id === step;
                   return (
                     <button
                       key={s.id}
-                      type="button"
-                      onClick={() => {
-                        if (step === "name" && s.id !== "name") {
-                          const trimmed = nameInput.trim();
-                          if (trimmed && trimmed !== initialName.trim()) {
-                            void saveNameAndContinue(s.id);
-                            return;
-                          }
-                        }
-                        goToStep(s.id);
+                      ref={(el) => {
+                        tabRefs.current[idx] = el;
                       }}
-                      className="setup-step-pill"
+                      id={`setup-tab-${s.id}`}
+                      role="tab"
+                      type="button"
+                      aria-selected={active}
+                      aria-controls={`setup-panel-${s.id}`}
+                      tabIndex={active ? 0 : -1}
+                      onClick={() => navigateToStep(s.id)}
+                      onKeyDown={(e) => handleTabKeyDown(e, idx)}
+                      className="setup-tab"
                       data-active={active ? "true" : "false"}
                     >
-                      <span className="setup-step-num">{s.num}</span>
                       <span>{s.label}</span>
                     </button>
                   );
@@ -332,39 +414,20 @@ export function SetupExperience({
                 type="button"
                 onClick={() => void handleSkip()}
                 disabled={finishing}
-                className="setup-skip-link"
+                className="setup-skip-link shrink-0 self-center"
               >
-                Skip setup
+                <span className="hidden sm:inline">Skip setup</span>
+                <span className="sm:hidden">Skip</span>
               </button>
             </header>
 
-            <div className="px-6 pt-5 pb-3">
-              <h1 className="setup-title text-[20px] font-medium tracking-[-0.02em]">
-                {step === "name"
-                  ? "What should Nexus call you?"
-                  : step === "theme"
-                    ? "Choose your appearance"
-                    : step === "apps"
-                      ? "Connect apps"
-                      : step === "widgets"
-                        ? "Organize widgets"
-                        : "Install nodes"}
-              </h1>
-              <p className="setup-subtitle mt-1 text-[13px]">
-                {step === "name"
-                  ? "Your workspace greets you by this name."
-                  : step === "theme"
-                    ? "Pick the look that fits your workspace."
-                    : step === "apps"
-                      ? "Enable feeds or link accounts for Command."
-                      : step === "widgets"
-                        ? "Drag to reorder your 4×2 Command board, or toggle tiles below."
-                        : `Select up to ${FREE_ACTIVE_EXTENSION_SLOTS} starter nodes (${selectedNodes.length}/${FREE_ACTIVE_EXTENSION_SLOTS} active).`}
-              </p>
+            <div className="px-4 pt-5 pb-3 sm:px-8 sm:pt-7">
+              <h1 className="setup-title">{stepMeta.title}</h1>
+              <p className="setup-subtitle mt-1.5">{stepMeta.subtitle}</p>
             </div>
 
             {oauthNotice ? (
-              <div className="mx-6 mb-2">
+              <div className="mx-4 mb-2 sm:mx-8">
                 <div
                   role="status"
                   className="setup-notice flex items-center justify-between gap-3 px-3.5 py-2 text-[12.5px]"
@@ -374,7 +437,7 @@ export function SetupExperience({
                   <button
                     type="button"
                     onClick={onDismissNotice}
-                    className="setup-icon-btn"
+                    className="setup-icon-btn shrink-0"
                     aria-label="Dismiss notice"
                   >
                     <CloseIcon size={13} />
@@ -383,9 +446,15 @@ export function SetupExperience({
               </div>
             ) : null}
 
-            <div className="setup-card-body min-h-0 flex-1 overflow-y-auto px-6 py-3">
+            <div
+              id={`setup-panel-${step}`}
+              role="tabpanel"
+              aria-labelledby={`setup-tab-${step}`}
+              className="setup-card-body min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-5 sm:px-8"
+            >
               {step === "name" ? (
                 <SetupNameStep
+                  inputRef={nameInputRef}
                   value={nameInput}
                   error={nameError}
                   busy={nameSaving}
@@ -406,6 +475,7 @@ export function SetupExperience({
               ) : step === "apps" ? (
                 <SetupAppsStep
                   command={command}
+                  connections={connections}
                   connectedIds={connectedIds}
                   onPulse={pulse}
                 />
@@ -430,7 +500,7 @@ export function SetupExperience({
               )}
             </div>
 
-            <footer className="setup-card-foot flex items-center justify-between gap-3 px-6 py-4">
+            <footer className="setup-card-foot flex items-center justify-between gap-3 px-4 py-4 sm:px-8">
               <div>
                 {currentStepIndex > 0 ? (
                   <button
@@ -442,7 +512,7 @@ export function SetupExperience({
                     <span>Back</span>
                   </button>
                 ) : (
-                  <span />
+                  <span className="setup-step-meta">1 of {STEPS.length}</span>
                 )}
               </div>
 
@@ -491,12 +561,14 @@ export function SetupExperience({
    ============================================================================ */
 
 function SetupNameStep({
+  inputRef,
   value,
   error,
   busy,
   onChange,
   onSubmit,
 }: {
+  inputRef: RefObject<HTMLInputElement | null>;
   value: string;
   error: string | null;
   busy: boolean;
@@ -508,27 +580,50 @@ function SetupNameStep({
     onSubmit();
   }
 
+  const trimmed = value.trim();
+
   return (
-    <form onSubmit={handleFormSubmit} className="py-4">
-      <label className="block">
-        <span className="setup-label">Name</span>
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="Your name"
-          maxLength={80}
-          disabled={busy}
-          autoFocus
-          autoComplete="given-name"
-          className="setup-input mt-2"
-        />
-      </label>
-      {error ? (
-        <p className="setup-error mt-2.5" role="alert">
-          {error}
+    <form onSubmit={handleFormSubmit} className="space-y-6 pt-3 pb-2">
+      <div>
+        <label htmlFor="setup-name-input" className="setup-label block">
+          Display name
+        </label>
+        <div className="setup-name-field mt-2">
+          <input
+            ref={inputRef}
+            id="setup-name-input"
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Your name"
+            maxLength={80}
+            disabled={busy}
+            autoComplete="given-name"
+            className="setup-name-input"
+          />
+          <kbd className="setup-kbd hidden sm:inline-flex" aria-hidden>
+            Enter
+          </kbd>
+        </div>
+        {error ? (
+          <p className="setup-error mt-2.5" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
+
+      <div className="setup-name-preview" aria-live="polite">
+        <span className="setup-name-preview-label">Preview</span>
+        <p className="setup-name-specimen">
+          {trimmed ? (
+            <>
+              Welcome to Nexus, <span className="setup-name-specimen-val">{trimmed}</span>.
+            </>
+          ) : (
+            <span className="setup-name-specimen-empty">Your workspace will greet you here.</span>
+          )}
         </p>
-      ) : null}
+      </div>
     </form>
   );
 }
@@ -537,6 +632,44 @@ function SetupNameStep({
    STEP 2: THEME
    ============================================================================ */
 
+const THEME_OPTIONS: {
+  id: ThemeMode;
+  title: string;
+  note: string;
+  surface: string;
+  border: string;
+  orb: string;
+  barStrong: string;
+  barSoft: string;
+  tileBg: string;
+  tileBorder: string;
+}[] = [
+  {
+    id: "dark",
+    title: "Obsidian Dark",
+    note: "Deep obsidian canvas",
+    surface: "#070709",
+    border: "rgba(255, 255, 255, 0.12)",
+    orb: "#f0b54a",
+    barStrong: "rgba(255, 255, 255, 0.78)",
+    barSoft: "rgba(255, 255, 255, 0.2)",
+    tileBg: "rgba(255, 255, 255, 0.055)",
+    tileBorder: "rgba(255, 255, 255, 0.11)",
+  },
+  {
+    id: "light",
+    title: "Gallery Light",
+    note: "Warm paper white",
+    surface: "#f7f6f2",
+    border: "rgba(9, 9, 11, 0.11)",
+    orb: "#b87810",
+    barStrong: "rgba(17, 17, 19, 0.84)",
+    barSoft: "rgba(17, 17, 19, 0.2)",
+    tileBg: "#ffffff",
+    tileBorder: "rgba(9, 9, 11, 0.09)",
+  },
+];
+
 function SetupThemeStep({
   theme,
   onSelect,
@@ -544,14 +677,9 @@ function SetupThemeStep({
   theme: ThemeMode;
   onSelect: (next: ThemeMode) => void;
 }) {
-  const options: { id: ThemeMode; title: string; note: string }[] = [
-    { id: "dark", title: "Dark", note: "Deep obsidian surface" },
-    { id: "light", title: "Light", note: "Clean paper white" },
-  ];
-
   return (
-    <div className="grid grid-cols-1 gap-3 py-2 sm:grid-cols-2">
-      {options.map((opt) => {
+    <div className="grid grid-cols-1 gap-4 py-2 sm:grid-cols-2">
+      {THEME_OPTIONS.map((opt) => {
         const active = theme === opt.id;
         const isDark = opt.id === "dark";
         return (
@@ -566,53 +694,49 @@ function SetupThemeStep({
             <div
               className="setup-theme-preview"
               style={{
-                background: isDark ? "#08080a" : "#f7f7f9",
-                borderColor: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)",
+                background: opt.surface,
+                borderColor: opt.border,
               }}
             >
               <div className="flex items-center justify-between">
+                <span className="h-1.5 w-11 rounded-full" style={{ background: opt.barSoft }} />
                 <span
-                  className="h-2 w-10 rounded-full"
-                  style={{ background: isDark ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.16)" }}
-                />
-                <span
-                  className="h-2 w-2 rounded-full"
-                  style={{ background: isDark ? "#f4f4f6" : "#111113" }}
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{
+                    background: opt.orb,
+                    boxShadow: `0 0 10px ${opt.orb}`,
+                  }}
                 />
               </div>
-              <div className="mt-4 space-y-1.5">
-                <div
-                  className="h-2 w-3/4 rounded-full"
-                  style={{ background: isDark ? "rgba(255,255,255,0.68)" : "rgba(0,0,0,0.72)" }}
-                />
-                <div
-                  className="h-2 w-1/2 rounded-full"
-                  style={{ background: isDark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.14)" }}
-                />
+
+              <div className="mt-5 space-y-2">
+                <div className="h-2.5 w-3/4 rounded-full" style={{ background: opt.barStrong }} />
+                <div className="h-2 w-1/2 rounded-full" style={{ background: opt.barSoft }} />
               </div>
-              <div className="mt-4 grid grid-cols-3 gap-1.5">
-                {[0, 1, 2].map((idx) => (
-                  <div
-                    key={idx}
-                    className="h-5 rounded-[5px]"
-                    style={{
-                      background: isDark ? "rgba(255,255,255,0.06)" : "#ffffff",
-                      border: `1px solid ${isDark ? "rgba(255,255,255,0.10)" : "rgba(0,0,0,0.08)"}`,
-                    }}
-                  />
-                ))}
+
+              <div className="mt-5 grid grid-cols-3 gap-2">
+                <div
+                  className="col-span-2 h-8 rounded-[6px]"
+                  style={{ background: opt.tileBg, border: `1px solid ${opt.tileBorder}` }}
+                />
+                <div
+                  className="h-8 rounded-[6px]"
+                  style={{ background: opt.tileBg, border: `1px solid ${opt.tileBorder}` }}
+                />
               </div>
             </div>
 
-            <div className="mt-3 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                {isDark ? <MoonIcon size={14} /> : <SunIcon size={14} />}
-                <div>
+            <div className="mt-3.5 flex items-center justify-between gap-2.5">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="setup-theme-icon" aria-hidden>
+                  {isDark ? <MoonIcon size={14} /> : <SunIcon size={14} />}
+                </span>
+                <div className="min-w-0">
                   <div className="setup-row-title">{opt.title}</div>
                   <div className="setup-row-sub">{opt.note}</div>
                 </div>
               </div>
-              <span className="setup-check-ring" data-checked={active ? "true" : "false"}>
+              <span className="setup-check-ring shrink-0" data-checked={active ? "true" : "false"}>
                 {active ? <CheckIcon size={11} /> : null}
               </span>
             </div>
@@ -624,15 +748,17 @@ function SetupThemeStep({
 }
 
 /* ============================================================================
-   STEP 3: CONNECT APPS (SIMPLIFIED MONOCHROME LIST)
+   STEP 3: CONNECT APPS (HAIRLINE ARCHITECTURAL LIST)
    ============================================================================ */
 
 function SetupAppsStep({
   command,
+  connections,
   connectedIds,
   onPulse,
 }: {
   command: CommandController;
+  connections: Map<string, ConnectionRecord>;
   connectedIds: Set<string>;
   onPulse: () => void;
 }) {
@@ -653,6 +779,7 @@ function SetupAppsStep({
   const unconnectedGoogleIds = googleApps
     .filter((m) => !connectedIds.has(m.id))
     .map((m) => m.id);
+  const activeInstantCount = instantApps.filter((m) => connectedIds.has(m.id)).length;
 
   async function toggleInstant(m: ConnectorManifest) {
     setFormError(null);
@@ -672,18 +799,22 @@ function SetupAppsStep({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6 py-1">
       {formError ? (
         <p className="setup-error" role="alert">
           {formError}
         </p>
       ) : null}
 
-      <div>
-        <div className="mb-2 flex items-center justify-between gap-2">
+      <section aria-label="Instant feeds">
+        <div className="setup-section-head mb-1 flex items-center justify-between gap-2 pb-2">
           <span className="setup-label">Instant feeds</span>
+          <span className="setup-count-meta">
+            {activeInstantCount} / {instantApps.length} active
+          </span>
         </div>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+
+        <div className="setup-hairline-list">
           {instantApps.map((m) => {
             const isConnected = connectedIds.has(m.id);
             const isExpanded = expandedId === m.id;
@@ -691,21 +822,22 @@ function SetupAppsStep({
               command.pending === `connect:${m.id}` ||
               command.pending === `disconnect:${m.id}`;
             const hasSettings = (m.settings?.length ?? 0) > 0;
+
             return (
               <div
                 key={m.id}
-                className="setup-item-card"
+                className="setup-row"
                 data-selected={isConnected ? "true" : "false"}
               >
-                <div className="flex items-center justify-between gap-2.5">
-                  <div className="flex min-w-0 items-center gap-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
                     <SourceGlyph connectorId={m.id} />
                     <div className="min-w-0">
                       <div className="setup-row-title truncate">{m.name}</div>
                       <div className="setup-row-sub truncate">{m.description}</div>
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
+                  <div className="flex shrink-0 items-center gap-2">
                     {isConnected && hasSettings ? (
                       <button
                         type="button"
@@ -726,10 +858,11 @@ function SetupAppsStep({
                     </button>
                   </div>
                 </div>
+
                 {isExpanded ? (
                   <SetupConnectorInlineForm
                     manifest={m}
-                    connection={command.state?.connections.find((c) => c.connectorId === m.id) ?? null}
+                    connection={connections.get(m.id) ?? null}
                     command={command}
                     onSaved={() => {
                       setExpandedId(null);
@@ -741,10 +874,10 @@ function SetupAppsStep({
             );
           })}
         </div>
-      </div>
+      </section>
 
-      <div>
-        <div className="mb-2 flex items-center justify-between gap-2">
+      <section aria-label="Accounts and APIs">
+        <div className="setup-section-head mb-1 flex items-center justify-between gap-2 pb-2">
           <span className="setup-label">Accounts &amp; APIs</span>
           {googleConnectable && unconnectedGoogleIds.length > 0 ? (
             <button
@@ -759,7 +892,8 @@ function SetupAppsStep({
             </button>
           ) : null}
         </div>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+
+        <div className="setup-hairline-list">
           {accountApps.map((m) => {
             const isConnected = connectedIds.has(m.id);
             const isExpanded = expandedId === m.id;
@@ -767,29 +901,35 @@ function SetupAppsStep({
               command.pending === `connect:${m.id}` ||
               command.pending === `disconnect:${m.id}`;
             const connectable = availability[m.id]?.connectable ?? false;
-            const conn = command.state?.connections.find((c) => c.connectorId === m.id) ?? null;
+            const conn = connections.get(m.id) ?? null;
+            const authMeta =
+              m.auth.type === "oauth"
+                ? m.auth.provider === "google"
+                  ? "Google OAuth"
+                  : "OAuth"
+                : "API token";
 
             return (
               <div
                 key={m.id}
-                className="setup-item-card"
+                className="setup-row"
                 data-selected={isConnected ? "true" : "false"}
               >
-                <div className="flex items-center justify-between gap-2.5">
-                  <div className="flex min-w-0 items-center gap-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
                     <SourceGlyph connectorId={m.id} />
                     <div className="min-w-0">
                       <div className="setup-row-title truncate">{m.name}</div>
                       <div className="setup-row-sub truncate">
-                        {m.auth.type === "oauth" ? "OAuth" : "API token"}
+                        {authMeta} · {m.description}
                       </div>
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
+                  <div className="flex shrink-0 items-center gap-2">
                     {!command.state ? (
-                      <span className="setup-row-sub">Loading</span>
+                      <span className="setup-status-note">Loading…</span>
                     ) : !connectable && !isConnected ? (
-                      <span className="setup-row-sub">Unconfigured</span>
+                      <span className="setup-status-note">Unconfigured</span>
                     ) : isConnected ? (
                       <>
                         {(m.settings?.length ?? 0) > 0 ? (
@@ -847,6 +987,7 @@ function SetupAppsStep({
                     )}
                   </div>
                 </div>
+
                 {isExpanded ? (
                   <SetupConnectorInlineForm
                     manifest={m}
@@ -862,7 +1003,7 @@ function SetupAppsStep({
             );
           })}
         </div>
-      </div>
+      </section>
     </div>
   );
 }
@@ -902,7 +1043,7 @@ function SetupConnectorInlineForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="setup-inline-form mt-2.5 space-y-2 pt-2.5">
+    <form onSubmit={onSubmit} className="setup-inline-form mt-3 space-y-2.5 pt-3">
       {m.auth.type === "api_key"
         ? m.auth.fields.map((f) => (
             <label key={f.key} className="block">
@@ -912,7 +1053,7 @@ function SetupConnectorInlineForm({
                 value={credentials[f.key] ?? ""}
                 onChange={(e) => setCredentials((c) => ({ ...c, [f.key]: e.target.value }))}
                 placeholder={connection?.hasCredentials ? "Saved · enter to replace" : f.placeholder}
-                className="setup-input setup-input--sm mt-1"
+                className="setup-input setup-input--sm mt-1.5"
                 autoComplete="off"
                 spellCheck={false}
               />
@@ -935,7 +1076,7 @@ function SetupConnectorInlineForm({
               value={settings[s.key] ?? ""}
               onChange={(e) => setSettings((prev) => ({ ...prev, [s.key]: e.target.value }))}
               placeholder={s.placeholder}
-              className="setup-input setup-input--sm mt-1"
+              className="setup-input setup-input--sm mt-1.5"
               autoComplete="off"
               spellCheck={false}
             />
@@ -943,7 +1084,7 @@ function SetupConnectorInlineForm({
         ),
       )}
       {error ? <p className="setup-error">{error}</p> : null}
-      <div className="flex justify-end">
+      <div className="flex justify-end pt-0.5">
         <button type="submit" disabled={busy} className="setup-pill-btn" data-active="true">
           {busy ? "Saving…" : "Save"}
         </button>
@@ -953,7 +1094,7 @@ function SetupConnectorInlineForm({
 }
 
 /* ============================================================================
-   STEP 4: ORGANIZE WIDGETS (SIMPLIFIED 4x2 BOARD + TOGGLE PILLS)
+   STEP 4: ORGANIZE WIDGETS (INTERACTIVE 4x2 BOARD + TOGGLE CHIPS)
    ============================================================================ */
 
 function buildEmptyGridCells(placed: readonly { x: number; y: number; w: number; h: number }[]) {
@@ -989,8 +1130,14 @@ function SetupWidgetsStep({
   const [dragOverId, setDragOverId] = useState<string | null>(null);
 
   const placed = useMemo(() => placeWidgets(widgetIds), [widgetIds]);
+  const stablePlaced = useMemo(
+    () => [...placed].sort((a, b) => a.id.localeCompare(b.id)),
+    [placed],
+  );
   const openCells = useMemo(() => buildEmptyGridCells(placed), [placed]);
   const placedIds = placed.map((p) => p.id);
+  const totalSlots = OVERVIEW_COLUMNS * OVERVIEW_ROWS;
+  const usedSlots = totalSlots - openCells.length;
 
   function addWidget(id: string) {
     if (!overviewAccepts(placedIds, id)) return;
@@ -1012,11 +1159,38 @@ function SetupWidgetsStep({
     onChange(copy);
   }
 
+  function moveByOffset(id: string, delta: number) {
+    const idx = placedIds.indexOf(id);
+    if (idx < 0) return;
+    const targetIdx = idx + delta;
+    if (targetIdx < 0 || targetIdx >= placedIds.length) return;
+    swapOrReorder(id, placedIds[targetIdx]!);
+  }
+
+  function handleTileKeyDown(e: KeyboardEvent<HTMLDivElement>, id: string) {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+      e.preventDefault();
+      moveByOffset(id, -1);
+    } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+      e.preventDefault();
+      moveByOffset(id, 1);
+    } else if (e.key === "Delete" || e.key === "Backspace") {
+      e.preventDefault();
+      removeWidget(id);
+    }
+  }
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <span className="setup-label">Board layout (4×2)</span>
+    <div className="space-y-5 py-1">
+      <div className="setup-section-head flex items-center justify-between gap-2 pb-2">
         <div className="flex items-center gap-3">
+          <span className="setup-label">Board layout (4×2)</span>
+          <span className="setup-count-meta">
+            {usedSlots}/{totalSlots} slots
+          </span>
+        </div>
+        <div className="flex items-center gap-3.5">
           <button
             type="button"
             onClick={() => onChange(computeSuggestedWidgets(connectedIds))}
@@ -1035,12 +1209,16 @@ function SetupWidgetsStep({
       </div>
 
       <div className="setup-board" role="region" aria-label="4 by 2 Command widget board">
-        {placed.map((p) => {
+        {stablePlaced.map((p) => {
           const def = widgetDef(p.id);
           return (
             <div
               key={p.id}
+              role="group"
               draggable
+              tabIndex={0}
+              aria-label={`${def?.name ?? p.id} widget (${p.w} by ${p.h}). Use arrow keys to reorder or Delete to remove.`}
+              onKeyDown={(e) => handleTileKeyDown(e, p.id)}
               onDragStart={() => setDraggingId(p.id)}
               onDragEnd={() => {
                 setDraggingId(null);
@@ -1067,7 +1245,7 @@ function SetupWidgetsStep({
                 gridRow: `${p.y + 1} / span ${p.h}`,
               }}
             >
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center justify-between gap-1 sm:gap-2">
                 <span className="setup-row-title truncate">{def?.name ?? p.id}</span>
                 <button
                   type="button"
@@ -1098,7 +1276,10 @@ function SetupWidgetsStep({
       </div>
 
       <div>
-        <span className="setup-label mb-2 block">Widgets</span>
+        <div className="setup-section-head mb-2.5 flex items-center justify-between gap-2 pb-2">
+          <span className="setup-label">Widgets</span>
+          <span className="setup-count-meta">Click to place or remove</span>
+        </div>
         <div className="flex flex-wrap gap-2">
           {COMMAND_WIDGETS.map((w) => {
             const onBoard = placedIds.includes(w.id);
@@ -1127,7 +1308,7 @@ function SetupWidgetsStep({
 }
 
 /* ============================================================================
-   STEP 5: INSTALL NODES (SIMPLIFIED 2x2 SAMPLE EXTENSIONS)
+   STEP 5: INSTALL NODES (UNIFIED 2x2 HAIRLINE MATRIX)
    ============================================================================ */
 
 function SetupNodesStep({
@@ -1150,8 +1331,15 @@ function SetupNodesStep({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+    <div className="space-y-4 py-1">
+      <div className="setup-section-head flex items-center justify-between gap-2 pb-2">
+        <span className="setup-label">Starter nodes</span>
+        <span className="setup-count-meta">
+          {selectedNodes.length} of {FREE_ACTIVE_EXTENSION_SLOTS} active
+        </span>
+      </div>
+
+      <div className="setup-node-matrix">
         {SAMPLE_EXTENSIONS.map((ext) => {
           const { id, name, monogram, description } = ext.manifest;
           const active = selectedNodes.includes(id);
@@ -1160,21 +1348,21 @@ function SetupNodesStep({
               key={id}
               type="button"
               onClick={() => toggleNode(id)}
-              className="setup-item-card text-left"
+              className="setup-node-cell text-left"
               data-selected={active ? "true" : "false"}
               aria-pressed={active}
             >
-              <div className="flex items-start justify-between gap-2.5">
-                <div className="flex min-w-0 items-center gap-2.5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-3">
                   <span className="setup-node-monogram" data-active={active ? "true" : "false"}>
                     {monogram ?? name.slice(0, 2).toUpperCase()}
                   </span>
                   <div className="min-w-0">
-                    <div className="setup-row-title truncate">{name}</div>
-                    <div className="setup-row-sub truncate">{description}</div>
+                    <div className="setup-row-title">{name}</div>
+                    <div className="setup-row-sub mt-0.5 line-clamp-2">{description}</div>
                   </div>
                 </div>
-                <span className="setup-check-ring shrink-0" data-checked={active ? "true" : "false"}>
+                <span className="setup-check-ring mt-0.5 shrink-0" data-checked={active ? "true" : "false"}>
                   {active ? <CheckIcon size={11} /> : null}
                 </span>
               </div>
@@ -1184,7 +1372,7 @@ function SetupNodesStep({
       </div>
 
       <p className="setup-footer-note">
-        Showing sample starter nodes for now. Functional nodes will be added here in later updates.
+        Showing sample starter nodes for preview. Functional nodes will be added here in later updates.
       </p>
     </div>
   );
