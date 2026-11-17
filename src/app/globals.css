@@ -7666,11 +7666,6 @@ html[data-dash-theme="light"] .setup-card {
   --setup-ring-empty: rgba(9, 9, 11, 0.28);
 }
 
-.dash.setup-root[data-blast="true"],
-.setup-root[data-blast="true"] {
-  background: transparent !important;
-}
-
 .dash[data-theme="light"] .setup-start-button {
   color: rgba(17, 17, 19, 0.78);
 }
@@ -8815,43 +8810,35 @@ html[data-dash-theme="light"] .setup-card {
 }
 
 /* ==========================================================================
-   FINALE EXPLOSION REVEAL INTO DASHBOARD
+   FINALE EXPLOSION DISSIPATION REVEAL INTO DASHBOARD
    ========================================================================== */
-.dash--prewarm .dash-header,
-.dash--prewarm .node-rail-dock,
-.dash--prewarm .dash-chat {
-  opacity: 0;
-  pointer-events: none;
+.dash-finale-reveal {
+  background: radial-gradient(
+    circle at 50% var(--dash-core-y, 60%),
+    rgba(255, 250, 236, 0.72) 0%,
+    rgba(248, 212, 128, 0.42) 26%,
+    rgba(220, 150, 44, 0.14) 55%,
+    rgba(0, 0, 0, 0) 82%
+  );
+  animation: dash-finale-fade 540ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-.dash--from-setup .dash-header,
-.dash--from-setup .dash-chat {
-  animation: dash-morph-ui-in 680ms cubic-bezier(0.22, 1, 0.36, 1) 340ms both;
+.dash[data-theme="light"] .dash-finale-reveal {
+  background: radial-gradient(
+    circle at 50% var(--dash-core-y, 60%),
+    rgba(255, 250, 238, 0.74) 0%,
+    rgba(232, 178, 72, 0.38) 28%,
+    rgba(204, 134, 14, 0.12) 56%,
+    rgba(247, 246, 242, 0) 82%
+  );
 }
 
-.dash--from-setup .node-rail-dock {
-  animation: dash-morph-rail-in 680ms cubic-bezier(0.22, 1, 0.36, 1) 340ms both;
-}
-
-@keyframes dash-morph-ui-in {
+@keyframes dash-finale-fade {
   0% {
-    opacity: 0;
-    transform: translateY(10px);
+    opacity: 1;
   }
   100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes dash-morph-rail-in {
-  0% {
     opacity: 0;
-    transform: translateY(calc(-50% + 10px));
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(-50%);
   }
 }
 
@@ -8860,10 +8847,8 @@ html[data-dash-theme="light"] .setup-card {
     transition: none;
   }
 
-  .dash--from-setup .dash-header,
-  .dash--from-setup .dash-chat,
-  .dash--from-setup .node-rail-dock {
-    animation: none;
+  .dash-finale-reveal {
+    animation-duration: 180ms;
   }
 }
 

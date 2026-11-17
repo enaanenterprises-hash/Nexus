@@ -951,6 +951,11 @@ export const NeuralStage = memo(function NeuralStage({
     let rippleClock = 0;
     let wakeShockFired = fromExplosion;
 
+    if (fromExplosion && !reduceMotion) {
+      ripples.push({ u: 0.14, crimson: false, strength: 1.35 });
+      ripples.push({ u: 0.03, crimson: false, strength: 0.95 });
+    }
+
     const pointerTarget: Vec = { x: 0, y: 0 };
     const pointerSmooth: Vec = { x: 0, y: 0 };
     const pointerPosSmooth: Vec = { x: -9999, y: -9999 };
@@ -1091,7 +1096,9 @@ export const NeuralStage = memo(function NeuralStage({
           : Math.max(0, time - WAKE_SILENCE_SECONDS);
       const intro = reduceMotion
         ? 1
-        : Math.min(1, activeTime / INTRO_SPRING_SECONDS);
+        : fromExplosion
+          ? Math.min(1, 0.16 + activeTime / INTRO_SPRING_SECONDS)
+          : Math.min(1, activeTime / INTRO_SPRING_SECONDS);
       const introEase = 1 - Math.pow(1 - intro, 3);
       const coreIntro = fromExplosion ? 1 : introEase;
       const explosionAfterglow = fromExplosion && !reduceMotion ? Math.exp(-activeTime * 2.2) : 0;

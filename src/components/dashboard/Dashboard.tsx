@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { X } from "lucide-react";
 import { NexusMark } from "@/components/landing/NexusLogo";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ import {
   type StageSignal,
   type StageTransfer,
 } from "./NeuralStage";
+import { computeCoreCenter } from "./stage-layout";
 import { NodeMenu, NodeRail, type PanelId, type Surface } from "./NodeNav";
 import { NexusInput, NexusVoice } from "./NexusVoice";
 import { SETUP_RESUME_KEY, SetupExperience, type SetupStep } from "./SetupExperience";
@@ -117,12 +118,10 @@ export function Dashboard({
   const [viewerName, setViewerName] = useState<string | null>(viewer.name);
 
   const [setupDone, setSetupDone] = useState(initialSetupDone);
-  const [finalePrewarm, setFinalePrewarm] = useState(false);
-  const [finaleExploded, setFinaleExploded] = useState(false);
-  const [cameFromSetup, setCameFromSetup] = useState(false);
   const [setupResumeStep, setSetupResumeStep] = useState<SetupStep | null>(initialSetupStep);
   const [setupNotice, setSetupNotice] = useState<{ ok: boolean; text: string } | null>(initialOauthNotice);
   const [setupReveal, setSetupReveal] = useState(false);
+  const [setupRevealCoreY, setSetupRevealCoreY] = useState<number | null>(null);
 
   const [surface, setSurface] = useState<Surface>({ view: "home", panel: null });
   const [researchMounted, setResearchMounted] = useState(false);
@@ -463,8 +462,8 @@ export function Dashboard({
       snap: hub.lastSnapped && snapIndex >= 0 ? { index: snapIndex, serial: hub.lastSnapped.serial } : null,
       transfer,
       activeSocket: activeSocketIdx >= 0 ? activeSocketIdx : null,
-      paused: surface.view !== "home" || (finalePrewarm && !finaleExploded),
-      fromSetupExplosion: setupReveal || finalePrewarm || cameFromSetup,
+      paused: surface.view !== "home",
+      fromSetupExplosion: setupReveal,
     };
   }, [
     session.brain,
@@ -479,9 +478,6 @@ export function Dashboard({
     surface.panel,
     selected,
     setupReveal,
-    finalePrewarm,
-    finaleExploded,
-    cameFromSetup,
   ]);
 
   const firstName = useMemo(() => {
@@ -541,31 +537,15 @@ export function Dashboard({
     await fetch("/api/setup", { method: "POST" }).catch(() => null);
   }
 
-  const handleFinaleCollapsed = useCallback(() => {
-    setCameFromSetup(true);
-    setFinalePrewarm(true);
-  }, []);
-
-  const handleFinaleExplode = useCallback(() => {
-    setCameFromSetup(true);
-    setFinalePrewarm(true);
-    setFinaleExploded(true);
-    setSetupReveal(true);
-  }, []);
-
   async function completeSetup(nodeIds: ExtensionId[], options?: { fromFinale?: boolean }) {
     await persistSetup(nodeIds);
     setSetupNotice(null);
     setSetupResumeStep(null);
-    setFinalePrewarm(false);
     if (options?.fromFinale) {
-      setFinaleExploded(true);
-      setCameFromSetup(true);
+      if (typeof window !== "undefined") {
+        setSetupRevealCoreY(computeCoreCenter(window.innerWidth, window.innerHeight).y);
+      }
       setSetupReveal(true);
-    } else {
-      setFinaleExploded(false);
-      setCameFromSetup(false);
-      setSetupReveal(false);
     }
     setSetupDone(true);
   }
@@ -579,9 +559,6 @@ export function Dashboard({
   const replaySetup = useCallback(async () => {
     clearResumeSetupStep();
     persistedNodesRef.current = false;
-    setFinalePrewarm(false);
-    setFinaleExploded(false);
-    setCameFromSetup(false);
     setSetupReveal(false);
     try {
       window.localStorage.removeItem(SETUP_DONE_KEY);
@@ -598,7 +575,7 @@ export function Dashboard({
 
   useEffect(() => {
     if (!setupReveal) return;
-    const t = window.setTimeout(() => setSetupReveal(false), 1400);
+    const t = window.setTimeout(() => setSetupReveal(false), 950);
     return () => window.clearTimeout(t);
   }, [setupReveal]);
 
@@ -665,33 +642,52 @@ export function Dashboard({
 
   const panel = surface.panel;
   const isNetworkHome = surface.view === "home";
-  const showDashboardTree = setupDone || finalePrewarm;
-  const isPrewarmHidden = finalePrewarm && !finaleExploded;
+
+  if (!setupDone) {
+    return (
+      <SetupExperience
+        initialName={viewerName ?? ""}
+        theme={theme}
+        hub={hub}
+        initialStep={setupResumeStep}
+        oauthNotice={setupNotice}
+        onDismissNotice={() => setSetupNotice(null)}
+        onNameSaved={(name) => setViewerName(name)}
+        onPersistSetup={persistSetup}
+        onComplete={completeSetup}
+        onSkip={skipSetup}
+      />
+    );
+  }
 
   return (
-    <>
-      {showDashboardTree ? (
+    <div
+      className={`dash ${theme === "dark" ? "dark" : "light"} relative h-[100svh] w-full flex-1 overflow-hidden`}
+      data-theme={theme}
+      data-nav-open={isNetworkHome ? (menuOpen ? "true" : "false") : "true"}
+    >
+      {setupReveal ? (
         <div
-          className={`dash ${theme === "dark" ? "dark" : "light"} ${
-            isPrewarmHidden ? "dash--prewarm" : ""
-          } ${setupReveal ? "dash--from-setup" : ""} relative h-[100svh] w-full flex-1 overflow-hidden`}
-          data-theme={theme}
-          data-nav-open={isNetworkHome ? (menuOpen ? "true" : "false") : "true"}
-        >
-          <section
-            aria-label="Nexus Laniakea network"
-            className="absolute inset-0"
-            hidden={surface.view === "command"}
-          >
-            <NeuralStage signal={signal} onSelectSocket={handleSelectSocket} />
-            <div className="dash-scrim--home pointer-events-none absolute inset-0" />
-          </section>
+          className="dash-finale-reveal pointer-events-none fixed inset-0 z-50"
+          style={
+            setupRevealCoreY !== null
+              ? ({ "--dash-core-y": `${setupRevealCoreY}px` } as CSSProperties)
+              : undefined
+          }
+          aria-hidden
+          onAnimationEnd={() => setSetupReveal(false)}
+        />
+      ) : null}
+      <section
+        aria-label="Nexus Laniakea network"
+        className="absolute inset-0"
+        hidden={surface.view === "command"}
+      >
+        <NeuralStage signal={signal} onSelectSocket={handleSelectSocket} />
+        <div className="dash-scrim--home pointer-events-none absolute inset-0" />
+      </section>
 
-          <header
-            className={`${
-              cameFromSetup || finalePrewarm || setupReveal ? "" : "landing-enter "
-            }dash-header pointer-events-none absolute inset-x-0 top-0 z-40 flex h-16 items-center`}
-          >
+      <header className="landing-enter pointer-events-none absolute inset-x-0 top-0 z-40 flex h-16 items-center">
             {isNetworkHome || surface.view === "studio" ? (
               <div className="pointer-events-auto ml-[14px] inline-flex w-[74px] shrink-0 justify-center">
                 <NexusMenuButton
@@ -736,7 +732,7 @@ export function Dashboard({
                   revealed={session.revealed}
                   history={session.history}
                   followUps={session.followUps}
-                  skipWake={setupReveal || finalePrewarm || cameFromSetup}
+                  skipWake={setupReveal}
                   onAsk={chat}
                 />
                 <NexusInput
@@ -828,27 +824,6 @@ export function Dashboard({
               </ScrollArea>
             </aside>
           ) : null}
-        </div>
-      ) : null}
-
-      {!setupDone ? (
-        <div className={`fixed inset-0 z-50 ${finalePrewarm ? "pointer-events-none" : ""}`}>
-          <SetupExperience
-            initialName={viewerName ?? ""}
-            theme={theme}
-            hub={hub}
-            initialStep={setupResumeStep}
-            oauthNotice={setupNotice}
-            onDismissNotice={() => setSetupNotice(null)}
-            onNameSaved={(name) => setViewerName(name)}
-            onPersistSetup={persistSetup}
-            onComplete={completeSetup}
-            onSkip={skipSetup}
-            onFinaleCollapsed={handleFinaleCollapsed}
-            onFinaleExplode={handleFinaleExplode}
-          />
-        </div>
-      ) : null}
-    </>
+    </div>
   );
 }
