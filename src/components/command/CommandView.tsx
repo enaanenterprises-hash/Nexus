@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { RefreshCw, X } from "lucide-react";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -45,7 +44,7 @@ function buildGreetings(name: string, hour: number): string[] {
 
 const noopSubscribe = () => () => {};
 const todayLabel = () =>
-  new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+  new Date().toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 
 type Props = {
   /** Viewer's display/first name shown in rotating Command greetings. */
@@ -98,43 +97,49 @@ export function CommandView({ userName, openCount = 0, request, onClose }: Props
 
   return (
     <section aria-label="Command" className="cmd-screen flex h-full min-h-0 flex-col">
-      <header className="cmd-header grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 border-b border-border/75 py-2.5 pr-4 pl-[92px] sm:pr-6 md:grid-cols-[1fr_auto_1fr] md:gap-y-0 md:py-2">
-        <div className="min-w-0">
-          <p suppressHydrationWarning className="dash-eyebrow leading-none">
-            {date || "Today"}
-          </p>
+      <header className="cmd-header grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1.5 py-2 pr-3 pl-[64px] sm:pr-5 md:grid-cols-[1fr_auto_1fr] md:gap-y-0 md:py-1.5">
+        <div className="flex min-w-0 items-baseline gap-2">
           <h2
             suppressHydrationWarning
-            className="mt-1 truncate text-[16.5px] leading-tight font-medium tracking-[-0.015em] text-foreground sm:text-[18px]"
+            className="truncate text-[14.5px] leading-none font-medium tracking-[-0.015em] text-foreground sm:text-[15.5px]"
           >
             {activeGreeting}
           </h2>
+          <span
+            suppressHydrationWarning
+            className="hidden shrink-0 text-[11px] font-medium tracking-wide text-muted-foreground/75 lg:inline"
+          >
+            {date || "Today"}
+          </span>
         </div>
 
         <Tabs
           value={tab}
           onValueChange={(v) => setTab(v as CommandTab)}
-          className="col-span-2 row-start-2 -ml-[76px] justify-self-center sm:-ml-[68px] md:col-span-1 md:col-start-2 md:row-start-1 md:ml-0"
+          className="col-span-2 row-start-2 -ml-[48px] justify-self-center md:col-span-1 md:col-start-2 md:row-start-1 md:ml-0"
         >
-          <TabsList variant="line" aria-label="Command views" className="gap-1">
+          <TabsList
+            aria-label="Command views"
+            className="h-7 gap-0.5 rounded-full border border-border/65 bg-card/75 p-0.5"
+          >
             {TABS.map((t) => (
               <TabsTrigger
                 key={t.id}
                 value={t.id}
-                className="gap-1.5 rounded-none px-2.5 py-1.5 text-[13.5px] font-medium"
+                className="h-6 gap-1.5 rounded-full px-3 text-[12px] font-medium text-muted-foreground data-[active]:bg-foreground data-[active]:text-background data-[active]:shadow-xs"
               >
                 <span>{t.label}</span>
                 {t.id === "connections" && state?.connections.length ? (
-                  <Badge variant="secondary" className="h-4 min-w-4 px-1.5 text-[10px] tabular-nums">
+                  <span className="rounded-full bg-current/15 px-1.5 py-px text-[10px] leading-none tabular-nums">
                     {state.connections.length}
-                  </Badge>
+                  </span>
                 ) : null}
               </TabsTrigger>
             ))}
           </TabsList>
         </Tabs>
 
-        <div className="flex items-center justify-end gap-1.5 justify-self-end">
+        <div className="flex items-center justify-end gap-1 justify-self-end">
           {state?.connections.length ? (
             <Tooltip>
               <TooltipTrigger
@@ -142,12 +147,12 @@ export function CommandView({ userName, openCount = 0, request, onClose }: Props
                   <Button
                     type="button"
                     variant="ghost"
-                    size="sm"
-                    className="h-8 gap-1.5 rounded-full px-3 text-[12.5px] text-muted-foreground hover:text-foreground"
+                    size="xs"
+                    className="h-7 gap-1.5 rounded-full px-2.5 text-[11.5px] text-muted-foreground hover:text-foreground"
                     onClick={() => void command.sync()}
                     disabled={command.syncing}
                   >
-                    <RefreshCw className={`size-3.5 ${command.syncing ? "animate-spin" : ""}`} />
+                    <RefreshCw className={`size-3 ${command.syncing ? "animate-spin" : ""}`} />
                     <span className="max-sm:hidden">
                       {command.syncing ? "Syncing" : lastSync ? relative(lastSync, now) : "Sync"}
                     </span>
@@ -163,12 +168,12 @@ export function CommandView({ userName, openCount = 0, request, onClose }: Props
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon-sm"
+                  size="icon-xs"
                   onClick={onClose}
                   aria-label="Close Command"
-                  className="rounded-full"
+                  className="size-7 rounded-full text-muted-foreground hover:text-foreground"
                 >
-                  <X className="size-4" />
+                  <X className="size-3.5" />
                 </Button>
               }
             />

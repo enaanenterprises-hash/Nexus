@@ -27,19 +27,28 @@ import {
   CloudSnow,
   CloudSun,
   Coins,
+  Compass,
+  Droplets,
   ExternalLink,
+  Eye,
   Flag,
   Footprints,
+  Gauge,
   GitBranch,
   GitCommitHorizontal,
   GitPullRequest,
   ListTodo,
+  MapPin,
   Moon,
   Plus,
   RefreshCw,
   SlidersHorizontal,
   Sun,
+  Sunrise,
+  Sunset,
+  Thermometer,
   Triangle,
+  Wind,
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -186,14 +195,17 @@ function Gate({
       !(manifest.settings ?? []).some((s) => s.type === "location" || s.key === "urls");
     return (
       <div className="cmd-widget-empty">
-        <p>{manifest?.name ?? "This service"} is not connected yet.</p>
-        {scope ? <p className="cmd-scope">{scope}</p> : null}
+        <p className="font-medium text-foreground/90">{manifest?.name ?? "This service"} isn&apos;t connected yet</p>
         {unconfigured ? (
           <p className="text-[11.5px] text-muted-foreground">
-            Server needs:{" "}
+            Server needs{" "}
             <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
               {availability.missing.join(", ")}
             </code>
+          </p>
+        ) : manifest?.description ? (
+          <p className="line-clamp-2 max-w-[260px] text-[11.5px] text-muted-foreground">
+            {manifest.description}
           </p>
         ) : null}
         {google ? (
@@ -503,10 +515,18 @@ export function CalendarWidget({ command, expanded = false, onExpand, onCollapse
 }
 
 /* -------------------------------------------------------------------------- */
-/* Weather (1×1) — °C/°F toggle, WMO icon, specs & hourly strip              */
+/* Weather (1×1 preview → Atmospheric Observatory when expanded)              */
 /* -------------------------------------------------------------------------- */
 
-function WeatherIcon({ condition, className = "size-3.5" }: { condition: string; className?: string }) {
+function WeatherIcon({
+  condition,
+  isDay = true,
+  className = "size-3.5",
+}: {
+  condition: string;
+  isDay?: boolean;
+  className?: string;
+}) {
   const c = condition.toLowerCase();
   if (c.includes("thunder")) return <CloudLightning className={className} />;
   if (c.includes("snow")) return <CloudSnow className={className} />;
@@ -515,7 +535,69 @@ function WeatherIcon({ condition, className = "size-3.5" }: { condition: string;
   if (c.includes("fog")) return <CloudFog className={className} />;
   if (c.includes("partly")) return <CloudSun className={className} />;
   if (c.includes("overcast") || c.includes("cloud")) return <Cloud className={className} />;
-  return <Sun className={className} />;
+  return isDay ? <Sun className={className} /> : <Moon className={className} />;
+}
+
+function wmoCodeCondition(code: number): string {
+  if (code >= 95) return "Storm";
+  if (code >= 85 || (code >= 71 && code <= 77)) return "Snow";
+  if (code >= 80 || (code >= 61 && code <= 67)) return "Rain";
+  if (code >= 51 && code <= 57) return "Drizzle";
+  if (code === 45 || code === 48) return "Fog";
+  if (code === 3) return "Overcast";
+  if (code === 2) return "Partly cloudy";
+  if (code === 1) return "Mostly clear";
+  return "Clear";
+}
+
+function weatherAtmosphere(condition: string, isDay: boolean): { glow: string; accent: string } {
+  const c = condition.toLowerCase();
+  if (c.includes("thunder")) {
+    return {
+      glow: "radial-gradient(circle at 86% 12%, rgba(168, 85, 247, 0.22), rgba(240, 181, 74, 0.08) 42%, transparent 72%)",
+      accent: "text-violet-300",
+    };
+  }
+  if (c.includes("rain") || c.includes("drizzle") || c.includes("shower")) {
+    return {
+      glow: "radial-gradient(circle at 86% 12%, rgba(56, 189, 248, 0.2), rgba(56, 189, 248, 0.05) 45%, transparent 74%)",
+      accent: "text-sky-300",
+    };
+  }
+  if (c.includes("snow")) {
+    return {
+      glow: "radial-gradient(circle at 86% 12%, rgba(186, 230, 253, 0.22), rgba(147, 197, 253, 0.05) 45%, transparent 74%)",
+      accent: "text-sky-200",
+    };
+  }
+  if (c.includes("cloud") || c.includes("overcast") || c.includes("fog")) {
+    return {
+      glow: "radial-gradient(circle at 86% 12%, rgba(148, 163, 184, 0.17), transparent 70%)",
+      accent: "text-slate-300",
+    };
+  }
+  if (!isDay) {
+    return {
+      glow: "radial-gradient(circle at 86% 12%, rgba(99, 102, 241, 0.22), rgba(240, 181, 74, 0.05) 45%, transparent 72%)",
+      accent: "text-indigo-200",
+    };
+  }
+  return {
+    glow: "radial-gradient(circle at 86% 12%, rgba(240, 181, 74, 0.24), rgba(240, 181, 74, 0.05) 46%, transparent 74%)",
+    accent: "text-[color:var(--land-gold)]",
+  };
+}
+
+function compassDirection(deg: number): string {
+  const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+  return dirs[Math.round((((deg % 360) + 360) % 360) / 45) % 8] ?? "N";
+}
+
+function uvSeverity(uv: number): string {
+  if (uv >= 8) return "Very high";
+  if (uv >= 6) return "High";
+  if (uv >= 3) return "Moderate";
+  return "Low";
 }
 
 export function WeatherWidget({
@@ -532,6 +614,7 @@ export function WeatherWidget({
   style?: CSSProperties;
 }) {
   const { unit, toggle } = useTempUnit();
+  const nowMs = useNow(60_000);
   const [weather, setWeather] = useState<LiveWeather | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
@@ -558,7 +641,63 @@ export function WeatherWidget({
 
   const details = weather?.data.details;
   const condition = String(details?.["condition"] ?? "");
-  const hours = typeof details?.["hourly"] === "string" ? details["hourly"].split(",").slice(0, 5) : [];
+  const isDay = details?.["isDay"] !== 0;
+  const atmosphere = weatherAtmosphere(condition, isDay);
+
+  const hourlyEntries = useMemo(() => {
+    const raw = typeof details?.["hourly"] === "string" ? details["hourly"] : "";
+    return raw
+      .split(",")
+      .filter(Boolean)
+      .map((entry) => {
+        const [t, tempC, pop, code, wind, uv, feelsC] = entry.split(":").map(Number);
+        return {
+          t: t ?? 0,
+          tempC: tempC ?? 0,
+          pop: pop ?? 0,
+          code: code ?? 0,
+          wind: wind ?? Number(details?.["windKmh"] ?? 0),
+          uv: uv ?? Number(details?.["uvIndex"] ?? 0),
+          feelsC: feelsC ?? tempC ?? 0,
+        };
+      });
+  }, [details]);
+
+  const dailyEntries = useMemo(() => {
+    const raw = typeof details?.["daily"] === "string" ? details["daily"] : "";
+    return raw
+      .split(",")
+      .filter(Boolean)
+      .map((entry) => {
+        const [t, code, maxC, minC, pop, uv, wind] = entry.split(":").map(Number);
+        return {
+          t: t ?? 0,
+          code: code ?? 0,
+          maxC: maxC ?? 0,
+          minC: minC ?? 0,
+          pop: pop ?? 0,
+          uv: uv ?? 0,
+          wind: wind ?? 0,
+        };
+      });
+  }, [details]);
+
+  const previewHours = hourlyEntries.slice(0, 5);
+  const expandedHours = hourlyEntries.slice(0, 12);
+  const currentTemp = weather?.data.value ?? 0;
+  const highC = Number(details?.["high"] ?? currentTemp);
+  const lowC = Number(details?.["low"] ?? currentTemp);
+  const feelsC = Number(details?.["feelsLike"] ?? currentTemp);
+  const windKmh = Number(details?.["windKmh"] ?? 0);
+  const windDir = Number(details?.["windDir"] ?? 0);
+  const gustsKmh = Number(details?.["gustsKmh"] ?? windKmh);
+  const humidity = Number(details?.["humidity"] ?? 0);
+  const rainChance = Number(details?.["rainChance"] ?? 0);
+  const uvIndex = Number(details?.["uvIndex"] ?? 0);
+  const pressureHpa = Number(details?.["pressureHpa"] ?? 1013);
+  const cloudCover = Number(details?.["cloudCover"] ?? 0);
+  const sunriseIso = typeof details?.["sunrise"] === "string" ? details["sunrise"] : null;
+  const sunsetIso = typeof details?.["sunset"] === "string" ? details["sunset"] : null;
 
   const actions = (
     <>
@@ -592,73 +731,344 @@ export function WeatherWidget({
     </>
   );
 
+  const cardStyle: CSSProperties = {
+    ...style,
+    ...(weather ? { backgroundImage: atmosphere.glow } : {}),
+  };
+
   return (
     <WidgetFrame
       title="Weather"
-      icon={<WeatherIcon condition={condition} />}
+      icon={<WeatherIcon condition={condition} isDay={isDay} />}
       hint={weather ? String(details?.["location"] ?? "") : undefined}
       actions={actions}
       expanded={expanded}
       onExpand={onExpand}
       onCollapse={onCollapse}
       onRemove={onRemove}
-      style={style}
+      style={cardStyle}
     >
       {weather === undefined ? <p className="cmd-empty py-5 text-center">Reading the sky…</p> : null}
       {weather === null ? <p className="cmd-empty py-5 text-center">{error ?? "Weather is unavailable."}</p> : null}
-      {weather ? (
-        <div className="flex h-full flex-col justify-between gap-2 pt-0.5">
+
+      {weather && !expanded ? (
+        <div className="flex h-full min-h-0 flex-col justify-between gap-2 pt-0.5">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="cmd-wx-temp tabular-nums">
-                {formatTemp(weather.data.value ?? 0, unit)}°
-              </p>
-              <p className="mt-1 text-[12px] text-muted-foreground">
-                {condition} · H {formatTemp(Number(details?.["high"] ?? 0), unit)}° L{" "}
-                {formatTemp(Number(details?.["low"] ?? 0), unit)}°
+              <div className="flex items-baseline gap-2">
+                <p className="text-[36px] leading-none font-light tracking-[-0.04em] text-foreground tabular-nums">
+                  {formatTemp(currentTemp, unit)}°
+                </p>
+                <span className="rounded-full border border-border/60 bg-background/40 px-2 py-0.5 text-[10.5px] font-medium text-foreground/90">
+                  {condition || "Clear"}
+                </span>
+              </div>
+              <p className="mt-1.5 text-[11.5px] text-muted-foreground tabular-nums">
+                H {formatTemp(highC, unit)}° · L {formatTemp(lowC, unit)}° · Feels {formatTemp(feelsC, unit)}°
               </p>
             </div>
-            <span className="mt-0.5 text-[color:var(--land-gold)]">
-              <WeatherIcon condition={condition} className="size-5" />
+            <span className={`cmd-wx-float mt-0.5 shrink-0 ${atmosphere.accent}`}>
+              <WeatherIcon condition={condition} isDay={isDay} className="size-6" />
             </span>
           </div>
 
-          <div className="grid grid-cols-3 gap-1.5 rounded-lg bg-muted/45 px-2.5 py-1.5 text-[11px]">
+          <div className="grid grid-cols-3 gap-1.5 rounded-xl border border-border/50 bg-background/30 px-2.5 py-1.5 text-[11px]">
             <div>
-              <span className="block text-[10px] text-muted-foreground">Feels</span>
-              <span className="font-medium tabular-nums">
-                {formatTemp(Number(details?.["feelsLike"] ?? weather.data.value ?? 0), unit)}°
-              </span>
+              <span className="block text-[9.5px] tracking-wide text-muted-foreground uppercase">Wind</span>
+              <span className="font-medium tabular-nums">{windKmh} km/h</span>
             </div>
             <div>
-              <span className="block text-[10px] text-muted-foreground">Wind</span>
-              <span className="font-medium tabular-nums">{String(details?.["windKmh"] ?? 0)} km/h</span>
+              <span className="block text-[9.5px] tracking-wide text-muted-foreground uppercase">Rain</span>
+              <span className="font-medium tabular-nums">{rainChance}%</span>
             </div>
             <div>
-              <span className="block text-[10px] text-muted-foreground">Rain</span>
-              <span className="font-medium tabular-nums">{String(details?.["rainChance"] ?? 0)}%</span>
+              <span className="block text-[9.5px] tracking-wide text-muted-foreground uppercase">Humidity</span>
+              <span className="font-medium tabular-nums">{humidity}%</span>
             </div>
           </div>
 
           <ol className="cmd-wx-hours mt-0">
-            {hours.map((hour, index) => {
-              const [t, tempC, pop] = hour.split(":").map(Number);
-              const at = new Date((t ?? 0) * 1000);
+            {previewHours.map((hour, index) => {
+              const at = new Date(hour.t * 1000);
               return (
-                <li key={index} className="rounded-md bg-muted/30 py-1">
-                  <span className="text-[11px] font-medium tabular-nums">
-                    {formatTemp(tempC ?? 0, unit)}°
-                  </span>
-                  <span className="text-[10px] text-muted-foreground">
+                <li key={index} className="rounded-lg border border-border/40 bg-background/25 py-1">
+                  <span suppressHydrationWarning className="text-[10px] text-muted-foreground">
                     {index === 0 ? "Now" : at.toLocaleTimeString(undefined, { hour: "numeric" })}
                   </span>
-                  {(pop ?? 0) >= 15 ? (
-                    <span className="text-[9.5px] text-[color:var(--land-gold)] tabular-nums">{pop}%</span>
+                  <WeatherIcon
+                    condition={wmoCodeCondition(hour.code)}
+                    isDay={isDay}
+                    className={`size-3 ${atmosphere.accent}`}
+                  />
+                  <span className="text-[11px] font-medium tabular-nums">
+                    {formatTemp(hour.tempC, unit)}°
+                  </span>
+                  {hour.pop >= 15 ? (
+                    <span className="text-[9.5px] text-sky-300 tabular-nums">{hour.pop}%</span>
                   ) : null}
                 </li>
               );
             })}
           </ol>
+        </div>
+      ) : null}
+
+      {weather && expanded ? (
+        <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto pr-1">
+          {/* Hero Conditions + Sun Arc */}
+          <div className="grid grid-cols-1 gap-3 rounded-2xl border border-border/65 bg-background/35 p-4 sm:p-5 lg:grid-cols-[1.2fr_1fr]">
+            <div className="flex items-center gap-4 sm:gap-5">
+              <div className={`cmd-wx-float flex size-16 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-background/45 ${atmosphere.accent}`}>
+                <WeatherIcon condition={condition} isDay={isDay} className="size-9" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-baseline gap-2.5">
+                  <span className="text-[48px] leading-none font-light tracking-[-0.045em] text-foreground tabular-nums sm:text-[56px]">
+                    {formatTemp(currentTemp, unit)}°{unit}
+                  </span>
+                  <span className="rounded-full border border-border/60 bg-muted/45 px-2.5 py-0.5 text-[12px] font-medium text-foreground">
+                    {condition}
+                  </span>
+                </div>
+                <p className="mt-2 text-[13px] text-muted-foreground tabular-nums">
+                  {String(details?.["location"] ?? "Local")} · Feels like{" "}
+                  <span className="font-medium text-foreground">{formatTemp(feelsC, unit)}°</span> · H{" "}
+                  <span className="font-medium text-foreground">{formatTemp(highC, unit)}°</span> / L{" "}
+                  <span className="font-medium text-foreground">{formatTemp(lowC, unit)}°</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col justify-center gap-2.5 rounded-xl border border-border/55 bg-background/35 px-4 py-3">
+              <div className="flex items-center justify-between text-[11.5px] text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5">
+                  <Sunrise className="size-3.5 text-[color:var(--land-gold)]" />
+                  <span suppressHydrationWarning className="tabular-nums">
+                    {sunriseIso ? clock(sunriseIso) : "—"}
+                  </span>
+                </span>
+                <span className="text-[10.5px] tracking-wider uppercase">Daylight</span>
+                <span className="inline-flex items-center gap-1.5">
+                  <Sunset className="size-3.5 text-amber-400" />
+                  <span suppressHydrationWarning className="tabular-nums">
+                    {sunsetIso ? clock(sunsetIso) : "—"}
+                  </span>
+                </span>
+              </div>
+              {(() => {
+                const startMs = sunriseIso ? Date.parse(sunriseIso) : 0;
+                const endMs = sunsetIso ? Date.parse(sunsetIso) : 0;
+                const pct =
+                  startMs && endMs && endMs > startMs
+                    ? Math.max(0, Math.min(100, Math.round(((nowMs - startMs) / (endMs - startMs)) * 100)))
+                    : 50;
+                return (
+                  <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted/70">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-amber-500/70 via-[color:var(--land-gold)] to-amber-300/70"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                );
+              })()}
+              <p suppressHydrationWarning className="text-[11.5px] text-muted-foreground">
+                {details?.["nextRain"]
+                  ? `Next rain window around ${clock(String(details["nextRain"]))}.`
+                  : "No heavy rain expected over the next 12 hours."}
+              </p>
+            </div>
+          </div>
+
+          {/* 6 Telemetry Detail Tiles */}
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+            <div className="rounded-xl border border-border/60 bg-background/30 p-3">
+              <div className="flex items-center gap-1.5 text-[10.5px] tracking-wide text-muted-foreground uppercase">
+                <Sun className="size-3.5 text-[color:var(--land-gold)]" />
+                <span>UV Index</span>
+              </div>
+              <p className="mt-1.5 text-[20px] font-medium text-foreground tabular-nums">{uvIndex}</p>
+              <p className="text-[11px] text-muted-foreground">{uvSeverity(uvIndex)}</p>
+            </div>
+
+            <div className="rounded-xl border border-border/60 bg-background/30 p-3">
+              <div className="flex items-center gap-1.5 text-[10.5px] tracking-wide text-muted-foreground uppercase">
+                <Wind className="size-3.5 text-sky-300" />
+                <span>Wind</span>
+              </div>
+              <p className="mt-1.5 text-[20px] font-medium text-foreground tabular-nums">
+                {windKmh} <span className="text-[12px] font-normal text-muted-foreground">km/h</span>
+              </p>
+              <p className="flex items-center gap-1 text-[11px] text-muted-foreground tabular-nums">
+                <Compass className="size-3" />
+                {compassDirection(windDir)} · Gusts {gustsKmh} km/h
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-border/60 bg-background/30 p-3">
+              <div className="flex items-center gap-1.5 text-[10.5px] tracking-wide text-muted-foreground uppercase">
+                <Droplets className="size-3.5 text-sky-400" />
+                <span>Rain &amp; Moisture</span>
+              </div>
+              <p className="mt-1.5 text-[20px] font-medium text-foreground tabular-nums">{rainChance}%</p>
+              <p className="text-[11px] text-muted-foreground tabular-nums">Humidity {humidity}%</p>
+            </div>
+
+            <div className="rounded-xl border border-border/60 bg-background/30 p-3">
+              <div className="flex items-center gap-1.5 text-[10.5px] tracking-wide text-muted-foreground uppercase">
+                <Thermometer className="size-3.5 text-amber-300" />
+                <span>Feels Like</span>
+              </div>
+              <p className="mt-1.5 text-[20px] font-medium text-foreground tabular-nums">
+                {formatTemp(feelsC, unit)}°{unit}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {feelsC < currentTemp ? "Cooler with wind" : feelsC > currentTemp ? "Warmer than air" : "Matches actual"}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-border/60 bg-background/30 p-3">
+              <div className="flex items-center gap-1.5 text-[10.5px] tracking-wide text-muted-foreground uppercase">
+                <Gauge className="size-3.5 text-emerald-300" />
+                <span>Pressure</span>
+              </div>
+              <p className="mt-1.5 text-[20px] font-medium text-foreground tabular-nums">
+                {pressureHpa} <span className="text-[12px] font-normal text-muted-foreground">hPa</span>
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {pressureHpa >= 1020 ? "High ridge" : pressureHpa <= 1005 ? "Low system" : "Steady"}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-border/60 bg-background/30 p-3">
+              <div className="flex items-center gap-1.5 text-[10.5px] tracking-wide text-muted-foreground uppercase">
+                <Eye className="size-3.5 text-slate-300" />
+                <span>Cloud Cover</span>
+              </div>
+              <p className="mt-1.5 text-[20px] font-medium text-foreground tabular-nums">{cloudCover}%</p>
+              <p className="text-[11px] text-muted-foreground">
+                {cloudCover < 25 ? "Clear skies" : cloudCover < 65 ? "Broken clouds" : "Dense cover"}
+              </p>
+            </div>
+          </div>
+
+          {/* 12-Hour Temperature Curve + Hourly Timeline */}
+          {expandedHours.length > 0 ? (
+            <div className="rounded-2xl border border-border/60 bg-background/30 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h4 className="text-[12.5px] font-semibold tracking-wide text-foreground/90 uppercase">
+                  Next 12 Hours
+                </h4>
+                <span className="text-[11.5px] text-muted-foreground">Temperature, rain chance &amp; wind</span>
+              </div>
+              {(() => {
+                const temps = expandedHours.map((h) => h.tempC);
+                const minT = Math.min(...temps);
+                const maxT = Math.max(...temps);
+                const span = Math.max(1, maxT - minT);
+                const points = expandedHours
+                  .map((h, i) => {
+                    const x = expandedHours.length === 1 ? 50 : (i / (expandedHours.length - 1)) * 100;
+                    const y = 32 - ((h.tempC - minT) / span) * 24;
+                    return `${x.toFixed(1)},${y.toFixed(1)}`;
+                  })
+                  .join(" ");
+                return (
+                  <svg viewBox="0 0 100 38" preserveAspectRatio="none" className="mb-3 h-10 w-full overflow-visible">
+                    <polyline
+                      fill="none"
+                      stroke="var(--land-gold)"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      vectorEffect="non-scaling-stroke"
+                      points={points}
+                    />
+                  </svg>
+                );
+              })()}
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-6 lg:grid-cols-12">
+                {expandedHours.map((hour, index) => {
+                  const at = new Date(hour.t * 1000);
+                  return (
+                    <div
+                      key={index}
+                      className="flex flex-col items-center gap-1 rounded-xl border border-border/45 bg-background/30 px-1.5 py-2 text-center"
+                    >
+                      <span suppressHydrationWarning className="text-[10.5px] text-muted-foreground">
+                        {index === 0 ? "Now" : at.toLocaleTimeString(undefined, { hour: "numeric" })}
+                      </span>
+                      <WeatherIcon
+                        condition={wmoCodeCondition(hour.code)}
+                        isDay={isDay}
+                        className={`size-4 ${atmosphere.accent}`}
+                      />
+                      <span className="text-[13px] font-medium text-foreground tabular-nums">
+                        {formatTemp(hour.tempC, unit)}°
+                      </span>
+                      <span className="text-[10px] text-sky-300/90 tabular-nums">{hour.pop}%</span>
+                      <span className="text-[9.5px] text-muted-foreground tabular-nums">{hour.wind} km/h</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          {/* 5-Day Forecast */}
+          {dailyEntries.length > 0 ? (
+            <div className="rounded-2xl border border-border/60 bg-background/30 p-4">
+              <h4 className="mb-2.5 text-[12.5px] font-semibold tracking-wide text-foreground/90 uppercase">
+                5-Day Outlook
+              </h4>
+              {(() => {
+                const weekMin = Math.min(...dailyEntries.map((d) => d.minC));
+                const weekMax = Math.max(...dailyEntries.map((d) => d.maxC));
+                const weekSpan = Math.max(1, weekMax - weekMin);
+                return (
+                  <ul className="divide-y divide-border/45">
+                    {dailyEntries.map((d, idx) => {
+                      const leftPct = Math.round(((d.minC - weekMin) / weekSpan) * 100);
+                      const widthPct = Math.max(8, Math.round(((d.maxC - d.minC) / weekSpan) * 100));
+                      const label =
+                        idx === 0
+                          ? "Today"
+                          : new Date(d.t * 1000).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+                      return (
+                        <li key={d.t} className="grid grid-cols-[110px_auto_1fr_auto] items-center gap-3 py-2 text-[12.5px]">
+                          <span suppressHydrationWarning className={idx === 0 ? "font-semibold text-foreground" : "text-foreground/85"}>
+                            {label}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <WeatherIcon condition={wmoCodeCondition(d.code)} className={`size-4 ${atmosphere.accent}`} />
+                            <span className="w-8 text-[11px] text-sky-300 tabular-nums">
+                              {d.pop >= 10 ? `${d.pop}%` : ""}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2.5">
+                            <span className="w-8 text-right text-[12px] text-muted-foreground tabular-nums">
+                              {formatTemp(d.minC, unit)}°
+                            </span>
+                            <div className="relative h-1.5 flex-1 rounded-full bg-muted/70">
+                              <div
+                                className="absolute inset-y-0 rounded-full bg-gradient-to-r from-sky-400/75 via-[color:var(--land-gold)] to-amber-400"
+                                style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+                              />
+                            </div>
+                            <span className="w-8 text-[12px] font-medium text-foreground tabular-nums">
+                              {formatTemp(d.maxC, unit)}°
+                            </span>
+                          </div>
+                          <span className="hidden text-[11px] text-muted-foreground tabular-nums sm:inline">
+                            UV {d.uv} · {d.wind} km/h
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                );
+              })()}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </WidgetFrame>
@@ -1041,80 +1451,276 @@ export function SkyWidget({ command, expanded = false, onExpand, onCollapse, onR
 }
 
 /* -------------------------------------------------------------------------- */
-/* Formula 1 (2×1) — Next session countdown + weekend session schedule         */
+/* Formula 1 (2×1 preview → Pit-Wall Motorsport Hub when expanded)            */
 /* -------------------------------------------------------------------------- */
 
+function shortSessionCode(label: string): string {
+  const low = label.toLowerCase();
+  if (low.includes("practice 1")) return "FP1";
+  if (low.includes("practice 2")) return "FP2";
+  if (low.includes("practice 3")) return "FP3";
+  if (low.includes("sprint quali") || low.includes("shootout")) return "SQ";
+  if (low === "sprint") return "SPR";
+  if (low.includes("qualifying")) return "QUALI";
+  if (low === "race") return "RACE";
+  return label.slice(0, 5).toUpperCase();
+}
+
+function splitCountdownParts(targetIso: string, nowMs: number) {
+  const diff = Math.max(0, Date.parse(targetIso) - nowMs);
+  const days = Math.floor(diff / 86_400_000);
+  const hours = Math.floor((diff % 86_400_000) / 3_600_000);
+  const mins = Math.floor((diff % 3_600_000) / 60_000);
+  return { days, hours, mins, live: diff === 0 };
+}
+
 export function F1Widget({ command, expanded = false, onExpand, onCollapse, onRemove, onConnections, style }: WidgetProps) {
-  const now = useNow(60_000);
+  const now = useNow(30_000);
   const sessions = command.state!.items
     .filter((item): item is CommandItemOf<"command.event"> => item.kind === "command.event" && item.data.connectorId === "f1")
     .sort((a, b) => Date.parse(a.data.startsAt) - Date.parse(b.data.startsAt));
-  const place = sessions[0]?.data.location;
+
+  const firstTitle = sessions[0]?.title ?? "";
+  const gpName = firstTitle.includes(" · ") ? firstTitle.split(" · ")[0]! : firstTitle || "Formula 1";
+  const roundMatch = /^\d+-(\d+)-/.exec(sessions[0]?.data.externalId ?? "");
+  const roundLabel = roundMatch ? `Round ${roundMatch[1]}` : null;
+  const place = sessions[0]?.data.location ?? null;
   const nextIdx = sessions.findIndex((s) => Date.parse(s.data.endsAt ?? s.data.startsAt) >= now);
   const nextSession = nextIdx >= 0 ? sessions[nextIdx] : null;
+  const f1Glow: CSSProperties = {
+    ...style,
+    ...(sessions.length > 0
+      ? {
+          backgroundImage:
+            "radial-gradient(circle at 92% 0%, rgba(225, 6, 0, 0.16), transparent 54%), linear-gradient(180deg, rgba(225, 6, 0, 0.045), transparent 36%)",
+        }
+      : {}),
+  };
 
   return (
     <WidgetFrame
-      title="Formula 1"
-      icon={<Flag className="size-3.5" />}
-      hint={place ?? undefined}
+      title={sessions.length > 0 ? gpName : "Formula 1"}
+      icon={<Flag className="size-3.5 text-[#ff3b30]" />}
+      hint={roundLabel && place ? `${roundLabel} · ${place}` : place ?? undefined}
       expanded={expanded}
       onExpand={onExpand}
       onCollapse={onCollapse}
       onRemove={onRemove}
-      style={style}
+      style={f1Glow}
     >
       <Gate connectorId="f1" command={command} onConnections={onConnections}>
         {sessions.length === 0 ? (
           <p className="cmd-empty py-5 text-center">No upcoming sessions.</p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {nextSession ? (
-              <div className="flex items-center justify-between gap-2 rounded-xl border border-[color:var(--land-gold)]/35 bg-[color:var(--land-gold)]/10 px-3 py-2">
-                <div className="min-w-0">
-                  <span className="text-[10.5px] font-semibold tracking-wider text-[color:var(--land-gold)] uppercase">
-                    Up next · {dayLabel(nextSession.data.startsAt)} {clock(nextSession.data.startsAt)}
-                  </span>
-                  <p className="truncate text-[13px] font-medium text-foreground">{nextSession.title}</p>
-                </div>
-                <div className="flex shrink-0 items-center gap-1.5">
-                  <Badge variant="outline" className="h-5 px-2 text-[11px] tabular-nums">
-                    {relative(nextSession.data.startsAt, now)}
-                  </Badge>
-                  {nextSession.data.url ? (
-                    <a
-                      href={nextSession.data.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label="Open Grand Prix details"
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      <ExternalLink className="size-3.5" />
-                    </a>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
+        ) : !expanded ? (
+          <div className="flex h-full min-h-0 flex-col justify-between gap-2 pt-0.5">
+            {nextSession ? (() => {
+              const sessionName = nextSession.title.includes(" · ")
+                ? nextSession.title.split(" · ")[1]!
+                : nextSession.title;
+              const startMs = Date.parse(nextSession.data.startsAt);
+              const isLive = now >= startMs;
+              const cd = splitCountdownParts(nextSession.data.startsAt, now);
+              return (
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-[#e10600]/35 bg-[#e10600]/10 px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1 rounded bg-[#e10600] px-1.5 py-0.5 font-mono text-[9.5px] font-bold tracking-wider text-white uppercase">
+                        {isLive ? "LIVE" : shortSessionCode(sessionName)}
+                      </span>
+                      <span suppressHydrationWarning className="text-[11px] font-medium text-muted-foreground tabular-nums">
+                        {dayLabel(nextSession.data.startsAt)} · {clock(nextSession.data.startsAt)}
+                      </span>
+                    </div>
+                    <p className="mt-1 truncate text-[13.5px] font-semibold tracking-tight text-foreground">
+                      {sessionName}
+                    </p>
+                  </div>
 
-            <ul className="divide-y divide-border/50">
-              {sessions.map((session, idx) => {
+                  <div className="flex shrink-0 items-center gap-2">
+                    <div className="text-right">
+                      <span className="block font-mono text-[14px] font-semibold tracking-tight text-foreground tabular-nums">
+                        {isLive ? "ON TRACK" : cd.days > 0 ? `${cd.days}d ${cd.hours}h` : `${cd.hours}h ${cd.mins}m`}
+                      </span>
+                      <span className="block text-[9.5px] tracking-wider text-muted-foreground uppercase">
+                        {isLive ? "Now" : "Lights out"}
+                      </span>
+                    </div>
+                    {nextSession.data.url ? (
+                      <a
+                        href={nextSession.data.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="Open Grand Prix details"
+                        className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-background/40 hover:text-foreground"
+                      >
+                        <ExternalLink className="size-3.5" />
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })() : null}
+
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-5">
+              {sessions.slice(0, 5).map((session, idx) => {
+                const label = session.title.includes(" · ") ? session.title.split(" · ")[1]! : session.title;
                 const done = Date.parse(session.data.endsAt ?? session.data.startsAt) < now;
                 const isNext = idx === nextIdx;
                 return (
-                  <li
+                  <div
                     key={session.id}
-                    className={`flex items-center justify-between gap-2 py-1 text-[12px] ${
-                      done ? "opacity-50" : isNext ? "font-medium text-foreground" : "text-muted-foreground"
+                    className={`rounded-xl border px-2 py-1.5 transition-colors ${
+                      isNext
+                        ? "border-[#e10600]/45 bg-[#e10600]/8"
+                        : done
+                          ? "border-border/35 bg-background/15 opacity-55"
+                          : "border-border/55 bg-background/25"
                     }`}
                   >
-                    <span className="min-w-0 flex-1 truncate">{session.title}</span>
-                    <span className="shrink-0 tabular-nums">
-                      {dayLabel(session.data.startsAt)} · {clock(session.data.startsAt)}
-                    </span>
-                  </li>
+                    <div className="flex items-center justify-between gap-1">
+                      <span
+                        className={`font-mono text-[10px] font-semibold tracking-wider ${
+                          isNext ? "text-[#ff453a]" : "text-foreground/85"
+                        }`}
+                      >
+                        {shortSessionCode(label)}
+                      </span>
+                      {done ? (
+                        <CheckCircle2 className="size-3 text-muted-foreground" />
+                      ) : isNext ? (
+                        <span className="size-1.5 rounded-full bg-[#ff3b30]" />
+                      ) : null}
+                    </div>
+                    <p suppressHydrationWarning className="mt-1 truncate text-[10.5px] text-muted-foreground tabular-nums">
+                      {dayLabel(session.data.startsAt).split(",")[0]}
+                    </p>
+                    <p suppressHydrationWarning className="text-[11px] font-medium text-foreground tabular-nums">
+                      {clock(session.data.startsAt)}
+                    </p>
+                  </div>
                 );
               })}
-            </ul>
+            </div>
+          </div>
+        ) : (
+          <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto pr-1">
+            {/* Expanded Pit-Wall Header Banner */}
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[#e10600]/35 bg-[#e10600]/8 p-5">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e10600] px-2.5 py-0.5 font-mono text-[10.5px] font-bold tracking-wider text-white uppercase">
+                    F1 Weekend
+                  </span>
+                  {roundLabel ? (
+                    <span className="font-mono text-[11px] tracking-wider text-muted-foreground uppercase">
+                      {roundLabel}
+                    </span>
+                  ) : null}
+                </div>
+                <h4 className="mt-2 text-[24px] font-semibold tracking-tight text-foreground">{gpName}</h4>
+                {place ? (
+                  <p className="mt-1 flex items-center gap-1.5 text-[13px] text-muted-foreground">
+                    <MapPin className="size-3.5 text-[#ff453a]" />
+                    <span>{place}</span>
+                  </p>
+                ) : null}
+              </div>
+
+              {nextSession ? (() => {
+                const cd = splitCountdownParts(nextSession.data.startsAt, now);
+                const nextLabel = nextSession.title.includes(" · ")
+                  ? nextSession.title.split(" · ")[1]!
+                  : nextSession.title;
+                return (
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-xl border border-border/60 bg-background/45 px-4 py-2.5 text-right">
+                      <span className="block text-[10px] font-semibold tracking-wider text-[#ff453a] uppercase">
+                        Next · {nextLabel}
+                      </span>
+                      <div className="mt-1 flex items-baseline justify-end gap-2 font-mono text-[22px] font-semibold text-foreground tabular-nums">
+                        {cd.live ? (
+                          <span>ON TRACK</span>
+                        ) : (
+                          <>
+                            <span>{String(cd.days).padStart(2, "0")}d</span>
+                            <span className="text-muted-foreground">:</span>
+                            <span>{String(cd.hours).padStart(2, "0")}h</span>
+                            <span className="text-muted-foreground">:</span>
+                            <span>{String(cd.mins).padStart(2, "0")}m</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    {nextSession.data.url ? (
+                      <a
+                        href={nextSession.data.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border/70 bg-background/40 px-3 text-[12.5px] font-medium text-foreground transition-colors hover:bg-muted"
+                      >
+                        <span>Circuit Info</span>
+                        <ExternalLink className="size-3.5" />
+                      </a>
+                    ) : null}
+                  </div>
+                );
+              })() : null}
+            </div>
+
+            {/* Weekend Session Schedule Cards */}
+            <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+              {sessions.map((session, idx) => {
+                const label = session.title.includes(" · ") ? session.title.split(" · ")[1]! : session.title;
+                const startMs = Date.parse(session.data.startsAt);
+                const endMs = session.data.endsAt ? Date.parse(session.data.endsAt) : startMs + 60 * 60_000;
+                const done = endMs < now;
+                const live = now >= startMs && now <= endMs;
+                const isNext = idx === nextIdx;
+                const mins = Math.max(15, Math.round((endMs - startMs) / 60_000));
+                return (
+                  <div
+                    key={session.id}
+                    className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 ${
+                      live || isNext
+                        ? "border-[#e10600]/45 bg-[#e10600]/8"
+                        : done
+                          ? "border-border/45 bg-background/20 opacity-60"
+                          : "border-border/60 bg-background/30"
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold tracking-wider uppercase ${
+                            live || isNext
+                              ? "bg-[#e10600] text-white"
+                              : "bg-muted text-foreground/80"
+                          }`}
+                        >
+                          {shortSessionCode(label)}
+                        </span>
+                        <span className="truncate text-[14px] font-medium text-foreground">{label}</span>
+                      </div>
+                      <p suppressHydrationWarning className="mt-1 text-[12px] text-muted-foreground tabular-nums">
+                        {dayLabel(session.data.startsAt)} · {clock(session.data.startsAt)} – {clock(new Date(endMs).toISOString())} · {mins}m
+                      </p>
+                    </div>
+                    <Badge
+                      variant={live || isNext ? "secondary" : "outline"}
+                      className={`shrink-0 text-[11px] tabular-nums ${
+                        live
+                          ? "border-[#e10600]/60 bg-[#e10600]/20 text-[#ff453a]"
+                          : isNext
+                            ? "border-[#e10600]/40 bg-[#e10600]/15 text-foreground"
+                            : ""
+                      }`}
+                    >
+                      {live ? "Live now" : done ? "Completed" : relative(session.data.startsAt, now)}
+                    </Badge>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </Gate>

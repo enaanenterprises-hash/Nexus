@@ -712,9 +712,17 @@ export function Dashboard({
         <div className="dash-scrim--home pointer-events-none absolute inset-0" />
       </section>
 
-      <header className="landing-enter pointer-events-none absolute inset-x-0 top-0 z-40 flex h-16 items-center">
+      <header
+        className={`landing-enter pointer-events-none absolute inset-x-0 top-0 z-40 flex items-center ${
+          surface.view === "command" ? "h-12" : "h-16"
+        }`}
+      >
             {usesFloatingMenu ? (
-              <div className="pointer-events-auto ml-[14px] inline-flex w-[74px] shrink-0 justify-center">
+              <div
+                className={`pointer-events-auto inline-flex shrink-0 justify-center ${
+                  surface.view === "command" ? "ml-2 w-[52px]" : "ml-[14px] w-[74px]"
+                }`}
+              >
                 <NexusMenuButton
                   buttonRef={menuTriggerRef}
                   open={menuOpen}

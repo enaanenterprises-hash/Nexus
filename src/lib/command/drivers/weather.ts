@@ -37,9 +37,41 @@ const WMO: Record<number, string> = {
 export const weatherLabel = (code: number) => WMO[code] ?? "—"
 
 interface Forecast {
-  current: { time: number; temperature_2m: number; apparent_temperature: number; weather_code: number; wind_speed_10m: number; relative_humidity_2m: number }
-  hourly: { time: number[]; temperature_2m: number[]; precipitation_probability: number[]; weather_code: number[] }
-  daily: { temperature_2m_max: number[]; temperature_2m_min: number[]; precipitation_probability_max: number[] }
+  current: {
+    time: number
+    temperature_2m: number
+    apparent_temperature: number
+    is_day?: number
+    weather_code: number
+    wind_speed_10m: number
+    wind_direction_10m?: number
+    wind_gusts_10m?: number
+    pressure_msl?: number
+    uv_index?: number
+    cloud_cover?: number
+    relative_humidity_2m: number
+  }
+  hourly: {
+    time: number[]
+    temperature_2m: number[]
+    apparent_temperature?: number[]
+    precipitation_probability: number[]
+    weather_code: number[]
+    wind_speed_10m?: number[]
+    uv_index?: number[]
+    relative_humidity_2m?: number[]
+  }
+  daily: {
+    time?: number[]
+    weather_code?: number[]
+    temperature_2m_max: number[]
+    temperature_2m_min: number[]
+    precipitation_probability_max: number[]
+    sunrise?: number[]
+    sunset?: number[]
+    uv_index_max?: number[]
+    wind_speed_10m_max?: number[]
+  }
 }
 
 /** Open-Meteo: free, keyless forecasts. */
@@ -53,10 +85,11 @@ export const weatherDriver: ConnectorDriver = {
     const params = new URLSearchParams({
       latitude: String(loc.lat),
       longitude: String(loc.lon),
-      current: "temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m",
-      hourly: "temperature_2m,precipitation_probability,weather_code",
-      daily: "temperature_2m_max,temperature_2m_min,precipitation_probability_max",
-      forecast_days: "2",
+      current:
+        "temperature_2m,apparent_temperature,is_day,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m,pressure_msl,uv_index,cloud_cover,relative_humidity_2m",
+      hourly: "temperature_2m,apparent_temperature,precipitation_probability,weather_code,wind_speed_10m,uv_index,relative_humidity_2m",
+      daily: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset,uv_index_max,wind_speed_10m_max",
+      forecast_days: "5",
       timeformat: "unixtime",
       timezone: "auto",
       wind_speed_unit: "kmh",
@@ -69,6 +102,15 @@ export const weatherDriver: ConnectorDriver = {
     const observedAt = new Date(c.time * 1000).toISOString()
     const condition = weatherLabel(c.weather_code)
     const rainChance = f.daily.precipitation_probability_max[0] ?? 0
+    const days = (f.daily.time ?? []).slice(0, 5).map((t, i) => {
+      const code = f.daily.weather_code?.[i] ?? c.weather_code
+      const max = Math.round(f.daily.temperature_2m_max[i] ?? c.temperature_2m)
+      const min = Math.round(f.daily.temperature_2m_min[i] ?? c.temperature_2m)
+      const pop = f.daily.precipitation_probability_max[i] ?? 0
+      const uv = Math.round(f.daily.uv_index_max?.[i] ?? 0)
+      const wind = Math.round(f.daily.wind_speed_10m_max?.[i] ?? 0)
+      return `${t}:${code}:${max}:${min}:${pop}:${uv}:${wind}`
+    })
 
     const items: CommandItemInput[] = [
       {
@@ -87,14 +129,28 @@ export const weatherDriver: ConnectorDriver = {
           details: {
             location: loc.name,
             condition,
+            isDay: c.is_day ?? 1,
             feelsLike: Math.round(c.apparent_temperature),
             high: Math.round(f.daily.temperature_2m_max[0] ?? c.temperature_2m),
             low: Math.round(f.daily.temperature_2m_min[0] ?? c.temperature_2m),
             windKmh: Math.round(c.wind_speed_10m),
+            windDir: Math.round(c.wind_direction_10m ?? 0),
+            gustsKmh: Math.round(c.wind_gusts_10m ?? c.wind_speed_10m),
+            pressureHpa: Math.round(c.pressure_msl ?? 1013),
+            uvIndex: Math.round((c.uv_index ?? 0) * 10) / 10,
+            cloudCover: Math.round(c.cloud_cover ?? 0),
             humidity: c.relative_humidity_2m,
             rainChance,
+            sunrise: f.daily.sunrise?.[0] ? new Date(f.daily.sunrise[0] * 1000).toISOString() : null,
+            sunset: f.daily.sunset?.[0] ? new Date(f.daily.sunset[0] * 1000).toISOString() : null,
             nextRain: wet ? new Date(wet.t * 1000).toISOString() : null,
-            hourly: next.map(({ t, i }) => `${t}:${Math.round(f.hourly.temperature_2m[i] ?? 0)}:${f.hourly.precipitation_probability[i] ?? 0}:${f.hourly.weather_code[i] ?? 0}`).join(","),
+            hourly: next
+              .map(
+                ({ t, i }) =>
+                  `${t}:${Math.round(f.hourly.temperature_2m[i] ?? 0)}:${f.hourly.precipitation_probability[i] ?? 0}:${f.hourly.weather_code[i] ?? 0}:${Math.round(f.hourly.wind_speed_10m?.[i] ?? 0)}:${Math.round(f.hourly.uv_index?.[i] ?? 0)}:${Math.round(f.hourly.apparent_temperature?.[i] ?? f.hourly.temperature_2m[i] ?? 0)}`,
+              )
+              .join(","),
+            daily: days.join(","),
           },
         },
       },
