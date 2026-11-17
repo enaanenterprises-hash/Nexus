@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
-import { Plus } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { GripVertical, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -17,12 +17,14 @@ import {
   OVERVIEW_ROWS,
   overviewAccepts,
   placeWidgets,
+  reorderOverviewWidgets,
   widgetDef,
   type PlacedWidget,
 } from "@/lib/command/widgets";
 import type { CommandController } from "./use-command";
 import { WidgetVisualPreview } from "./WidgetVisualPreview";
 import { GmailWidget } from "./widgets/GmailWidget";
+import { WidgetSlotDragProvider } from "./widgets/frame";
 import {
   CalendarWidget,
   CryptoWidget,
@@ -53,6 +55,22 @@ function findFirstOpenCell(placed: readonly PlacedWidget[]): { x: number; y: num
   return null;
 }
 
+type DragState = {
+  id: string;
+  title: string;
+  blurb: string;
+  startX: number;
+  startY: number;
+  x: number;
+  y: number;
+  offsetX: number;
+  offsetY: number;
+  width: number;
+  height: number;
+  active: boolean;
+  targetId: string | "__end__" | null;
+};
+
 export function OverviewView({ command, onConnections }: { command: CommandController; onConnections: () => void }) {
   const overviewIds = command.state?.overview;
   const ids = useMemo(() => overviewIds ?? [], [overviewIds]);
@@ -60,6 +78,17 @@ export function OverviewView({ command, onConnections }: { command: CommandContr
   const [open, setOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [pendingMailId, setPendingMailId] = useState<string | null>(null);
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const dragRef = useRef<DragState | null>(null);
+  const idsRef = useRef(ids);
+
+  useEffect(() => {
+    idsRef.current = ids;
+  }, [ids]);
+
+  useEffect(() => {
+    dragRef.current = drag;
+  }, [drag]);
 
   const pageFull = useMemo(
     () => COMMAND_WIDGETS.every((widget) => !overviewAccepts(ids, widget.id)),
@@ -74,6 +103,94 @@ export function OverviewView({ command, onConnections }: { command: CommandContr
   const collapse = useCallback(() => {
     setExpandedId(null);
     setPendingMailId(null);
+  }, []);
+
+  const isDraggingSession = drag !== null;
+
+  useEffect(() => {
+    if (!isDraggingSession) return;
+
+    function resolveTarget(clientX: number, clientY: number, draggedId: string): string | "__end__" | null {
+      const hit = document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>("[data-cmd-drop-id]");
+      const hitId = hit?.dataset.cmdDropId ?? null;
+      if (!hitId || hitId === draggedId) return null;
+      return reorderOverviewWidgets(idsRef.current, draggedId, hitId) ? hitId : null;
+    }
+
+    function onPointerMove(event: PointerEvent) {
+      const current = dragRef.current;
+      if (!current) return;
+      const dist = Math.hypot(event.clientX - current.startX, event.clientY - current.startY);
+      if (!current.active && dist < 8) return;
+      if (!current.active) {
+        document.body.style.userSelect = "none";
+      }
+      const next: DragState = {
+        ...current,
+        x: event.clientX,
+        y: event.clientY,
+        active: true,
+        targetId: resolveTarget(event.clientX, event.clientY, current.id),
+      };
+      dragRef.current = next;
+      setDrag(next);
+    }
+
+    function finishDrag() {
+      const current = dragRef.current;
+      dragRef.current = null;
+      setDrag(null);
+      document.body.style.userSelect = "";
+      if (!current?.active) return;
+
+      const suppressClick = (clickEvent: MouseEvent) => {
+        clickEvent.preventDefault();
+        clickEvent.stopPropagation();
+      };
+      window.addEventListener("click", suppressClick, { capture: true, once: true });
+      window.setTimeout(() => {
+        window.removeEventListener("click", suppressClick, { capture: true });
+      }, 100);
+
+      if (current.targetId) {
+        const reordered = reorderOverviewWidgets(idsRef.current, current.id, current.targetId);
+        if (reordered) {
+          void command.setOverview(reordered);
+        }
+      }
+    }
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", finishDrag);
+    window.addEventListener("pointercancel", finishDrag);
+    return () => {
+      document.body.style.userSelect = "";
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", finishDrag);
+      window.removeEventListener("pointercancel", finishDrag);
+    };
+  }, [isDraggingSession, command]);
+
+  const startDrag = useCallback((id: string, event: ReactPointerEvent<HTMLElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const def = widgetDef(id);
+    const initial: DragState = {
+      id,
+      title: def?.name ?? id,
+      blurb: def?.blurb ?? "",
+      startX: event.clientX,
+      startY: event.clientY,
+      x: event.clientX,
+      y: event.clientY,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+      width: rect.width,
+      height: rect.height,
+      active: false,
+      targetId: null,
+    };
+    dragRef.current = initial;
+    setDrag(initial);
   }, []);
 
   useEffect(() => {
@@ -121,37 +238,51 @@ export function OverviewView({ command, onConnections }: { command: CommandContr
           />
         </div>
       ) : (
-        <div className="cmd-board">
-          {placed.map((widget) => (
-            <WidgetSlot
-              key={widget.id}
-              id={widget.id}
-              style={{ gridColumn: `${widget.x + 1} / span ${widget.w}`, gridRow: `${widget.y + 1} / span ${widget.h}` }}
-              command={command}
-              expanded={false}
-              onExpand={() => {
-                setPendingMailId(null);
-                setExpandedId(widget.id);
-              }}
-              onOpenMessageFromPreview={(msgId) => {
-                setPendingMailId(msgId);
-                setExpandedId("gmail");
-              }}
-              onRemove={() => remove(widget.id)}
-              onConnections={onConnections}
-            />
-          ))}
+        <div className="cmd-board" data-cmd-dragging={drag?.active ? "true" : undefined}>
+          {placed.map((widget) => {
+            const isDragged = Boolean(drag?.active && drag.id === widget.id);
+            const isDropTarget = Boolean(drag?.active && drag.targetId === widget.id);
+            return (
+              <WidgetSlotDragProvider
+                key={widget.id}
+                value={{
+                  widgetId: widget.id,
+                  dragging: isDragged,
+                  dropTarget: isDropTarget,
+                  onDragStartPointer: (event) => startDrag(widget.id, event),
+                }}
+              >
+                <WidgetSlot
+                  id={widget.id}
+                  style={{ gridColumn: `${widget.x + 1} / span ${widget.w}`, gridRow: `${widget.y + 1} / span ${widget.h}` }}
+                  command={command}
+                  expanded={false}
+                  onExpand={() => {
+                    setPendingMailId(null);
+                    setExpandedId(widget.id);
+                  }}
+                  onOpenMessageFromPreview={(msgId) => {
+                    setPendingMailId(msgId);
+                    setExpandedId("gmail");
+                  }}
+                  onRemove={() => remove(widget.id)}
+                  onConnections={onConnections}
+                />
+              </WidgetSlotDragProvider>
+            );
+          })}
 
           {!pageFull && openCell ? (
             <button
               type="button"
+              data-cmd-drop-id="__end__"
               onClick={() => setOpen(true)}
               disabled={command.pending === "overview"}
               style={{
                 gridColumn: `${openCell.x + 1} / span 1`,
                 gridRow: `${openCell.y + 1} / span 1`,
               }}
-              className="cmd-add-tile group"
+              className={`cmd-add-tile group ${drag?.active && drag.targetId === "__end__" ? "cmd-add-tile--drop-target" : ""}`}
               aria-label="Add widget"
             >
               <div className="cmd-add-tile-card">
@@ -175,6 +306,30 @@ export function OverviewView({ command, onConnections }: { command: CommandContr
           ) : null}
         </div>
       )}
+
+      {drag?.active ? (
+        <div
+          aria-hidden
+          className="cmd-drag-ghost"
+          style={{
+            left: drag.x - drag.offsetX,
+            top: drag.y - drag.offsetY,
+            width: drag.width,
+            height: drag.height,
+          }}
+        >
+          <div className="cmd-widget-bar">
+            <GripVertical className="size-3.5 text-[color:var(--land-gold)]" />
+            <h3>{drag.title}</h3>
+            <span className="cmd-widget-hint ml-auto">
+              {drag.targetId ? "Release to move here" : "Drag over a slot"}
+            </span>
+          </div>
+          {drag.blurb ? (
+            <p className="px-3 py-2 text-[12px] text-muted-foreground">{drag.blurb}</p>
+          ) : null}
+        </div>
+      ) : null}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="gap-0 overflow-hidden border border-border bg-popover p-0 text-popover-foreground shadow-2xl ring-0 sm:max-w-[920px]">

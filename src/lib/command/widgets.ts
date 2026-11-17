@@ -88,3 +88,42 @@ export function normalizeOverview(input: unknown): string[] {
   if (!Array.isArray(input)) return []
   return placeWidgets(input.filter((id): id is string => typeof id === "string")).map((p) => p.id)
 }
+
+/** Computes a valid reordered widget list when dragging one widget onto another or onto the end of the board. */
+export function reorderOverviewWidgets(
+  current: readonly string[],
+  draggedId: string,
+  targetId: string | "__end__",
+): string[] | null {
+  const from = current.indexOf(draggedId)
+  if (from < 0) return null
+
+  const fitsAll = (candidate: string[]) => placeWidgets(candidate).length === current.length
+
+  if (targetId === "__end__") {
+    const next = [...current.filter((id) => id !== draggedId), draggedId]
+    const sameOrder = next.every((id, index) => id === current[index])
+    return !sameOrder && fitsAll(next) ? next : null
+  }
+
+  const to = current.indexOf(targetId)
+  if (to < 0 || from === to) return null
+
+  const draggedDef = BY_ID.get(draggedId)
+  const targetDef = BY_ID.get(targetId)
+  const sameSize = draggedDef && targetDef && draggedDef.w === targetDef.w && draggedDef.h === targetDef.h
+
+  const swapped = [...current]
+  ;[swapped[from], swapped[to]] = [swapped[to]!, swapped[from]!]
+
+  const inserted = [...current]
+  const [moved] = inserted.splice(from, 1)
+  if (!moved) return null
+  inserted.splice(to, 0, moved)
+
+  const candidates = sameSize ? [swapped, inserted] : [inserted, swapped]
+  for (const candidate of candidates) {
+    if (fitsAll(candidate)) return candidate
+  }
+  return null
+}

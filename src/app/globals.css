@@ -2053,13 +2053,8 @@ button.landing-signup {
 
 .cmd-screen {
   height: 100%;
-  padding: 4.15rem 1rem 1rem 5.25rem;
-}
-
-@media (min-width: 640px) {
-  .cmd-screen {
-    padding-right: 4.75rem;
-  }
+  padding: 0;
+  background: #1b1a18;
 }
 
 .node-panel {
@@ -2412,16 +2407,10 @@ select.research-field option {
 
 /* ——— Command node ——— */
 .cmd-header {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.9rem 0.9rem 0.9rem 1.5rem;
   border-bottom: 1px solid var(--land-hair);
-  background: rgba(33, 32, 29, 0.94);
-}
-
-.cmd-header > :first-child {
-  flex: 1;
+  background: rgba(33, 32, 29, 0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
 .cmd-tabs {
@@ -3264,11 +3253,6 @@ textarea.cmd-field {
 }
 
 @media (max-width: 639px) {
-  .cmd-header {
-    flex-wrap: wrap;
-    padding-left: 1rem;
-  }
-
   .cmd-tabs {
     order: 3;
     width: 100%;
@@ -3370,6 +3354,13 @@ textarea.cmd-field {
   min-height: 0;
   flex-direction: column;
   gap: 0.75rem;
+  padding: 0.75rem 1rem 1rem;
+}
+
+@media (min-width: 768px) {
+  .cmd-overview-page {
+    padding: 0.9rem 1.35rem 1.25rem;
+  }
 }
 
 .cmd-overview-tools {
@@ -3438,14 +3429,14 @@ textarea.cmd-field {
   flex: 1;
   min-height: 0;
   width: 100%;
-  max-width: 1440px;
+  max-width: 1680px;
   margin-inline: auto;
   grid-template-columns: minmax(0, 1fr);
   grid-auto-rows: minmax(215px, auto);
   align-content: start;
   gap: 0.75rem;
   overflow-y: auto;
-  padding-bottom: 0.25rem;
+  padding: 0.125rem 0.125rem 0.25rem;
 }
 
 @media (max-width: 1023px) {
@@ -3458,16 +3449,21 @@ textarea.cmd-field {
 @media (min-width: 640px) {
   .cmd-board {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-auto-rows: minmax(240px, clamp(240px, 33svh, 310px));
+    grid-auto-rows: minmax(240px, clamp(240px, 34svh, 330px));
   }
 }
 
 @media (min-width: 1024px) {
   .cmd-board {
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    grid-template-rows: repeat(2, clamp(235px, 34svh, 325px));
-    grid-auto-rows: clamp(235px, 34svh, 325px);
+    grid-template-rows: repeat(2, minmax(225px, 1fr));
+    grid-auto-rows: minmax(225px, 1fr);
   }
+}
+
+.cmd-board[data-cmd-dragging="true"],
+.cmd-board[data-cmd-dragging="true"] * {
+  cursor: grabbing !important;
 }
 
 .cmd-widget {
@@ -3497,12 +3493,48 @@ textarea.cmd-field {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
 }
 
+.cmd-widget--dragging {
+  opacity: 0.36;
+  border-style: dashed;
+  border-color: rgba(240, 181, 74, 0.45);
+}
+
+.cmd-widget--drop-target {
+  border-color: rgba(240, 181, 74, 0.85) !important;
+  background: rgba(240, 181, 74, 0.08) !important;
+  box-shadow:
+    0 0 0 2px rgba(240, 181, 74, 0.34),
+    0 18px 42px rgba(0, 0, 0, 0.36) !important;
+  transform: scale(1.008);
+}
+
+.cmd-add-tile--drop-target .cmd-add-tile-card {
+  border-color: rgba(240, 181, 74, 0.85);
+  background: rgba(240, 181, 74, 0.08);
+  box-shadow: 0 0 0 2px rgba(240, 181, 74, 0.28);
+}
+
+.cmd-drag-ghost {
+  position: fixed;
+  z-index: 70;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid rgba(240, 181, 74, 0.65);
+  background: rgba(33, 32, 29, 0.94);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.52);
+  transform: scale(0.985) rotate(-0.4deg);
+  opacity: 0.94;
+}
+
 .cmd-expanded-stage {
   display: flex;
   flex: 1;
   min-height: 0;
   width: 100%;
-  max-width: 1440px;
+  max-width: 1680px;
   margin-inline: auto;
   animation: cmd-window-expand 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -6995,7 +7027,13 @@ html[data-dash-theme="light"] .studio-range::-webkit-slider-thumb {
 }
 
 /* Command Node in Light Mode */
-.dash[data-theme="light"] .cmd-header {
+.dash[data-theme="light"] .cmd-screen,
+html[data-dash-theme="light"] .cmd-screen {
+  background: #eceae5;
+}
+
+.dash[data-theme="light"] .cmd-header,
+html[data-dash-theme="light"] .cmd-header {
   background: rgba(245, 244, 240, 0.92);
   border-bottom-color: var(--land-hair);
 }
@@ -7039,6 +7077,29 @@ html[data-dash-theme="light"] .cmd-widget--preview:hover {
   border-color: rgba(212, 172, 66, 0.62);
   background: #f7f6f2;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.07);
+}
+
+.dash[data-theme="light"] .cmd-widget--drop-target,
+html[data-dash-theme="light"] .cmd-widget--drop-target {
+  border-color: rgba(154, 118, 28, 0.78) !important;
+  background: rgba(212, 172, 66, 0.14) !important;
+  box-shadow:
+    0 0 0 2px rgba(212, 172, 66, 0.34),
+    0 16px 36px rgba(0, 0, 0, 0.09) !important;
+}
+
+.dash[data-theme="light"] .cmd-add-tile--drop-target .cmd-add-tile-card,
+html[data-dash-theme="light"] .cmd-add-tile--drop-target .cmd-add-tile-card {
+  border-color: rgba(154, 118, 28, 0.78);
+  background: rgba(212, 172, 66, 0.12);
+  box-shadow: 0 0 0 2px rgba(212, 172, 66, 0.28);
+}
+
+.dash[data-theme="light"] .cmd-drag-ghost,
+html[data-dash-theme="light"] .cmd-drag-ghost {
+  border-color: rgba(154, 118, 28, 0.55);
+  background: rgba(245, 244, 240, 0.95);
+  box-shadow: 0 22px 54px rgba(0, 0, 0, 0.16);
 }
 
 .dash[data-theme="light"] .cmd-widget--expanded,
@@ -7292,18 +7353,6 @@ html[data-dash-theme="light"] select.research-field option {
 
 .dash[data-theme="light"] .dash-welcome--waking {
   color: #58554f;
-}
-
-/* 2. Command full-width right padding (no attached nodes rail on Command) */
-.cmd-screen {
-  height: 100%;
-  padding: 4.15rem 1.25rem 1.25rem 5.25rem;
-}
-
-@media (min-width: 640px) {
-  .cmd-screen {
-    padding-right: 1.5rem;
-  }
 }
 
 /* 3. Floating Add-Widget Preview Square on the Command Screen (Monotone) */

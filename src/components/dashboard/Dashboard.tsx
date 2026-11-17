@@ -127,6 +127,7 @@ export function Dashboard({
   const [researchMounted, setResearchMounted] = useState(false);
   const [researchRequest, setResearchRequest] = useState<{ input: string; serial: number } | null>(null);
   const [commandMounted, setCommandMounted] = useState(false);
+  const [commandOpenCount, setCommandOpenCount] = useState(0);
   const [studioMounted, setStudioMounted] = useState(false);
   const [commandRequest, setCommandRequest] = useState<{
     tab: CommandTab;
@@ -163,6 +164,7 @@ export function Dashboard({
   const openCommand = useCallback(
     (request?: { tab: CommandTab; service: string | null; notice: string | null }) => {
       setCommandMounted(true);
+      setCommandOpenCount((c) => c + 1);
       setMenuOpen(false);
       setSurface({ view: "command", panel: null });
       if (request) setCommandRequest((r) => ({ ...request, serial: (r?.serial ?? 0) + 1 }));
@@ -405,7 +407,7 @@ export function Dashboard({
   }, [surface.panel, surface.view, menuOpen]);
 
   useEffect(() => {
-    if ((surface.view !== "home" && surface.view !== "studio") || !menuOpen) return;
+    if ((surface.view !== "home" && surface.view !== "studio" && surface.view !== "command") || !menuOpen) return;
     function onPointerDown(event: PointerEvent) {
       const target = event.target as Node | null;
       if (!target) return;
@@ -642,6 +644,7 @@ export function Dashboard({
 
   const panel = surface.panel;
   const isNetworkHome = surface.view === "home";
+  const usesFloatingMenu = isNetworkHome || surface.view === "studio" || surface.view === "command";
 
   if (!setupDone) {
     return (
@@ -664,7 +667,7 @@ export function Dashboard({
     <div
       className={`dash ${theme === "dark" ? "dark" : "light"} relative h-[100svh] w-full flex-1 overflow-hidden`}
       data-theme={theme}
-      data-nav-open={isNetworkHome ? (menuOpen ? "true" : "false") : "true"}
+      data-nav-open={usesFloatingMenu ? (menuOpen ? "true" : "false") : "true"}
     >
       {setupReveal ? (
         <div
@@ -688,7 +691,7 @@ export function Dashboard({
       </section>
 
       <header className="landing-enter pointer-events-none absolute inset-x-0 top-0 z-40 flex h-16 items-center">
-            {isNetworkHome || surface.view === "studio" ? (
+            {usesFloatingMenu ? (
               <div className="pointer-events-auto ml-[14px] inline-flex w-[74px] shrink-0 justify-center">
                 <NexusMenuButton
                   buttonRef={menuTriggerRef}
@@ -710,8 +713,8 @@ export function Dashboard({
             navRef={menuNavRef}
             hub={hub}
             surface={surface}
-            floating={isNetworkHome || surface.view === "studio"}
-            open={isNetworkHome || surface.view === "studio" ? menuOpen : true}
+            floating={usesFloatingMenu}
+            open={usesFloatingMenu ? menuOpen : true}
             onHome={goHome}
             onCommand={handleOpenCommand}
             onPanel={openPanel}
@@ -752,7 +755,12 @@ export function Dashboard({
 
           {commandMounted ? (
             <div className="command-screen" hidden={surface.view !== "command"}>
-              <CommandView request={commandRequest} onClose={() => setSurface({ view: "home", panel: null })} />
+              <CommandView
+                userName={firstName}
+                openCount={commandOpenCount}
+                request={commandRequest}
+                onClose={() => setSurface({ view: "home", panel: null })}
+              />
             </div>
           ) : null}
 

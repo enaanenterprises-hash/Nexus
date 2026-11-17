@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { RefreshCw, X } from "lucide-react";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -21,25 +21,73 @@ const TABS: { id: CommandTab; label: string }[] = [
   { id: "connections", label: "Connections" },
 ];
 
+const GREETING_STORAGE_KEY = "nexus:cmd-greeting-idx.v1";
+
+function timeOfDayGreeting(name: string, hour: number): string {
+  if (hour >= 5 && hour < 12) return `Good morning, ${name}`;
+  if (hour >= 12 && hour < 17) return `Good afternoon, ${name}`;
+  if (hour >= 17 && hour < 22) return `Good evening, ${name}`;
+  return `Late night mode, ${name}`;
+}
+
+function buildGreetings(name: string, hour: number): string[] {
+  return [
+    timeOfDayGreeting(name, hour),
+    `Welcome back, ${name}`,
+    `Ready when you are, ${name}`,
+    `Your desk is set, ${name}`,
+    `Here's your pulse, ${name}`,
+    `What's moving today, ${name}?`,
+    `All systems steady, ${name}`,
+    `Sharp focus ahead, ${name}`,
+  ];
+}
+
 const noopSubscribe = () => () => {};
 const todayLabel = () =>
   new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
 
 type Props = {
+  /** Viewer's display/first name shown in rotating Command greetings. */
+  userName?: string | null;
+  /** Incremented by Dashboard each time Command is opened so greetings cycle reliably. */
+  openCount?: number;
   /** Set by the dashboard after an OAuth round trip, e.g. `{ tab: "connections", service: "strava", notice }`. */
   request: { tab: CommandTab; service: string | null; notice: string | null; serial: number } | null;
   onClose: () => void;
 };
 
 /** Nexus Command: connected services, one daily timeline, and deterministic automations. */
-export function CommandView({ request, onClose }: Props) {
+export function CommandView({ userName, openCount = 0, request, onClose }: Props) {
   const command = useCommand();
   const [tab, setTab] = useState<CommandTab>("overview");
   const [notice, setNotice] = useState<string | null>(null);
+  const [greetingIndex, setGreetingIndex] = useState(0);
+  const lastOpenCountRef = useRef<number | null>(null);
   const date = useSyncExternalStore(noopSubscribe, todayLabel, () => "");
   const now = useNow(30_000);
   const state = command.state;
   const lastSync = state?.connections.map((c) => c.lastSyncAt).filter(Boolean).sort().at(-1) ?? null;
+
+  const displayName = userName?.trim() || "there";
+  const greetings = buildGreetings(displayName, new Date(now).getHours());
+  const activeGreeting = greetings[greetingIndex % greetings.length] ?? greetings[0]!;
+
+  useEffect(() => {
+    if (lastOpenCountRef.current === openCount) return;
+    lastOpenCountRef.current = openCount;
+    let next = 0;
+    try {
+      const raw = window.localStorage.getItem(GREETING_STORAGE_KEY);
+      const prev = raw !== null ? Number.parseInt(raw, 10) : -1;
+      next = Number.isFinite(prev) ? (prev + 1) % greetings.length : 0;
+      window.localStorage.setItem(GREETING_STORAGE_KEY, String(next));
+    } catch {
+      next = Math.abs(openCount) % greetings.length;
+    }
+    const frame = window.requestAnimationFrame(() => setGreetingIndex(next));
+    return () => window.cancelAnimationFrame(frame);
+  }, [openCount, greetings.length]);
 
   const [handled, setHandled] = useState<number | null>(null);
   if (request && request.serial !== handled) {
@@ -50,14 +98,25 @@ export function CommandView({ request, onClose }: Props) {
 
   return (
     <section aria-label="Command" className="cmd-screen flex h-full min-h-0 flex-col">
-      <header className="cmd-header">
+      <header className="cmd-header grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 border-b border-border/75 py-2.5 pr-4 pl-[92px] sm:pr-6 md:grid-cols-[1fr_auto_1fr] md:gap-y-0 md:py-2">
         <div className="min-w-0">
-          <p className="dash-eyebrow">{date || "Today"}</p>
-          <h2 className="mt-1 text-[19px] font-medium tracking-[-0.015em]">Command</h2>
+          <p suppressHydrationWarning className="dash-eyebrow leading-none">
+            {date || "Today"}
+          </p>
+          <h2
+            suppressHydrationWarning
+            className="mt-1 truncate text-[16.5px] leading-tight font-medium tracking-[-0.015em] text-foreground sm:text-[18px]"
+          >
+            {activeGreeting}
+          </h2>
         </div>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as CommandTab)} className="max-sm:order-3 max-sm:w-full">
-          <TabsList variant="line" aria-label="Command views" className="gap-1 max-sm:w-full max-sm:justify-start">
+        <Tabs
+          value={tab}
+          onValueChange={(v) => setTab(v as CommandTab)}
+          className="col-span-2 row-start-2 -ml-[76px] justify-self-center sm:-ml-[68px] md:col-span-1 md:col-start-2 md:row-start-1 md:ml-0"
+        >
+          <TabsList variant="line" aria-label="Command views" className="gap-1">
             {TABS.map((t) => (
               <TabsTrigger
                 key={t.id}
@@ -75,7 +134,7 @@ export function CommandView({ request, onClose }: Props) {
           </TabsList>
         </Tabs>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center justify-end gap-1.5 justify-self-end">
           {state?.connections.length ? (
             <Tooltip>
               <TooltipTrigger
