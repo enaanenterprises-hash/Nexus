@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { BookmarkPlus, Mic, MicOff, Pause, Play, Square } from "lucide-react";
+import { BookmarkPlus, Pause, Play, SkipBack } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { LiveAudioTelemetry, StudioTransportState } from "./use-studio-audio";
@@ -22,8 +22,8 @@ function formatRemaining(playheadMs: number, totalMs: number): string {
 }
 
 /**
- * Edit-page top transport strip matching Image 2: crimson Record launcher pill, Play/Pause,
- * dual-tone grey/crimson mix & voice preview waveform bar, Marker button, and timecode readout.
+ * Edit-page top playback & waveform scrub strip: dedicated exclusively to playing,
+ * rewinding, scrubbing across the dual-tone mix preview, and dropping markers.
  */
 export function ReactiveRecordBar({
   transport,
@@ -34,11 +34,7 @@ export function ReactiveRecordBar({
   countInBeat,
   theme,
   sampleTelemetry,
-  onArmMic,
-  onStartRecord,
-  onPauseRecord,
-  onResumeRecord,
-  onStopRecord,
+  onSeek,
   onPlay,
   onPausePlay,
   onDropMarker,
@@ -51,11 +47,7 @@ export function ReactiveRecordBar({
   countInBeat: number | null;
   theme: "dark" | "light";
   sampleTelemetry: () => LiveAudioTelemetry;
-  onArmMic: () => void;
-  onStartRecord: () => void;
-  onPauseRecord: () => void;
-  onResumeRecord: () => void;
-  onStopRecord: () => void;
+  onSeek?: (ms: number) => void;
   onPlay: () => void;
   onPausePlay: () => void;
   onDropMarker: () => void;
@@ -227,7 +219,6 @@ export function ReactiveRecordBar({
   }, []);
 
   const isRecording = transport === "recording";
-  const isPaused = transport === "paused";
   const isCounting = transport === "counting-in";
   const isPlaying = transport === "playing";
 
@@ -237,89 +228,61 @@ export function ReactiveRecordBar({
       data-state={transport}
       data-armed={micReady ? "true" : "false"}
       role="region"
-      aria-label="Studio transport bar"
+      aria-label="Edit playback transport bar"
     >
-      <div className="flex items-center gap-2.5">
-        {isRecording || isPaused || isCounting ? (
-          <>
-            <Button
-              type="button"
-              size="sm"
-              onClick={onStopRecord}
-              aria-label="Stop and keep take"
-              className="studio-rec-stop-btn h-9 rounded-full px-4 text-[12.5px] font-semibold"
-            >
-              <Square className="size-3.5 fill-current" />
-              <span>Stop</span>
-            </Button>
-
-            {!isCounting ? (
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="outline"
-                onClick={isRecording ? onPauseRecord : onResumeRecord}
-                aria-label={isRecording ? "Pause recording" : "Resume recording"}
-                className="h-9 w-9 rounded-full"
-              >
-                {isRecording ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
-              </Button>
-            ) : null}
-          </>
-        ) : (
-          <>
-            <Button
-              type="button"
-              size="sm"
-              onClick={onStartRecord}
-              aria-label="Record layer"
-              className="studio-rec-trigger-btn h-9 gap-2 rounded-full px-4 text-[12.5px] font-medium"
-            >
-              <span className="studio-rec-dot" aria-hidden />
-              <span>Record</span>
-            </Button>
-
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="outline"
-                    onClick={isPlaying ? onPausePlay : onPlay}
-                    aria-label={isPlaying ? "Pause playback" : "Play mix"}
-                    className="h-9 w-9 rounded-full border-border/80 bg-background/40"
-                  >
-                    {isPlaying ? <Pause className="size-3.5" /> : <Play className="size-3.5 fill-current" />}
-                  </Button>
-                }
-              />
-              <TooltipContent side="top">{isPlaying ? "Pause (Space)" : "Play mix (Space)"}</TooltipContent>
-            </Tooltip>
-          </>
-        )}
-
+      <div className="flex items-center gap-2">
         <Tooltip>
           <TooltipTrigger
             render={
               <Button
                 type="button"
                 size="icon-sm"
-                variant={micReady ? "secondary" : "outline"}
-                onClick={onArmMic}
-                aria-label={micReady ? "Mic armed and live" : "Test microphone"}
+                variant="outline"
+                onClick={() => onSeek?.(0)}
+                aria-label="Return playhead to start"
                 className="h-9 w-9 rounded-full border-border/80 bg-background/40"
               >
-                {micReady ? <Mic className="size-3.5 text-[#fc3a34]" /> : <MicOff className="size-3.5" />}
+                <SkipBack className="size-3.5" />
               </Button>
             }
           />
-          <TooltipContent side="top">{micReady ? "Mic live" : "Arm mic input"}</TooltipContent>
+          <TooltipContent side="top">Jump to start</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={isPlaying ? onPausePlay : onPlay}
+                aria-label={isPlaying ? "Pause playback" : "Play mix"}
+                className={`h-9 gap-2 rounded-full border-border/80 px-4 text-[12.5px] font-medium ${
+                  isPlaying ? "bg-foreground text-background hover:bg-foreground/90" : "bg-background/45"
+                }`}
+              >
+                {isPlaying ? <Pause className="size-3.5" /> : <Play className="size-3.5 fill-current" />}
+                <span>{isPlaying ? "Pause" : "Play"}</span>
+              </Button>
+            }
+          />
+          <TooltipContent side="top">{isPlaying ? "Pause (Space)" : "Play mix (Space)"}</TooltipContent>
         </Tooltip>
       </div>
 
       <div className="relative order-last min-w-full flex-1 sm:order-none sm:min-w-0">
-        <canvas ref={canvasRef} className="block h-[50px] w-full rounded-xl" aria-hidden />
+        <canvas
+          ref={canvasRef}
+          onClick={(e) => {
+            if (!onSeek || totalTimelineMs <= 0) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / Math.max(1, rect.width)));
+            onSeek(Math.round(ratio * totalTimelineMs));
+          }}
+          className="block h-[50px] w-full cursor-pointer rounded-xl"
+          aria-label="Overview mix waveform scrub bar"
+        />
         {isCounting && countInBeat !== null ? (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <span className="rounded-full bg-background/85 px-3 py-0.5 font-mono text-[13px] font-semibold tracking-wider text-[#fc3a34]">

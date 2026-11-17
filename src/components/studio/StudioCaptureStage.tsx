@@ -2,9 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import {
-  ArrowRight,
   BookmarkPlus,
-  FolderOpen,
   Headphones,
   Metronome,
   Mic,
@@ -32,14 +30,14 @@ function formatClockHMS(ms: number): string {
 
 /**
  * Page 1 of Nexus Recording Studio — dedicated full-screen vocal & audio capture stage.
- * Renders a split center-needle tape waveform: monochrome silver recorded history on the left
- * of the needle and vibrant crimson voice-reactive spectrum on the right, paired with one
- * clean transport capsule and live HH:MM:SS timer.
+ * Displays a centered split-needle tape waveform (silver/grey recorded trace on the left,
+ * glowing crimson reactive spectrum on the right), glass transport capsule, and HH:MM:SS timer.
  */
 export function StudioCaptureStage({
   transport,
   micReady,
   micError,
+  statusNotice,
   countInBeat,
   metronomeEnabled,
   overdubEnabled,
@@ -48,9 +46,6 @@ export function StudioCaptureStage({
   inputGain,
   devices,
   selectedDeviceId,
-  activeLayerIndex,
-  takesCount,
-  clipCount,
   theme,
   sampleTelemetry,
   onArmMic,
@@ -65,12 +60,11 @@ export function StudioCaptureStage({
   onChangeInputGain,
   onSelectDevice,
   onDropMarker,
-  onOpenTakes,
-  onGoToEdit,
 }: {
   transport: StudioTransportState;
   micReady: boolean;
   micError: string | null;
+  statusNotice: string | null;
   countInBeat: number | null;
   metronomeEnabled: boolean;
   overdubEnabled: boolean;
@@ -79,9 +73,6 @@ export function StudioCaptureStage({
   inputGain: number;
   devices: MicDeviceOption[];
   selectedDeviceId: string;
-  activeLayerIndex: number;
-  takesCount: number;
-  clipCount: number;
   theme: "dark" | "light";
   sampleTelemetry: () => LiveAudioTelemetry;
   onArmMic: () => void;
@@ -96,8 +87,6 @@ export function StudioCaptureStage({
   onChangeInputGain: (val: number) => void;
   onSelectDevice: (id: string) => void;
   onDropMarker: () => void;
-  onOpenTakes: () => void;
-  onGoToEdit: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const timerRef = useRef<HTMLSpanElement>(null);
@@ -162,7 +151,6 @@ export function StudioCaptureStage({
         timerRef.current.textContent = formatClockHMS(tel.recordingProgressMs);
       }
 
-      // Advance rolling tape history when actively recording or armed (slowed nicely for legible silhouette)
       if ((isRec || (isArmed && tel.rms > 0.015)) && nowMs - lastSampleAtRef.current >= 42) {
         lastSampleAtRef.current = nowMs;
         const instantaneous = Math.min(1, Math.max(0.03, tel.rms * 1.45 + tel.peak * 0.3));
@@ -181,7 +169,7 @@ export function StudioCaptureStage({
       const barW = 2.4;
       const halfCount = Math.max(24, Math.floor((cx - 12) / step));
 
-      // Soft radial crimson bloom contained inside canvas height so it never clips a box edge
+      // Soft radial crimson bloom contained within canvas height
       const energy = Math.min(1, tel.rms * 1.4 + tel.peak * 0.25);
       if (isRec || (isArmed && energy > 0.02)) {
         const bloomRadius = Math.max(40, Math.min(width * 0.36, height * 0.48));
@@ -196,7 +184,7 @@ export function StudioCaptureStage({
         ctx.fill();
       }
 
-      // LEFT OF NEEDLE: Crisp metallic silver/white recorded history waveform trailing into dots
+      // LEFT OF NEEDLE: Crisp silver/white recorded history waveform trailing cleanly into dots
       const hist = historyRef.current;
       for (let i = 0; i < halfCount; i++) {
         const x = cx - 7 - i * step;
@@ -212,7 +200,6 @@ export function StudioCaptureStage({
           amp = isArmed ? gentle * 1.2 : gentle;
         }
 
-        // Taper down at far outer edge like an authentic oscilloscope envelope
         const shaped = amp * (0.28 + 0.72 * (1 - normFromCenter * 0.78));
         const h = Math.max(2.4, Math.min(maxBarH * 2, shaped * maxBarH * 2));
         ctx.fillStyle = isLight
@@ -244,7 +231,8 @@ export function StudioCaptureStage({
           !reduceMotion && isArmed
             ? 0.035 + 0.025 * Math.sin(nowMs * 0.004 - i * 0.34)
             : 0.025;
-        const liveLevel = bandVal * (0.68 + 0.62 * Math.sin(i * 0.48 + nowMs * 0.008) * 0.28) + tel.rms * 0.36;
+        const liveLevel =
+          bandVal * (0.68 + 0.62 * Math.sin(i * 0.48 + nowMs * 0.008) * 0.28) + tel.rms * 0.36;
         const amp = Math.max(pulseMod, liveLevel) * (0.25 + 0.75 * (1 - normFromCenter * 0.72));
         const h = Math.max(2.4, Math.min(maxBarH * 2, amp * maxBarH * 2));
 
@@ -316,46 +304,14 @@ export function StudioCaptureStage({
       aria-label="Nexus Capture Stage"
       className="studio-capture-stage relative flex h-full w-full flex-col justify-between overflow-hidden"
     >
-      {/* Minimal top strip clearing the top-left Nexus blade button */}
-      <header className="flex min-h-16 shrink-0 items-center justify-between gap-3 py-2 pl-[92px] pr-4 sm:pr-6">
-        <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
-          <span className="hidden font-medium text-foreground/80 sm:inline">Capture</span>
-          {activeLayerIndex > 0 || clipCount > 0 ? (
-            <span className="rounded-full border border-border/70 px-2.5 py-0.5 font-mono text-[11px] text-muted-foreground">
-              Layer {activeLayerIndex + 1} · {clipCount} {clipCount === 1 ? "clip" : "clips"}
-            </span>
-          ) : null}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={onOpenTakes}
-            className="h-8 gap-1.5 rounded-full text-[12px] text-muted-foreground hover:text-foreground"
-          >
-            <FolderOpen className="size-3.5" />
-            <span>Takes ({takesCount})</span>
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={onGoToEdit}
-            className="h-8 gap-1.5 rounded-full border-border/80 text-[12px]"
-          >
-            <span>Editor</span>
-            <ArrowRight className="size-3.5" />
-          </Button>
-        </div>
-      </header>
-
-      {/* Center Stage Waveform + Transport Pill */}
       <div className="mx-auto flex w-full max-w-[1280px] flex-1 flex-col items-center justify-center gap-10 px-4">
         {micError ? (
           <div role="alert" className="rounded-full border border-destructive/40 bg-destructive/10 px-4 py-1.5 text-[12.5px] text-destructive">
             {micError}
+          </div>
+        ) : statusNotice ? (
+          <div role="status" className="rounded-full border border-border/75 bg-background/60 px-4 py-1 text-[12px] text-muted-foreground">
+            {statusNotice}
           </div>
         ) : null}
 
@@ -428,7 +384,7 @@ export function StudioCaptureStage({
         </div>
       </div>
 
-      {/* Subtle Bottom Utility Bar (fades quietly so canvas holds visual hierarchy) */}
+      {/* Subtle Bottom Utility Bar */}
       <footer className="flex shrink-0 flex-wrap items-center justify-center gap-2 px-4 pb-6 pt-2 opacity-70 transition-opacity hover:opacity-100">
         <Button
           type="button"

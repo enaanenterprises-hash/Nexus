@@ -305,8 +305,7 @@ export function StudioView({
       });
       setLayerCount((prev) => Math.max(prev, layerIdx + 1));
       setSelectedTrackId(stamped.id);
-      setStudioPage("edit");
-      showNotice(`Captured ${stamped.name} (${fmtDuration(stamped.durationMs)}).`);
+      showNotice(`Captured ${stamped.name} (${fmtDuration(stamped.durationMs)}) — ready in Edit.`);
     },
     [activeLayerIndex, layerMixers, markers, persistDraft, showNotice],
   );
@@ -345,7 +344,6 @@ export function StudioView({
     setLayerMixers(deriveLayerMixers(full.tracks));
     setSelectedTrackId(full.tracks[0]?.id ?? null);
     setSavedProjectSnapshot(full);
-    if (full.tracks.length > 0) setStudioPage("edit");
   }
 
   useEffect(() => {
@@ -720,12 +718,7 @@ export function StudioView({
     [selectedTrackId, tracks],
   );
 
-  const beginRecordingFromAnywhere = useCallback(() => {
-    setStudioPage("record");
-    void audio.startRecording(captureRole, activeLayerIndex);
-  }, [activeLayerIndex, audio, captureRole]);
-
-  // Keyboard shortcuts: Space (Play/Pause), R (Rec/Stop), M (Marker), V (Move tool), C (Split tool), X (Split at playhead)
+  // Keyboard shortcuts: Space (Play/Pause), R (Rec/Stop on Record page), M (Marker), V (Move), C (Split), X (Split at playhead)
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null;
@@ -742,12 +735,12 @@ export function StudioView({
         e.preventDefault();
         if (audio.transport === "playing") audio.pausePlayback();
         else if (audio.transport === "idle") void audio.play();
-      } else if ((e.key === "r" || e.key === "R") && !e.metaKey && !e.ctrlKey) {
+      } else if ((e.key === "r" || e.key === "R") && !e.metaKey && !e.ctrlKey && studioPage === "record") {
         e.preventDefault();
         if (audio.transport === "recording" || audio.transport === "paused" || audio.transport === "counting-in") {
           audio.stopRecording();
         } else {
-          beginRecordingFromAnywhere();
+          void audio.startRecording(captureRole, activeLayerIndex);
         }
       } else if ((e.key === "m" || e.key === "M") && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
@@ -769,16 +762,20 @@ export function StudioView({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
+    activeLayerIndex,
     audio,
-    beginRecordingFromAnywhere,
+    captureRole,
     dropMarkerAtPlayhead,
     handleRemoveTrack,
     selectedTrack,
     splitClipAt,
     splittableTrackAtPlayhead,
+    studioPage,
   ]);
 
   const activeFolderName = collections.find((c) => c.id === activeCollectionId)?.name ?? "Studio sessions";
+  const isCaptureLive =
+    audio.transport === "recording" || audio.transport === "paused" || audio.transport === "counting-in";
   const micLabel =
     audio.selectedDeviceId === "default"
       ? "Default microphone"
@@ -791,76 +788,78 @@ export function StudioView({
       data-studio-page={studioPage}
       className="studio-screen flex h-full w-full flex-col overflow-hidden"
     >
-      {studioPage === "record" ? (
-        <StudioCaptureStage
-          transport={audio.transport}
-          micReady={audio.micReady}
-          micError={audio.micError}
-          countInBeat={audio.countInBeat}
-          metronomeEnabled={metronomeEnabled}
-          overdubEnabled={audio.overdubEnabled}
-          monitorInput={audio.monitorInput}
-          studioRawMic={audio.studioRawMic}
-          inputGain={audio.inputGain}
-          devices={audio.devices}
-          selectedDeviceId={audio.selectedDeviceId}
-          activeLayerIndex={activeLayerIndex}
-          takesCount={summaries.length}
-          clipCount={tracks.length}
-          theme={theme}
-          sampleTelemetry={audio.sampleTelemetry}
-          onArmMic={() => void audio.armMicrophone()}
-          onStartRecord={() => void audio.startRecording(captureRole, activeLayerIndex)}
-          onPauseRecord={audio.pauseRecording}
-          onResumeRecord={audio.resumeRecording}
-          onStopRecord={audio.stopRecording}
-          onToggleMetronome={() => setMetronomeEnabled((v) => !v)}
-          onToggleOverdub={() => audio.setOverdubEnabled(!audio.overdubEnabled)}
-          onToggleMonitor={(next) => audio.setMonitorInput(next)}
-          onToggleRawMic={(next) => audio.setStudioRawMic(next)}
-          onChangeInputGain={(val) => audio.setInputGain(val)}
-          onSelectDevice={(id) => audio.setSelectedDeviceId(id)}
-          onDropMarker={dropMarkerAtPlayhead}
-          onOpenTakes={() => setTakesDrawerOpen(true)}
-          onGoToEdit={() => setStudioPage("edit")}
-        />
-      ) : (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {/* Top Edit Studio Header — left clearance frames the top-left Nexus blade button */}
-          <header className="studio-header flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/75 py-2 pl-[92px] pr-4 sm:pr-6">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                onBlur={() => {
-                  if (tracks.length > 0 || activeId) void persistDraft(tracks, markers);
-                }}
-                aria-label="Recording project title"
-                className="h-8 w-[145px] border-0 bg-transparent px-1.5 text-[14px] font-medium shadow-none focus-visible:ring-1 sm:w-[205px]"
-              />
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="ghost"
-                      onClick={() => setTakesDrawerOpen(true)}
-                      aria-label={`Browse takes (${summaries.length})`}
-                      className="h-7 w-7 rounded-full text-muted-foreground hover:text-foreground"
-                    >
-                      <ChevronDown className="size-4" />
-                    </Button>
-                  }
-                />
-                <TooltipContent side="bottom">Takes &amp; folders ({summaries.length})</TooltipContent>
-              </Tooltip>
-              <Badge variant="outline" className="hidden text-[10px] font-normal md:inline-flex">
-                {databaseConfigured ? "Synced" : "Local IDB"}
-              </Badge>
-            </div>
+      {/* Unified Full-Screen Header: Left clears Nexus emblem, Centered Record | Edit tabs, Right contextual actions */}
+      <header
+        data-page={studioPage}
+        className="studio-header grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 border-b border-border/75 py-2.5 pl-[92px] pr-4 sm:pr-6 md:grid-cols-[1fr_auto_1fr] md:gap-y-0 md:py-2"
+      >
+        <div className="col-start-1 row-start-1 flex min-w-0 items-center gap-1 justify-self-start">
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={() => {
+              if (tracks.length > 0 || activeId) void persistDraft(tracks, markers);
+            }}
+            aria-label="Recording project title"
+            className="h-8 w-full min-w-0 max-w-[168px] border-0 bg-transparent px-1.5 text-[14px] font-medium shadow-none focus-visible:ring-1 sm:max-w-[195px]"
+          />
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="ghost"
+                  onClick={() => setTakesDrawerOpen(true)}
+                  aria-label={`Browse takes (${summaries.length})`}
+                  className="h-7 w-7 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronDown className="size-4" />
+                </Button>
+              }
+            />
+            <TooltipContent side="bottom">Takes &amp; folders ({summaries.length})</TooltipContent>
+          </Tooltip>
+          <Badge variant="outline" className="hidden shrink-0 text-[10px] font-normal lg:inline-flex">
+            {databaseConfigured ? "Synced" : "Local IDB"}
+          </Badge>
+        </div>
 
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+        <div
+          className="studio-tabs col-span-2 row-start-2 -ml-[76px] justify-self-center sm:-ml-[68px] md:col-span-1 md:col-start-2 md:row-start-1 md:ml-0"
+          role="tablist"
+          aria-label="Studio workspace page"
+        >
+          <span className="studio-tabs-indicator" data-page={studioPage} aria-hidden />
+          <button
+            type="button"
+            role="tab"
+            id="studio-tab-record"
+            aria-selected={studioPage === "record"}
+            aria-controls="studio-panel-record"
+            onClick={() => setStudioPage("record")}
+            className={`studio-tab ${studioPage === "record" ? "studio-tab--active" : ""}`}
+          >
+            <span className={`studio-tab-dot ${isCaptureLive ? "studio-tab-dot--live" : ""}`} aria-hidden />
+            <span>Record</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="studio-tab-edit"
+            aria-selected={studioPage === "edit"}
+            aria-controls="studio-panel-edit"
+            onClick={() => setStudioPage("edit")}
+            className={`studio-tab ${studioPage === "edit" ? "studio-tab--active" : ""}`}
+          >
+            <span>Edit</span>
+            {tracks.length > 0 ? <span className="studio-tab-count">{tracks.length}</span> : null}
+          </button>
+        </div>
+
+        <div className="contents md:col-start-3 md:row-start-1 md:flex md:items-center md:justify-end md:gap-2 md:justify-self-end">
+          {studioPage === "edit" ? (
+            <div className="col-span-2 row-start-3 -ml-[76px] flex flex-wrap items-center justify-center gap-1.5 sm:-ml-[68px] md:ml-0 md:gap-2">
               <Button
                 type="button"
                 size="sm"
@@ -870,7 +869,7 @@ export function StudioView({
                 className="h-8 gap-1.5 rounded-full border-border/80 bg-background/40 text-[12px]"
               >
                 {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
-                <span className="hidden sm:inline">{saving ? "Saving" : "Save"}</span>
+                <span>{saving ? "Saving" : "Save"}</span>
               </Button>
 
               <Button
@@ -882,7 +881,7 @@ export function StudioView({
                 className="h-8 gap-1.5 rounded-full border-border/80 bg-background/40 text-[12px]"
               >
                 {exporting ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-                <span className="hidden sm:inline">Export WAV</span>
+                <span>Export WAV</span>
               </Button>
 
               <Button
@@ -894,63 +893,115 @@ export function StudioView({
                 <Zap className="size-3.5" />
                 <span>Send → Node</span>
               </Button>
-
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={onClose}
-                className="h-8 rounded-full text-[12px] text-muted-foreground hover:text-foreground"
-              >
-                Exit
-              </Button>
-
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={onReleaseNode}
-                className="hidden h-8 rounded-full text-[12px] text-muted-foreground hover:text-destructive sm:inline-flex"
-              >
-                Disconnect
-              </Button>
             </div>
-          </header>
+          ) : null}
 
-          {/* Edit Page Content: Transport Strip + Monochrome Pill Rows + Full-Height DAW Timeline */}
-          <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden px-4 py-3 sm:px-6">
-            {audio.micError ? (
-              <div role="alert" className="shrink-0 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-2 text-[12.5px] text-destructive">
-                {audio.micError}
+          <div className="col-start-2 row-start-1 flex items-center gap-1 justify-self-end md:gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={onClose}
+              className="h-8 rounded-full text-[12px] text-muted-foreground hover:text-foreground"
+            >
+              Exit
+            </Button>
+
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={onReleaseNode}
+              className="hidden h-8 rounded-full text-[12px] text-muted-foreground hover:text-destructive sm:inline-flex"
+            >
+              Disconnect
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      {/* Sliding Dual-Page Container: Record (Default) <-> Edit */}
+      <div className="studio-pages-viewport">
+        <div className="studio-pages-track" data-page={studioPage}>
+          {/* Page 1: Minimal Dedicated Recording Stage (Image 1) */}
+          <div
+            id="studio-panel-record"
+            role="tabpanel"
+            aria-labelledby="studio-tab-record"
+            aria-hidden={studioPage !== "record"}
+            inert={studioPage !== "record"}
+            data-active={studioPage === "record" ? "true" : "false"}
+            className="studio-page-pane"
+          >
+            <StudioCaptureStage
+              transport={audio.transport}
+              micReady={audio.micReady}
+              micError={audio.micError}
+              statusNotice={statusBanner}
+              countInBeat={audio.countInBeat}
+              metronomeEnabled={metronomeEnabled}
+              overdubEnabled={audio.overdubEnabled}
+              monitorInput={audio.monitorInput}
+              studioRawMic={audio.studioRawMic}
+              inputGain={audio.inputGain}
+              devices={audio.devices}
+              selectedDeviceId={audio.selectedDeviceId}
+              theme={theme}
+              sampleTelemetry={audio.sampleTelemetry}
+              onArmMic={() => void audio.armMicrophone()}
+              onStartRecord={() => void audio.startRecording(captureRole, activeLayerIndex)}
+              onPauseRecord={audio.pauseRecording}
+              onResumeRecord={audio.resumeRecording}
+              onStopRecord={audio.stopRecording}
+              onToggleMetronome={() => setMetronomeEnabled((v) => !v)}
+              onToggleOverdub={() => audio.setOverdubEnabled(!audio.overdubEnabled)}
+              onToggleMonitor={(next) => audio.setMonitorInput(next)}
+              onToggleRawMic={(next) => audio.setStudioRawMic(next)}
+              onChangeInputGain={(val) => audio.setInputGain(val)}
+              onSelectDevice={(id) => audio.setSelectedDeviceId(id)}
+              onDropMarker={dropMarkerAtPlayhead}
+            />
+          </div>
+
+          {/* Page 2: Dedicated Multi-Layer Editorial DAW Workspace (Image 2) */}
+          <div
+            id="studio-panel-edit"
+            role="tabpanel"
+            aria-labelledby="studio-tab-edit"
+            aria-hidden={studioPage !== "edit"}
+            inert={studioPage !== "edit"}
+            data-active={studioPage === "edit" ? "true" : "false"}
+            className="studio-page-pane"
+          >
+            <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden px-4 py-3 sm:px-6">
+              {audio.micError ? (
+                <div role="alert" className="shrink-0 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-2 text-[12.5px] text-destructive">
+                  {audio.micError}
+                </div>
+              ) : null}
+
+              {statusBanner ? (
+                <div role="status" className="shrink-0 rounded-xl border border-border/80 bg-muted/40 px-4 py-1.5 text-[12px] text-foreground">
+                  {statusBanner}
+                </div>
+              ) : null}
+
+              <div className="shrink-0">
+                <ReactiveRecordBar
+                  transport={audio.transport}
+                  micReady={audio.micReady}
+                  playheadMs={audio.playheadMs}
+                  totalTimelineMs={totalTimelineMs}
+                  summaryPeaks={summaryPeaks}
+                  countInBeat={audio.countInBeat}
+                  theme={theme}
+                  sampleTelemetry={audio.sampleTelemetry}
+                  onSeek={audio.seek}
+                  onPlay={() => void audio.play()}
+                  onPausePlay={audio.pausePlayback}
+                  onDropMarker={dropMarkerAtPlayhead}
+                />
               </div>
-            ) : null}
-
-            {statusBanner ? (
-              <div role="status" className="shrink-0 rounded-xl border border-border/80 bg-muted/40 px-4 py-1.5 text-[12px] text-foreground">
-                {statusBanner}
-              </div>
-            ) : null}
-
-            <div className="shrink-0">
-              <ReactiveRecordBar
-                transport={audio.transport}
-                micReady={audio.micReady}
-                playheadMs={audio.playheadMs}
-                totalTimelineMs={totalTimelineMs}
-                summaryPeaks={summaryPeaks}
-                countInBeat={audio.countInBeat}
-                theme={theme}
-                sampleTelemetry={audio.sampleTelemetry}
-                onArmMic={() => void audio.armMicrophone()}
-                onStartRecord={beginRecordingFromAnywhere}
-                onPauseRecord={audio.pauseRecording}
-                onResumeRecord={audio.resumeRecording}
-                onStopRecord={audio.stopRecording}
-                onPlay={() => void audio.play()}
-                onPausePlay={audio.pausePlayback}
-                onDropMarker={dropMarkerAtPlayhead}
-              />
-            </div>
 
             {/* Row 1: Primary Timeline Editing Tools + Inline Clip Quick Actions (Image 2 Style) */}
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
@@ -1349,7 +1400,8 @@ export function StudioView({
             />
           </div>
         </div>
-      )}
+      </div>
+    </div>
 
       {/* Left Takes & Folders Sheet Drawer (keeps workspace full width by default) */}
       <Sheet open={takesDrawerOpen} onOpenChange={setTakesDrawerOpen}>
