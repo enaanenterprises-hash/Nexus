@@ -69,6 +69,11 @@ function saveInstalledNodes(ids: readonly ExtensionId[]) {
   } catch {
     // Ignore storage access errors
   }
+  void fetch("/api/user/state", {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ installedNodes: ids }),
+  }).catch(() => {});
 }
 
 function clearResumeSetupStep() {
@@ -252,10 +257,27 @@ export function Dashboard({
       }
       if (setupDone && !bootedRef.current) {
         bootedRef.current = true;
+        let remoteNodes: ExtensionId[] | null = null;
+        try {
+          const res = await fetch("/api/user/state", { cache: "no-store" });
+          if (res.ok) {
+            const data = (await res.json()) as { installedNodes?: unknown };
+            if (Array.isArray(data.installedNodes) && data.installedNodes.length > 0) {
+              remoteNodes = data.installedNodes.filter((id): id is ExtensionId => typeof id === "string");
+              try {
+                window.localStorage.setItem(INSTALLED_NODES_KEY, JSON.stringify(remoteNodes));
+              } catch {
+                // Ignore storage access errors
+              }
+            }
+          }
+        } catch {
+          // Offline or unconfigured database fallback uses localStorage
+        }
         const snap = extensionRegistry.getSnapshot();
         const anyOccupied = snap.slots.some((s) => s.occupiedBy !== null);
         if (!anyOccupied) {
-          const initialNodes = readSavedNodes() ?? DEFAULT_NODE_IDS;
+          const initialNodes = remoteNodes ?? readSavedNodes() ?? DEFAULT_NODE_IDS;
           for (const nodeId of initialNodes) {
             if (extensionRegistry.get(nodeId)) {
               await extensionRegistry.activate(nodeId);

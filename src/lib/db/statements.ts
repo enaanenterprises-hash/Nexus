@@ -216,3 +216,13 @@ export const STUDIO_SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS "studio_recording_userId_idx" ON "studio_recording" ("userId", "updatedAt" DESC)`,
   `CREATE INDEX IF NOT EXISTS "studio_recording_collectionId_idx" ON "studio_recording" ("collectionId")`,
 ] as const
+
+/** Per-user Nexus workspace preferences & wired node sockets, synced via Postgres. */
+export const USER_STATE_SCHEMA_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS "nexus_user_state" (
+    "userId" text PRIMARY KEY REFERENCES "user" ("id") ON DELETE CASCADE,
+    "installedNodes" jsonb NOT NULL DEFAULT '[]',
+    "theme" text,
+    "updatedAt" timestamptz NOT NULL DEFAULT now()
+  )`,
+] as const

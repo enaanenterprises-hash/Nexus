@@ -8,6 +8,8 @@ import {
   COMMAND_SCHEMA_STATEMENTS,
   RESEARCH_SCHEMA_STATEMENTS,
   STUDIO_SCHEMA_STATEMENTS,
+  USER_STATE_SCHEMA_STATEMENTS,
+  WAITLIST_SCHEMA_STATEMENTS,
 } from "../src/lib/db/statements.ts"
 
 const url = process.env.DATABASE_URL?.trim()
@@ -25,10 +27,12 @@ try {
     ...RESEARCH_SCHEMA_STATEMENTS,
     ...STUDIO_SCHEMA_STATEMENTS,
     ...COMMAND_SCHEMA_STATEMENTS,
+    ...USER_STATE_SCHEMA_STATEMENTS,
+    ...WAITLIST_SCHEMA_STATEMENTS,
   ]) {
     await sql.unsafe(statement)
   }
-  console.log("Auth, Research, Studio and Command tables are ready.")
+  console.log("Auth, Research, Studio, Command, User State and Waitlist tables are ready.")
 } catch (error) {
   const raw = error instanceof Error ? error.message : String(error)
   console.error(raw.replace(/postgres(?:ql)?:\/\/\S+/gi, "[redacted-database-url]"))

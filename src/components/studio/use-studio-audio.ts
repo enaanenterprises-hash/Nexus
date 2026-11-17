@@ -436,7 +436,12 @@ export function useStudioAudio({
         let blob = await loadAudioBlob(track.audioRef.idbKey);
         if (!blob && track.audioRef.url) {
           const res = await fetch(track.audioRef.url);
-          if (res.ok) blob = await res.blob();
+          if (res.ok) {
+            blob = await res.blob();
+            if (track.audioRef.idbKey) {
+              void saveAudioBlob(track.audioRef.idbKey, blob).catch(() => {});
+            }
+          }
         }
         if (!blob) return null;
         const ab = await blob.arrayBuffer();
@@ -830,7 +835,12 @@ export function useStudioAudio({
     const stillReferenced = key && remainingTracks.some((t) => t.audioRef.idbKey === key);
     if (!stillReferenced) {
       bufferCacheRef.current.delete(key || track.id);
-      if (key) await deleteAudioBlob(key);
+      if (key) {
+        await deleteAudioBlob(key);
+        if (track.audioRef.storage === "url" && track.audioRef.url?.startsWith("/api/studio/audio")) {
+          void fetch(`/api/studio/audio?key=${encodeURIComponent(key)}`, { method: "DELETE" }).catch(() => {});
+        }
+      }
     }
   }, []);
 

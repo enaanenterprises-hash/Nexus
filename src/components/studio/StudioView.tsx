@@ -35,7 +35,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { STUDIO_NODE_ID } from "@/extensions/studio/node";
 import type { ExtensionHubSnapshot, ExtensionId } from "@/lib/extensions";
-import { loadAudioBlob } from "@/lib/studio/audio-db";
+import { loadAudioBlob, saveAudioBlob } from "@/lib/studio/audio-db";
 import {
   createStudioCollection,
   deleteStudioRecording,
@@ -692,9 +692,22 @@ export function StudioView({
   }
 
   async function handleDownloadRawTrack(track: StudioTrackV1) {
-    const blob = await loadAudioBlob(track.audioRef.idbKey);
+    let blob = await loadAudioBlob(track.audioRef.idbKey);
+    if (!blob && track.audioRef.url) {
+      try {
+        const res = await fetch(track.audioRef.url);
+        if (res.ok) {
+          blob = await res.blob();
+          if (track.audioRef.idbKey) {
+            void saveAudioBlob(track.audioRef.idbKey, blob).catch(() => {});
+          }
+        }
+      } catch {
+        blob = null;
+      }
+    }
     if (!blob) {
-      showNotice("Audio blob is not in local storage.");
+      showNotice("Audio file is unavailable offline or on the server.");
       return;
     }
     const ext = track.audioRef.mimeType.includes("wav")

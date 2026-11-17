@@ -5,6 +5,7 @@ import {
   COMMAND_SCHEMA_STATEMENTS,
   RESEARCH_SCHEMA_STATEMENTS,
   STUDIO_SCHEMA_STATEMENTS,
+  USER_STATE_SCHEMA_STATEMENTS,
   WAITLIST_SCHEMA_STATEMENTS,
 } from "./statements"
 
@@ -18,6 +19,7 @@ let researchReady: Promise<void> | null = null
 let studioReady: Promise<void> | null = null
 let commandReady: Promise<void> | null = null
 let waitlistReady: Promise<void> | null = null
+let userStateReady: Promise<void> | null = null
 
 export function databaseUrl() {
   const url = process.env["DATABASE_URL"]?.trim()
@@ -121,4 +123,19 @@ export function ensureStudioSchema() {
     throw error
   })
   return studioReady
+}
+
+/** Creates the per-user workspace state table (after the Auth.js tables it references). */
+export function ensureUserStateSchema() {
+  userStateReady ??= (async () => {
+    await ensureAuthSchema()
+    const connection = getSql()
+    for (const statement of USER_STATE_SCHEMA_STATEMENTS) {
+      await connection.unsafe(statement)
+    }
+  })().catch((error: unknown) => {
+    userStateReady = null
+    throw error
+  })
+  return userStateReady
 }

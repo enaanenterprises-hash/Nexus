@@ -8,6 +8,7 @@ import {
   saveRecording,
 } from "@/lib/studio/store";
 import type { StudioMarkerV1, StudioTrackV1 } from "@/lib/studio/types";
+import { deleteStudioAudioObject, sanitizeAudioObjectKey } from "@/lib/supabase/storage";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await requireLibraryUser();
@@ -64,8 +65,20 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if ("response" in user) return user.response;
   const { id } = await params;
   try {
+    const existing = await getRecording(user.userId, id);
     const removed = await deleteRecording(user.userId, id);
     if (!removed) return jsonError(404, "Recording not found.", "not_found");
+    if (existing) {
+      const keys = new Set(
+        existing.tracks
+          .filter((t) => t.audioRef.storage === "url")
+          .map((t) => sanitizeAudioObjectKey(t.audioRef.idbKey))
+          .filter((k): k is string => Boolean(k)),
+      );
+      after(async () => {
+        await Promise.allSettled([...keys].map((key) => deleteStudioAudioObject(user.userId, key)));
+      });
+    }
     return json({ ok: true });
   } catch (error) {
     return libraryFailure(error);

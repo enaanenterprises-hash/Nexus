@@ -3,6 +3,7 @@
 import { STUDIO_NODE_ID } from "@/extensions/studio/node";
 import { nexusBus, type ExtensionId } from "@/lib/extensions";
 import {
+  loadAudioBlob,
   readLocalStudioSnapshot,
   writeLocalStudioSnapshot,
 } from "./audio-db";
@@ -13,10 +14,12 @@ import type {
   StudioRecordingContentV1,
   StudioRecordingSummary,
   StudioRoutingIntent,
+  StudioTrackV1,
 } from "./types";
 
 export type StudioBackendStatus = {
   databaseConfigured: boolean;
+  storageConfigured: boolean;
 };
 
 function makeLocalId(prefix: string): string {
@@ -65,12 +68,100 @@ function computeLocalPeaks(tracks: StudioRecording["tracks"]): number[] {
 export async function fetchStudioStatus(): Promise<StudioBackendStatus> {
   try {
     const res = await fetch("/api/studio/status", { cache: "no-store" });
-    if (!res.ok) return { databaseConfigured: false };
-    const body = (await res.json()) as { database?: { configured?: boolean } };
-    return { databaseConfigured: Boolean(body.database?.configured) };
+    if (!res.ok) return { databaseConfigured: false, storageConfigured: false };
+    const body = (await res.json()) as {
+      database?: { configured?: boolean };
+      storage?: { configured?: boolean };
+    };
+    return {
+      databaseConfigured: Boolean(body.database?.configured),
+      storageConfigured: Boolean(body.storage?.configured),
+    };
   } catch {
-    return { databaseConfigured: false };
+    return { databaseConfigured: false, storageConfigured: false };
   }
+}
+
+async function uploadStudioAudioBlob(key: string, blob: Blob): Promise<string | null> {
+  if (!key) return null;
+  try {
+    const signRes = await fetch("/api/studio/audio/sign", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ key }),
+    });
+    if (signRes.ok) {
+      const signData = (await signRes.json()) as {
+        configured?: boolean;
+        signedUrl?: string;
+        objectUrl?: string;
+      };
+      if (!signData.configured) return null;
+      if (signData.signedUrl && signData.objectUrl) {
+        try {
+          const putRes = await fetch(signData.signedUrl, {
+            method: "PUT",
+            headers: { "content-type": blob.type || "audio/webm" },
+            body: blob,
+          });
+          if (putRes.ok) return signData.objectUrl;
+        } catch {
+          // Fall through to same-origin server upload fallback if direct PUT fails
+        }
+      }
+    }
+  } catch {
+    // Fall through to multipart fallback
+  }
+
+  try {
+    const form = new FormData();
+    form.set("key", key);
+    form.set("file", blob, key);
+    const uploadRes = await fetch(`/api/studio/audio?key=${encodeURIComponent(key)}`, {
+      method: "POST",
+      body: form,
+    });
+    if (!uploadRes.ok) return null;
+    const data = (await uploadRes.json()) as { url?: string };
+    return data.url ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function syncTracksToCloudStorage(tracks: StudioTrackV1[]): Promise<StudioTrackV1[]> {
+  const uniqueKeys = new Set<string>();
+  for (const t of tracks) {
+    if (t.audioRef.idbKey && (t.audioRef.storage !== "url" || !t.audioRef.url)) {
+      uniqueKeys.add(t.audioRef.idbKey);
+    }
+  }
+  if (uniqueKeys.size === 0) return tracks;
+
+  const uploadedUrls = new Map<string, string>();
+  await Promise.all(
+    [...uniqueKeys].map(async (key) => {
+      const blob = await loadAudioBlob(key);
+      if (!blob) return;
+      const url = await uploadStudioAudioBlob(key, blob);
+      if (url) uploadedUrls.set(key, url);
+    }),
+  );
+  if (uploadedUrls.size === 0) return tracks;
+
+  return tracks.map((t) => {
+    const cloudUrl = uploadedUrls.get(t.audioRef.idbKey);
+    if (!cloudUrl) return t;
+    return {
+      ...t,
+      audioRef: {
+        ...t.audioRef,
+        storage: "url",
+        url: cloudUrl,
+      },
+    };
+  });
 }
 
 export async function listStudioCollections(useDatabase: boolean): Promise<StudioCollection[]> {
@@ -177,12 +268,15 @@ export async function saveStudioRecording(
   useDatabase: boolean,
   input: SaveStudioRecordingInput,
 ): Promise<StudioRecording> {
+  const tracks = useDatabase ? await syncTracksToCloudStorage(input.tracks) : input.tracks;
+  const payload = tracks === input.tracks ? input : { ...input, tracks };
+
   let saved: StudioRecording | null = null;
   if (useDatabase) {
     const res = await fetch("/api/studio/recordings", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(input),
+      body: JSON.stringify(payload),
     });
     if (res.ok) {
       const body = (await res.json()) as { recording: StudioRecording };
