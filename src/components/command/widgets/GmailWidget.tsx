@@ -797,20 +797,20 @@ export function GmailWidget({
                     </div>
                   </div>
 
-                  <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-7 sm:py-5">
-                    <h4 className="text-[18px] font-medium leading-snug tracking-[-0.01em] text-foreground sm:text-[20px]">
+                  <div className="flex min-h-0 flex-1 flex-col px-5 py-4 sm:px-7 sm:py-5">
+                    <h4 className="shrink-0 text-[18px] font-medium leading-snug tracking-[-0.01em] text-foreground sm:text-[20px]">
                       {activeLetter.subject}
                     </h4>
 
                     {isLoadingActive ? (
-                      <p className="mt-2 flex items-center gap-2 text-[12px] text-muted-foreground">
+                      <p className="mt-2 flex shrink-0 items-center gap-2 text-[12px] text-muted-foreground">
                         <span className="state-dot state-dot--thinking" />
                         Loading full message…
                       </p>
                     ) : null}
 
                     {activeError ? (
-                      <Alert variant="destructive" className="mt-3 rounded-xl py-2">
+                      <Alert variant="destructive" className="mt-3 shrink-0 rounded-xl py-2">
                         <AlertDescription className="flex flex-wrap items-center justify-between gap-2 text-xs">
                           <span>{activeError}</span>
                           <div className="flex items-center gap-1.5">
@@ -837,11 +837,11 @@ export function GmailWidget({
                       </Alert>
                     ) : null}
 
-                    <div className="mt-4">
+                    <div className={`mt-3 min-h-0 flex-1 ${activeLetter.bodyHtml ? "flex flex-col" : "overflow-y-auto"}`}>
                       <SafeEmailContent
                         html={activeLetter.bodyHtml}
                         fallbackText={activeLetter.body || activeLetter.snippet || "No readable body content."}
-                        className="text-[14px] leading-[1.65]"
+                        className={activeLetter.bodyHtml ? "flex-1" : "text-[14px] leading-[1.65]"}
                       />
                     </div>
                   </div>

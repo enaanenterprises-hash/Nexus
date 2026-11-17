@@ -1,5 +1,6 @@
 import "server-only"
 import { randomBytes } from "crypto"
+import sanitizeHtml from "sanitize-html"
 import type { CommandItemInput } from "../kinds"
 import { parseReceipt } from "../parsers/receipt"
 import { apiJson } from "./http"
@@ -98,7 +99,8 @@ export const googleCalendarDriver: ConnectorDriver = {
 
 interface GPart {
   mimeType: string
-  body?: { data?: string }
+  headers?: { name: string; value: string }[]
+  body?: { data?: string; attachmentId?: string; size?: number }
   parts?: GPart[]
 }
 
@@ -134,18 +136,6 @@ function htmlOf(part: GPart): string {
   return ""
 }
 
-const SAFE_EMAIL_TAGS = new Set([
-  "p", "br", "div", "span", "strong", "b", "em", "i", "u", "s", "del",
-  "blockquote", "pre", "code", "ul", "ol", "li", "h1", "h2", "h3", "hr", "a",
-  "table", "thead", "tbody", "tfoot", "tr", "td", "th", "caption", "img",
-])
-const VOID_EMAIL_TAGS = new Set(["br", "hr", "img"])
-const BLOCK_SPACE_TAGS = new Set(["section", "article", "header", "footer"])
-
-function escapeHtmlAttr(value: string): string {
-  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
-}
-
 function safeHref(raw: string): string | null {
   const clean = raw.replace(/[\u0000-\u001f\u007f]+/g, "").trim()
   if (/^(https?:\/\/|mailto:)/i.test(clean)) return clean
@@ -154,69 +144,147 @@ function safeHref(raw: string): string | null {
 
 function safeImgSrc(raw: string): string | null {
   const clean = raw.replace(/[\u0000-\u001f\u007f]+/g, "").trim()
-  if (/^https:\/\//i.test(clean)) return clean
+  if (/^(https?:\/\/|data:image\/(?:png|jpeg|jpg|gif|webp);base64,)/i.test(clean)) {
+    return clean.replace(/^http:\/\//i, "https://")
+  }
   return null
 }
 
-function extractAttr(attrs: string, name: string): string {
-  const m = new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "i").exec(attrs)
-  return m?.[1] ?? m?.[2] ?? m?.[3] ?? ""
+function sanitizeInlineCss(rawStyle: string): string {
+  return rawStyle
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(?:expression|javascript|vbscript|behavior|-moz-binding)\s*\(?/gi, "")
+    .replace(/@import\b[^;]*;?/gi, "")
+    .replace(/url\s*\(\s*['"]?\s*(?!https?:\/\/)[^)]*\)/gi, "")
+    .trim()
 }
 
-/** Strips active content and unsafe attributes while preserving structural email markup, tables, and HTTPS images. */
-export function sanitizeEmailHtml(rawHtml: string): string {
-  const stripped = rawHtml
-    .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/<(script|style|head|title|meta|link|iframe|object|embed|svg|math)\b[^>]*>[\s\S]*?<\/\1>/gi, "")
-    .replace(/<(script|style|head|title|meta|link|iframe|object|embed|svg|math)\b[^>]*\/?>/gi, "")
+function sanitizeStyleSheet(rawCss: string): string {
+  return rawCss
+    .replace(/<!--|-->/g, "")
+    .replace(/@import\b[^;]*;?/gi, "")
+    .replace(/(?:expression|javascript|vbscript|behavior|-moz-binding)\s*\(?/gi, "")
+    .replace(/url\s*\(\s*['"]?\s*(?!https?:\/\/)[^)]*\)/gi, "")
+}
 
-  const tokens: string[] = []
-  const re = /<\/?([a-zA-Z0-9]+)(?:\s+([^>]*))?\/?>|([^<]+)/g
-  let match: RegExpExecArray | null
-  while ((match = re.exec(stripped)) !== null) {
-    if (match[3] !== undefined) {
-      tokens.push(match[3].replaceAll("<", "&lt;").replaceAll(">", "&gt;"))
-      continue
-    }
-    const rawName = (match[1] ?? "").toLowerCase()
-    const isClose = match[0].startsWith("</")
-    if (!SAFE_EMAIL_TAGS.has(rawName)) {
-      if (isClose && BLOCK_SPACE_TAGS.has(rawName)) tokens.push("<br>")
-      continue
-    }
-    if (rawName === "img") {
-      if (!isClose) {
-        const attrs = match[2] ?? ""
-        const src = safeImgSrc(extractAttr(attrs, "src"))
-        if (src) {
-          const alt = extractAttr(attrs, "alt").slice(0, 140)
-          tokens.push(`<img src="${escapeHtmlAttr(src)}"${alt ? ` alt="${escapeHtmlAttr(alt)}"` : ""}>`)
+function stripEmailNoise(rawHtml: string): string {
+  return rawHtml
+    .replace(/<!DOCTYPE[^>]*>/gi, "")
+    .replace(/<\?[\s\S]*?\?>/g, "")
+    .replace(/<!--\[if[\s\S]*?<!\[endif\]-->/gi, "")
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/(?:&zwnj;|&#8204;|&#x200c;|\u200c|\u200b|\ufeff)+(?:\s|&nbsp;|&#160;)*/gi, " ")
+}
+
+const INBOUND_ALLOWED_TAGS = [
+  "html", "head", "body", "style",
+  "div", "span", "p", "br", "hr", "center",
+  "h1", "h2", "h3", "h4", "h5", "h6",
+  "strong", "b", "em", "i", "u", "s", "del", "small", "sub", "sup",
+  "blockquote", "pre", "code", "font",
+  "ul", "ol", "li", "dl", "dt", "dd",
+  "table", "thead", "tbody", "tfoot", "tr", "td", "th", "caption", "colgroup", "col",
+  "a", "img", "figure", "figcaption", "picture", "source",
+]
+
+const SHARED_STYLE_ATTRS = [
+  "style", "class", "id", "align", "valign", "bgcolor", "color",
+  "width", "height", "dir", "role", "aria-label",
+]
+
+/** Strips active content while preserving real HTML email layout, CSS styles, tables, and images. */
+export function sanitizeEmailHtml(rawHtml: string): string {
+  const precleaned = stripEmailNoise(rawHtml)
+  const cleaned = sanitizeHtml(precleaned, {
+    allowedTags: INBOUND_ALLOWED_TAGS,
+    allowVulnerableTags: true,
+    disallowedTagsMode: "discard",
+    nonTextTags: ["script", "textarea", "option", "noscript", "title"],
+    allowedAttributes: {
+      "*": SHARED_STYLE_ATTRS,
+      a: ["href", "target", "rel", "title", ...SHARED_STYLE_ATTRS],
+      img: ["src", "srcset", "alt", "title", "border", ...SHARED_STYLE_ATTRS],
+      source: ["srcset", "media", "type"],
+      font: ["face", "size", "color", ...SHARED_STYLE_ATTRS],
+      table: ["border", "cellpadding", "cellspacing", "summary", ...SHARED_STYLE_ATTRS],
+      td: ["colspan", "rowspan", "nowrap", "background", ...SHARED_STYLE_ATTRS],
+      th: ["colspan", "rowspan", "scope", "nowrap", "background", ...SHARED_STYLE_ATTRS],
+      tr: ["background", ...SHARED_STYLE_ATTRS],
+      body: ["background", ...SHARED_STYLE_ATTRS],
+      style: ["type", "media"],
+    },
+    allowedSchemes: ["http", "https", "mailto", "data"],
+    allowedSchemesByTag: {
+      img: ["http", "https", "data"],
+      a: ["http", "https", "mailto"],
+    },
+    textFilter: (text) => text,
+    transformTags: {
+      style: (tagName, attribs) => {
+        const next: Record<string, string> = {}
+        if (attribs.media) next.media = attribs.media
+        return { tagName, attribs: next }
+      },
+      a: (tagName, attribs) => {
+        const href = safeHref(attribs.href ?? "")
+        const next: Record<string, string> = { ...attribs }
+        if (next.style) next.style = sanitizeInlineCss(next.style)
+        if (!href) {
+          delete next.href
+          return { tagName: "span", attribs: next }
         }
+        next.href = href
+        next.target = "_blank"
+        next.rel = "noopener noreferrer"
+        return { tagName, attribs: next }
+      },
+      img: (tagName, attribs) => {
+        const src = safeImgSrc(attribs.src ?? "")
+        if (!src) return { tagName: "span", attribs: { style: "display:none" } }
+        const next: Record<string, string> = { ...attribs, src }
+        if (next.style) next.style = sanitizeInlineCss(next.style)
+        return { tagName, attribs: next }
+      },
+      "*": (tagName, attribs) => {
+        if (!attribs.style && !attribs.background) return { tagName, attribs }
+        const next: Record<string, string> = { ...attribs }
+        if (next.style) {
+          const safeCss = sanitizeInlineCss(next.style)
+          if (safeCss) next.style = safeCss
+          else delete next.style
+        }
+        if (next.background && !/^https?:\/\//i.test(next.background.trim())) {
+          delete next.background
+        }
+        return { tagName, attribs: next }
+      },
+    },
+    exclusiveFilter: (frame) => {
+      if (frame.tag === "style") {
+        frame.text = sanitizeStyleSheet(frame.text)
       }
-      continue
-    }
-    if (VOID_EMAIL_TAGS.has(rawName)) {
-      if (!isClose) tokens.push(`<${rawName}>`)
-      continue
-    }
-    if (isClose) {
-      tokens.push(`</${rawName}>`)
-      continue
-    }
-    if (rawName === "a") {
-      const href = safeHref(extractAttr(match[2] ?? "", "href"))
-      if (href) {
-        tokens.push(`<a href="${escapeHtmlAttr(href)}" target="_blank" rel="noopener noreferrer">`)
-      }
-      continue
-    }
-    tokens.push(`<${rawName}>`)
-  }
-  return tokens.join("").trim()
+      return false
+    },
+  })
+  return cleaned.trim()
+}
+
+function sanitizeOutboundEmailHtml(rawHtml: string): string {
+  return sanitizeHtml(stripEmailNoise(rawHtml), {
+    allowedTags: [
+      "p", "br", "div", "span", "strong", "b", "em", "i", "u", "s", "del",
+      "blockquote", "pre", "code", "ul", "ol", "li", "h1", "h2", "h3", "hr", "a",
+    ],
+    allowedAttributes: { a: ["href", "target", "rel"] },
+    allowedSchemes: ["http", "https", "mailto"],
+    transformTags: {
+      a: sanitizeHtml.simpleTransform("a", { target: "_blank", rel: "noopener noreferrer" }),
+    },
+  }).trim()
 }
 
 export function htmlToPlainText(rawHtml: string): string {
-  return rawHtml
+  return stripEmailNoise(rawHtml)
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<br\s*\/?>|<\/(p|div|tr|li|h\d|blockquote)>/gi, "\n")
@@ -298,7 +366,40 @@ export async function fetchGmailMessage(ctx: DriverContext, id: string) {
   const m = await google<GMessage>(ctx, `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`)
   const header = (name: string) => m.payload?.headers?.find((h) => h.name.toLowerCase() === name)?.value ?? ""
   const body = textOf(m.payload).replace(/\n{3,}/g, "\n\n").trim()
-  const rawHtml = htmlOf(m.payload)
+  let rawHtml = htmlOf(m.payload)
+  if (rawHtml && /cid:/i.test(rawHtml)) {
+    const cidParts: Array<{ cid: string; mimeType: string; data?: string; attachmentId?: string }> = []
+    const walk = (part: GPart) => {
+      const contentId = part.headers?.find((h) => h.name.toLowerCase() === "content-id")?.value
+      if (contentId && /^image\/(png|jpeg|jpg|gif|webp)$/i.test(part.mimeType)) {
+        const cleanCid = contentId.replace(/^[<\s]+|[>\s]+$/g, "")
+        if (cleanCid) {
+          cidParts.push({
+            cid: cleanCid,
+            mimeType: part.mimeType,
+            data: part.body?.data,
+            attachmentId: part.body?.attachmentId,
+          })
+        }
+      }
+      for (const p of part.parts ?? []) walk(p)
+    }
+    walk(m.payload)
+    for (const item of cidParts.slice(0, 12)) {
+      let b64 = item.data
+      if (!b64 && item.attachmentId) {
+        const att = await google<{ data?: string }>(
+          ctx,
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}/attachments/${item.attachmentId}`,
+        ).catch(() => null)
+        b64 = att?.data
+      }
+      if (b64 && b64.length < 1_500_000) {
+        const std = b64.replaceAll("-", "+").replaceAll("_", "/")
+        rawHtml = rawHtml.replaceAll(`cid:${item.cid}`, `data:${item.mimeType};base64,${std}`)
+      }
+    }
+  }
   const sanitizedHtml = rawHtml ? sanitizeEmailHtml(rawHtml) : ""
   return {
     id: m.id,
@@ -344,7 +445,7 @@ export function buildRawMessage(input: {
   html?: string | null
   inReplyTo?: string | null
 }): string {
-  const safeHtml = input.html ? sanitizeEmailHtml(input.html) : ""
+  const safeHtml = input.html ? sanitizeOutboundEmailHtml(input.html) : ""
   const plainBody = input.body.trim() ? input.body : safeHtml ? htmlToPlainText(safeHtml) : ""
   const baseHeaders = [
     `To: ${input.to.join(", ")}`,
