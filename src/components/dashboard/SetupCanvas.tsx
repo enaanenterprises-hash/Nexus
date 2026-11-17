@@ -19,11 +19,8 @@ const FINALE_COLLAPSE_END = 2.05;
 const FINALE_EXPLODE_AT = 2.65;
 const FINALE_COMPLETE_AT = 2.83;
 
-const CONSTELLATION_DARK_LINE: Rgb = [240, 198, 122];
-const CONSTELLATION_DARK_HALO: Rgb = [232, 148, 36];
-const CONSTELLATION_DARK_STAR: Rgb = [255, 240, 202];
+const CONSTELLATION_DARK_WHITE: Rgb = [255, 255, 255];
 const CONSTELLATION_LIGHT_INK: Rgb = [17, 17, 19];
-const CONSTELLATION_LIGHT_GOLD: Rgb = [164, 98, 12];
 
 const GOLD_CORE: Rgb = [255, 250, 232];
 const GOLD_BRIGHT: Rgb = [255, 224, 156];
@@ -143,151 +140,19 @@ type ConstellationField = {
   ambientStars: AmbientStar[];
 };
 
-type CuratedAsterism = {
-  rx: number;
-  ry: number;
-  scaleMul: number;
-  rot: number;
+type AsterismTemplate = {
   points: ReadonlyArray<readonly [number, number]>;
   edges: ReadonlyArray<readonly [number, number]>;
-  anchorIndex: number;
-  minWidth?: number;
 };
 
-const CURATED_ASTERISMS: readonly CuratedAsterism[] = [
-  // Top-left Y-fork branching upward right
+const ASTERISM_TEMPLATES: readonly AsterismTemplate[] = [
   {
-    rx: 0.19,
-    ry: 0.22,
-    scaleMul: 1.05,
-    rot: 0,
-    anchorIndex: 1,
     points: [
-      [-0.28, -0.78],
-      [-0.14, 0.08],
-      [0.42, -0.82],
-      [-0.58, 0.56],
-      [0.45, 0.58],
-    ],
-    edges: [
-      [0, 1],
-      [2, 1],
-      [1, 3],
-      [1, 4],
-    ],
-  },
-  // Upper-left chevron bridge
-  {
-    rx: 0.365,
-    ry: 0.165,
-    scaleMul: 0.88,
-    rot: 0,
-    anchorIndex: 1,
-    points: [
-      [-0.78, 0.05],
-      [0.08, -0.28],
-      [0.54, 0.48],
-    ],
-    edges: [
-      [0, 1],
-      [1, 2],
-    ],
-  },
-  // Left-mid sweeping C-arch
-  {
-    rx: 0.102,
-    ry: 0.46,
-    scaleMul: 1.05,
-    rot: 0,
-    anchorIndex: 3,
-    minWidth: 620,
-    points: [
-      [0.34, -0.82],
-      [-0.36, -0.45],
-      [-0.24, 0.18],
-      [0.24, 0.86],
-    ],
-    edges: [
-      [0, 1],
-      [1, 2],
-      [2, 3],
-    ],
-  },
-  // Bottom-left signature diamond-kite with diagonal stem
-  {
-    rx: 0.125,
-    ry: 0.785,
-    scaleMul: 1.08,
-    rot: 0,
-    anchorIndex: 2,
-    points: [
-      [-0.08, -0.42],
-      [0.36, 0.08],
-      [-0.16, 0.58],
-      [-0.64, 0.08],
-      [0.72, -0.74],
-    ],
-    edges: [
-      [0, 1],
-      [1, 2],
-      [2, 3],
-      [3, 0],
-      [0, 4],
-    ],
-  },
-  // Upper-right luminous closed triangle
-  {
-    rx: 0.695,
-    ry: 0.16,
-    scaleMul: 0.92,
-    rot: 0,
-    anchorIndex: 1,
-    points: [
-      [0.34, -0.68],
-      [-0.46, 0.48],
-      [0.52, 0.44],
-    ],
-    edges: [
-      [0, 1],
-      [1, 2],
-      [2, 0],
-    ],
-  },
-  // Far upper-right asymmetric dart wedge
-  {
-    rx: 0.835,
-    ry: 0.23,
-    scaleMul: 0.88,
-    rot: 0,
-    anchorIndex: 0,
-    minWidth: 620,
-    points: [
-      [-0.18, -0.68],
-      [0.54, 0.08],
-      [-0.48, 0.22],
-      [-0.16, 0.82],
-    ],
-    edges: [
-      [0, 1],
-      [1, 2],
-      [2, 0],
-      [2, 3],
-    ],
-  },
-  // Far-right tall zigzag
-  {
-    rx: 0.892,
-    ry: 0.475,
-    scaleMul: 1.06,
-    rot: 0,
-    anchorIndex: 4,
-    minWidth: 620,
-    points: [
-      [-0.02, -0.92],
-      [0.34, -0.58],
-      [-0.24, -0.22],
-      [0.34, 0.24],
-      [-0.26, 0.86],
+      [-1.0, 0.25],
+      [-0.45, -0.32],
+      [0.12, -0.42],
+      [0.68, -0.15],
+      [1.05, 0.35],
     ],
     edges: [
       [0, 1],
@@ -296,23 +161,64 @@ const CURATED_ASTERISMS: readonly CuratedAsterism[] = [
       [3, 4],
     ],
   },
-  // Bottom-right wide dipper cradle
   {
-    rx: 0.865,
-    ry: 0.785,
-    scaleMul: 0.96,
-    rot: 0,
-    anchorIndex: 1,
     points: [
-      [-0.58, -0.62],
-      [0.06, 0.22],
-      [0.44, 0.42],
-      [0.92, 0.16],
+      [-0.55, -0.45],
+      [0.18, -0.72],
+      [0.52, -0.05],
+      [-0.12, 0.32],
+      [0.98, 0.62],
     ],
     edges: [
       [0, 1],
       [1, 2],
       [2, 3],
+      [3, 0],
+      [2, 4],
+    ],
+  },
+  {
+    points: [
+      [-0.85, 0.35],
+      [-0.22, 0.02],
+      [0.42, -0.28],
+      [0.98, -0.48],
+      [0.05, 0.72],
+    ],
+    edges: [
+      [0, 1],
+      [1, 2],
+      [2, 3],
+      [1, 4],
+    ],
+  },
+  {
+    points: [
+      [-0.65, -0.22],
+      [0.32, -0.64],
+      [0.64, 0.18],
+      [-0.98, 0.56],
+    ],
+    edges: [
+      [0, 1],
+      [1, 2],
+      [2, 0],
+      [0, 3],
+    ],
+  },
+  {
+    points: [
+      [-0.95, -0.18],
+      [-0.36, 0.38],
+      [0.18, -0.28],
+      [0.74, 0.32],
+      [1.08, -0.16],
+    ],
+    edges: [
+      [0, 1],
+      [1, 2],
+      [2, 3],
+      [3, 4],
     ],
   },
 ];
@@ -398,145 +304,7 @@ function fitHighResCanvas(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext
   return { width: rect.width, height: rect.height };
 }
 
-function hash2D(ix: number, iy: number): number {
-  let n = Math.imul(ix, 374761393) + Math.imul(iy, 668265263);
-  n = (n ^ (n >>> 13)) | 0;
-  n = Math.imul(n, 1274126177);
-  return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
-}
-
-function smoothNoise2D(x: number, y: number): number {
-  const ix = Math.floor(x);
-  const iy = Math.floor(y);
-  const fx = x - ix;
-  const fy = y - iy;
-  const ux = fx * fx * (3 - 2 * fx);
-  const uy = fy * fy * (3 - 2 * fy);
-  const a = hash2D(ix, iy);
-  const b = hash2D(ix + 1, iy);
-  const c = hash2D(ix, iy + 1);
-  const d = hash2D(ix + 1, iy + 1);
-  return lerp(lerp(a, b, ux), lerp(c, d, ux), uy);
-}
-
-function fbm(x: number, y: number, octaves: number): number {
-  let sum = 0;
-  let amp = 0.5;
-  let freq = 1;
-  let norm = 0;
-  for (let i = 0; i < octaves; i++) {
-    sum += smoothNoise2D(x * freq, y * freq) * amp;
-    norm += amp;
-    amp *= 0.5;
-    freq *= 2.04;
-  }
-  return sum / norm;
-}
-
-/** Synthesizes the fine burnt-gold lacy filamentary nebula sky once per resize/theme. */
-function buildNebulaCanvas(
-  width: number,
-  height: number,
-  isLight: boolean,
-): HTMLCanvasElement | null {
-  if (typeof document === "undefined" || width < 32 || height < 32) return null;
-  const nw = clamp(Math.round(width * 0.5), 260, 720);
-  const nh = clamp(Math.round(height * 0.5), 160, 450);
-  const off = document.createElement("canvas");
-  off.width = nw;
-  off.height = nh;
-  const octx = off.getContext("2d");
-  if (!octx) return null;
-
-  const img = octx.createImageData(nw, nh);
-  const data = img.data;
-  const aspect = width / Math.max(1, height);
-  const scaleX = 3.8 * aspect;
-  const scaleY = 3.8;
-
-  for (let py = 0; py < nh; py++) {
-    const ny = py / nh;
-    const y = ny * scaleY;
-    for (let px = 0; px < nw; px++) {
-      const nx = px / nw;
-      const x = nx * scaleX;
-
-      const w1x = fbm(x * 0.92 + 3.7, y * 0.92 - 1.9, 3);
-      const w1y = fbm(x * 0.92 - 2.4, y * 0.92 + 4.8, 3);
-      const wx = fbm(x * 1.85 + w1x * 1.65 + 6.1, y * 1.85 + w1y * 1.65 - 2.7, 4);
-      const wy = fbm(x * 1.85 - w1y * 1.55 - 3.3, y * 1.85 + w1x * 1.55 + 5.2, 4);
-
-      const n1 = fbm(x * 1.75 + wx * 1.45, y * 1.75 + wy * 1.45, 5);
-      const n2 = fbm(x * 4.4 - wy * 1.15 + 2.1, y * 4.4 + wx * 1.15 - 1.4, 4);
-      const n3 = fbm(x * 0.85 + w1x * 0.9, y * 0.85 + w1y * 0.9, 3);
-
-      // Sharp filamentary ridges + sparse smoky wisps matching dark obsidian cosmos
-      const ridgeA = Math.pow(clamp(1 - Math.abs(n1 * 2 - 1), 0, 1), 6.8);
-      const ridgeB = Math.pow(clamp(1 - Math.abs(n2 * 2 - 1), 0, 1), 9.2);
-      const mist = Math.pow(clamp((n3 - 0.34) * 1.65, 0, 1), 2.8);
-
-      // Asymmetric cosmic currents: bright top-left knot sweeping diagonally, delicate right canyon, calm center
-      const diagTendril = Math.exp(-Math.pow((nx * 0.92 - ny * 1.04 + 0.06) * 2.15, 2));
-      const topLeftKnot = Math.exp(-((nx - 0.085) * (nx - 0.085) * 18 + (ny - 0.21) * (ny - 0.21) * 12));
-      const bottomLeftHint = Math.exp(-((nx - 0.11) * (nx - 0.11) * 14 + (ny - 0.82) * (ny - 0.82) * 10));
-      const rightCanyon = Math.exp(-((nx - 0.91) * (nx - 0.91) * 11 + (ny - 0.48) * (ny - 0.48) * 4.2));
-      const rightMidKnot = Math.exp(-((nx - 0.94) * (nx - 0.94) * 24 + (ny - 0.34) * (ny - 0.34) * 14));
-
-      const centerDist = Math.hypot((nx - 0.5) * 0.9, (ny - 0.6) * 1.18);
-      const centerCalm = clamp((centerDist - 0.18) / 0.34, 0.08, 1);
-
-      const envelope = clamp(
-        (0.14 + 0.56 * diagTendril + 0.95 * topLeftKnot + 0.44 * bottomLeftHint + 0.72 * rightCanyon + 0.68 * rightMidKnot) *
-          centerCalm,
-        0,
-        1.28,
-      );
-
-      const filament = ridgeA * 0.72 + ridgeB * 0.78 + mist * 0.12;
-      const intensity = clamp(Math.pow(clamp(envelope * filament * 0.94, 0, 1), 1.24), 0, 1);
-      if (intensity <= 0.015) continue;
-
-      const idx = (py * nw + px) * 4;
-      if (isLight) {
-        data[idx] = 164;
-        data[idx + 1] = 96;
-        data[idx + 2] = 14;
-        data[idx + 3] = Math.round(clamp(intensity * 46, 0, 48));
-      } else {
-        const coreHot = Math.pow(intensity, 2.3);
-        data[idx] = Math.round(clamp(lerp(72, 252, Math.pow(intensity, 0.7)) + 12 * coreHot, 0, 255));
-        data[idx + 1] = Math.round(clamp(lerp(16, 118, Math.pow(intensity, 1.15)) + 86 * coreHot, 0, 232));
-        data[idx + 2] = Math.round(clamp(lerp(0, 14, Math.pow(intensity, 1.55)) + 88 * coreHot, 0, 176));
-        data[idx + 3] = Math.round(clamp(intensity * 184, 0, 192));
-      }
-    }
-  }
-
-  octx.putImageData(img, 0, 0);
-  return off;
-}
-
-function buildStarGlowSprite(rgb: Rgb): HTMLCanvasElement | null {
-  if (typeof document === "undefined") return null;
-  const size = 48;
-  const off = document.createElement("canvas");
-  off.width = size;
-  off.height = size;
-  const octx = off.getContext("2d");
-  if (!octx) return null;
-  const half = size * 0.5;
-  const col = `${rgb[0]}, ${rgb[1]}, ${rgb[2]}`;
-  const g = octx.createRadialGradient(half, half, 0, half, half, half);
-  g.addColorStop(0, `rgba(${col}, 1)`);
-  g.addColorStop(0.28, `rgba(${col}, 0.56)`);
-  g.addColorStop(0.65, `rgba(${col}, 0.14)`);
-  g.addColorStop(1, `rgba(${col}, 0)`);
-  octx.fillStyle = g;
-  octx.fillRect(0, 0, size, size);
-  return off;
-}
-
-/** Seeds prominent golden constellations + dense deep-space dust clear of singularity & lower prompt band. */
+/** Seeds prominent floating white constellations in outer sky, clear of singularity & lower prompt negative space. */
 function createConstellationField(width: number, height: number): ConstellationField {
   if (width < 40 || height < 40) {
     return { groups: [], ambientStars: [] };
@@ -549,35 +317,68 @@ function createConstellationField(width: number, height: number): ConstellationF
   const minDim = Math.min(width, height);
   const coreBaseR = clamp(minDim * 0.14, 58, 118);
 
-  const maxDrift = 14;
-  const clearR = coreBaseR * 1.48 + maxDrift;
-  const promptTop = cy + coreBaseR * 0.26 - maxDrift;
-  const promptHalfW = Math.min(width * 0.35, 330) + maxDrift;
+  // Reserve extra excursion margin so floating drift never enters the singularity halo or lower prompt band
+  const maxDrift = 22;
+  const clearR = coreBaseR * 1.58 + maxDrift;
+  const promptTop = cy + coreBaseR * 0.30 - maxDrift;
+  const promptHalfW = Math.min(width * 0.39, 370) + maxDrift;
 
-  const pad = clamp(minDim * 0.042, 20, 44);
-  const span = clamp(Math.min(width * 0.105, height * 0.135), 54, 114);
+  const pad = clamp(minDim * 0.055, 28, 52);
+  const span = clamp(Math.min(width * 0.115, height * 0.145), 58, 122);
+  const lateralSpace = cx - promptHalfW - pad;
 
-  const groups: ConstellationGroup[] = [];
+  const upperSkyBottom = Math.max(pad + span, cy - clearR - span * 0.32);
+  const upperHighY = lerp(pad, upperSkyBottom, 0.34);
+  const upperLowY = lerp(pad, upperSkyBottom, 0.72);
+
+  const anchors: Vec[] = [
+    { x: lerp(pad + span * 0.5, cx - clearR * 0.72, 0.38), y: upperLowY },
+    { x: lerp(pad + span * 0.5, cx, 0.58), y: upperHighY },
+    { x: lerp(cx, width - pad - span * 0.5, 0.42), y: upperHighY * 1.06 },
+    { x: lerp(cx + clearR * 0.72, width - pad - span * 0.5, 0.62), y: upperLowY * 0.94 },
+  ];
+
+  if (width >= 600) {
+    anchors.push(
+      { x: pad + (cx - pad) * 0.18, y: Math.min(cy - clearR * 0.42, upperSkyBottom + span * 0.75) },
+      { x: width - pad - (width - pad - cx) * 0.18, y: Math.min(cy - clearR * 0.42, upperSkyBottom + span * 0.72) },
+    );
+  }
+
+  if (lateralSpace >= 105) {
+    anchors.push(
+      { x: pad + lateralSpace * 0.46, y: lerp(cy + 22, height - pad, 0.54) },
+      { x: width - pad - lateralSpace * 0.46, y: lerp(cy + 22, height - pad, 0.52) },
+    );
+  }
+
   const placedStarPositions: Vec[] = [];
+  const groups: ConstellationGroup[] = [];
+  const minCrossStarSep = Math.max(28, span * 0.36);
 
   const isInsideSafeCanvas = (x: number, y: number) =>
     x >= pad && x <= width - pad && y >= pad && y <= height - pad;
 
-  for (const tpl of CURATED_ASTERISMS) {
-    if (tpl.minWidth && width < tpl.minWidth) continue;
-    const anchorX = tpl.rx * width;
-    const anchorY = tpl.ry * height;
-    const rot = tpl.rot + between(-0.04, 0.04);
+  for (let aIdx = 0; aIdx < anchors.length; aIdx++) {
+    const anchor = anchors[aIdx]!;
+    const tpl =
+      ASTERISM_TEMPLATES[(aIdx + Math.floor(rnd() * ASTERISM_TEMPLATES.length)) % ASTERISM_TEMPLATES.length]!;
+    const rot = rnd() * TAU;
     const cosR = Math.cos(rot);
     const sinR = Math.sin(rot);
-    const localScale = span * tpl.scaleMul;
+    const localScale = span * between(0.86, 1.15);
+    const offsetX = between(-span * 0.16, span * 0.16);
+    const offsetY = between(-span * 0.14, span * 0.14);
 
     const candidates = tpl.points.map(([lx, ly]) => {
-      const x = anchorX + (lx * cosR - ly * sinR) * localScale;
-      const y = anchorY + (lx * sinR + ly * cosR) * localScale;
+      const jx = lx + between(-0.1, 0.1);
+      const jy = ly + between(-0.1, 0.1);
+      const x = anchor.x + offsetX + (jx * cosR - jy * sinR) * localScale;
+      const y = anchor.y + offsetY + (jx * sinR + jy * cosR) * localScale;
       const valid =
         isInsideSafeCanvas(x, y) &&
-        !isPointInConstellationExclusion(x, y, cx, cy, clearR, promptTop, promptHalfW);
+        !isPointInConstellationExclusion(x, y, cx, cy, clearR, promptTop, promptHalfW) &&
+        placedStarPositions.every((s) => Math.hypot(x - s.x, y - s.y) >= minCrossStarSep);
       return { x, y, valid };
     });
 
@@ -615,18 +416,19 @@ function createConstellationField(width: number, height: number): ConstellationF
     const localToGroup = new Map<number, number>();
     const groupStars: ConstellationStar[] = [];
 
-    for (const localIdx of usedIndices) {
+    for (let uIdx = 0; uIdx < usedIndices.length; uIdx++) {
+      const localIdx = usedIndices[uIdx]!;
       const pt = candidates[localIdx]!;
-      const isAnchor = localIdx === tpl.anchorIndex;
+      const isAnchor = uIdx === 0 || (uIdx === 2 && rnd() < 0.65);
       localToGroup.set(localIdx, groupStars.length);
       placedStarPositions.push({ x: pt.x, y: pt.y });
       groupStars.push({
         rx: pt.x - groupCx,
         ry: pt.y - groupCy,
-        radius: isAnchor ? between(2.8, 3.6) : between(1.65, 2.35),
-        alpha: isAnchor ? between(0.95, 1.0) : between(0.82, 0.96),
-        twinkleSpeed: between(1.25, 2.4),
-        twinkleRatio: between(1.45, 2.2),
+        radius: isAnchor ? between(3.1, 4.35) : between(2.05, 3.0),
+        alpha: isAnchor ? between(0.92, 1.0) : between(0.76, 0.94),
+        twinkleSpeed: between(1.35, 2.75),
+        twinkleRatio: between(1.55, 2.35),
         phase: rnd() * TAU,
         isAnchor,
       });
@@ -635,54 +437,49 @@ function createConstellationField(width: number, height: number): ConstellationF
     const groupEdges: ConstellationEdge[] = validEdges.map(([ia, ib]) => ({
       a: localToGroup.get(ia)!,
       b: localToGroup.get(ib)!,
-      alpha: between(0.56, 0.78),
+      alpha: between(0.42, 0.62),
       phase: rnd() * TAU,
     }));
 
     groups.push({
       cx: groupCx,
       cy: groupCy,
-      driftAmpX: between(3.5, 7.5),
-      driftAmpY: between(2.5, 6.0),
-      driftFreqX: between(0.12, 0.22),
-      driftFreqY: between(0.11, 0.2),
+      driftAmpX: between(8, 17),
+      driftAmpY: between(6, 14),
+      driftFreqX: between(0.16, 0.28),
+      driftFreqY: between(0.14, 0.25),
       driftPhase: rnd() * TAU,
-      rotAmp: between(0.01, 0.024),
-      rotFreq: between(0.09, 0.16),
+      rotAmp: between(0.025, 0.055),
+      rotFreq: between(0.12, 0.22),
       rotPhase: rnd() * TAU,
       stars: groupStars,
       edges: groupEdges,
     });
   }
 
-  const targetAmbient = clamp(Math.round((width * height) / 3100), 165, 360);
+  const targetAmbient = clamp(Math.round((width * height) / 28000), 26, 62);
   const ambientStars: AmbientStar[] = [];
   let attempts = 0;
-  while (ambientStars.length < targetAmbient && attempts < targetAmbient * 6) {
+  while (ambientStars.length < targetAmbient && attempts < targetAmbient * 10) {
     attempts++;
-    const x = between(8, width - 8);
-    const y = between(8, height - 8);
-    // Keep immediate core pinhole clear; keep prompt text clean of bright flare stars
-    if (Math.hypot(x - cx, y - cy) < coreBaseR * 0.72) continue;
-    const inPromptBand =
-      y >= promptTop - 10 && y <= promptTop + 68 && Math.abs(x - cx) < promptHalfW;
-    if (inPromptBand) continue;
-    if (placedStarPositions.some((s) => Math.hypot(x - s.x, y - s.y) < 12)) continue;
-    const roll = rnd();
-    const bright = roll < 0.048;
-    const med = roll >= 0.048 && roll < 0.31;
+    const x = between(pad * 0.6, width - pad * 0.6);
+    const y = between(pad * 0.6, height - pad * 0.6);
+    if (isPointInConstellationExclusion(x, y, cx, cy, clearR, promptTop, promptHalfW)) continue;
+    if (placedStarPositions.some((s) => Math.hypot(x - s.x, y - s.y) < 20)) continue;
+    if (ambientStars.some((s) => Math.hypot(x - s.x, y - s.y) < 22)) continue;
+    const bright = rnd() < 0.28;
     ambientStars.push({
       x,
       y,
-      driftAmpX: between(1.2, 4.5),
-      driftAmpY: between(1.2, 4.2),
-      driftFreqX: between(0.14, 0.28),
-      driftFreqY: between(0.12, 0.25),
+      driftAmpX: between(5, 13),
+      driftAmpY: between(4, 11),
+      driftFreqX: between(0.18, 0.34),
+      driftFreqY: between(0.15, 0.3),
       driftPhase: rnd() * TAU,
-      radius: bright ? between(1.35, 1.95) : med ? between(0.85, 1.3) : between(0.4, 0.8),
-      alpha: bright ? between(0.82, 0.98) : med ? between(0.55, 0.84) : between(0.35, 0.68),
-      twinkleSpeed: between(1.2, 3.0),
-      twinkleRatio: between(1.4, 2.3),
+      radius: bright ? between(1.8, 2.55) : between(1.05, 1.75),
+      alpha: bright ? between(0.72, 0.94) : between(0.44, 0.72),
+      twinkleSpeed: between(1.4, 3.1),
+      twinkleRatio: between(1.5, 2.4),
       phase: rnd() * TAU,
       hasFlare: bright,
     });
@@ -697,45 +494,47 @@ function drawCrispStar(
   y: number,
   radius: number,
   alpha: number,
-  coreRgb: string,
-  haloSprite: HTMLCanvasElement | null,
+  rgb: string,
   withFlare: boolean,
   isAnchor: boolean,
 ) {
-  const haloR = radius * (isAnchor ? 7.2 : withFlare ? 4.8 : 2.8);
-  const haloAlpha = clamp(alpha * (isAnchor ? 0.76 : withFlare ? 0.48 : 0.3), 0, 1);
-  if (haloSprite && haloAlpha > 0.01) {
-    ctx.globalAlpha = haloAlpha;
-    ctx.drawImage(haloSprite, x - haloR, y - haloR, haloR * 2, haloR * 2);
-  }
-  ctx.globalAlpha = 1;
+  const haloR = radius * (isAnchor ? 4.8 : withFlare ? 3.8 : 2.8);
+  const haloAlpha = alpha * (isAnchor ? 0.42 : 0.28);
+  const g = ctx.createRadialGradient(x, y, 0, x, y, haloR);
+  g.addColorStop(0, `rgba(${rgb}, ${haloAlpha})`);
+  g.addColorStop(0.45, `rgba(${rgb}, ${haloAlpha * 0.32})`);
+  g.addColorStop(1, `rgba(${rgb}, 0)`);
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, y, haloR, 0, TAU);
+  ctx.fill();
 
   if (withFlare) {
-    const spikeLen = radius * (isAnchor ? 6.4 : 4.1);
-    const spikeAlpha = alpha * (isAnchor ? 0.92 : 0.68);
-    ctx.strokeStyle = `rgba(${coreRgb}, ${spikeAlpha * 0.72})`;
-    ctx.lineWidth = isAnchor ? 0.9 : 0.65;
+    const spikeLen = radius * (isAnchor ? 4.4 : 3.1);
+    const spikeAlpha = alpha * (isAnchor ? 0.78 : 0.56);
+    const hg = ctx.createLinearGradient(x - spikeLen, y, x + spikeLen, y);
+    hg.addColorStop(0, `rgba(${rgb}, 0)`);
+    hg.addColorStop(0.5, `rgba(${rgb}, ${spikeAlpha})`);
+    hg.addColorStop(1, `rgba(${rgb}, 0)`);
+    ctx.strokeStyle = hg;
+    ctx.lineWidth = isAnchor ? 1.1 : 0.85;
     ctx.beginPath();
     ctx.moveTo(x - spikeLen, y);
     ctx.lineTo(x + spikeLen, y);
+    ctx.stroke();
+
+    const vg = ctx.createLinearGradient(x, y - spikeLen, x, y + spikeLen);
+    vg.addColorStop(0, `rgba(${rgb}, 0)`);
+    vg.addColorStop(0.5, `rgba(${rgb}, ${spikeAlpha})`);
+    vg.addColorStop(1, `rgba(${rgb}, 0)`);
+    ctx.strokeStyle = vg;
+    ctx.beginPath();
     ctx.moveTo(x, y - spikeLen);
     ctx.lineTo(x, y + spikeLen);
     ctx.stroke();
-
-    if (isAnchor) {
-      const diagLen = spikeLen * 0.44;
-      ctx.strokeStyle = `rgba(${coreRgb}, ${spikeAlpha * 0.42})`;
-      ctx.lineWidth = 0.6;
-      ctx.beginPath();
-      ctx.moveTo(x - diagLen, y - diagLen);
-      ctx.lineTo(x + diagLen, y + diagLen);
-      ctx.moveTo(x + diagLen, y - diagLen);
-      ctx.lineTo(x - diagLen, y + diagLen);
-      ctx.stroke();
-    }
   }
 
-  ctx.fillStyle = `rgba(${coreRgb}, ${alpha})`;
+  ctx.fillStyle = `rgba(${rgb}, ${alpha})`;
   ctx.beginPath();
   ctx.arc(x, y, radius, 0, TAU);
   ctx.fill();
@@ -751,7 +550,6 @@ function twinkleWave(time: number, speed: number, ratio: number, phase: number, 
 function renderConstellations(
   ctx: CanvasRenderingContext2D,
   field: ConstellationField,
-  haloSprite: HTMLCanvasElement | null,
   time: number,
   fade: number,
   isLight: boolean,
@@ -759,10 +557,8 @@ function renderConstellations(
 ) {
   if (fade <= 0.005 || (field.groups.length === 0 && field.ambientStars.length === 0)) return;
 
-  const lineRgb = isLight ? CONSTELLATION_LIGHT_GOLD : CONSTELLATION_DARK_LINE;
-  const starRgb = isLight ? CONSTELLATION_LIGHT_INK : CONSTELLATION_DARK_STAR;
-  const lineRgbStr = `${lineRgb[0]}, ${lineRgb[1]}, ${lineRgb[2]}`;
-  const starRgbStr = `${starRgb[0]}, ${starRgb[1]}, ${starRgb[2]}`;
+  const baseRgb = isLight ? CONSTELLATION_LIGHT_INK : CONSTELLATION_DARK_WHITE;
+  const rgb = `${baseRgb[0]}, ${baseRgb[1]}, ${baseRgb[2]}`;
 
   ctx.save();
   ctx.globalCompositeOperation = isLight ? "source-over" : "lighter";
@@ -773,17 +569,10 @@ function renderConstellations(
     const dx = reduceMotion ? 0 : Math.sin(time * star.driftFreqX + star.driftPhase) * star.driftAmpX;
     const dy = reduceMotion ? 0 : Math.cos(time * star.driftFreqY + star.driftPhase * 1.3) * star.driftAmpY;
     const tw = twinkleWave(time, star.twinkleSpeed, star.twinkleRatio, star.phase, reduceMotion);
-    const a = clamp(star.alpha * tw * fade * (isLight ? 0.65 : 1), 0, 1);
+    const a = clamp(star.alpha * tw * fade * (isLight ? 0.85 : 1), 0, 1);
     if (a <= 0.01) continue;
-    const r = star.radius * (0.88 + 0.24 * tw);
-    if (star.hasFlare) {
-      drawCrispStar(ctx, star.x + dx, star.y + dy, r, a, starRgbStr, haloSprite, true, false);
-    } else {
-      ctx.fillStyle = `rgba(${star.radius > 1.1 ? starRgbStr : lineRgbStr}, ${a})`;
-      ctx.beginPath();
-      ctx.arc(star.x + dx, star.y + dy, r, 0, TAU);
-      ctx.fill();
-    }
+    const r = star.radius * (0.85 + 0.3 * tw);
+    drawCrispStar(ctx, star.x + dx, star.y + dy, r, a, rgb, star.hasFlare, false);
   }
 
   for (const group of field.groups) {
@@ -806,7 +595,7 @@ function renderConstellations(
       };
     });
 
-    ctx.lineWidth = isLight ? 1.1 : 1.15;
+    ctx.lineWidth = isLight ? 1.15 : 1.25;
     for (const edge of group.edges) {
       const pA = livePts[edge.a]!;
       const pB = livePts[edge.b]!;
@@ -816,14 +605,14 @@ function renderConstellations(
       if (dist < 10) continue;
       const ux = dx / dist;
       const uy = dy / dist;
-      const trimA = pA.radius + 2.8;
-      const trimB = pB.radius + 2.8;
+      const trimA = pA.radius + 3.2;
+      const trimB = pB.radius + 3.2;
       if (trimA + trimB >= dist) continue;
-      const linePulse = reduceMotion ? 1 : 0.82 + 0.18 * Math.sin(time * 0.85 + edge.phase);
-      const a = clamp(edge.alpha * linePulse * fade * (isLight ? 0.65 : 1), 0, 1);
+      const linePulse = reduceMotion ? 1 : 0.78 + 0.22 * Math.sin(time * 0.9 + edge.phase);
+      const a = clamp(edge.alpha * linePulse * fade * (isLight ? 0.75 : 1), 0, 1);
       if (a <= 0.008) continue;
 
-      ctx.strokeStyle = `rgba(${lineRgbStr}, ${a})`;
+      ctx.strokeStyle = `rgba(${rgb}, ${a})`;
       ctx.beginPath();
       ctx.moveTo(pA.x + ux * trimA, pA.y + uy * trimA);
       ctx.lineTo(pB.x - ux * trimB, pB.y - uy * trimB);
@@ -832,7 +621,7 @@ function renderConstellations(
 
     for (const pt of livePts) {
       if (pt.alpha <= 0.01) continue;
-      drawCrispStar(ctx, pt.x, pt.y, pt.radius, pt.alpha, starRgbStr, haloSprite, true, pt.isAnchor);
+      drawCrispStar(ctx, pt.x, pt.y, pt.radius, pt.alpha, rgb, true, pt.isAnchor);
     }
   }
 
@@ -1000,10 +789,6 @@ export const SetupCanvas = memo(function SetupCanvas({
     let height = 1;
     let diag = 1;
     let constellations: ConstellationField = { groups: [], ambientStars: [] };
-    let nebulaDark: HTMLCanvasElement | null = null;
-    let nebulaLight: HTMLCanvasElement | null = null;
-    const starGlowDark = buildStarGlowSprite(CONSTELLATION_DARK_HALO);
-    const starGlowLight = buildStarGlowSprite(CONSTELLATION_LIGHT_GOLD);
     let frame = 0;
     let last = 0;
     let smoothDt = 1 / 60;
@@ -1224,7 +1009,7 @@ export const SetupCanvas = memo(function SetupCanvas({
       }
       ctx.fillRect(0, 0, width, height);
 
-      // 0. Golden cosmic nebula clouds + gold-lit constellations during "singularity", fading smoothly on early "exploding"
+      // 0. Delicate background constellations in outer sky during "singularity", fading gently on early "exploding"
       const constellationFade =
         curPhase === "singularity"
           ? 1
@@ -1232,25 +1017,7 @@ export const SetupCanvas = memo(function SetupCanvas({
             ? Math.pow(clamp(1 - explodeAge / 0.56, 0, 1), 1.65)
             : 0;
       if (constellationFade > 0.005) {
-        if (isLight && !nebulaLight && width >= 32) nebulaLight = buildNebulaCanvas(width, height, true);
-        if (!isLight && !nebulaDark && width >= 32) nebulaDark = buildNebulaCanvas(width, height, false);
-        const activeNebula = isLight ? nebulaLight : nebulaDark;
-        if (activeNebula) {
-          ctx.save();
-          ctx.globalCompositeOperation = isLight ? "source-over" : "lighter";
-          ctx.globalAlpha = constellationFade * (0.94 + 0.06 * Math.sin(time * 0.45));
-          ctx.drawImage(activeNebula, 0, 0, width, height);
-          ctx.restore();
-        }
-        renderConstellations(
-          ctx,
-          constellations,
-          isLight ? starGlowLight : starGlowDark,
-          time,
-          constellationFade,
-          isLight,
-          reduceMotion,
-        );
+        renderConstellations(ctx, constellations, time, constellationFade, isLight, reduceMotion);
       }
 
       const goldCore = isLight ? GOLD_LIGHT_SPECULAR : GOLD_CORE;
@@ -1624,63 +1391,30 @@ export const SetupCanvas = memo(function SetupCanvas({
         ctx.fill();
       }
 
-      if (curPhase === "singularity") {
-        // Organic molten-amber corona & softly feathered event horizon matching the concept singularity
-        const singOrbR = Math.max(14, coreBaseR * (0.31 + 0.03 * singPulse + 0.055 * hoverFocus) * coreScale);
-        ctx.fillStyle = createMoffat(
-          singOrbR * 1.55,
-          singOrbR * 0.24,
-          1.95,
-          clamp((isLight ? 0.62 : 0.76) + 0.1 * singRipple + 0.12 * hoverFocus, 0, 1),
-          isLight ? [198, 128, 16] : [255, 224, 148],
-          isLight ? [224, 158, 34] : [238, 152, 42],
-          isLight ? [238, 186, 78] : [176, 84, 12],
-        );
-        ctx.beginPath();
-        ctx.arc(0, 0, singOrbR * 1.55, 0, TAU);
-        ctx.fill();
+      const orbRadiusMul =
+        curPhase === "singularity"
+          ? 0.365 + 0.068 * singPulse + 0.055 * hoverFocus
+          : 0.34 + 0.05 * hoverFocus + 0.15 * coreFlash;
+      const orbR = Math.max(3, coreBaseR * orbRadiusMul * coreScale);
+      const orbCoreRatio = curPhase === "singularity" ? 0.295 + 0.055 * singPulse : 0.28;
+      const orbBeta = curPhase === "singularity" ? 2.2 - 0.48 * singRipple : 2.35;
+      const orbPeakAlpha =
+        curPhase === "singularity"
+          ? clamp((isLight ? 0.79 : 0.84) + 0.15 * singRipple + 0.12 * hoverFocus, 0, 1)
+          : clamp((isLight ? 0.88 : 0.96) + 0.1 * hoverFocus + 0.15 * coreFlash, 0, 1);
 
-        const ringRadius = clamp(coreBaseR * 0.072, 4.6, 8.2) * (0.94 + 0.07 * singPulse + 0.08 * hoverFocus);
-        const horizonR = ringRadius * 0.48;
-        const ringG = ctx.createRadialGradient(0, 0, horizonR * 0.45, 0, 0, ringRadius * 1.9);
-        ringG.addColorStop(0, "rgba(0, 0, 0, 0)");
-        ringG.addColorStop(0.28, isLight ? "rgba(186, 110, 12, 0.92)" : "rgba(255, 214, 126, 0.94)");
-        ringG.addColorStop(0.5, isLight ? "rgba(218, 148, 28, 0.66)" : "rgba(240, 156, 44, 0.72)");
-        ringG.addColorStop(1, "rgba(240, 156, 44, 0)");
-        ctx.fillStyle = ringG;
-        ctx.beginPath();
-        ctx.arc(0, 0, ringRadius * 1.9, 0, TAU);
-        ctx.fill();
-
-        ctx.globalCompositeOperation = "source-over";
-        const pupilG = ctx.createRadialGradient(0, 0, 0, 0, 0, horizonR * 1.25);
-        pupilG.addColorStop(0, isLight ? "rgba(26, 20, 12, 0.98)" : "rgba(6, 4, 2, 0.98)");
-        pupilG.addColorStop(0.66, isLight ? "rgba(26, 20, 12, 0.88)" : "rgba(8, 5, 2, 0.88)");
-        pupilG.addColorStop(1, "rgba(6, 4, 2, 0)");
-        ctx.fillStyle = pupilG;
-        ctx.beginPath();
-        ctx.arc(0, 0, horizonR * 1.25, 0, TAU);
-        ctx.fill();
-      } else {
-        const orbRadiusMul = 0.34 + 0.05 * hoverFocus + 0.15 * coreFlash;
-        const orbR = Math.max(3, coreBaseR * orbRadiusMul * coreScale);
-        const orbCoreRatio = 0.28;
-        const orbBeta = 2.35;
-        const orbPeakAlpha = clamp((isLight ? 0.88 : 0.96) + 0.1 * hoverFocus + 0.15 * coreFlash, 0, 1);
-
-        ctx.fillStyle = createMoffat(
-          orbR,
-          orbR * orbCoreRatio,
-          orbBeta,
-          orbPeakAlpha,
-          isLight ? [156, 88, 6] : [255, 252, 238],
-          isLight ? [198, 128, 16] : [255, 218, 124],
-          isLight ? [228, 168, 42] : [236, 158, 44],
-        );
-        ctx.beginPath();
-        ctx.arc(0, 0, orbR, 0, TAU);
-        ctx.fill();
-      }
+      ctx.fillStyle = createMoffat(
+        orbR,
+        orbR * orbCoreRatio,
+        orbBeta,
+        orbPeakAlpha,
+        isLight ? [156, 88, 6] : [255, 252, 238],
+        isLight ? [198, 128, 16] : [255, 218, 124],
+        isLight ? [228, 168, 42] : [236, 158, 44],
+      );
+      ctx.beginPath();
+      ctx.arc(0, 0, orbR, 0, TAU);
+      ctx.fill();
 
       ctx.restore();
     };
@@ -1691,8 +1425,6 @@ export const SetupCanvas = memo(function SetupCanvas({
       height = fitted.height;
       diag = Math.hypot(width, height);
       constellations = createConstellationField(width, height);
-      nebulaDark = themeRef.current === "light" ? null : buildNebulaCanvas(width, height, false);
-      nebulaLight = themeRef.current === "light" ? buildNebulaCanvas(width, height, true) : null;
       coreLayoutCbRef.current?.(computeCoreCenter(width, height).y);
       if (reduceMotion) draw(6, 0);
       else draw(smoothTime, 0, 0);
