@@ -353,7 +353,7 @@ export function OverviewView({ command, onConnections }: { command: CommandContr
                     type="button"
                     disabled={!accepted}
                     onClick={() => add(widget.id)}
-                    className={`cmd-gallery-card ${widget.w === 2 ? "cmd-gallery-card--wide" : ""}`}
+                    className={`cmd-gallery-card ${widget.w === 2 ? "cmd-gallery-card--wide" : ""} ${widget.h === 2 ? "cmd-gallery-card--tall" : ""}`}
                     aria-label={`Add ${widget.name} widget`}
                   >
                     <div className="cmd-widget cmd-gallery-widget pointer-events-none h-full w-full text-left">

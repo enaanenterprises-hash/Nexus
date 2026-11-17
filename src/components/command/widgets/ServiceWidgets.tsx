@@ -282,7 +282,7 @@ function Gate({
 }
 
 /* -------------------------------------------------------------------------- */
-/* Calendar (2×1) — Live status, filter & inline Google Calendar creation      */
+/* Calendar (2×2 full-month Google Calendar → Full-page Calendar when expanded) */
 /* -------------------------------------------------------------------------- */
 
 function toLocalDateTimeInput(date: Date): string {
@@ -290,9 +290,56 @@ function toLocalDateTimeInput(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+function localDayKey(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function addDaysToKey(key: string, days: number): string {
+  const [y, m, d] = key.split("-").map(Number);
+  const dt = new Date(y ?? 2026, (m ?? 1) - 1, (d ?? 1) + days);
+  return localDayKey(dt);
+}
+
+function eventDayKeys(event: CommandItemOf<"command.event">): string[] {
+  const start = new Date(event.data.startsAt);
+  if (Number.isNaN(start.getTime())) return [];
+  const startKey = localDayKey(start);
+  if (!event.data.endsAt) return [startKey];
+  const endMs = Date.parse(event.data.endsAt);
+  if (!Number.isFinite(endMs) || endMs <= start.getTime()) return [startKey];
+  // Subtract 1ms so midnight-ending all-day events stay on their true final day
+  const endDate = new Date(endMs - 1);
+  const endKey = localDayKey(endDate);
+  if (endKey <= startKey) return [startKey];
+  const keys = [startKey];
+  let cursor = startKey;
+  for (let i = 0; i < 31 && cursor < endKey; i++) {
+    cursor = addDaysToKey(cursor, 1);
+    keys.push(cursor);
+  }
+  return keys;
+}
+
+function shortClock(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }).replace(/\s?(AM|PM|a\.m\.|p\.m\.)/i, (m) =>
+    m.toLowerCase().includes("p") ? "p" : "a",
+  );
+}
+
+const WEEKDAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
 export function CalendarWidget({ command, expanded = false, onExpand, onCollapse, onRemove, onConnections, style }: WidgetProps) {
-  const now = useNow(30_000);
-  const [scope, setScope] = useState<"today" | "upcoming">("upcoming");
+  const now = useNow(60_000);
+  const todayKey = useMemo(() => localDayKey(new Date(now)), [now]);
+
+  const [viewMonth, setViewMonth] = useState<{ year: number; month: number }>(() => {
+    const d = new Date();
+    return { year: d.getFullYear(), month: d.getMonth() };
+  });
+  const [selectedDayKey, setSelectedDayKey] = useState<string>(() => localDayKey(new Date()));
   const [openCreate, setOpenCreate] = useState(false);
   const [title, setTitle] = useState("");
   const [startLocal, setStartLocal] = useState(() => {
@@ -305,25 +352,87 @@ export function CalendarWidget({ command, expanded = false, onExpand, onCollapse
 
   const calConn = command.state!.connections.find((c) => c.connectorId === "google-calendar");
 
-  const events = useMemo(() => {
-    const todayKey = dayLabel(new Date(now).toISOString());
-    return command.state!.items
-      .filter(
-        (item): item is CommandItemOf<"command.event"> =>
-          item.kind === "command.event" &&
-          item.data.connectorId === "google-calendar" &&
-          item.data.status !== "cancelled",
-      )
-      .filter((item) => {
-        const startMs = Date.parse(item.data.startsAt);
-        const endMs = item.data.endsAt ? Date.parse(item.data.endsAt) : startMs + 60 * 60_000;
-        if (endMs < now) return false;
-        if (scope === "today") return dayLabel(item.data.startsAt) === todayKey;
-        return true;
-      })
-      .sort((a, b) => Date.parse(a.data.startsAt) - Date.parse(b.data.startsAt))
-      .slice(0, 12);
-  }, [command.state, now, scope]);
+  const allEvents = useMemo(
+    () =>
+      command.state!.items
+        .filter(
+          (item): item is CommandItemOf<"command.event"> =>
+            item.kind === "command.event" &&
+            item.data.connectorId === "google-calendar" &&
+            item.data.status !== "cancelled",
+        )
+        .sort((a, b) => Date.parse(a.data.startsAt) - Date.parse(b.data.startsAt)),
+    [command.state],
+  );
+
+  const eventsByDay = useMemo(() => {
+    const map = new Map<string, CommandItemOf<"command.event">[]>();
+    for (const ev of allEvents) {
+      for (const k of eventDayKeys(ev)) {
+        const list = map.get(k);
+        if (list) list.push(ev);
+        else map.set(k, [ev]);
+      }
+    }
+    return map;
+  }, [allEvents]);
+
+  const monthCells = useMemo(() => {
+    const firstOfMonth = new Date(viewMonth.year, viewMonth.month, 1);
+    const firstWeekday = firstOfMonth.getDay();
+    const daysInMonth = new Date(viewMonth.year, viewMonth.month + 1, 0).getDate();
+    const totalCells = firstWeekday + daysInMonth > 35 ? 42 : 35;
+    return Array.from({ length: totalCells }, (_, idx) => {
+      const date = new Date(viewMonth.year, viewMonth.month, idx - firstWeekday + 1);
+      const key = localDayKey(date);
+      return {
+        key,
+        dayNum: date.getDate(),
+        inMonth: date.getMonth() === viewMonth.month,
+        isToday: key === todayKey,
+        events: eventsByDay.get(key) ?? [],
+      };
+    });
+  }, [viewMonth, todayKey, eventsByDay]);
+
+  const monthLabel = useMemo(
+    () =>
+      new Date(viewMonth.year, viewMonth.month, 1).toLocaleDateString(undefined, {
+        month: "long",
+        year: "numeric",
+      }),
+    [viewMonth],
+  );
+
+  const selectedDayEvents = useMemo(() => eventsByDay.get(selectedDayKey) ?? [], [eventsByDay, selectedDayKey]);
+
+  const selectedDayLabel = useMemo(() => {
+    const [y, m, d] = selectedDayKey.split("-").map(Number);
+    return new Date(y ?? 2026, (m ?? 1) - 1, d ?? 1).toLocaleDateString(undefined, {
+      weekday: "long",
+      month: "short",
+      day: "numeric",
+    });
+  }, [selectedDayKey]);
+
+  function shiftMonth(delta: number) {
+    setViewMonth((prev) => {
+      const d = new Date(prev.year, prev.month + delta, 1);
+      return { year: d.getFullYear(), month: d.getMonth() };
+    });
+  }
+
+  function jumpToToday() {
+    const d = new Date();
+    setViewMonth({ year: d.getFullYear(), month: d.getMonth() });
+    setSelectedDayKey(localDayKey(d));
+  }
+
+  function selectDay(key: string) {
+    setSelectedDayKey(key);
+    const timePart = startLocal.split("T")[1] || "09:00";
+    setStartLocal(`${key}T${timePart}`);
+  }
 
   async function submitEvent(e: FormEvent) {
     e.preventDefault();
@@ -347,29 +456,58 @@ export function CalendarWidget({ command, expanded = false, onExpand, onCollapse
     setOpenCreate(false);
   }
 
+  const monthCount = useMemo(
+    () => monthCells.filter((c) => c.inMonth).reduce((sum, c) => sum + c.events.length, 0),
+    [monthCells],
+  );
+
   const actions =
     calConn && calConn.status !== "needs_auth" ? (
       <>
-        <div className="inline-flex rounded-md border border-border/70 bg-muted/40 p-0.5 text-[10.5px]">
+        <div className="inline-flex items-center gap-0.5 rounded-md border border-border/70 bg-muted/40 p-0.5 text-[11px]">
           <button
             type="button"
-            onClick={() => setScope("today")}
-            className={`rounded px-1.5 py-0.5 font-medium transition-colors ${
-              scope === "today" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
-            }`}
+            onClick={() => shiftMonth(-1)}
+            aria-label="Previous month"
+            className="rounded px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-background/60 hover:text-foreground"
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            onClick={jumpToToday}
+            className="rounded px-2 py-0.5 font-medium text-foreground/90 transition-colors hover:bg-background/60"
           >
             Today
           </button>
           <button
             type="button"
-            onClick={() => setScope("upcoming")}
-            className={`rounded px-1.5 py-0.5 font-medium transition-colors ${
-              scope === "upcoming" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
-            }`}
+            onClick={() => shiftMonth(1)}
+            aria-label="Next month"
+            className="rounded px-1.5 py-0.5 text-muted-foreground transition-colors hover:bg-background/60 hover:text-foreground"
           >
-            All
+            ›
           </button>
         </div>
+
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="size-6 rounded-md text-muted-foreground hover:text-foreground"
+                onClick={() => void command.sync()}
+                disabled={command.syncing}
+                aria-label="Sync Google Calendar"
+              >
+                <RefreshCw className={`size-3 ${command.syncing ? "animate-spin" : ""}`} />
+              </Button>
+            }
+          />
+          <TooltipContent side="bottom">Sync Google Calendar</TooltipContent>
+        </Tooltip>
 
         <Popover open={openCreate} onOpenChange={setOpenCreate}>
           <PopoverTooltipIcon
@@ -379,7 +517,7 @@ export function CalendarWidget({ command, expanded = false, onExpand, onCollapse
           />
           <PopoverContent align="end" sideOffset={6} className="w-72 rounded-xl border border-border bg-popover p-3.5 shadow-xl">
             <form onSubmit={(e) => void submitEvent(e)} className="space-y-2.5">
-              <p className="text-[12.5px] font-medium text-foreground">New calendar event</p>
+              <p className="text-[12.5px] font-medium text-foreground">New Google Calendar event</p>
               <div className="space-y-1">
                 <Label htmlFor="cal-new-title" className="text-[11px] text-muted-foreground">
                   Title
@@ -429,7 +567,7 @@ export function CalendarWidget({ command, expanded = false, onExpand, onCollapse
                 className="w-full border border-[color:var(--land-gold)]/55 bg-[color:var(--land-gold)]/18 text-[color:var(--land-ink)] hover:bg-[color:var(--land-gold)]/28"
                 disabled={command.pending === "calendar:create" || !title.trim()}
               >
-                {command.pending === "calendar:create" ? "Scheduling…" : "Add to Calendar"}
+                {command.pending === "calendar:create" ? "Scheduling…" : "Add to Google Calendar"}
               </Button>
             </form>
           </PopoverContent>
@@ -439,9 +577,9 @@ export function CalendarWidget({ command, expanded = false, onExpand, onCollapse
 
   return (
     <WidgetFrame
-      title="Calendar"
-      icon={<Calendar className="size-3.5" />}
-      hint={events.length ? `${events.length} upcoming` : undefined}
+      title={monthLabel}
+      icon={<Calendar className="size-3.5 text-[color:var(--land-gold)]" />}
+      hint={calConn ? `${monthCount} events` : "Google Calendar"}
       actions={actions}
       expanded={expanded}
       onExpand={onExpand}
@@ -450,64 +588,303 @@ export function CalendarWidget({ command, expanded = false, onExpand, onCollapse
       style={style}
     >
       <Gate connectorId="google-calendar" command={command} onConnections={onConnections}>
-        {events.length === 0 ? (
-          <p className="cmd-empty py-5 text-center">
-            {scope === "today" ? "Clear schedule for the rest of today." : "Nothing upcoming on your calendar."}
-          </p>
-        ) : (
-          <ul className="divide-y divide-border/50">
-            {events.map((event) => {
-              const startMs = Date.parse(event.data.startsAt);
-              const endMs = event.data.endsAt ? Date.parse(event.data.endsAt) : startMs + 60 * 60_000;
-              const live = now >= startMs && now < endMs;
-              return (
-                <li key={event.id} className="flex items-center gap-2.5 py-1.5 text-[12.5px]">
-                  <span
-                    aria-hidden
-                    className={`size-1.5 shrink-0 rounded-full ${
-                      live ? "bg-[color:var(--land-gold)]" : "bg-border"
+        {!expanded ? (
+          /* ——— 2×2 Live Monthly Calendar Board ——— */
+          <div className="flex h-full min-h-0 flex-col gap-1.5">
+            <div className="grid shrink-0 grid-cols-7 gap-1 text-center text-[10px] font-medium tracking-wider text-muted-foreground/80 uppercase">
+              {WEEKDAYS_SHORT.map((day) => (
+                <span key={day}>{day}</span>
+              ))}
+            </div>
+
+            <div
+              className={`grid min-h-0 flex-1 grid-cols-7 gap-1 ${
+                monthCells.length > 35 ? "grid-rows-6" : "grid-rows-5"
+              }`}
+            >
+              {monthCells.map((cell) => {
+                const isSelected = cell.key === selectedDayKey;
+                return (
+                  <button
+                    key={cell.key}
+                    type="button"
+                    data-no-expand="true"
+                    onClick={() => selectDay(cell.key)}
+                    onDoubleClick={() => {
+                      selectDay(cell.key);
+                      onExpand?.();
+                    }}
+                    className={`group/day flex min-h-0 flex-col overflow-hidden rounded-lg border px-1.5 py-1 text-left transition-colors ${
+                      isSelected
+                        ? "border-[color:var(--land-gold)]/65 bg-[color:var(--land-gold)]/12"
+                        : cell.isToday
+                          ? "border-[color:var(--land-gold)]/35 bg-background/45"
+                          : cell.inMonth
+                            ? "border-border/45 bg-background/20 hover:border-border hover:bg-muted/35"
+                            : "border-transparent bg-transparent opacity-40 hover:opacity-70"
                     }`}
-                  />
-                  <span
-                    suppressHydrationWarning
-                    className="cmd-cal-time w-16 shrink-0 text-[11.5px] font-medium tabular-nums"
                   >
-                    {event.data.allDay ? "All day" : clock(event.data.startsAt)}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      {event.data.url ? (
-                        <a
-                          href={event.data.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="truncate font-medium text-foreground hover:text-[color:var(--land-gold)]"
-                        >
-                          {event.title}
-                        </a>
-                      ) : (
-                        <span className="truncate font-medium text-foreground">{event.title}</span>
-                      )}
-                      {live ? (
-                        <Badge
-                          variant="secondary"
-                          className="h-4 border border-[color:var(--land-gold)]/40 bg-[color:var(--land-gold)]/12 px-1.5 text-[9.5px] text-[color:var(--land-gold)]"
-                        >
-                          Now
-                        </Badge>
+                    <div className="flex items-center justify-between gap-1">
+                      <span
+                        suppressHydrationWarning
+                        className={`inline-flex size-4.5 items-center justify-center rounded-full text-[10.5px] leading-none tabular-nums ${
+                          cell.isToday
+                            ? "bg-[color:var(--land-gold)] font-bold text-[#09090b]"
+                            : isSelected
+                              ? "font-semibold text-foreground"
+                              : "font-medium text-foreground/85"
+                        }`}
+                      >
+                        {cell.dayNum}
+                      </span>
+                      {cell.events.length > 2 ? (
+                        <span className="text-[9px] font-medium text-muted-foreground tabular-nums">
+                          +{cell.events.length - 2}
+                        </span>
                       ) : null}
                     </div>
-                    {event.data.location ? (
-                      <p className="truncate text-[11px] text-muted-foreground">{event.data.location}</p>
-                    ) : null}
-                  </div>
-                  <span suppressHydrationWarning className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
-                    {live ? "Live" : dayLabel(event.data.startsAt)}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
+
+                    <div className="mt-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden">
+                      {cell.events.slice(0, 2).map((ev) => {
+                        const isFocus = ev.data.category === "focus";
+                        return (
+                          <div
+                            key={`${cell.key}-${ev.id}`}
+                            className={`flex items-center gap-1 truncate rounded px-1 py-px text-[9.5px] leading-tight ${
+                              isFocus
+                                ? "bg-[color:var(--land-gold)]/18 text-[color:var(--land-gold)]"
+                                : "bg-muted/70 text-foreground/90"
+                            }`}
+                            title={ev.title}
+                          >
+                            {!ev.data.allDay ? (
+                              <span suppressHydrationWarning className="shrink-0 opacity-70 tabular-nums">
+                                {shortClock(ev.data.startsAt)}
+                              </span>
+                            ) : null}
+                            <span className="truncate font-medium">{ev.title}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Selected day compact footer */}
+            <div className="flex shrink-0 items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/35 px-2.5 py-1 text-[11px]">
+              <div className="flex min-w-0 items-center gap-2">
+                <span suppressHydrationWarning className="shrink-0 font-semibold text-foreground">
+                  {selectedDayKey === todayKey ? "Today" : selectedDayLabel}
+                </span>
+                <span className="truncate text-muted-foreground">
+                  {selectedDayEvents.length === 0
+                    ? "No events scheduled"
+                    : selectedDayEvents
+                        .slice(0, 2)
+                        .map((e) => (e.data.allDay ? e.title : `${shortClock(e.data.startsAt)} ${e.title}`))
+                        .join(" · ")}
+                </span>
+              </div>
+              {onExpand ? (
+                <button
+                  type="button"
+                  onClick={onExpand}
+                  className="shrink-0 text-[10.5px] font-medium text-[color:var(--land-gold)] hover:underline"
+                >
+                  Full view →
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : (
+          /* ——— Expanded Full-Page Calendar & Selected Day Inspector ——— */
+          <div className="grid h-full min-h-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_330px]">
+            {/* Full-month Calendar Matrix */}
+            <div className="flex min-h-0 flex-col gap-2">
+              <div className="grid shrink-0 grid-cols-7 gap-1.5 text-center text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+                {WEEKDAYS_SHORT.map((day) => (
+                  <span key={day}>{day}</span>
+                ))}
+              </div>
+
+              <div
+                className={`grid min-h-0 flex-1 grid-cols-7 gap-1.5 ${
+                  monthCells.length > 35 ? "grid-rows-6" : "grid-rows-5"
+                }`}
+              >
+                {monthCells.map((cell) => {
+                  const isSelected = cell.key === selectedDayKey;
+                  return (
+                    <button
+                      key={cell.key}
+                      type="button"
+                      onClick={() => selectDay(cell.key)}
+                      className={`flex min-h-0 flex-col overflow-hidden rounded-xl border p-2 text-left transition-colors ${
+                        isSelected
+                          ? "border-[color:var(--land-gold)]/70 bg-[color:var(--land-gold)]/10"
+                          : cell.isToday
+                            ? "border-[color:var(--land-gold)]/40 bg-background/45"
+                            : cell.inMonth
+                              ? "border-border/55 bg-background/25 hover:border-border hover:bg-muted/30"
+                              : "border-border/25 bg-transparent opacity-40 hover:opacity-75"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <span
+                          suppressHydrationWarning
+                          className={`inline-flex size-6 items-center justify-center rounded-full text-[12px] tabular-nums ${
+                            cell.isToday
+                              ? "bg-[color:var(--land-gold)] font-bold text-[#09090b]"
+                              : isSelected
+                                ? "font-semibold text-foreground"
+                                : "font-medium text-foreground/90"
+                          }`}
+                        >
+                          {cell.dayNum}
+                        </span>
+                        {cell.events.length > 3 ? (
+                          <span className="text-[10px] font-medium text-muted-foreground tabular-nums">
+                            +{cell.events.length - 3}
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <div className="mt-1.5 flex min-h-0 flex-1 flex-col gap-1 overflow-hidden">
+                        {cell.events.slice(0, 3).map((ev) => {
+                          const startMs = Date.parse(ev.data.startsAt);
+                          const endMs = ev.data.endsAt ? Date.parse(ev.data.endsAt) : startMs + 60 * 60_000;
+                          const live = now >= startMs && now < endMs;
+                          return (
+                            <div
+                              key={`${cell.key}-full-${ev.id}`}
+                              className={`flex items-center gap-1.5 truncate rounded-md border px-1.5 py-0.5 text-[11px] leading-tight ${
+                                live
+                                  ? "border-[color:var(--land-gold)]/60 bg-[color:var(--land-gold)]/20 text-foreground"
+                                  : ev.data.category === "focus"
+                                    ? "border-[color:var(--land-gold)]/30 bg-[color:var(--land-gold)]/10 text-[color:var(--land-gold)]"
+                                    : "border-border/40 bg-muted/60 text-foreground/90"
+                              }`}
+                              title={ev.title}
+                            >
+                              {!ev.data.allDay ? (
+                                <span suppressHydrationWarning className="shrink-0 text-[10px] text-muted-foreground tabular-nums">
+                                  {shortClock(ev.data.startsAt)}
+                                </span>
+                              ) : null}
+                              <span className="truncate font-medium">{ev.title}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Right Day Agenda + Inline Event Creator */}
+            <div className="flex min-h-0 flex-col gap-3 rounded-2xl border border-border/60 bg-background/35 p-4">
+              <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-3">
+                <div className="min-w-0">
+                  <p className="text-[10.5px] font-semibold tracking-wider text-muted-foreground uppercase">
+                    {selectedDayKey === todayKey ? "Today's Schedule" : "Selected Day"}
+                  </p>
+                  <h4 suppressHydrationWarning className="mt-0.5 truncate text-[16px] font-semibold text-foreground">
+                    {selectedDayLabel}
+                  </h4>
+                </div>
+                <Badge variant="secondary" className="shrink-0 text-[11px] tabular-nums">
+                  {selectedDayEvents.length} {selectedDayEvents.length === 1 ? "event" : "events"}
+                </Badge>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+                {selectedDayEvents.length === 0 ? (
+                  <p className="py-8 text-center text-[13px] text-muted-foreground">
+                    No Google Calendar events on this day.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {selectedDayEvents.map((event) => {
+                      const startMs = Date.parse(event.data.startsAt);
+                      const endMs = event.data.endsAt ? Date.parse(event.data.endsAt) : startMs + 60 * 60_000;
+                      const live = now >= startMs && now < endMs;
+                      return (
+                        <li
+                          key={`agenda-${event.id}`}
+                          className={`rounded-xl border p-3 ${
+                            live
+                              ? "border-[color:var(--land-gold)]/55 bg-[color:var(--land-gold)]/10"
+                              : "border-border/55 bg-background/35"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <span
+                              suppressHydrationWarning
+                              className="text-[11.5px] font-medium text-[color:var(--land-gold)] tabular-nums"
+                            >
+                              {event.data.allDay
+                                ? "All day"
+                                : `${clock(event.data.startsAt)} – ${clock(new Date(endMs).toISOString())}`}
+                            </span>
+                            {event.data.url ? (
+                              <a
+                                href={event.data.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label="Open in Google Calendar"
+                                className="text-muted-foreground hover:text-foreground"
+                              >
+                                <ExternalLink className="size-3.5" />
+                              </a>
+                            ) : null}
+                          </div>
+                          <p className="mt-1 text-[13.5px] font-medium text-foreground">{event.title}</p>
+                          {event.data.location ? (
+                            <p className="mt-1 flex items-center gap-1 text-[11.5px] text-muted-foreground">
+                              <MapPin className="size-3 shrink-0" />
+                              <span className="truncate">{event.data.location}</span>
+                            </p>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+
+              <form onSubmit={(e) => void submitEvent(e)} className="shrink-0 space-y-2 border-t border-border/50 pt-3">
+                <p className="text-[11.5px] font-medium text-foreground">Quick add to Google Calendar</p>
+                <Input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder={`Add event on ${selectedDayLabel.split(",")[0]}…`}
+                  aria-label="New calendar event title"
+                  className="h-8 rounded-lg text-[12.5px]"
+                />
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    type="datetime-local"
+                    value={startLocal}
+                    onChange={(e) => setStartLocal(e.target.value)}
+                    aria-label="Event start"
+                    className="h-8 flex-1 rounded-lg text-[11.5px]"
+                  />
+                  <Button
+                    type="submit"
+                    size="xs"
+                    disabled={command.pending === "calendar:create" || !title.trim()}
+                    className="h-8 border border-[color:var(--land-gold)]/55 bg-[color:var(--land-gold)]/18 px-3 text-[12px] text-[color:var(--land-ink)] hover:bg-[color:var(--land-gold)]/28"
+                  >
+                    {command.pending === "calendar:create" ? "Saving…" : "Add"}
+                  </Button>
+                </div>
+                {formError ? <p className="text-[11px] text-destructive">{formError}</p> : null}
+              </form>
+            </div>
+          </div>
         )}
       </Gate>
     </WidgetFrame>

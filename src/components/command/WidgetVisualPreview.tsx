@@ -27,21 +27,33 @@ export function WidgetVisualPreview({ id }: { id: string }) {
       );
     case "calendar":
       return (
-        <div className="pt-0.5 text-foreground">
-          <div className="cmd-cal-row" style={{ alignItems: "center" }}>
-            <span className="cmd-cal-time">09:30 AM</span>
-            <span className="min-w-0 flex-1 truncate font-medium text-foreground">Product architecture review</span>
-            <span className="shrink-0 text-[11px] font-medium text-[color:var(--land-gold)]">Now</span>
+        <div className="space-y-1 pt-0.5 text-foreground">
+          <div className="flex items-center justify-between text-[10px] font-medium text-muted-foreground">
+            <span>Month view</span>
+            <span className="text-[color:var(--land-gold)]">Google Calendar</span>
           </div>
-          <div className="cmd-cal-row" style={{ alignItems: "center" }}>
-            <span className="cmd-cal-time">11:30 AM</span>
-            <span className="min-w-0 flex-1 truncate text-foreground/90">Design system &amp; Laniakea sync</span>
-            <span className="shrink-0 text-[11px] text-muted-foreground">Today</span>
-          </div>
-          <div className="cmd-cal-row" style={{ alignItems: "center", borderBottom: "none" }}>
-            <span className="cmd-cal-time">02:00 PM</span>
-            <span className="min-w-0 flex-1 truncate text-foreground/90">Founder 1:1</span>
-            <span className="shrink-0 text-[11px] text-muted-foreground">Today</span>
+          <div className="grid grid-cols-7 gap-1 text-center text-[9px] text-muted-foreground">
+            {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
+              <span key={i}>{d}</span>
+            ))}
+            {Array.from({ length: 14 }, (_, idx) => {
+              const day = idx + 10;
+              const isToday = day === 17;
+              const hasEvent = day === 12 || day === 17 || day === 19 || day === 22;
+              return (
+                <span
+                  key={day}
+                  className={`flex flex-col items-center rounded border py-0.5 text-[9.5px] tabular-nums ${
+                    isToday
+                      ? "border-[color:var(--land-gold)]/55 bg-[color:var(--land-gold)]/15 font-semibold text-foreground"
+                      : "border-border/40 bg-muted/30 text-foreground/80"
+                  }`}
+                >
+                  <span>{day}</span>
+                  {hasEvent ? <span className="mt-0.5 h-1 w-2.5 rounded-full bg-[color:var(--land-gold)]" /> : null}
+                </span>
+              );
+            })}
           </div>
         </div>
       );

@@ -20,7 +20,7 @@ export interface WidgetDef {
 
 export const COMMAND_WIDGETS: readonly WidgetDef[] = [
   { id: "gmail", name: "Gmail", blurb: "Inbox, rich formatting compose, and replies.", w: 2, h: 1, connectorId: "gmail", needsConnection: true },
-  { id: "calendar", name: "Calendar", blurb: "Schedule and quick event creation.", w: 2, h: 1, connectorId: "google-calendar", needsConnection: true },
+  { id: "calendar", name: "Calendar", blurb: "Full 30-day calendar synced with Google Calendar.", w: 2, h: 2, connectorId: "google-calendar", needsConnection: true },
   { id: "weather", name: "Weather", blurb: "Live forecast, wind, rain & hourly view.", w: 1, h: 1, connectorId: "weather", needsConnection: false },
   { id: "tasks", name: "Tasks", blurb: "Check off and add Google Tasks.", w: 1, h: 1, connectorId: "google-tasks", needsConnection: true },
   { id: "crypto", name: "Crypto", blurb: "Live prices, 24h delta, and coin list.", w: 2, h: 1, connectorId: "markets", needsConnection: true },

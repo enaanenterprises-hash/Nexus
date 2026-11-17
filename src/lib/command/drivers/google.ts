@@ -38,9 +38,10 @@ export const googleCalendarDriver: ConnectorDriver = {
     await google(ctx, `${CAL}?maxResults=1`)
   },
   async fetch(ctx) {
-    const start = startOfLocalDay(ctx.now, ctx.timeZone)
-    const end = new Date(start.getTime() + CALENDAR_DAYS * 86_400_000)
-    const params = new URLSearchParams({ timeMin: start.toISOString(), timeMax: end.toISOString(), singleEvents: "true", orderBy: "startTime", maxResults: "250" })
+    const todayStart = startOfLocalDay(ctx.now, ctx.timeZone)
+    const start = new Date(todayStart.getTime() - 35 * 86_400_000)
+    const end = new Date(todayStart.getTime() + 65 * 86_400_000)
+    const params = new URLSearchParams({ timeMin: start.toISOString(), timeMax: end.toISOString(), singleEvents: "true", orderBy: "startTime", maxResults: "500" })
     const { items = [] } = await google<{ items?: GEvent[] }>(ctx, `${CAL}?${params}`)
     return items.map((e): CommandItemInput => {
       const allDay = !e.start.dateTime
