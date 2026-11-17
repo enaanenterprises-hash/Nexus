@@ -151,7 +151,7 @@ export function ReaderView({ doc, mode, savedCopy, highlights, canHighlight, foc
       <iframe
         title={doc.title}
         src={doc.url}
-        className="h-full w-full border-0 bg-white"
+        className="h-full w-full border-0 bg-[#f5f4f0]"
         sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-popups-to-escape-sandbox"
         referrerPolicy="no-referrer"
       />

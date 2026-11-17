@@ -780,14 +780,14 @@ const THEME_OPTIONS: {
   {
     id: "light",
     title: "Gallery Light",
-    note: "Warm paper white",
-    surface: "#f7f6f2",
-    border: "rgba(9, 9, 11, 0.11)",
-    orb: "#b87810",
-    barStrong: "rgba(17, 17, 19, 0.84)",
-    barSoft: "rgba(17, 17, 19, 0.2)",
-    tileBg: "#ffffff",
-    tileBorder: "rgba(9, 9, 11, 0.09)",
+    note: "Soft pearl off-white",
+    surface: "#eceae5",
+    border: "rgba(24, 23, 20, 0.11)",
+    orb: "#d4ae4a",
+    barStrong: "rgba(25, 24, 22, 0.84)",
+    barSoft: "rgba(25, 24, 22, 0.2)",
+    tileBg: "#f5f4f0",
+    tileBorder: "rgba(24, 23, 20, 0.09)",
   },
 ];
 

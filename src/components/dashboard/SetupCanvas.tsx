@@ -27,10 +27,10 @@ const GOLD_BRIGHT: Rgb = [255, 224, 156];
 const GOLD_MID: Rgb = [246, 182, 74];
 const GOLD_DEEP: Rgb = [212, 128, 34];
 
-const GOLD_LIGHT_SPECULAR: Rgb = [142, 78, 4];
-const GOLD_LIGHT_BRIGHT: Rgb = [184, 112, 10];
-const GOLD_LIGHT_MID: Rgb = [212, 144, 22];
-const GOLD_LIGHT_DEEP: Rgb = [232, 174, 52];
+const GOLD_LIGHT_SPECULAR: Rgb = [248, 226, 152];
+const GOLD_LIGHT_BRIGHT: Rgb = [232, 196, 98];
+const GOLD_LIGHT_MID: Rgb = [212, 172, 66];
+const GOLD_LIGHT_DEEP: Rgb = [192, 150, 48];
 
 const CRIMSON_ACCENT: Rgb = [252, 64, 56];
 
@@ -1000,9 +1000,9 @@ export const SetupCanvas = memo(function SetupCanvas({
       ctx.globalAlpha = 1;
       if (isLight) {
         const bgGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, diag * 0.75);
-        bgGrad.addColorStop(0, "#fdfcfa");
-        bgGrad.addColorStop(0.55, "#f7f6f2");
-        bgGrad.addColorStop(1, "#efede7");
+        bgGrad.addColorStop(0, "#f2f1ed");
+        bgGrad.addColorStop(0.55, "#eceae5");
+        bgGrad.addColorStop(1, "#e4e1db");
         ctx.fillStyle = bgGrad;
       } else {
         ctx.fillStyle = "#000000";
@@ -1317,10 +1317,10 @@ export const SetupCanvas = memo(function SetupCanvas({
         ctx.globalCompositeOperation = blendOp;
         const ng = ctx.createRadialGradient(cx, cy, 0, cx, cy, novaR);
         if (isLight) {
-          ng.addColorStop(0, `rgba(255, 250, 236, ${novaAlpha})`);
-          ng.addColorStop(0.42, `rgba(232, 178, 72, ${novaAlpha * 0.72})`);
-          ng.addColorStop(0.82, `rgba(204, 134, 14, ${novaAlpha * 0.25})`);
-          ng.addColorStop(1, "rgba(247, 246, 242, 0)");
+          ng.addColorStop(0, `rgba(255, 246, 214, ${novaAlpha})`);
+          ng.addColorStop(0.42, `rgba(236, 204, 114, ${novaAlpha * 0.72})`);
+          ng.addColorStop(0.82, `rgba(214, 174, 74, ${novaAlpha * 0.25})`);
+          ng.addColorStop(1, "rgba(230, 226, 217, 0)");
         } else {
           ng.addColorStop(0, `rgba(255, 252, 242, ${novaAlpha})`);
           ng.addColorStop(0.4, `rgba(255, 224, 150, ${novaAlpha * 0.78})`);
@@ -1360,9 +1360,9 @@ export const SetupCanvas = memo(function SetupCanvas({
       ctx.globalCompositeOperation = blendOp;
       ctx.globalAlpha = 1;
 
-      const haloOuter: Rgb = isLight ? [174, 102, 6] : [188, 102, 20];
-      const haloMid: Rgb = isLight ? [204, 134, 14] : [242, 172, 56];
-      const haloInner: Rgb = isLight ? [228, 168, 42] : [255, 226, 154];
+      const haloOuter: Rgb = isLight ? [194, 152, 54] : [188, 102, 20];
+      const haloMid: Rgb = isLight ? [224, 188, 92] : [242, 172, 56];
+      const haloInner: Rgb = isLight ? [250, 232, 168] : [255, 226, 154];
 
       // Omit outer atmospheric halo at start ("singularity"), focus tightly while pinched, flare upon blast
       const glowHaloIn =
@@ -1381,7 +1381,7 @@ export const SetupCanvas = memo(function SetupCanvas({
           haloR,
           haloR * 0.22,
           1.85,
-          clamp(((isLight ? 0.36 : 0.42) + 0.25 * coreFlash) * glowHaloIn, 0, 1),
+          clamp(((isLight ? 0.38 : 0.42) + 0.25 * coreFlash) * glowHaloIn, 0, 1),
           haloInner,
           haloMid,
           haloOuter,
@@ -1400,17 +1400,17 @@ export const SetupCanvas = memo(function SetupCanvas({
       const orbBeta = curPhase === "singularity" ? 2.2 - 0.48 * singRipple : 2.35;
       const orbPeakAlpha =
         curPhase === "singularity"
-          ? clamp((isLight ? 0.79 : 0.84) + 0.15 * singRipple + 0.12 * hoverFocus, 0, 1)
-          : clamp((isLight ? 0.88 : 0.96) + 0.1 * hoverFocus + 0.15 * coreFlash, 0, 1);
+          ? clamp((isLight ? 0.82 : 0.84) + 0.15 * singRipple + 0.12 * hoverFocus, 0, 1)
+          : clamp((isLight ? 0.92 : 0.96) + 0.1 * hoverFocus + 0.15 * coreFlash, 0, 1);
 
       ctx.fillStyle = createMoffat(
         orbR,
         orbR * orbCoreRatio,
         orbBeta,
         orbPeakAlpha,
-        isLight ? [156, 88, 6] : [255, 252, 238],
-        isLight ? [198, 128, 16] : [255, 218, 124],
-        isLight ? [228, 168, 42] : [236, 158, 44],
+        isLight ? [252, 240, 190] : [255, 252, 238],
+        isLight ? [238, 206, 116] : [255, 218, 124],
+        isLight ? [216, 176, 78] : [236, 158, 44],
       );
       ctx.beginPath();
       ctx.arc(0, 0, orbR, 0, TAU);

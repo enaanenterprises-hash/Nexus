@@ -81,12 +81,12 @@ const GOLD_MID: Rgb = [246, 182, 74];
 const GOLD_DEEP: Rgb = [212, 128, 34];
 const DORMANT_BRONZE: Rgb = [118, 84, 38];
 
-// Light-mode 24k burnished gold palette: high-chroma champagne -> sovereign 24k gold -> deep imperial bronze-gold
-const GOLD_LIGHT_SPECULAR: Rgb = [142, 78, 4];
-const GOLD_LIGHT_BRIGHT: Rgb = [184, 112, 10];
-const GOLD_LIGHT_MID: Rgb = [212, 144, 22];
-const GOLD_LIGHT_DEEP: Rgb = [232, 174, 52];
-const DORMANT_LIGHT_PLATINUM: Rgb = [158, 150, 138];
+// Light-mode pale 18k champagne light-gold palette: luminous sunlit gold against soft pearl off-white without dark brown mud
+const GOLD_LIGHT_SPECULAR: Rgb = [248, 226, 152];
+const GOLD_LIGHT_BRIGHT: Rgb = [232, 196, 98];
+const GOLD_LIGHT_MID: Rgb = [212, 172, 66];
+const GOLD_LIGHT_DEEP: Rgb = [192, 150, 48];
+const DORMANT_LIGHT_PLATINUM: Rgb = [166, 162, 154];
 
 const CRIMSON_HOT: Rgb = [255, 104, 82];
 const CRIMSON_PURE: Rgb = [252, 48, 44];
@@ -749,20 +749,20 @@ function buildPhotonSprite(size: number, rgb: Rgb): HTMLCanvasElement | null {
 function createStageSpriteAtlas(): StageSpriteAtlas {
   const darkFieldOuter: Rgb = [198, 116, 28];
   const darkFieldCallOuter = mixRgbTuple(darkFieldOuter, [238, 48, 42], 0.35);
-  const lightFieldOuter: Rgb = [184, 112, 10];
+  const lightFieldOuter: Rgb = [208, 168, 68];
   return {
     fieldDark: buildMoffatSprite(256, 0.24, 1.85, [255, 224, 152], [242, 174, 62], darkFieldOuter),
     fieldCallDark: buildMoffatSprite(256, 0.24, 1.85, [255, 224, 152], [242, 174, 62], darkFieldCallOuter),
-    fieldLight: buildMoffatSprite(256, 0.24, 1.85, [226, 166, 38], [208, 138, 18], lightFieldOuter),
+    fieldLight: buildMoffatSprite(256, 0.24, 1.85, [248, 228, 156], [232, 196, 102], lightFieldOuter),
     anaDark: buildMoffatSprite(256, 0.22, 2.2, [255, 242, 206], [248, 192, 86], darkFieldOuter),
-    anaLight: buildMoffatSprite(256, 0.22, 2.2, [196, 124, 12], [218, 152, 28], lightFieldOuter),
+    anaLight: buildMoffatSprite(256, 0.22, 2.2, [250, 232, 168], [234, 200, 108], lightFieldOuter),
     heartDark: buildMoffatSprite(256, 0.2, 2.45, [255, 248, 228], [252, 212, 124], [236, 162, 52]),
-    heartLight: buildMoffatSprite(256, 0.2, 2.45, [156, 88, 6], [198, 128, 16], [228, 168, 42]),
+    heartLight: buildMoffatSprite(256, 0.2, 2.45, [252, 240, 190], [238, 206, 116], [216, 176, 78]),
     photonGoldDark: buildPhotonSprite(24, GOLD_CORE),
     photonHorizonGoldDark: buildPhotonSprite(24, GOLD_BRIGHT),
     photonCrimsonDark: buildPhotonSprite(24, CRIMSON_PURE),
-    photonGoldLight: buildPhotonSprite(24, GOLD_LIGHT_BRIGHT),
-    photonHorizonGoldLight: buildPhotonSprite(24, GOLD_LIGHT_MID),
+    photonGoldLight: buildPhotonSprite(24, GOLD_LIGHT_SPECULAR),
+    photonHorizonGoldLight: buildPhotonSprite(24, GOLD_LIGHT_BRIGHT),
     photonCrimsonLight: buildPhotonSprite(24, CRIMSON_LIGHT_PURE),
   };
 }
@@ -819,10 +819,10 @@ function renderOpticalSingularityCore(
   const involuteCount = 36;
   const involuteReach = R * 0.22 * breathe * introEase;
   if (!invCache.grad || invCache.isLight !== isLight || Math.abs(invCache.reach - involuteReach) > 2) {
-    const invColor = isLight ? "184, 112, 10" : "255, 228, 162";
+    const invColor = isLight ? "220, 182, 78" : "255, 228, 162";
     const invGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.max(1, involuteReach));
-    invGrad.addColorStop(0, `rgba(${invColor}, ${isLight ? 0.28 : 0.22})`);
-    invGrad.addColorStop(0.45, `rgba(${invColor}, ${isLight ? 0.11 : 0.08})`);
+    invGrad.addColorStop(0, `rgba(${invColor}, ${isLight ? 0.32 : 0.22})`);
+    invGrad.addColorStop(0.45, `rgba(${invColor}, ${isLight ? 0.13 : 0.08})`);
     invGrad.addColorStop(1, `rgba(${invColor}, 0)`);
     invCache.grad = invGrad;
     invCache.reach = involuteReach;
@@ -1065,15 +1065,15 @@ export const NeuralStage = memo(function NeuralStage({
       const L = layout;
       const { width, height, core, radius: R, scale: S } = L;
 
-      // ——— 1. Pure Pitch-Black Background (or Warm Gallery Alabaster in Light Mode) ———
+      // ——— 1. Pure Pitch-Black Background (or Soft Alabaster Off-White in Light Mode) ———
       ctx.globalCompositeOperation = "source-over";
       ctx.globalAlpha = 1;
       if (isLight) {
         if (!cachedBgGrad || cachedBgW !== width || cachedBgH !== height) {
           const bgGrad = ctx.createRadialGradient(core.x, core.y, 0, core.x, core.y, Math.hypot(width, height) * 0.75);
-          bgGrad.addColorStop(0, "#fdfcfa");
-          bgGrad.addColorStop(0.55, "#f7f6f2");
-          bgGrad.addColorStop(1, "#efede7");
+          bgGrad.addColorStop(0, "#f2f1ed");
+          bgGrad.addColorStop(0.55, "#eceae5");
+          bgGrad.addColorStop(1, "#e4e1db");
           cachedBgGrad = bgGrad;
           cachedBgW = width;
           cachedBgH = height;
@@ -1279,7 +1279,7 @@ export const NeuralStage = memo(function NeuralStage({
       const crimsonPure = isLight ? CRIMSON_LIGHT_PURE : CRIMSON_PURE;
       const crimsonDeep = isLight ? CRIMSON_LIGHT_DEEP : CRIMSON_DEEP;
       const blendOp: GlobalCompositeOperation = isLight ? "source-over" : "lighter";
-      const alphaScale = isLight ? 1.65 : 1.0;
+      const alphaScale = isLight ? 1.85 : 1.0;
 
       ctx.globalCompositeOperation = blendOp;
       ctx.globalAlpha = fromExplosion ? 1 : Math.min(1, intro * 2.4);
@@ -1528,19 +1528,19 @@ export const NeuralStage = memo(function NeuralStage({
             traceSmoothPolylineScratch(ctx, scratchXs, scratchYs, CURVE_STEPS + 1);
           }
 
-          ctx.lineWidth = layer.width * (0.85 + 0.45 * level + 0.14 * waveStrength) * (isLight ? 1.18 : 1);
+          ctx.lineWidth = layer.width * (0.85 + 0.45 * level + 0.14 * waveStrength) * (isLight ? 1.24 : 1);
           ctx.strokeStyle = armGrad;
           ctx.stroke();
 
-          // In Light Mode, add a fine sunlit 24k champagne-gold lustre thread along the inner core strands of connected arms
+          // In Light Mode, add a fine sunlit champagne-gold lustre thread along the inner core strands of connected arms
           if (isLight && isConnected && layerIdx === 3) {
             const lustreGrad = ctx.createLinearGradient(core.x, core.y, spine.tipPt.x, spine.tipPt.y);
-            lustreGrad.addColorStop(0, "rgba(255, 226, 138, 0.85)");
-            lustreGrad.addColorStop(0.34, "rgba(244, 192, 72, 0.72)");
-            lustreGrad.addColorStop(0.58, `rgba(232, 168, 42, ${lerp(0.14, 0.42, steadyBlend)})`);
-            lustreGrad.addColorStop(0.76, `rgba(232, 168, 42, ${lerp(0, 0.16, steadyBlend)})`);
-            lustreGrad.addColorStop(1, "rgba(232, 168, 42, 0)");
-            ctx.lineWidth = 0.32;
+            lustreGrad.addColorStop(0, "rgba(255, 240, 184, 0.92)");
+            lustreGrad.addColorStop(0.34, "rgba(242, 210, 118, 0.78)");
+            lustreGrad.addColorStop(0.58, `rgba(222, 184, 82, ${lerp(0.18, 0.48, steadyBlend)})`);
+            lustreGrad.addColorStop(0.76, `rgba(210, 170, 68, ${lerp(0, 0.2, steadyBlend)})`);
+            lustreGrad.addColorStop(1, "rgba(210, 170, 68, 0)");
+            ctx.lineWidth = 0.36;
             ctx.strokeStyle = lustreGrad;
             ctx.stroke();
           }
