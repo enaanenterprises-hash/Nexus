@@ -172,14 +172,14 @@ export async function updateItemData(userId: string, item: CommandItem): Promise
   return toItem(row!)
 }
 
-/** Items around today: timed within [-7 days, +31 days] (the 30-day calendar), plus untimed ones. */
+/** Items around today: timed within [-7 days, +31 days] (the 30-day calendar), plus inbox messages, signals, shipments, and tasks. */
 export async function listRecentItems(userId: string, now = new Date()): Promise<CommandItem[]> {
   const sql = await db()
   const from = new Date(now.getTime() - 7 * 86_400_000)
   const to = new Date(now.getTime() + 31 * 86_400_000)
   const rows = await sql`
     SELECT * FROM command_item WHERE "userId" = ${userId}
-      AND ("occursAt" IS NULL OR "occursAt" BETWEEN ${from.toISOString()}::text::timestamptz AND ${to.toISOString()}::text::timestamptz OR "kind" IN ('command.signal', 'command.shipment', 'command.task'))
+      AND ("occursAt" IS NULL OR "occursAt" BETWEEN ${from.toISOString()}::text::timestamptz AND ${to.toISOString()}::text::timestamptz OR "kind" IN ('command.signal', 'command.shipment', 'command.task', 'command.message'))
     ORDER BY "occursAt" NULLS LAST LIMIT 1000`
   return rows.map(toItem)
 }

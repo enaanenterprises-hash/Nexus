@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -58,11 +58,41 @@ export function OverviewView({ command, onConnections }: { command: CommandContr
   const ids = useMemo(() => overviewIds ?? [], [overviewIds]);
   const placed = useMemo(() => placeWidgets(ids), [ids]);
   const [open, setOpen] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [pendingMailId, setPendingMailId] = useState<string | null>(null);
+
   const pageFull = useMemo(
     () => COMMAND_WIDGETS.every((widget) => !overviewAccepts(ids, widget.id)),
     [ids],
   );
   const openCell = useMemo(() => findFirstOpenCell(placed), [placed]);
+  const expandedWidget = useMemo(
+    () => (expandedId ? placed.find((w) => w.id === expandedId) ?? null : null),
+    [expandedId, placed],
+  );
+
+  const collapse = useCallback(() => {
+    setExpandedId(null);
+    setPendingMailId(null);
+  }, []);
+
+  useEffect(() => {
+    if (!expandedWidget) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      if (
+        document.querySelector(
+          '[data-slot="dialog-content"][data-open], [data-slot="alert-dialog-content"][data-open], [data-slot="popover-content"][data-open]',
+        )
+      ) {
+        return;
+      }
+      event.preventDefault();
+      collapse();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [expandedWidget, collapse]);
 
   function add(id: string) {
     if (!overviewAccepts(ids, id)) return;
@@ -71,55 +101,80 @@ export function OverviewView({ command, onConnections }: { command: CommandContr
   }
 
   function remove(id: string) {
+    if (expandedId === id) collapse();
     void command.setOverview(ids.filter((widget) => widget !== id));
   }
 
   return (
     <div className="cmd-overview-page">
-      <div className="cmd-board">
-        {placed.map((widget) => (
+      {expandedWidget ? (
+        <div className="cmd-expanded-stage">
           <WidgetSlot
-            key={widget.id}
-            id={widget.id}
-            style={{ gridColumn: `${widget.x + 1} / span ${widget.w}`, gridRow: `${widget.y + 1} / span ${widget.h}` }}
+            key={`expanded-${expandedWidget.id}`}
+            id={expandedWidget.id}
             command={command}
-            onRemove={() => remove(widget.id)}
+            expanded
+            initialMailId={expandedWidget.id === "gmail" ? pendingMailId : null}
+            onCollapse={collapse}
+            onRemove={() => remove(expandedWidget.id)}
             onConnections={onConnections}
           />
-        ))}
+        </div>
+      ) : (
+        <div className="cmd-board">
+          {placed.map((widget) => (
+            <WidgetSlot
+              key={widget.id}
+              id={widget.id}
+              style={{ gridColumn: `${widget.x + 1} / span ${widget.w}`, gridRow: `${widget.y + 1} / span ${widget.h}` }}
+              command={command}
+              expanded={false}
+              onExpand={() => {
+                setPendingMailId(null);
+                setExpandedId(widget.id);
+              }}
+              onOpenMessageFromPreview={(msgId) => {
+                setPendingMailId(msgId);
+                setExpandedId("gmail");
+              }}
+              onRemove={() => remove(widget.id)}
+              onConnections={onConnections}
+            />
+          ))}
 
-        {!pageFull && openCell ? (
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            disabled={command.pending === "overview"}
-            style={{
-              gridColumn: `${openCell.x + 1} / span 1`,
-              gridRow: `${openCell.y + 1} / span 1`,
-            }}
-            className="cmd-add-tile group"
-            aria-label="Add widget"
-          >
-            <div className="cmd-add-tile-card">
-              <div className="cmd-add-tile-chrome" aria-hidden>
-                <span className="cmd-add-tile-dot" />
-                <span className="cmd-add-tile-bar" />
+          {!pageFull && openCell ? (
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              disabled={command.pending === "overview"}
+              style={{
+                gridColumn: `${openCell.x + 1} / span 1`,
+                gridRow: `${openCell.y + 1} / span 1`,
+              }}
+              className="cmd-add-tile group"
+              aria-label="Add widget"
+            >
+              <div className="cmd-add-tile-card">
+                <div className="cmd-add-tile-chrome" aria-hidden>
+                  <span className="cmd-add-tile-dot" />
+                  <span className="cmd-add-tile-bar" />
+                </div>
+                <div className="cmd-add-tile-body">
+                  <span className="cmd-add-tile-plus">
+                    <Plus className="size-5" />
+                  </span>
+                  <span className="cmd-add-tile-title">Add widget</span>
+                  <span className="cmd-add-tile-sub">Browse visual widgets</span>
+                </div>
+                <div className="cmd-add-tile-ghost" aria-hidden>
+                  <span />
+                  <span />
+                </div>
               </div>
-              <div className="cmd-add-tile-body">
-                <span className="cmd-add-tile-plus">
-                  <Plus className="size-5" />
-                </span>
-                <span className="cmd-add-tile-title">Add widget</span>
-                <span className="cmd-add-tile-sub">Browse visual widgets</span>
-              </div>
-              <div className="cmd-add-tile-ghost" aria-hidden>
-                <span />
-                <span />
-              </div>
-            </div>
-          </button>
-        ) : null}
-      </div>
+            </button>
+          ) : null}
+        </div>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="gap-0 overflow-hidden border border-border bg-popover p-0 text-popover-foreground shadow-2xl ring-0 sm:max-w-[920px]">
@@ -176,23 +231,52 @@ function WidgetSlot({
   id,
   style,
   command,
+  expanded,
+  initialMailId = null,
+  onExpand,
+  onCollapse,
+  onOpenMessageFromPreview,
   onRemove,
   onConnections,
 }: {
   id: string;
-  style: CSSProperties;
+  style?: CSSProperties;
   command: CommandController;
+  expanded: boolean;
+  initialMailId?: string | null;
+  onExpand?: () => void;
+  onCollapse?: () => void;
+  onOpenMessageFromPreview?: (messageId: string) => void;
   onRemove: () => void;
   onConnections: () => void;
 }) {
-  const props = { command, onRemove, onConnections, style };
+  const props = { command, expanded, onExpand, onCollapse, onRemove, onConnections, style };
   switch (id) {
     case "gmail":
-      return <GmailWidget command={command} onRemove={onRemove} style={style} />;
+      return (
+        <GmailWidget
+          command={command}
+          expanded={expanded}
+          initialMessageId={initialMailId}
+          onOpenMessageFromPreview={onOpenMessageFromPreview}
+          onExpand={onExpand}
+          onCollapse={onCollapse}
+          onRemove={onRemove}
+          style={style}
+        />
+      );
     case "calendar":
       return <CalendarWidget {...props} />;
     case "weather":
-      return <WeatherWidget onRemove={onRemove} style={style} />;
+      return (
+        <WeatherWidget
+          expanded={expanded}
+          onExpand={onExpand}
+          onCollapse={onCollapse}
+          onRemove={onRemove}
+          style={style}
+        />
+      );
     case "tasks":
       return <TasksWidget {...props} />;
     case "crypto":

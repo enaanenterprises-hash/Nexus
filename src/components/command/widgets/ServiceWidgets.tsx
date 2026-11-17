@@ -106,9 +106,12 @@ function PopoverTooltipIcon({
 
 type WidgetProps = {
   command: CommandController;
+  expanded?: boolean;
+  onExpand?: () => void;
+  onCollapse?: () => void;
   onRemove: () => void;
   onConnections: () => void;
-  style: CSSProperties;
+  style?: CSSProperties;
 };
 
 type TempUnit = "C" | "F";
@@ -176,6 +179,8 @@ function Gate({
   const scope = scopeOf(connectorId);
   if (!connection) {
     const google = manifest?.auth.type === "oauth" && manifest.auth.provider === "google";
+    const availability = command.state!.availability?.[connectorId];
+    const unconfigured = availability && !availability.connectable;
     const quick =
       manifest?.auth.type === "none" &&
       !(manifest.settings ?? []).some((s) => s.type === "location" || s.key === "urls");
@@ -183,15 +188,29 @@ function Gate({
       <div className="cmd-widget-empty">
         <p>{manifest?.name ?? "This service"} is not connected yet.</p>
         {scope ? <p className="cmd-scope">{scope}</p> : null}
+        {unconfigured ? (
+          <p className="text-[11.5px] text-muted-foreground">
+            Server needs:{" "}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
+              {availability.missing.join(", ")}
+            </code>
+          </p>
+        ) : null}
         {google ? (
-          <Button
-            type="button"
-            size="sm"
-            className="w-fit border border-[color:var(--land-gold)]/55 bg-[color:var(--land-gold)]/18 text-[color:var(--land-ink)] hover:bg-[color:var(--land-gold)]/28"
-            onClick={() => void connectGoogleService(connectorId)}
-          >
-            Connect {manifest?.name}
-          </Button>
+          unconfigured ? (
+            <Button type="button" size="sm" variant="outline" className="w-fit" onClick={onConnections}>
+              View setup in Connections
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              className="w-fit border border-[color:var(--land-gold)]/55 bg-[color:var(--land-gold)]/18 text-[color:var(--land-ink)] hover:bg-[color:var(--land-gold)]/28"
+              onClick={() => void connectGoogleService(connectorId)}
+            >
+              Connect {manifest?.name}
+            </Button>
+          )
         ) : quick ? (
           <Button
             type="button"
@@ -259,7 +278,7 @@ function toLocalDateTimeInput(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-export function CalendarWidget({ command, onRemove, onConnections, style }: WidgetProps) {
+export function CalendarWidget({ command, expanded = false, onExpand, onCollapse, onRemove, onConnections, style }: WidgetProps) {
   const now = useNow(30_000);
   const [scope, setScope] = useState<"today" | "upcoming">("upcoming");
   const [openCreate, setOpenCreate] = useState(false);
@@ -412,6 +431,9 @@ export function CalendarWidget({ command, onRemove, onConnections, style }: Widg
       icon={<Calendar className="size-3.5" />}
       hint={events.length ? `${events.length} upcoming` : undefined}
       actions={actions}
+      expanded={expanded}
+      onExpand={onExpand}
+      onCollapse={onCollapse}
       onRemove={onRemove}
       style={style}
     >
@@ -434,7 +456,10 @@ export function CalendarWidget({ command, onRemove, onConnections, style }: Widg
                       live ? "bg-[color:var(--land-gold)]" : "bg-border"
                     }`}
                   />
-                  <span className="cmd-cal-time w-16 shrink-0 text-[11.5px] font-medium tabular-nums">
+                  <span
+                    suppressHydrationWarning
+                    className="cmd-cal-time w-16 shrink-0 text-[11.5px] font-medium tabular-nums"
+                  >
                     {event.data.allDay ? "All day" : clock(event.data.startsAt)}
                   </span>
                   <div className="min-w-0 flex-1">
@@ -464,7 +489,7 @@ export function CalendarWidget({ command, onRemove, onConnections, style }: Widg
                       <p className="truncate text-[11px] text-muted-foreground">{event.data.location}</p>
                     ) : null}
                   </div>
-                  <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+                  <span suppressHydrationWarning className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
                     {live ? "Live" : dayLabel(event.data.startsAt)}
                   </span>
                 </li>
@@ -493,7 +518,19 @@ function WeatherIcon({ condition, className = "size-3.5" }: { condition: string;
   return <Sun className={className} />;
 }
 
-export function WeatherWidget({ onRemove, style }: { onRemove: () => void; style: CSSProperties }) {
+export function WeatherWidget({
+  expanded = false,
+  onExpand,
+  onCollapse,
+  onRemove,
+  style,
+}: {
+  expanded?: boolean;
+  onExpand?: () => void;
+  onCollapse?: () => void;
+  onRemove: () => void;
+  style?: CSSProperties;
+}) {
   const { unit, toggle } = useTempUnit();
   const [weather, setWeather] = useState<LiveWeather | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
@@ -561,6 +598,9 @@ export function WeatherWidget({ onRemove, style }: { onRemove: () => void; style
       icon={<WeatherIcon condition={condition} />}
       hint={weather ? String(details?.["location"] ?? "") : undefined}
       actions={actions}
+      expanded={expanded}
+      onExpand={onExpand}
+      onCollapse={onCollapse}
       onRemove={onRemove}
       style={style}
     >
@@ -629,7 +669,7 @@ export function WeatherWidget({ onRemove, style }: { onRemove: () => void; style
 /* Tasks (1×1) — Quick add + real check/uncheck synced to Google Tasks         */
 /* -------------------------------------------------------------------------- */
 
-export function TasksWidget({ command, onRemove, onConnections, style }: WidgetProps) {
+export function TasksWidget({ command, expanded = false, onExpand, onCollapse, onRemove, onConnections, style }: WidgetProps) {
   const [view, setView] = useState<"open" | "done">("open");
   const [newTitle, setNewTitle] = useState("");
   const [taskError, setTaskError] = useState<string | null>(null);
@@ -698,6 +738,9 @@ export function TasksWidget({ command, onRemove, onConnections, style }: WidgetP
       title="Tasks"
       icon={<ListTodo className="size-3.5" />}
       actions={actions}
+      expanded={expanded}
+      onExpand={onExpand}
+      onCollapse={onCollapse}
       onRemove={onRemove}
       style={style}
     >
@@ -780,7 +823,7 @@ export function TasksWidget({ command, onRemove, onConnections, style }: WidgetP
 /* Crypto (2×1) — Multi-asset grid + inline coin customizer                   */
 /* -------------------------------------------------------------------------- */
 
-export function CryptoWidget({ command, onRemove, onConnections, style }: WidgetProps) {
+export function CryptoWidget({ command, expanded = false, onExpand, onCollapse, onRemove, onConnections, style }: WidgetProps) {
   const conn = command.state!.connections.find((c) => c.connectorId === "markets");
   const coins = command.state!.items.filter(
     (item): item is CommandItemOf<"command.signal"> =>
@@ -839,6 +882,9 @@ export function CryptoWidget({ command, onRemove, onConnections, style }: Widget
       icon={<Coins className="size-3.5" />}
       hint="24h"
       actions={actions}
+      expanded={expanded}
+      onExpand={onExpand}
+      onCollapse={onCollapse}
       onRemove={onRemove}
       style={style}
     >
@@ -927,7 +973,7 @@ function MoonDisc({ illumination, phase }: { illumination: number; phase: string
   );
 }
 
-export function SkyWidget({ command, onRemove, onConnections, style }: WidgetProps) {
+export function SkyWidget({ command, expanded = false, onExpand, onCollapse, onRemove, onConnections, style }: WidgetProps) {
   const sky = command.state!.items.find(
     (item): item is CommandItemOf<"command.signal"> =>
       item.kind === "command.signal" && item.data.metric === "sky.tonight",
@@ -942,6 +988,9 @@ export function SkyWidget({ command, onRemove, onConnections, style }: WidgetPro
       title="Night sky"
       icon={<Moon className="size-3.5" />}
       hint={sky ? `${score}/100` : undefined}
+      expanded={expanded}
+      onExpand={onExpand}
+      onCollapse={onCollapse}
       onRemove={onRemove}
       style={style}
     >
@@ -995,7 +1044,7 @@ export function SkyWidget({ command, onRemove, onConnections, style }: WidgetPro
 /* Formula 1 (2×1) — Next session countdown + weekend session schedule         */
 /* -------------------------------------------------------------------------- */
 
-export function F1Widget({ command, onRemove, onConnections, style }: WidgetProps) {
+export function F1Widget({ command, expanded = false, onExpand, onCollapse, onRemove, onConnections, style }: WidgetProps) {
   const now = useNow(60_000);
   const sessions = command.state!.items
     .filter((item): item is CommandItemOf<"command.event"> => item.kind === "command.event" && item.data.connectorId === "f1")
@@ -1009,6 +1058,9 @@ export function F1Widget({ command, onRemove, onConnections, style }: WidgetProp
       title="Formula 1"
       icon={<Flag className="size-3.5" />}
       hint={place ?? undefined}
+      expanded={expanded}
+      onExpand={onExpand}
+      onCollapse={onCollapse}
       onRemove={onRemove}
       style={style}
     >
@@ -1074,7 +1126,7 @@ export function F1Widget({ command, onRemove, onConnections, style }: WidgetProp
 /* Uptime (2×1) — Status codes, latency bars + inline URL configuration        */
 /* -------------------------------------------------------------------------- */
 
-export function UptimeWidget({ command, onRemove, onConnections, style }: WidgetProps) {
+export function UptimeWidget({ command, expanded = false, onExpand, onCollapse, onRemove, onConnections, style }: WidgetProps) {
   const conn = command.state!.connections.find((c) => c.connectorId === "uptime");
   const sites = command.state!.items.filter(
     (item): item is CommandItemOf<"command.signal"> =>
@@ -1145,6 +1197,9 @@ export function UptimeWidget({ command, onRemove, onConnections, style }: Widget
       title="Uptime"
       icon={<Activity className="size-3.5" />}
       actions={actions}
+      expanded={expanded}
+      onExpand={onExpand}
+      onCollapse={onCollapse}
       onRemove={onRemove}
       style={style}
     >
@@ -1212,7 +1267,7 @@ export function UptimeWidget({ command, onRemove, onConnections, style }: Widget
 /* GitHub (2×1) — Clickable links + category filters                           */
 /* -------------------------------------------------------------------------- */
 
-export function GitHubWidget({ command, onRemove, onConnections, style }: WidgetProps) {
+export function GitHubWidget({ command, expanded = false, onExpand, onCollapse, onRemove, onConnections, style }: WidgetProps) {
   const [filter, setFilter] = useState<"all" | "reviews" | "issues" | "pushes">("all");
   const allItems = useMemo(
     () => command.state!.items.filter((item) => item.data.connectorId === "github"),
@@ -1261,6 +1316,9 @@ export function GitHubWidget({ command, onRemove, onConnections, style }: Widget
       title="GitHub"
       icon={<GitBranch className="size-3.5" />}
       actions={actions}
+      expanded={expanded}
+      onExpand={onExpand}
+      onCollapse={onCollapse}
       onRemove={onRemove}
       style={style}
     >
@@ -1320,7 +1378,7 @@ export function GitHubWidget({ command, onRemove, onConnections, style }: Widget
 /* Strava (1×1) — Rich telemetry + 7d distance summary                        */
 /* -------------------------------------------------------------------------- */
 
-export function StravaWidget({ command, onRemove, onConnections, style }: WidgetProps) {
+export function StravaWidget({ command, expanded = false, onExpand, onCollapse, onRemove, onConnections, style }: WidgetProps) {
   const activities = command.state!.items
     .filter(
       (item): item is CommandItemOf<"command.activity"> =>
@@ -1340,6 +1398,9 @@ export function StravaWidget({ command, onRemove, onConnections, style }: Widget
       title="Strava"
       icon={<Footprints className="size-3.5" />}
       hint={activities.length ? `7d · ${weekKm.toFixed(1)} km` : undefined}
+      expanded={expanded}
+      onExpand={onExpand}
+      onCollapse={onCollapse}
       onRemove={onRemove}
       style={style}
     >
@@ -1408,7 +1469,7 @@ export function StravaWidget({ command, onRemove, onConnections, style }: Widget
 /* Vercel (1×1) — Clickable deployments, commit ref & status                   */
 /* -------------------------------------------------------------------------- */
 
-export function VercelWidget({ command, onRemove, onConnections, style }: WidgetProps) {
+export function VercelWidget({ command, expanded = false, onExpand, onCollapse, onRemove, onConnections, style }: WidgetProps) {
   const now = useNow(60_000);
   const deploys = command.state!.items
     .filter(
@@ -1422,6 +1483,9 @@ export function VercelWidget({ command, onRemove, onConnections, style }: Widget
       title="Vercel"
       icon={<Triangle className="size-3 fill-current" />}
       hint={deploys.length ? `${deploys.length} recent` : undefined}
+      expanded={expanded}
+      onExpand={onExpand}
+      onCollapse={onCollapse}
       onRemove={onRemove}
       style={style}
     >

@@ -387,7 +387,7 @@ export function Dashboard({
       if (event.key !== "Escape" || event.defaultPrevented) return;
       if (
         document.querySelector(
-          '[data-slot="dialog-content"][data-open], [data-slot="alert-dialog-content"][data-open], [data-slot="sheet-content"][data-open], [data-slot="dropdown-menu-content"][data-open], [data-slot="popover-content"][data-open], [data-slot="select-content"][data-open]',
+          '[data-cmd-expanded="true"], [data-slot="dialog-content"][data-open], [data-slot="alert-dialog-content"][data-open], [data-slot="sheet-content"][data-open], [data-slot="dropdown-menu-content"][data-open], [data-slot="popover-content"][data-open], [data-slot="select-content"][data-open]',
         )
       ) {
         return;

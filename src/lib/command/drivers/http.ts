@@ -3,6 +3,24 @@ import { DriverError } from "./types"
 
 const TIMEOUT_MS = 10_000
 
+function extractUpstreamError(raw: string): string {
+  if (!raw.trim()) return ""
+  try {
+    const parsed = JSON.parse(raw) as {
+      error?: string | { message?: string; status?: string }
+      error_description?: string
+      message?: string
+    }
+    if (typeof parsed.error === "object" && parsed.error?.message) return parsed.error.message
+    if (typeof parsed.error_description === "string") return parsed.error_description
+    if (typeof parsed.message === "string") return parsed.message
+    if (typeof parsed.error === "string") return parsed.error
+  } catch {
+    // Plain text upstream error
+  }
+  return ""
+}
+
 /** JSON request to a fixed, known API host. 401/403 become `auth` errors the user can fix by reconnecting. */
 export async function apiJson<T>(url: string, init: RequestInit & { label: string }): Promise<T> {
   const { label, ...rest } = init
@@ -15,10 +33,17 @@ export async function apiJson<T>(url: string, init: RequestInit & { label: strin
   }
   if (response.status === 401 || response.status === 403) {
     const detail = await response.text().catch(() => "")
-    throw new DriverError(`${label} rejected the credentials (${response.status}). Reconnect it.${detail.includes("rate limit") ? " (rate limited)" : ""}`, "auth")
+    const reason = extractUpstreamError(detail)
+    const cleanReason = reason ? ` (${reason.slice(0, 180)})` : ""
+    if (/rateLimitExceeded|userRateLimitExceeded|quota/i.test(detail)) {
+      throw new DriverError(`${label} is temporarily rate-limiting requests. Try again in a moment.`, "upstream")
+    }
+    throw new DriverError(`${label} rejected the credentials (${response.status})${cleanReason}. Reconnect it.`, "auth")
   }
   if (!response.ok) {
-    throw new DriverError(`${label} answered ${response.status}.`, "upstream")
+    const detail = await response.text().catch(() => "")
+    const reason = extractUpstreamError(detail)
+    throw new DriverError(`${label} answered ${response.status}${reason ? `: ${reason.slice(0, 160)}` : "."}`, "upstream")
   }
   if (response.status === 204) return undefined as T
   return (await response.json()) as T

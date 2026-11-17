@@ -2,7 +2,7 @@ import "server-only"
 import { cookies } from "next/headers"
 import { CONNECTOR_CATALOG } from "@/lib/connectors/catalog"
 import { credentialsFromTokens } from "./drivers/oauth"
-import { listConnections, readCredentials, saveConnection } from "./store"
+import { listConnections, markConnection, readCredentials, saveConnection } from "./store"
 
 export const GOOGLE_PENDING_COOKIE = "nexus_command_google"
 
@@ -31,7 +31,18 @@ export async function storeGoogleGrant(userId: string, account: GoogleAccount) {
   for (const m of GOOGLE_CONNECTORS) {
     const existing = connections.get(m.id)
     if (m.auth.type !== "oauth" || !(existing || pending.has(m.id))) continue
-    if (!m.auth.scopes.every((s) => granted.has(s))) continue
+    if (!m.auth.scopes.every((s) => granted.has(s))) {
+      if (pending.has(m.id)) {
+        await saveConnection(userId, m.id, { credentials: null })
+        await markConnection(
+          userId,
+          m.id,
+          "needs_auth",
+          `Google sign-in finished without granting ${m.auth.scopes.join(", ")}. Reconnect ${m.name} and check the permission box on Google's consent screen.`,
+        )
+      }
+      continue
+    }
     let previous: Record<string, string> | null = null
     try {
       previous = existing ? readCredentials(existing) : null

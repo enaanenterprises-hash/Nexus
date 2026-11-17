@@ -555,6 +555,8 @@ function ToolbarBtn({
 interface MailAstNode {
   tag: string;
   href?: string;
+  src?: string;
+  alt?: string;
   text?: string;
   children: MailAstNode[];
 }
@@ -602,6 +604,21 @@ function parseSanitizedHtml(html: string): MailAstNode[] {
       if (!isClose) stack[stack.length - 1]!.children.push({ tag, children: [] });
       continue;
     }
+    if (tag === "img") {
+      if (!isClose && match[2]) {
+        const srcMatch = /\bsrc\s*=\s*"([^"]*)"/i.exec(match[2]);
+        const altMatch = /\balt\s*=\s*"([^"]*)"/i.exec(match[2]);
+        if (srcMatch?.[1] && /^https:\/\//i.test(srcMatch[1])) {
+          stack[stack.length - 1]!.children.push({
+            tag: "img",
+            src: decodeEntities(srcMatch[1]),
+            alt: altMatch?.[1] ? decodeEntities(altMatch[1]) : "",
+            children: [],
+          });
+        }
+      }
+      continue;
+    }
     if (isClose) {
       for (let i = stack.length - 1; i >= 1; i--) {
         if (stack[i]!.tag === tag) {
@@ -614,7 +631,7 @@ function parseSanitizedHtml(html: string): MailAstNode[] {
     let href: string | undefined;
     if (tag === "a" && match[2]) {
       const m = /\bhref\s*=\s*"([^"]*)"/i.exec(match[2]);
-      if (m?.[1] && /^(https?:\/\/|mailto:)/i.test(m[1])) href = m[1];
+      if (m?.[1] && /^(https?:\/\/|mailto:)/i.test(m[1])) href = decodeEntities(m[1]);
     }
     const node: MailAstNode = { tag, href, children: [] };
     stack[stack.length - 1]!.children.push(node);
@@ -626,16 +643,29 @@ function parseSanitizedHtml(html: string): MailAstNode[] {
 function renderMailNode(node: MailAstNode, key: string): ReactNode {
   if (node.tag === "#text") return <Fragment key={key}>{node.text}</Fragment>;
   if (node.tag === "br") return <br key={key} />;
-  if (node.tag === "hr") return <hr key={key} className="my-2.5 border-border/70" />;
+  if (node.tag === "hr") return <hr key={key} className="my-3 border-border/70" />;
+  if (node.tag === "img") {
+    return node.src ? (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        key={key}
+        src={node.src}
+        alt={node.alt ?? ""}
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        className="my-2 max-w-full rounded-lg border border-border/40"
+      />
+    ) : null;
+  }
   const kids = node.children.map((c, idx) => renderMailNode(c, `${key}-${idx}`));
   switch (node.tag) {
     case "h1":
     case "h2":
-      return <h4 key={key} className="mt-2 mb-1 text-[14px] font-semibold text-foreground">{kids}</h4>;
+      return <h4 key={key} className="mt-3 mb-1.5 text-[15px] font-semibold text-foreground">{kids}</h4>;
     case "h3":
-      return <h5 key={key} className="mt-1.5 mb-0.5 text-[13px] font-semibold text-foreground">{kids}</h5>;
+      return <h5 key={key} className="mt-2.5 mb-1 text-[14px] font-semibold text-foreground">{kids}</h5>;
     case "p":
-      return <p key={key} className="my-1.5 leading-relaxed">{kids}</p>;
+      return <p key={key} className="my-2 leading-relaxed">{kids}</p>;
     case "div":
       return <div key={key} className="my-1 leading-relaxed">{kids}</div>;
     case "strong":
@@ -651,28 +681,48 @@ function renderMailNode(node: MailAstNode, key: string): ReactNode {
       return <s key={key} className="line-through opacity-75">{kids}</s>;
     case "blockquote":
       return (
-        <blockquote key={key} className="my-2 border-l border-border pl-3 text-muted-foreground">
+        <blockquote key={key} className="my-2.5 border-l-2 border-border pl-3.5 text-muted-foreground">
           {kids}
         </blockquote>
       );
     case "pre":
       return (
-        <pre key={key} className="my-2 overflow-x-auto rounded-lg bg-muted/60 p-2.5 font-mono text-[12px] text-foreground">
+        <pre key={key} className="my-2.5 overflow-x-auto rounded-lg bg-muted/60 p-3 font-mono text-[12.5px] text-foreground">
           {kids}
         </pre>
       );
     case "code":
       return (
-        <code key={key} className="rounded bg-muted/70 px-1 py-0.5 font-mono text-[12px] text-foreground">
+        <code key={key} className="rounded bg-muted/70 px-1.5 py-0.5 font-mono text-[12.5px] text-foreground">
           {kids}
         </code>
       );
     case "ul":
-      return <ul key={key} className="my-1.5 list-disc space-y-0.5 pl-5">{kids}</ul>;
+      return <ul key={key} className="my-2 list-disc space-y-1 pl-5">{kids}</ul>;
     case "ol":
-      return <ol key={key} className="my-1.5 list-decimal space-y-0.5 pl-5">{kids}</ol>;
+      return <ol key={key} className="my-2 list-decimal space-y-1 pl-5">{kids}</ol>;
     case "li":
       return <li key={key}>{kids}</li>;
+    case "table":
+      return (
+        <div key={key} className="my-2 overflow-x-auto">
+          <table className="w-full border-collapse text-left text-[13px]">{kids}</table>
+        </div>
+      );
+    case "thead":
+      return <thead key={key} className="border-b border-border/70 text-foreground">{kids}</thead>;
+    case "tbody":
+      return <tbody key={key} className="divide-y divide-border/45">{kids}</tbody>;
+    case "tfoot":
+      return <tfoot key={key} className="border-t border-border/70">{kids}</tfoot>;
+    case "tr":
+      return <tr key={key}>{kids}</tr>;
+    case "th":
+      return <th key={key} className="px-2.5 py-1.5 text-left font-medium text-foreground">{kids}</th>;
+    case "td":
+      return <td key={key} className="px-2.5 py-1.5 align-top">{kids}</td>;
+    case "caption":
+      return <caption key={key} className="mb-1 text-left text-[12px] text-muted-foreground">{kids}</caption>;
     case "a":
       return node.href ? (
         <a
@@ -705,13 +755,13 @@ export function SafeEmailContent({
   const tree = useMemo(() => (html ? parseSanitizedHtml(html) : null), [html]);
   if (!tree || tree.length === 0) {
     return (
-      <div className={`whitespace-pre-wrap text-[12.5px] leading-relaxed text-muted-foreground ${className}`}>
+      <div className={`whitespace-pre-wrap text-[13.5px] leading-relaxed text-foreground/85 ${className}`}>
         {fallbackText}
       </div>
     );
   }
   return (
-    <div className={`cmd-mail-prose text-[12.5px] leading-relaxed text-muted-foreground ${className}`}>
+    <div className={`cmd-mail-prose text-[13.5px] leading-relaxed text-foreground/85 ${className}`}>
       {tree.map((node, i) => renderMailNode(node, `root-${i}`))}
     </div>
   );

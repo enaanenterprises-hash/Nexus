@@ -137,9 +137,10 @@ function htmlOf(part: GPart): string {
 const SAFE_EMAIL_TAGS = new Set([
   "p", "br", "div", "span", "strong", "b", "em", "i", "u", "s", "del",
   "blockquote", "pre", "code", "ul", "ol", "li", "h1", "h2", "h3", "hr", "a",
+  "table", "thead", "tbody", "tfoot", "tr", "td", "th", "caption", "img",
 ])
-const VOID_EMAIL_TAGS = new Set(["br", "hr"])
-const BLOCK_SPACE_TAGS = new Set(["tr", "td", "th", "section", "article", "header", "footer"])
+const VOID_EMAIL_TAGS = new Set(["br", "hr", "img"])
+const BLOCK_SPACE_TAGS = new Set(["section", "article", "header", "footer"])
 
 function escapeHtmlAttr(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
@@ -151,7 +152,18 @@ function safeHref(raw: string): string | null {
   return null
 }
 
-/** Strips active content and unsafe attributes while preserving structural email markup. */
+function safeImgSrc(raw: string): string | null {
+  const clean = raw.replace(/[\u0000-\u001f\u007f]+/g, "").trim()
+  if (/^https:\/\//i.test(clean)) return clean
+  return null
+}
+
+function extractAttr(attrs: string, name: string): string {
+  const m = new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "i").exec(attrs)
+  return m?.[1] ?? m?.[2] ?? m?.[3] ?? ""
+}
+
+/** Strips active content and unsafe attributes while preserving structural email markup, tables, and HTTPS images. */
 export function sanitizeEmailHtml(rawHtml: string): string {
   const stripped = rawHtml
     .replace(/<!--[\s\S]*?-->/g, "")
@@ -172,6 +184,17 @@ export function sanitizeEmailHtml(rawHtml: string): string {
       if (isClose && BLOCK_SPACE_TAGS.has(rawName)) tokens.push("<br>")
       continue
     }
+    if (rawName === "img") {
+      if (!isClose) {
+        const attrs = match[2] ?? ""
+        const src = safeImgSrc(extractAttr(attrs, "src"))
+        if (src) {
+          const alt = extractAttr(attrs, "alt").slice(0, 140)
+          tokens.push(`<img src="${escapeHtmlAttr(src)}"${alt ? ` alt="${escapeHtmlAttr(alt)}"` : ""}>`)
+        }
+      }
+      continue
+    }
     if (VOID_EMAIL_TAGS.has(rawName)) {
       if (!isClose) tokens.push(`<${rawName}>`)
       continue
@@ -181,9 +204,7 @@ export function sanitizeEmailHtml(rawHtml: string): string {
       continue
     }
     if (rawName === "a") {
-      const attrs = match[2] ?? ""
-      const hrefMatch = /\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(attrs)
-      const href = safeHref(hrefMatch?.[1] ?? hrefMatch?.[2] ?? hrefMatch?.[3] ?? "")
+      const href = safeHref(extractAttr(match[2] ?? "", "href"))
       if (href) {
         tokens.push(`<a href="${escapeHtmlAttr(href)}" target="_blank" rel="noopener noreferrer">`)
       }
@@ -211,24 +232,45 @@ export function htmlToPlainText(rawHtml: string): string {
     .trim()
 }
 
-/** The 25 most recent inbox messages from the last week. Bodies are kept only for receipts, so the receipt recipe can read them. */
+/** Fetches up to 25 recent inbox messages in throttled batches so rate limits or single-message blips do not abort sync. */
 export const gmailDriver: ConnectorDriver = {
   id: "gmail",
   async verify(ctx) {
     await google(ctx, "https://gmail.googleapis.com/gmail/v1/users/me/profile")
   },
   async fetch(ctx) {
-    const q = encodeURIComponent("in:inbox newer_than:7d")
-    const list = await google<{ messages?: { id: string }[] }>(ctx, `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=25&q=${q}`)
-    const messages = await Promise.all(
-      (list.messages ?? []).map((m) => google<GMessage>(ctx, `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=full`)),
+    const q = encodeURIComponent("in:inbox")
+    const list = await google<{ messages?: { id: string }[] }>(
+      ctx,
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=25&q=${q}`,
     )
+    const ids = list.messages ?? []
+    if (ids.length === 0) return []
+
+    const messages: GMessage[] = []
+    let firstError: unknown = null
+    const BATCH_SIZE = 5
+    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+      const chunk = ids.slice(i, i + BATCH_SIZE)
+      const results = await Promise.allSettled(
+        chunk.map((m) =>
+          google<GMessage>(ctx, `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=full`),
+        ),
+      )
+      for (const res of results) {
+        if (res.status === "fulfilled") messages.push(res.value)
+        else if (!firstError) firstError = res.reason
+      }
+    }
+    if (messages.length === 0 && firstError) throw firstError
+
     return messages.map((m): CommandItemInput => {
-      const header = (name: string) => m.payload.headers.find((h) => h.name.toLowerCase() === name)?.value ?? ""
+      const header = (name: string) => m.payload?.headers?.find((h) => h.name.toLowerCase() === name)?.value ?? ""
       const from = header("from")
       const subject = header("subject") || "(no subject)"
       const body = textOf(m.payload).replace(/\n{3,}/g, "\n\n").trim()
       const receipt = parseReceipt({ from, subject, body })
+      const preview = body.slice(0, 1200)
       return {
         kind: "command.message",
         title: subject,
@@ -238,8 +280,8 @@ export const gmailDriver: ConnectorDriver = {
           channel: "email",
           from,
           subject,
-          snippet: m.snippet,
-          body: receipt.isReceipt ? body.slice(0, 4000) : "",
+          snippet: m.snippet || preview.slice(0, 200),
+          body: receipt.isReceipt ? body.slice(0, 4000) : preview,
           receivedAt: new Date(Number(m.internalDate)).toISOString(),
           labels: (m.labelIds ?? []).filter((l) => !l.startsWith("Label_") && !l.startsWith("CATEGORY_")),
           threadId: m.threadId || null,

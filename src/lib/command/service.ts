@@ -73,10 +73,10 @@ export function driverContext(userId: string, connection: store.StoredConnection
   }
 }
 
-function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs = FETCH_TIMEOUT_MS): Promise<T> {
   return Promise.race([
     promise,
-    new Promise<T>((_, reject) => setTimeout(() => reject(new DriverError(`${label} took too long to answer.`, "upstream")), FETCH_TIMEOUT_MS)),
+    new Promise<T>((_, reject) => setTimeout(() => reject(new DriverError(`${label} took too long to answer.`, "upstream")), timeoutMs)),
   ])
 }
 
@@ -99,7 +99,7 @@ export async function syncCommand(options: { userId: string; timeZone: string; d
       const driver = drivers[connection.connectorId]
       if (!driver?.fetch) return { connection, items: [] as CommandItem[] }
       const ctx = driverContext(userId, connection, timeZone, now)
-      const inputs = await withTimeout(driver.fetch(ctx), getConnector(connection.connectorId)?.name ?? connection.connectorId)
+      const inputs = await withTimeout(driver.fetch(ctx), getConnector(connection.connectorId)?.name ?? connection.connectorId, 20_000)
       return { connection, items: inputs.map((i) => stampItem(connection.connectorId, "sync", i, now)) }
     }),
   )
