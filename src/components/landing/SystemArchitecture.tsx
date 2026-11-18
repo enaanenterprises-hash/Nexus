@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
+import { EquilibriumCore, OrbitalHorizon } from "./FilamentVisuals";
 
 const PRINCIPLES = [
   {
@@ -19,10 +20,13 @@ const PRINCIPLES = [
   },
 ] as const;
 
+type RoadmapStepId = "cockpit" | "automations" | "workspaces" | "sdk";
+
 type RoadmapStep = {
-  id: string;
+  id: RoadmapStepId;
   title: string;
   status: string;
+  caption: string;
   summary: string;
   detail: string;
   surfaces: string[];
@@ -33,6 +37,7 @@ const ROADMAP_FLOW: RoadmapStep[] = [
     id: "cockpit",
     title: "Every feed on one expandable board",
     status: "Live in beta",
+    caption: "Live external feeds converging into one workspace",
     summary:
       "Arrange Gmail, 30-day Google Calendar, Tasks, GitHub, Weather, Night Sky, Markets, and Formula 1 on a 4×2 obsidian board.",
     detail:
@@ -43,6 +48,7 @@ const ROADMAP_FLOW: RoadmapStep[] = [
     id: "automations",
     title: "Services coordinate automatically",
     status: "Live · expanding",
+    caption: "Deterministic rule relays across connected accounts",
     summary: "Built-in recipes link your accounts deterministically—no prompt engineering, no fragile webhook glue.",
     detail:
       "Today: Deep work focus blocks, receipt detection to Ledger, failed Vercel deploy alerts to Telegram, and Strava goal completion. Next: Outlook, Slack, Linear, Notion, and Home Assistant triggers.",
@@ -52,6 +58,7 @@ const ROADMAP_FLOW: RoadmapStep[] = [
     id: "workspaces",
     title: "Studio, Research, Study, and Call",
     status: "Studio & Research live · Study & Call planned",
+    caption: "Two live first-party sockets · two planned orbital workspaces",
     summary: "Standalone applications wired into the same core so work recorded in one room flows cleanly into the next.",
     detail:
       "Record and layer multi-track audio in Studio with cloud sync, clip tracker-free sources in Research, and—on our roadmap—turn lectures and saved highlights into Study decks or live Call briefs.",
@@ -61,6 +68,7 @@ const ROADMAP_FLOW: RoadmapStep[] = [
     id: "sdk",
     title: "Third-party nodes on a public contract",
     status: "SDK v1 live · catalog planned",
+    caption: "Capability-scoped nodes radiating from the shared runtime",
     summary: "Build private personal tools or share community workspaces against a typed TypeScript extension contract.",
     detail:
       "Every node declares its exact capability manifest up front—reading only the shared content types you approve—so Nexus grows into your personal OS without turning into an opaque plugin store.",
@@ -69,7 +77,10 @@ const ROADMAP_FLOW: RoadmapStep[] = [
 ];
 
 export function SystemArchitecture() {
-  const [activeStepId, setActiveStepId] = useState<string>(ROADMAP_FLOW[0].id);
+  const [hoveredPrinciple, setHoveredPrinciple] = useState<number | null>(null);
+  const [activeStepId, setActiveStepId] = useState<RoadmapStepId>("cockpit");
+
+  const activeStep = ROADMAP_FLOW.find((s) => s.id === activeStepId) ?? ROADMAP_FLOW[0];
 
   return (
     <>
@@ -78,31 +89,51 @@ export function SystemArchitecture() {
         <div className="h-14 w-px bg-gradient-to-b from-white/[0.12] via-[#f0b54a]/22 to-white/[0.08]" />
       </div>
 
-      {/* Band 2: Asymmetric editorial principles (no 3-column icon-card scaffold) */}
+      {/* Band 2: Asymmetric editorial principles paired with optical Equilibrium Core */}
       <section className="bg-black px-6 py-20 sm:px-10 lg:px-14 lg:py-24" aria-label="Design philosophy">
         <div className="mx-auto grid max-w-[1280px] grid-cols-1 gap-12 lg:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] lg:gap-16">
-          <div className="max-w-[440px]">
-            <h2 className="text-[clamp(2rem,3.6vw,3rem)] font-light leading-[1.08] tracking-[-0.03em] text-[#f5f5f7] [text-wrap:balance]">
-              Built to stay quiet until you need it
-            </h2>
-            <p className="mt-4 text-[15px] leading-[1.65] text-[#a1a1a6]">
-              Software should answer when asked and stay calm the rest of the day. Every layer of Nexus keeps the same
-              restraint.
-            </p>
+          <div className="flex flex-col justify-between">
+            <div className="max-w-[440px]">
+              <h2 className="text-[clamp(2rem,3.6vw,3rem)] font-light leading-[1.08] tracking-[-0.03em] text-[#f5f5f7] [text-wrap:balance]">
+                Built to stay quiet until you need it
+              </h2>
+              <p className="mt-4 text-[15px] leading-[1.65] text-[#a1a1a6]">
+                Software should answer when asked and stay calm the rest of the day. Every layer of Nexus keeps the same
+                restraint.
+              </p>
+            </div>
+
+            <div className="mt-8 h-[210px] w-full max-w-[440px] sm:h-[240px]">
+              <EquilibriumCore activeIndex={hoveredPrinciple} />
+            </div>
           </div>
 
-          <div className="divide-y divide-white/[0.1] border-y border-white/[0.1]">
-            {PRINCIPLES.map((item) => (
-              <div
-                key={item.title}
-                className="grid grid-cols-1 gap-3 py-6 sm:grid-cols-[210px_minmax(0,1fr)] sm:gap-8 sm:py-7"
-              >
-                <h3 className="text-[16px] font-medium leading-[1.35] tracking-[-0.015em] text-[#f5f5f7]">
-                  {item.title}
-                </h3>
-                <p className="max-w-[54ch] text-[15px] leading-[1.68] text-[#a1a1a6]">{item.body}</p>
-              </div>
-            ))}
+          <div
+            className="divide-y divide-white/[0.1] border-y border-white/[0.1]"
+            onMouseLeave={() => setHoveredPrinciple(null)}
+          >
+            {PRINCIPLES.map((item, idx) => {
+              const active = hoveredPrinciple === idx;
+              return (
+                <div
+                  key={item.title}
+                  onMouseEnter={() => setHoveredPrinciple(idx)}
+                  onFocus={() => setHoveredPrinciple(idx)}
+                  onBlur={() => setHoveredPrinciple(null)}
+                  tabIndex={0}
+                  className="grid cursor-default grid-cols-1 gap-3 py-6 outline-none transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f0b54a] sm:grid-cols-[210px_minmax(0,1fr)] sm:gap-8 sm:py-7"
+                >
+                  <h3
+                    className={`text-[16px] font-medium leading-[1.35] tracking-[-0.015em] transition-colors duration-200 ${
+                      active ? "text-[#f0b54a]" : "text-[#f5f5f7]"
+                    }`}
+                  >
+                    {item.title}
+                  </h3>
+                  <p className="max-w-[54ch] text-[15px] leading-[1.68] text-[#a1a1a6]">{item.body}</p>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
@@ -112,7 +143,7 @@ export function SystemArchitecture() {
         <div className="h-12 w-px bg-gradient-to-b from-white/[0.08] to-[#f0b54a]/30" />
       </div>
 
-      {/* Band 3: Full planned vision & interactive roadmap on matte obsidian */}
+      {/* Band 3: Full planned vision & interactive roadmap with live morphing Orbital Horizon */}
       <section
         className="border-y border-white/[0.08] bg-[#0a0a0c] px-6 py-20 sm:px-10 lg:px-14 lg:py-28"
         aria-label="Full platform roadmap"
@@ -134,7 +165,14 @@ export function SystemArchitecture() {
               </p>
             </div>
 
-            <div className="mt-10 flex flex-wrap items-center gap-6 border-t border-white/[0.08] pt-6 text-[14px]">
+            <div className="mt-8">
+              <div className="h-[195px] w-full max-w-[460px] sm:h-[215px]">
+                <OrbitalHorizon activeStep={activeStepId} />
+              </div>
+              <p className="mt-2 text-[12.5px] text-[#8e8e95]">{activeStep.caption}</p>
+            </div>
+
+            <div className="mt-8 flex flex-wrap items-center gap-6 border-t border-white/[0.08] pt-6 text-[14px]">
               <Link
                 href="/about"
                 className="inline-flex items-center gap-1.5 text-[#f5f5f7] transition-colors hover:text-[#f0b54a] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f0b54a]"

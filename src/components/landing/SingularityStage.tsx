@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { CascadeFilament } from "./FilamentVisuals";
 import {
   Bookmark,
   Check,
@@ -212,18 +213,17 @@ export function SingularityStage() {
       aria-label="Workspace overview"
     >
       <div className="mx-auto max-w-[1280px]">
-        {/* Mobile top vertical hairline */}
-        <div className="flex justify-center lg:hidden" aria-hidden="true">
-          <div className="h-14 w-px bg-gradient-to-b from-[#f0b54a]/55 via-[#f0b54a]/22 to-white/[0.1]" />
+        {/* Mobile top optical cascade */}
+        <div className="h-20 w-full lg:hidden" aria-hidden="true">
+          <CascadeFilament activeLayer={activeLayer} />
         </div>
 
-        {/* Threshold statement with centered desktop vertical hairline descending from hero into stage top border */}
+        {/* Threshold statement with desktop optical filament cascade connecting hero edge into workspace border */}
         <div className="relative pb-7 pt-3 lg:pb-8 lg:pt-12">
-          <div
-            className="pointer-events-none absolute top-0 bottom-0 left-1/2 hidden w-px -translate-x-1/2 bg-gradient-to-b from-[#f0b54a]/60 via-[#f0b54a]/28 to-white/[0.15] lg:block"
-            aria-hidden="true"
-          />
-          <div className="max-w-[520px]">
+          <div className="pointer-events-none absolute inset-0 hidden lg:block" aria-hidden="true">
+            <CascadeFilament activeLayer={activeLayer} />
+          </div>
+          <div className="relative z-10 max-w-[520px]">
             <h2 className="text-[clamp(2.1rem,3.9vw,3.4rem)] font-light leading-[1.06] tracking-[-0.035em] text-[#f5f5f7] [text-wrap:balance]">
               One room for everything you run
             </h2>

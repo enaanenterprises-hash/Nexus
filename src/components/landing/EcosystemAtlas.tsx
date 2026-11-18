@@ -1,5 +1,9 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
+import { AtlasConduit, ClosingSingularity, VaultGeometry } from "./FilamentVisuals";
 import { WaitlistForm } from "./WaitlistForm";
 
 type ServiceEntry = {
@@ -75,6 +79,8 @@ const GUARANTEES = [
 ] as const;
 
 export function EcosystemAtlas() {
+  const [hoveredGuarantee, setHoveredGuarantee] = useState<number | null>(null);
+
   return (
     <>
       {/* Spine connector bridge from Band 3 to Band 4 */}
@@ -82,7 +88,7 @@ export function EcosystemAtlas() {
         <div className="h-12 w-px bg-gradient-to-b from-[#f0b54a]/28 to-white/[0.08]" />
       </div>
 
-      {/* Band 4: Dense Swiss connector index + asymmetric security ledger */}
+      {/* Band 4: Dense Swiss connector index + optical conduit + Vault geometry security ledger */}
       <section className="bg-black px-6 py-20 sm:px-10 lg:px-14 lg:py-24" aria-label="Integrations and security">
         <div className="mx-auto max-w-[1280px]">
           <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
@@ -101,8 +107,13 @@ export function EcosystemAtlas() {
             </div>
           </div>
 
+          {/* Optical 4-stream convergence conduit feeding into the 4 service columns */}
+          <div className="mt-8 h-[72px] w-full sm:h-[96px]" aria-hidden="true">
+            <AtlasConduit />
+          </div>
+
           {/* 4-column borderless directory */}
-          <div className="mt-12 grid grid-cols-1 gap-x-10 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-x-10 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">
             {SERVICE_ATLAS.map((group) => (
               <div key={group.heading} className="border-t border-white/[0.11] pt-5">
                 <h3 className="text-[14px] font-medium text-[#f5f5f7]">{group.heading}</h3>
@@ -122,53 +133,74 @@ export function EcosystemAtlas() {
             ))}
           </div>
 
-          {/* Asymmetric privacy & security specification ledger */}
+          {/* Asymmetric privacy & security specification ledger paired with VaultGeometry */}
           <div className="mt-20 grid grid-cols-1 gap-10 border-t border-white/[0.1] pt-12 lg:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] lg:gap-16">
-            <div>
-              <h3 className="text-[clamp(1.5rem,2.4vw,2rem)] font-light leading-[1.15] tracking-[-0.025em] text-[#f5f5f7]">
-                Private by architecture
-              </h3>
-              <p className="mt-3 max-w-[36ch] text-[14px] leading-[1.65] text-[#a1a1a6]">
-                Every credential, live conversation, and extension boundary is enforced server-side.
-              </p>
-              <Link
-                href="/security"
-                className="mt-5 inline-flex items-center gap-1.5 text-[14px] text-[#d1d1d6] transition-colors hover:text-[#f0b54a] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f0b54a]"
-              >
-                <span>Read full security spec</span>
-                <ArrowUpRight className="h-3.5 w-3.5" strokeWidth={1.6} aria-hidden="true" />
-              </Link>
+            <div className="flex flex-col justify-between">
+              <div>
+                <h3 className="text-[clamp(1.5rem,2.4vw,2rem)] font-light leading-[1.15] tracking-[-0.025em] text-[#f5f5f7]">
+                  Private by architecture
+                </h3>
+                <p className="mt-3 max-w-[36ch] text-[14px] leading-[1.65] text-[#a1a1a6]">
+                  Every credential, live conversation, and extension boundary is enforced server-side.
+                </p>
+                <Link
+                  href="/security"
+                  className="mt-5 inline-flex items-center gap-1.5 text-[14px] text-[#d1d1d6] transition-colors hover:text-[#f0b54a] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f0b54a]"
+                >
+                  <span>Read full security spec</span>
+                  <ArrowUpRight className="h-3.5 w-3.5" strokeWidth={1.6} aria-hidden="true" />
+                </Link>
+              </div>
+
+              <div className="mt-6 h-[156px] w-full max-w-[340px]">
+                <VaultGeometry activeIndex={hoveredGuarantee} />
+              </div>
             </div>
 
-            <div className="divide-y divide-white/[0.08]">
-              {GUARANTEES.map((item, idx) => (
-                <div
-                  key={item.title}
-                  className={`grid grid-cols-1 gap-2 sm:grid-cols-[220px_minmax(0,1fr)] sm:gap-8 ${
-                    idx === 0 ? "pb-5" : "py-5"
-                  }`}
-                >
-                  <h4 className="text-[15px] font-medium text-[#f5f5f7]">{item.title}</h4>
-                  <p className="text-[14px] leading-[1.65] text-[#a1a1a6]">{item.body}</p>
-                </div>
-              ))}
+            <div
+              className="divide-y divide-white/[0.08]"
+              onMouseLeave={() => setHoveredGuarantee(null)}
+            >
+              {GUARANTEES.map((item, idx) => {
+                const active = hoveredGuarantee === idx;
+                return (
+                  <div
+                    key={item.title}
+                    onMouseEnter={() => setHoveredGuarantee(idx)}
+                    onFocus={() => setHoveredGuarantee(idx)}
+                    onBlur={() => setHoveredGuarantee(null)}
+                    tabIndex={0}
+                    className={`grid cursor-default grid-cols-1 gap-2 outline-none transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f0b54a] sm:grid-cols-[220px_minmax(0,1fr)] sm:gap-8 ${
+                      idx === 0 ? "pb-5" : "py-5"
+                    }`}
+                  >
+                    <h4
+                      className={`text-[15px] font-medium transition-colors duration-200 ${
+                        active ? "text-[#f0b54a]" : "text-[#f5f5f7]"
+                      }`}
+                    >
+                      {item.title}
+                    </h4>
+                    <p className="text-[14px] leading-[1.65] text-[#a1a1a6]">{item.body}</p>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
       </section>
 
-      {/* Band 5: Unobstructed Open Beta closing section with vertical axis termination */}
+      {/* Band 5: Panoramic horizon singularity crowning the unobstructed Open Beta closing band */}
       <section
         id="waitlist"
-        className="border-t border-white/[0.08] bg-black px-6 pb-24 pt-0 sm:px-10 lg:px-14 lg:pb-28"
+        className="border-t border-white/[0.08] bg-black pb-24 pt-0 lg:pb-28"
         aria-label="Open beta access"
       >
-        <div className="mx-auto flex max-w-[600px] flex-col items-center text-center">
-          <div className="flex flex-col items-center pb-10" aria-hidden="true">
-            <div className="h-20 w-px bg-gradient-to-b from-white/[0.12] to-[#f0b54a]/55" />
-            <div className="h-1.5 w-1.5 rounded-full bg-[#f0b54a]" />
-          </div>
+        <div className="h-[140px] w-full sm:h-[175px]" aria-hidden="true">
+          <ClosingSingularity />
+        </div>
 
+        <div className="mx-auto flex max-w-[600px] flex-col items-center px-6 pt-3 text-center sm:px-10">
           <h2 className="text-[clamp(2.25rem,4.4vw,3.5rem)] font-light leading-[1.06] tracking-[-0.035em] text-[#f5f5f7] [text-wrap:balance]">
             Start in open beta
           </h2>
