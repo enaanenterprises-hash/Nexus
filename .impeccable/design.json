@@ -1,0 +1,744 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-18T23:31:00Z",
+  "title": "Design System: Nexus",
+  "extensions": {
+    "colorMeta": {
+      "singularity-gold": {
+        "role": "primary",
+        "displayName": "Singularity Gold",
+        "canonical": "#f0b54a",
+        "tonalRamp": [
+          "oklch(22% 0.045 79)",
+          "oklch(34% 0.075 79)",
+          "oklch(48% 0.105 79)",
+          "oklch(62% 0.128 79)",
+          "oklch(75% 0.138 79)",
+          "oklch(81% 0.135 79)",
+          "oklch(90% 0.085 79)",
+          "oklch(96% 0.032 79)"
+        ]
+      },
+      "amber-halo": {
+        "role": "primary",
+        "displayName": "Amber Halo",
+        "canonical": "#ffd99a",
+        "tonalRamp": [
+          "oklch(24% 0.036 78)",
+          "oklch(36% 0.058 78)",
+          "oklch(50% 0.082 78)",
+          "oklch(64% 0.098 78)",
+          "oklch(76% 0.104 78)",
+          "oklch(86% 0.092 78)",
+          "oklch(91% 0.082 78)",
+          "oklch(97% 0.025 78)"
+        ]
+      },
+      "gold-tint": {
+        "role": "primary",
+        "displayName": "Gold Tint",
+        "canonical": "rgba(240, 181, 74, 0.16)",
+        "tonalRamp": [
+          "oklch(16% 0.018 79)",
+          "oklch(26% 0.032 79)",
+          "oklch(38% 0.048 79)",
+          "oklch(52% 0.062 79)",
+          "oklch(66% 0.074 79)",
+          "oklch(78% 0.068 79)",
+          "oklch(88% 0.045 79)",
+          "oklch(95% 0.018 79)"
+        ]
+      },
+      "gold-ring": {
+        "role": "primary",
+        "displayName": "Gold Focus Ring",
+        "canonical": "rgba(240, 181, 74, 0.56)",
+        "tonalRamp": [
+          "oklch(20% 0.038 79)",
+          "oklch(32% 0.066 79)",
+          "oklch(46% 0.095 79)",
+          "oklch(60% 0.118 79)",
+          "oklch(73% 0.132 79)",
+          "oklch(81% 0.125 79)",
+          "oklch(90% 0.076 79)",
+          "oklch(96% 0.028 79)"
+        ]
+      },
+      "coral-alert": {
+        "role": "secondary",
+        "displayName": "Coral Alert",
+        "canonical": "#f0957a",
+        "tonalRamp": [
+          "oklch(22% 0.048 36)",
+          "oklch(34% 0.078 36)",
+          "oklch(48% 0.106 36)",
+          "oklch(62% 0.122 36)",
+          "oklch(74% 0.114 36)",
+          "oklch(82% 0.092 36)",
+          "oklch(90% 0.056 36)",
+          "oklch(96% 0.022 36)"
+        ]
+      },
+      "signal-destructive": {
+        "role": "secondary",
+        "displayName": "Signal Destructive",
+        "canonical": "#f87171",
+        "tonalRamp": [
+          "oklch(22% 0.064 22)",
+          "oklch(34% 0.108 22)",
+          "oklch(48% 0.148 22)",
+          "oklch(62% 0.172 22)",
+          "oklch(71% 0.165 22)",
+          "oklch(80% 0.118 22)",
+          "oklch(89% 0.068 22)",
+          "oklch(96% 0.024 22)"
+        ]
+      },
+      "signal-success": {
+        "role": "secondary",
+        "displayName": "Signal Success",
+        "canonical": "#4ade80",
+        "tonalRamp": [
+          "oklch(22% 0.052 148)",
+          "oklch(35% 0.088 148)",
+          "oklch(49% 0.124 148)",
+          "oklch(63% 0.152 148)",
+          "oklch(79% 0.176 148)",
+          "oklch(86% 0.132 148)",
+          "oklch(92% 0.074 148)",
+          "oklch(97% 0.024 148)"
+        ]
+      },
+      "pitch-black": {
+        "role": "neutral",
+        "displayName": "Pitch Black",
+        "canonical": "#000000",
+        "tonalRamp": [
+          "#000000",
+          "#0a0a0c",
+          "#0f0f12",
+          "#16161a",
+          "#1c1c21",
+          "#24242b",
+          "#8e8e95",
+          "#f5f5f7"
+        ]
+      },
+      "matte-obsidian": {
+        "role": "neutral",
+        "displayName": "Matte Obsidian",
+        "canonical": "#0a0a0c",
+        "tonalRamp": [
+          "#000000",
+          "#0a0a0c",
+          "#0f0f12",
+          "#16161a",
+          "#1c1c21",
+          "#2e2e36",
+          "#a1a1a6",
+          "#f5f5f7"
+        ]
+      },
+      "socket-well": {
+        "role": "neutral",
+        "displayName": "Socket Well",
+        "canonical": "#0b0b0e",
+        "tonalRamp": [
+          "#000000",
+          "#0b0b0e",
+          "#111115",
+          "#16161a",
+          "#1c1c21",
+          "#24242b",
+          "#a1a1a6",
+          "#f5f5f7"
+        ]
+      },
+      "obsidian-canvas": {
+        "role": "neutral",
+        "displayName": "Obsidian Canvas",
+        "canonical": "#0f0f12",
+        "tonalRamp": [
+          "#000000",
+          "#0a0a0c",
+          "#0f0f12",
+          "#16161a",
+          "#1c1c21",
+          "#2e2e36",
+          "#a1a1a6",
+          "#f5f5f7"
+        ]
+      },
+      "obsidian-surface": {
+        "role": "neutral",
+        "displayName": "Obsidian Surface",
+        "canonical": "#16161a",
+        "tonalRamp": [
+          "#000000",
+          "#0f0f12",
+          "#16161a",
+          "#1c1c21",
+          "#24242b",
+          "#2e2e36",
+          "#a1a1a6",
+          "#f5f5f7"
+        ]
+      },
+      "obsidian-elevated": {
+        "role": "neutral",
+        "displayName": "Obsidian Elevated",
+        "canonical": "#1c1c21",
+        "tonalRamp": [
+          "#000000",
+          "#0f0f12",
+          "#16161a",
+          "#1c1c21",
+          "#24242b",
+          "#3a3a44",
+          "#b4b4bc",
+          "#f5f5f7"
+        ]
+      },
+      "obsidian-selected": {
+        "role": "neutral",
+        "displayName": "Obsidian Selected",
+        "canonical": "#24242b",
+        "tonalRamp": [
+          "#0a0a0c",
+          "#16161a",
+          "#1c1c21",
+          "#24242b",
+          "#2e2e36",
+          "#52525c",
+          "#c7c7cc",
+          "#f5f5f7"
+        ]
+      },
+      "obsidian-active-cell": {
+        "role": "neutral",
+        "displayName": "Obsidian Active Cell",
+        "canonical": "#2e2e36",
+        "tonalRamp": [
+          "#0f0f12",
+          "#16161a",
+          "#24242b",
+          "#2e2e36",
+          "#44444e",
+          "#71717a",
+          "#d1d1d6",
+          "#f5f5f7"
+        ]
+      },
+      "pure-white": {
+        "role": "neutral",
+        "displayName": "Pure White",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#09090b",
+          "#24242b",
+          "#52525b",
+          "#8e8e95",
+          "#a1a1a6",
+          "#d1d1d6",
+          "#f5f5f7",
+          "#ffffff"
+        ]
+      },
+      "chalk-ink": {
+        "role": "neutral",
+        "displayName": "Chalk Ink",
+        "canonical": "#f5f5f7",
+        "tonalRamp": [
+          "#09090b",
+          "#1c1c21",
+          "#3f3f46",
+          "#71717a",
+          "#a1a1a6",
+          "#d1d1d6",
+          "#f5f5f7",
+          "#ffffff"
+        ]
+      },
+      "chrome-primary": {
+        "role": "neutral",
+        "displayName": "Chrome Primary",
+        "canonical": "#f4f4f6",
+        "tonalRamp": [
+          "#09090b",
+          "#1c1c21",
+          "#3f3f46",
+          "#71717a",
+          "#a1a1a6",
+          "#d1d1d6",
+          "#f4f4f6",
+          "#ffffff"
+        ]
+      },
+      "obsidian-on-light": {
+        "role": "neutral",
+        "displayName": "Obsidian-on-Light",
+        "canonical": "#09090b",
+        "tonalRamp": [
+          "#000000",
+          "#09090b",
+          "#16161a",
+          "#24242b",
+          "#52525b",
+          "#8e8e95",
+          "#d1d1d6",
+          "#f5f5f7"
+        ]
+      },
+      "silver-secondary": {
+        "role": "neutral",
+        "displayName": "Silver Secondary",
+        "canonical": "#d1d1d6",
+        "tonalRamp": [
+          "#0f0f12",
+          "#24242b",
+          "#46464f",
+          "#71717a",
+          "#a1a1a6",
+          "#d1d1d6",
+          "#e4e4e9",
+          "#f5f5f7"
+        ]
+      },
+      "ash-muted": {
+        "role": "neutral",
+        "displayName": "Ash Muted",
+        "canonical": "#a1a1a6",
+        "tonalRamp": [
+          "#0f0f12",
+          "#1c1c21",
+          "#3a3a42",
+          "#63636a",
+          "#8e8e95",
+          "#a1a1a6",
+          "#d1d1d6",
+          "#f5f5f7"
+        ]
+      },
+      "pewter-meta": {
+        "role": "neutral",
+        "displayName": "Pewter Meta",
+        "canonical": "#8e8e95",
+        "tonalRamp": [
+          "#0f0f12",
+          "#1c1c21",
+          "#36363e",
+          "#5a5a62",
+          "#8e8e95",
+          "#a1a1a6",
+          "#d1d1d6",
+          "#f5f5f7"
+        ]
+      },
+      "hairline-subtle": {
+        "role": "neutral",
+        "displayName": "Hairline Subtle",
+        "canonical": "rgba(255, 255, 255, 0.09)",
+        "tonalRamp": [
+          "rgba(255, 255, 255, 0.04)",
+          "rgba(255, 255, 255, 0.07)",
+          "rgba(255, 255, 255, 0.09)",
+          "rgba(255, 255, 255, 0.12)",
+          "rgba(255, 255, 255, 0.16)",
+          "rgba(255, 255, 255, 0.26)",
+          "rgba(255, 255, 255, 0.34)",
+          "rgba(255, 255, 255, 0.50)"
+        ]
+      },
+      "border-default": {
+        "role": "neutral",
+        "displayName": "Border Default",
+        "canonical": "rgba(255, 255, 255, 0.12)",
+        "tonalRamp": [
+          "rgba(255, 255, 255, 0.04)",
+          "rgba(255, 255, 255, 0.08)",
+          "rgba(255, 255, 255, 0.12)",
+          "rgba(255, 255, 255, 0.16)",
+          "rgba(255, 255, 255, 0.24)",
+          "rgba(255, 255, 255, 0.34)",
+          "rgba(255, 255, 255, 0.48)",
+          "rgba(255, 255, 255, 0.65)"
+        ]
+      },
+      "border-strong": {
+        "role": "neutral",
+        "displayName": "Border Strong",
+        "canonical": "rgba(255, 255, 255, 0.16)",
+        "tonalRamp": [
+          "rgba(255, 255, 255, 0.06)",
+          "rgba(255, 255, 255, 0.10)",
+          "rgba(255, 255, 255, 0.16)",
+          "rgba(255, 255, 255, 0.24)",
+          "rgba(255, 255, 255, 0.34)",
+          "rgba(255, 255, 255, 0.48)",
+          "rgba(255, 255, 255, 0.65)",
+          "rgba(255, 255, 255, 0.82)"
+        ]
+      },
+      "gallery-canvas": {
+        "role": "neutral",
+        "displayName": "Gallery Canvas (Light Theme)",
+        "canonical": "#eceae5",
+        "tonalRamp": [
+          "#1a1917",
+          "#3d3b37",
+          "#58554f",
+          "#726e67",
+          "#a8a49c",
+          "#d6d3cc",
+          "#eceae5",
+          "#f5f4f0"
+        ]
+      },
+      "gallery-surface": {
+        "role": "neutral",
+        "displayName": "Gallery Surface (Light Theme)",
+        "canonical": "#f5f4f0",
+        "tonalRamp": [
+          "#1a1917",
+          "#3d3b37",
+          "#58554f",
+          "#726e67",
+          "#b8b4ac",
+          "#dcd9d2",
+          "#eceae5",
+          "#f5f4f0"
+        ]
+      },
+      "gallery-ink": {
+        "role": "neutral",
+        "displayName": "Gallery Ink (Light Theme)",
+        "canonical": "#1a1917",
+        "tonalRamp": [
+          "#12110f",
+          "#1a1917",
+          "#363430",
+          "#58554f",
+          "#726e67",
+          "#a8a49c",
+          "#eceae5",
+          "#f5f4f0"
+        ]
+      },
+      "gallery-gold": {
+        "role": "primary",
+        "displayName": "Gallery Gold (Light Theme)",
+        "canonical": "#9a761c",
+        "tonalRamp": [
+          "oklch(24% 0.045 84)",
+          "oklch(38% 0.078 84)",
+          "oklch(50% 0.105 84)",
+          "oklch(58% 0.116 84)",
+          "oklch(68% 0.118 84)",
+          "oklch(78% 0.102 84)",
+          "oklch(88% 0.068 84)",
+          "oklch(96% 0.024 84)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Full-viewport hero thesis statement set in Manrope Light (300) with balanced wrapping."
+      },
+      "display-editorial": {
+        "displayName": "Editorial Display",
+        "purpose": "Cormorant Garamond reserved strictly for ceremonial onboarding prompts and setup step titles."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Primary section headlines across landing bands, set in Manrope Light (300) with tight negative tracking."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Interactive desktop layer labels, expandable roadmap step titles, and dashboard panel headings."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Editorial paragraphs, principles, roadmap summaries, and open-beta framing capped at 46ch–60ch."
+      },
+      "body-compact": {
+        "displayName": "Compact UI Body",
+        "purpose": "Cockpit widget titles, inbox subjects, connector directory rows, form inputs, and footer links."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Tabular telemetry timestamps, calendar weekdays, Formula 1 column headers, and compact controls."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Inline documentation code snippets and extension capability scope diagnostics."
+      }
+    },
+    "shadows": [
+      {
+        "name": "waitlist-focus-halo",
+        "value": "0 0 0 3px rgba(240, 181, 74, 0.14)",
+        "purpose": "Focus-within halo on the waitlist pill capsule and mobile email input."
+      },
+      {
+        "name": "dash-input-focus-halo",
+        "value": "0 0 0 4px rgba(240, 181, 74, 0.08)",
+        "purpose": "Focus-within halo on the floating dashboard voice/text bar."
+      },
+      {
+        "name": "widget-hover-lift",
+        "value": "0 12px 32px rgba(0, 0, 0, 0.38)",
+        "purpose": "Hover elevation beneath interactive Command preview tiles (.cmd-widget--preview:hover)."
+      },
+      {
+        "name": "widget-drop-target",
+        "value": "0 0 0 2px rgba(240, 181, 74, 0.34), 0 18px 42px rgba(0, 0, 0, 0.36)",
+        "purpose": "Active reorder drop target inside the Command 4x2 grid."
+      },
+      {
+        "name": "node-panel-overlay",
+        "value": "0 22px 60px rgba(0, 0, 0, 0.45)",
+        "purpose": "Depth grounding beneath translucent floating dashboard .node-panel drawers."
+      },
+      {
+        "name": "drag-ghost",
+        "value": "0 24px 64px rgba(0, 0, 0, 0.52)",
+        "purpose": "Floating drag ghost while repositioning a Command widget tile."
+      }
+    ],
+    "focusRings": [
+      {
+        "name": "keyboard-outline",
+        "value": "outline: 2px solid #f0b54a; outline-offset: 2px;",
+        "purpose": "Primary keyboard :focus-visible outline for buttons, layer tabs, socket pills, and links."
+      },
+      {
+        "name": "compact-outline",
+        "value": "outline: 2px solid #f0b54a; outline-offset: 1px;",
+        "purpose": "Tighter keyboard :focus-visible outline inside dense calendar cells and inbox rows."
+      },
+      {
+        "name": "base-ui-ring",
+        "value": "box-shadow: 0 0 0 3px rgba(240, 181, 74, 0.17); border-color: rgba(240, 181, 74, 0.56);",
+        "purpose": "Focus-visible ring on Base UI Button and Input primitives (--ring / ring-3 ring-ring/30)."
+      },
+      {
+        "name": "waitlist-capsule-focus",
+        "value": "border-color: rgba(240, 181, 74, 0.55); box-shadow: 0 0 0 3px rgba(240, 181, 74, 0.14);",
+        "purpose": "Focus-within state on the docked waitlist email pill."
+      },
+      {
+        "name": "caret",
+        "value": "caret-color: #f0b54a;",
+        "purpose": "Themed text insertion cursor across landing and waitlist inputs."
+      }
+    ],
+    "backdropFilters": [
+      {
+        "name": "blur-chip",
+        "value": "blur(12px)",
+        "purpose": "Translucent dashboard quick-action chips (.dash-chip)."
+      },
+      {
+        "name": "blur-glass",
+        "value": "blur(16px)",
+        "purpose": "Hero frosted Join waitlist button (.landing-signup) and dashboard conversation drawer."
+      },
+      {
+        "name": "blur-chrome",
+        "value": "blur(18px)",
+        "purpose": "Sticky site header (.site-header), floating .node-panel drawers, and widget drag ghost."
+      },
+      {
+        "name": "blur-command-bar",
+        "value": "blur(20px)",
+        "purpose": "Floating dashboard voice/text command capsule (.dash-input)."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out-quint",
+        "value": "cubic-bezier(0.22, 1, 0.36, 1)",
+        "purpose": "Signature deceleration curve for stage panel swaps (.lp-stage-panel), hero entrance, and Nexus blade mark motion."
+      },
+      {
+        "name": "ease-standard",
+        "value": "ease",
+        "purpose": "Standard easing for button fills, hairline border shifts, and text color transitions."
+      },
+      {
+        "name": "duration-fast",
+        "value": "150ms",
+        "purpose": "Dense cockpit micro-interactions (calendar day selection, inbox message row highlights)."
+      },
+      {
+        "name": "duration-base",
+        "value": "200ms",
+        "purpose": "Default hover and focus transition for buttons, pills, links, and waitlist inputs."
+      },
+      {
+        "name": "duration-stage",
+        "value": "260ms",
+        "purpose": "Stage layer panel reveal (lp-stage-in: opacity 0.72 -> 1, translateY 4px -> 0) and node drawer slides."
+      },
+      {
+        "name": "duration-rotor",
+        "value": "660ms",
+        "purpose": "Nexus three-blade menu mark rotation and blade split animation."
+      },
+      {
+        "name": "duration-hero-enter",
+        "value": "1200ms",
+        "purpose": "Measured hero header (200ms delay) and hero headline (900ms delay) fade-up choreography."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "@media (prefers-reduced-motion: reduce) { animation: none; }",
+        "purpose": "Disables stage entrance motion and shortens onboarding finale reveals for vestibular accessibility."
+      }
+    ],
+    "breakpoints": [
+      { "name": "capsule", "value": "540px" },
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "wide", "value": "900px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Waitlist Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "High-contrast monochrome chalk pill button for primary waitlist and conversion actions.",
+      "html": "<button type=\"button\" class=\"ds-btn-primary\">Join waitlist</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 999px; background: var(--land-ink, #f5f5f7); color: var(--primary-foreground, #09090b); padding: 11.5px 23px; font-family: var(--font-landing, Manrope, sans-serif); font-size: 14px; font-weight: 500; line-height: 1.2; white-space: nowrap; cursor: pointer; transition: background 180ms ease; } .ds-btn-primary:hover { background: #ffffff; } .ds-btn-primary:focus-visible { outline: 2px solid var(--land-gold, #f0b54a); outline-offset: 2px; } .ds-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }"
+    },
+    {
+      "name": "Frosted Glass Header Button",
+      "kind": "button",
+      "refersTo": "button-glass",
+      "description": "Translucent pill button floating over the pitch-black hero canvas.",
+      "html": "<a href=\"#waitlist\" class=\"ds-btn-glass\">Join waitlist</a>",
+      "css": ".ds-btn-glass { display: inline-flex; align-items: center; height: 36px; padding: 0 18.4px; border-radius: 999px; border: 1px solid var(--land-line, rgba(255, 255, 255, 0.16)); background: rgba(255, 255, 255, 0.07); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); color: var(--land-ink, #f5f5f7); font-family: var(--font-landing, Manrope, sans-serif); font-size: 14px; font-weight: 500; letter-spacing: -0.005em; text-decoration: none; transition: background 200ms ease, border-color 200ms ease; } .ds-btn-glass:hover { background: rgba(255, 255, 255, 0.14); border-color: rgba(255, 255, 255, 0.3); } .ds-btn-glass:focus-visible { outline: 2px solid var(--land-gold, #f0b54a); outline-offset: 2px; }"
+    },
+    {
+      "name": "Waitlist Pill Capsule",
+      "kind": "input",
+      "refersTo": "input-waitlist",
+      "description": "Unified pill email capture bar with gold caret and focus-within halo.",
+      "html": "<form class=\"ds-waitlist\"><input class=\"ds-waitlist-input\" type=\"email\" placeholder=\"Enter your email for early access\" aria-label=\"Email address\" /><button type=\"submit\" class=\"ds-waitlist-submit\">Join waitlist</button></form>",
+      "css": ".ds-waitlist { display: flex; align-items: center; max-width: 460px; padding: 4px; border-radius: 999px; border: 1px solid var(--border, rgba(255, 255, 255, 0.12)); background: rgba(255, 255, 255, 0.04); transition: border-color 200ms ease, box-shadow 200ms ease; } .ds-waitlist:focus-within { border-color: rgba(240, 181, 74, 0.55); box-shadow: 0 0 0 3px rgba(240, 181, 74, 0.14); } .ds-waitlist-input { flex: 1; min-width: 0; border: none; background: transparent; padding: 12px 19px; font-family: var(--font-landing, Manrope, sans-serif); font-size: 14px; color: var(--land-ink, #f5f5f7); caret-color: var(--land-gold, #f0b54a); outline: none; } .ds-waitlist-input::placeholder { color: #8e8e95; } .ds-waitlist-submit { border: none; border-radius: 999px; background: var(--land-ink, #f5f5f7); color: var(--primary-foreground, #09090b); padding: 11.5px 23px; font-family: var(--font-landing, Manrope, sans-serif); font-size: 14px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: background 180ms ease; } .ds-waitlist-submit:hover { background: #ffffff; } .ds-waitlist-submit:focus-visible { outline: 2px solid var(--land-gold, #f0b54a); outline-offset: 2px; }"
+    },
+    {
+      "name": "Socket Ecosystem Pill",
+      "kind": "chip",
+      "refersTo": "socket-pill",
+      "description": "Interactive orbital socket pill seated along a shared 1px horizontal connector track.",
+      "html": "<div class=\"ds-socket-track\"><button type=\"button\" class=\"ds-socket-pill ds-socket-pill--active\" aria-pressed=\"true\">Studio <span class=\"ds-socket-live\">(Live)</span></button><button type=\"button\" class=\"ds-socket-pill\" aria-pressed=\"false\">Study <span class=\"ds-socket-planned\">(Planned)</span></button></div>",
+      "css": ".ds-socket-track { position: relative; display: flex; gap: 12px; align-items: center; } .ds-socket-track::before { content: \"\"; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(255, 255, 255, 0.12); z-index: 0; } .ds-socket-pill { position: relative; z-index: 1; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.13); background: #0b0b0e; color: #d1d1d6; padding: 8px 14px; font-family: var(--font-landing, Manrope, sans-serif); font-size: 13px; font-weight: 400; cursor: pointer; transition: border-color 200ms ease, color 200ms ease, background 200ms ease; } .ds-socket-pill:hover { border-color: rgba(255, 255, 255, 0.26); color: var(--land-ink, #f5f5f7); } .ds-socket-pill--active { border-color: rgba(240, 181, 74, 0.55); background: var(--card, #16161a); color: var(--land-ink, #f5f5f7); } .ds-socket-pill:focus-visible { outline: 2px solid var(--land-gold, #f0b54a); outline-offset: 2px; } .ds-socket-live { color: var(--land-muted, #a1a1a6); } .ds-socket-planned { color: #8e8e95; }"
+    },
+    {
+      "name": "Layer Selector Rail",
+      "kind": "nav",
+      "refersTo": "stage-frame",
+      "description": "Unboxed vertical layer rail with a 1px Singularity Gold active tick beside the obsidian workstation stage.",
+      "html": "<nav class=\"ds-layer-rail\" aria-label=\"Nexus workspace layers\"><button type=\"button\" class=\"ds-layer-item ds-layer-item--active\" aria-pressed=\"true\"><span class=\"ds-layer-tick\" aria-hidden=\"true\"></span><span>Command</span></button><button type=\"button\" class=\"ds-layer-item\" aria-pressed=\"false\"><span class=\"ds-layer-tick\" aria-hidden=\"true\"></span><span>Studio &amp; Research</span></button><button type=\"button\" class=\"ds-layer-item\" aria-pressed=\"false\"><span class=\"ds-layer-tick\" aria-hidden=\"true\"></span><span>Modular Sockets</span></button></nav>",
+      "css": ".ds-layer-rail { display: flex; flex-direction: column; gap: 20px; } .ds-layer-item { display: flex; align-items: center; gap: 14px; border: none; background: transparent; padding: 2px 0; font-family: var(--font-landing, Manrope, sans-serif); font-size: 21px; font-weight: 400; letter-spacing: -0.02em; color: #8e8e95; text-align: left; cursor: pointer; transition: color 200ms ease; } .ds-layer-item:hover { color: #d1d1d6; } .ds-layer-item--active { color: var(--land-ink, #f5f5f7); } .ds-layer-item:focus-visible { outline: 2px solid var(--land-gold, #f0b54a); outline-offset: 2px; } .ds-layer-tick { width: 1px; height: 24px; background: rgba(255, 255, 255, 0.16); transition: background 200ms ease; } .ds-layer-item:hover .ds-layer-tick { background: rgba(255, 255, 255, 0.34); } .ds-layer-item--active .ds-layer-tick { background: var(--land-gold, #f0b54a); }"
+    },
+    {
+      "name": "Command View Switcher",
+      "kind": "nav",
+      "refersTo": "command-tab-active",
+      "description": "Compact pill segmented control used in the authenticated Command header.",
+      "html": "<div class=\"ds-cmd-tabs\" role=\"tablist\" aria-label=\"Command views\"><button type=\"button\" role=\"tab\" aria-selected=\"true\" class=\"ds-cmd-tab ds-cmd-tab--active\">Overview</button><button type=\"button\" role=\"tab\" aria-selected=\"false\" class=\"ds-cmd-tab\">Connections <span class=\"ds-cmd-badge\">4</span></button></div>",
+      "css": ".ds-cmd-tabs { display: inline-flex; align-items: center; gap: 2px; height: 28px; padding: 2px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(22, 22, 26, 0.75); } .ds-cmd-tab { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 12px; border: none; border-radius: 999px; background: transparent; color: var(--land-muted, #a1a1a6); font-family: var(--font-landing, Manrope, sans-serif); font-size: 12px; font-weight: 500; cursor: pointer; transition: color 160ms ease, background 160ms ease; } .ds-cmd-tab:hover { color: var(--land-ink, #f5f5f7); } .ds-cmd-tab--active { background: var(--primary, #f4f4f6); color: var(--primary-foreground, #09090b); } .ds-cmd-tab:focus-visible { outline: 2px solid var(--land-gold, #f0b54a); outline-offset: 2px; } .ds-cmd-badge { display: inline-flex; align-items: center; padding: 1px 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.14); font-size: 10px; line-height: 1; font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Obsidian Cockpit Tile",
+      "kind": "card",
+      "refersTo": "widget-tile",
+      "description": "Flat matte obsidian widget tile with 1px neutral hairline and tabular telemetry layout.",
+      "html": "<article class=\"ds-tile\"><div class=\"ds-tile-head\"><span class=\"ds-tile-title\">Weather</span><svg class=\"ds-tile-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.35\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 2v2\"/><path d=\"m4.93 4.93 1.41 1.41\"/><path d=\"M20 12h2\"/><path d=\"m19.07 4.93-1.41 1.41\"/><path d=\"M15.947 12.65a4 4 0 0 0-5.925-4.128\"/><path d=\"M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z\"/></svg></div><div class=\"ds-tile-stat\"><span class=\"ds-tile-temp\">11°</span><span class=\"ds-tile-loc\">Toronto</span></div></article>",
+      "css": ".ds-tile { display: flex; flex-direction: column; justify-content: space-between; min-width: 220px; padding: 14px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.08); background: var(--card, #16161a); color: var(--land-ink, #f5f5f7); font-family: var(--font-landing, Manrope, sans-serif); transition: border-color 180ms ease; } .ds-tile:hover { border-color: rgba(255, 255, 255, 0.16); } .ds-tile-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; } .ds-tile-title { font-size: 14px; color: #d1d1d6; } .ds-tile-icon { width: 28px; height: 28px; color: #d1d1d6; flex-shrink: 0; } .ds-tile-stat { display: flex; align-items: baseline; gap: 8px; margin-top: 8px; font-variant-numeric: tabular-nums; } .ds-tile-temp { font-size: 36px; font-weight: 300; line-height: 1; letter-spacing: -0.04em; color: var(--land-ink, #f5f5f7); } .ds-tile-loc { font-size: 13px; color: var(--land-muted, #a1a1a6); }"
+    },
+    {
+      "name": "Singularity Axis Connector",
+      "kind": "custom",
+      "refersTo": "stage-frame",
+      "description": "Centered 1px vertical golden axis terminating in a 6px Singularity Gold focal dot.",
+      "html": "<div class=\"ds-spine\" aria-hidden=\"true\"><span class=\"ds-spine-line\"></span><span class=\"ds-spine-dot\"></span></div>",
+      "css": ".ds-spine { display: flex; flex-direction: column; align-items: center; } .ds-spine-line { width: 1px; height: 80px; background: linear-gradient(to bottom, rgba(255, 255, 255, 0.12), rgba(240, 181, 74, 0.55)); } .ds-spine-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--land-gold, #f0b54a); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Obsidian Observatory",
+    "overview": "Nexus is built like a quiet, precision-calibrated personal observatory rather than a noisy software dashboard. Every surface begins from pure pitch black and steps through a tightly controlled monochrome obsidian ramp separated by crisp 1px white hairlines, leaving all ambient energy to the golden singularity core and a sparse vocabulary of warm gold status cues. The product chrome stays deliberately cool and silent until summoned so live data—schedules, mail, multi-track audio waveforms, clean reading prose, and telemetry—takes full priority.\n\nAcross both the public landing experience and the authenticated operating environment, information density is disciplined rather than decorative. Editorial bands use asymmetric two-column splits, generous pitch-black breathing room, and hairline-divided ledgers; interactive workspaces compress cleanly into nested obsidian containers with tabular alignment and zero gratuitous chrome. Authenticated dashboard and onboarding flows also carry a Gallery Light counterpart built on warm stone surfaces and charcoal ink with muted bronze-gold accents, preserving identical monochrome restraint in daylight.\n\nConfirmed visual rejections shape every surface: Nexus refuses stacked glowing feature-card showcases, uppercase tracked eyebrow kickers, decorative starbursts or radial halos behind copy, and symmetric three-column icon-heading-paragraph grids.",
+    "keyCharacteristics": [
+      "Neutral obsidian luminance ladder stepping cleanly from pitch black (`#000000`) through matte obsidian (`#0a0a0c`), canvas (`#0f0f12`), surface (`#16161a`), elevated (`#1c1c21`), and active selection (`#24242b`).",
+      "Monochrome chalk-on-obsidian controls paired with strictly rationed Singularity Gold (`#f0b54a`) reserved for the vertical spine hairline, active selection ticks, live status dots, text caret, and focus rings.",
+      "Light-weight `Manrope` (`300`) display typography paired with tabular numerals across all live cockpit readouts, with `Cormorant Garamond` reserved exclusively for ceremonial onboarding prompts.",
+      "Flat-at-rest surfaces delineated by crisp `1px` neutral white hairlines (`rgba(255, 255, 255, 0.09–0.16)`), reserving shadows and backdrop blur solely for floating chrome and drag states.",
+      "Unified Lucide `1.5px` vector stroke iconography and restrained `180ms–260ms` motion choreography honoring `prefers-reduced-motion`."
+    ],
+    "rules": [
+      {
+        "name": "The Singularity Gold Reserve Rule",
+        "body": "Reserve Singularity Gold (`#f0b54a`) strictly for the vertical spine hairline, active selection ticks, live status dots, text caret, and keyboard focus rings—never for full-bleed card fills, primary CTA buttons, or decorative gradients.",
+        "section": "colors"
+      },
+      {
+        "name": "The Monochrome Chrome Rule",
+        "body": "Keep primary buttons, active view tabs, and cockpit controls in crisp chalk-on-obsidian contrast (`#f5f5f7` / `#f4f4f6` with `#09090b` ink) so ambient energy stays anchored to the golden singularity and live telemetry.",
+        "section": "colors"
+      },
+      {
+        "name": "The AA Tertiary Floor Rule",
+        "body": "Use Pewter Meta (`#8e8e95`) as the minimum contrast floor for metadata, timestamps, and planned labels on dark obsidian surfaces; never drop legible copy down to legacy faint gray (`#6e6e73`).",
+        "section": "colors"
+      },
+      {
+        "name": "The Light-Display Rule",
+        "body": "Set display and section headlines in `Manrope` Light (`300`) with tight negative tracking (`-0.03em` to `-0.035em`) and `text-wrap: balance`; convey hierarchy through scale and negative space rather than heavy bolding.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Telemetry Rule",
+        "body": "Apply `font-variant-numeric: tabular-nums` to every timestamp, calendar grid, weather readout, audio timecode, and race timing column so live numbers never jitter horizontally.",
+        "section": "typography"
+      },
+      {
+        "name": "The No-Eyebrow Rule",
+        "body": "Open every band directly with its balanced headline rather than an uppercase tracked eyebrow or category kicker.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat-At-Rest Rule",
+        "body": "Marketing stages, cockpit tiles, and editorial ledgers carry zero drop shadows at rest; separation comes strictly from surface luminance steps and `1px` neutral hairlines.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Hairline Over Glow Rule",
+        "body": "Mark structure and boundaries with `1px` translucent white borders (`rgba(255, 255, 255, 0.08–0.16)`) instead of colored ambient halos or outer card glows.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do step surfaces cleanly along the obsidian luminance ladder (`#000000` -> `#0a0a0c` -> `#0f0f12` -> `#16161a` -> `#1c1c21`) separated by `1px` translucent white hairlines (`rgba(255, 255, 255, 0.08–0.16)`).",
+      "Do follow **The Singularity Gold Reserve Rule**—restrict `#f0b54a` to the vertical spine hairline, active selection ticks, live status dots, text caret, playhead, and `:focus-visible` outlines.",
+      "Do keep primary conversion buttons and active segmented tabs in monochrome chalk-on-obsidian contrast (`#f5f5f7` / `#f4f4f6` with `#09090b` ink).",
+      "Do set section headlines in `Manrope` Light (`300`) with `-0.03em` to `-0.035em` tracking and `text-wrap: balance`, and apply `tabular-nums` to all clocks, dates, temperatures, and timing tables.",
+      "Do use asymmetric split grids (`232px / 1fr`, `0.82fr / 1.18fr`, `0.72fr / 1.28fr`) and hairline-divided rows for editorial and specification sections.",
+      "Do maintain Pewter Meta (`#8e8e95`) as the darkest readable metadata ink on black/obsidian surfaces and honor `prefers-reduced-motion: reduce` on every transition or entrance animation."
+    ],
+    "donts": [
+      "Don't add uppercase tracked eyebrows or category kickers above headlines; open every band directly with its display or section title.",
+      "Don't place ambient radial glows, colored drop shadows, or decorative starbursts behind text, cards, or cockpit frames.",
+      "Don't build equal-width 3-column icon-heading-paragraph feature-card grids or invented dollar pricing tier tables.",
+      "Don't fill primary buttons, badges, or full cards with solid Singularity Gold (`#f0b54a`)—its restraint is what anchors the hierarchy.",
+      "Don't mix multiple icon libraries or emoji glyphs into UI chrome; stay exclusively on Lucide `1.5px` stroke vectors.",
+      "Don't use `Cormorant Garamond` inside the dense Command cockpit or marketing landing bands—keep it exclusively within ceremonial onboarding prompts."
+    ]
+  }
+}

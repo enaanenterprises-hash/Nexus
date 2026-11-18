@@ -75,7 +75,7 @@ export function WaitlistForm({ compact = false }: { compact?: boolean }) {
         <Button
           type="submit"
           disabled={status === "loading"}
-          className="waitlist-submit-btn landing-signup h-auto rounded-full"
+          className="waitlist-submit-btn h-auto rounded-full bg-[#f5f5f7] font-medium text-[#09090b] transition-colors hover:bg-white"
         >
           {status === "loading" ? "Joining…" : "Join waitlist"}
         </Button>
