@@ -1636,7 +1636,7 @@ button.landing-signup {
   border-color: rgba(240, 181, 74, 0.7);
 }
 
-/* ——— Flat 2D Geometric Nexus Blade Menu Button & Node Navigation ——— */
+/* ——— CrystalizedBall Orb Menu Trigger & Node Navigation ——— */
 .nexus-mark-button {
   position: relative;
   display: inline-grid;
@@ -1644,7 +1644,7 @@ button.landing-signup {
   width: 2.75rem;
   height: 2.75rem;
   border: 0;
-  border-radius: 14px;
+  border-radius: 999px;
   background: transparent;
   overflow: visible;
   cursor: pointer;
@@ -1652,7 +1652,7 @@ button.landing-signup {
 }
 
 .nexus-mark-button:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(240, 181, 74, 0.06);
 }
 
 .nexus-mark-button:focus-visible {
@@ -1660,87 +1660,31 @@ button.landing-signup {
   outline-offset: 2px;
 }
 
+.nexus-orb-canvas-stage {
+  position: absolute;
+  top: -18px;
+  left: -24px;
+  width: 128px;
+  height: 560px;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 2;
+}
+
 .nexus-mark-stage {
   position: relative;
   display: block;
-  width: 1.85rem;
-  height: 1.85rem;
+  width: 2.15rem;
+  height: 2.15rem;
   overflow: visible;
-  scale: 1;
-  transition:
-    scale 340ms cubic-bezier(0.22, 1, 0.36, 1),
-    filter 280ms ease;
-}
-
-.nexus-mark-button:hover .nexus-mark-stage {
-  scale: 1.05;
-}
-
-.nexus-mark-button:active .nexus-mark-stage {
-  scale: 0.93;
-}
-
-.nexus-mark-button--open .nexus-mark-stage,
-.nexus-mark-button--open:hover .nexus-mark-stage {
-  scale: 1.03;
-}
-
-.nexus-svg-rotor {
-  transform-box: view-box;
-  transform-origin: 50px 52px;
-  rotate: 0deg;
-  transition: rotate 640ms cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: rotate;
-}
-
-.nexus-mark-button--open .nexus-svg-rotor {
-  rotate: 360deg;
-}
-
-.nexus-svg-blade {
-  transform-box: view-box;
-  transform-origin: 50px 52px;
-  translate: 0px 0px;
-  rotate: 0deg;
-  transition:
-    translate 560ms cubic-bezier(0.22, 1, 0.36, 1),
-    rotate 560ms cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: translate, rotate;
-}
-
-/* Gentle hover poise while closed */
-.nexus-mark-button:not(.nexus-mark-button--open):hover .nexus-svg-blade--top {
-  translate: 1.6px -1.4px;
-}
-
-.nexus-mark-button:not(.nexus-mark-button--open):hover .nexus-svg-blade--bottom {
-  translate: 0.8px 1.6px;
-}
-
-.nexus-mark-button:not(.nexus-mark-button--open):hover .nexus-svg-blade--left {
-  translate: -1.8px -0.3px;
-}
-
-/* Open state: crisp radial blade spread & unified 360deg spring rotation */
-.nexus-mark-button--open .nexus-svg-blade--top {
-  translate: 6.5px -5.5px;
-  rotate: 9deg;
-}
-
-.nexus-mark-button--open .nexus-svg-blade--bottom {
-  translate: 2.5px 7px;
-  rotate: 9deg;
-}
-
-.nexus-mark-button--open .nexus-svg-blade--left {
-  translate: -7.5px -1.5px;
-  rotate: -9deg;
+  pointer-events: none;
+  z-index: 3;
 }
 
 .nexus-mark-dot {
   position: absolute;
-  right: -3px;
-  bottom: -2px;
+  right: -1px;
+  bottom: -1px;
   width: 6px;
   height: 6px;
   border-radius: 999px;
@@ -1748,9 +1692,73 @@ button.landing-signup {
   box-shadow: 0 0 0 2px #070709;
 }
 
+.dash-menu-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 38;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  background: rgba(5, 6, 10, 0.56);
+  backdrop-filter: blur(14px) saturate(1.1);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+  transition:
+    opacity 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 360ms;
+}
+
+.dash-menu-backdrop--open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition:
+    opacity 380ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 0s;
+}
+
+.dash[data-theme="light"] .dash-menu-backdrop {
+  background: rgba(12, 14, 20, 0.42);
+  backdrop-filter: blur(14px) saturate(1.08);
+  -webkit-backdrop-filter: blur(14px) saturate(1.08);
+}
+
+.dash-stage-layer,
+.dash-chat,
+.node-rail-dock,
+.command-screen,
+.nodes-fullscreen,
+.studio-fullscreen,
+.node-full {
+  transition: filter 380ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.dash[data-menu-modal="true"] .dash-stage-layer,
+.dash[data-menu-modal="true"] .dash-chat,
+.dash[data-menu-modal="true"] .node-rail-dock,
+.dash[data-menu-modal="true"] .command-screen,
+.dash[data-menu-modal="true"] .nodes-fullscreen,
+.dash[data-menu-modal="true"] .studio-fullscreen,
+.dash[data-menu-modal="true"] .node-full,
+.dash[data-menu-modal="true"] .node-panel {
+  filter: blur(10px) brightness(0.62);
+  pointer-events: none;
+}
+
+.dash[data-theme="light"][data-menu-modal="true"] .dash-stage-layer,
+.dash[data-theme="light"][data-menu-modal="true"] .dash-chat,
+.dash[data-theme="light"][data-menu-modal="true"] .node-rail-dock,
+.dash[data-theme="light"][data-menu-modal="true"] .command-screen,
+.dash[data-theme="light"][data-menu-modal="true"] .nodes-fullscreen,
+.dash[data-theme="light"][data-menu-modal="true"] .studio-fullscreen,
+.dash[data-theme="light"][data-menu-modal="true"] .node-full,
+.dash[data-theme="light"][data-menu-modal="true"] .node-panel {
+  filter: blur(10px) brightness(0.72);
+  pointer-events: none;
+}
+
 .node-menu {
   position: absolute;
-  z-index: 30;
+  z-index: 44;
   top: 4rem;
   bottom: 0.75rem;
   left: 0;
@@ -1770,18 +1778,14 @@ button.landing-signup {
   gap: 0.18rem;
   padding: 0.45rem 0.25rem;
   border-radius: 22px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(16, 16, 20, 0.76);
+  border: 1px solid rgba(240, 181, 74, 0.22);
+  background: rgba(16, 16, 20, 0.8);
   backdrop-filter: blur(26px) saturate(1.45);
   -webkit-backdrop-filter: blur(26px) saturate(1.45);
   box-shadow:
-    0 24px 56px -12px rgba(0, 0, 0, 0.74),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    0 24px 56px -12px rgba(0, 0, 0, 0.78),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
   transform-origin: top center;
-  transition:
-    transform 280ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 200ms ease,
-    visibility 0s linear 0s;
 }
 
 .node-menu--floating .node-menu-item {
@@ -1804,18 +1808,26 @@ button.landing-signup {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transform: translateY(-10px) scaleY(0.86);
+  clip-path: inset(0 0 92% 0 round 22px);
+  transform: translateY(-8px) scale(0.96);
   transition:
-    transform 220ms cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 160ms ease,
-    visibility 0s linear 220ms;
+    clip-path 320ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 300ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 220ms ease,
+    visibility 0s linear 320ms;
 }
 
 .node-menu--open {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
-  transform: translateY(0) scaleY(1);
+  clip-path: inset(0 0 0% 0 round 22px);
+  transform: translateY(0) scale(1);
+  transition:
+    clip-path 480ms cubic-bezier(0.22, 1, 0.36, 1) 75ms,
+    transform 460ms cubic-bezier(0.22, 1, 0.36, 1) 55ms,
+    opacity 320ms ease 55ms,
+    visibility 0s linear 0s;
 }
 
 .node-menu-item {
@@ -2500,7 +2512,7 @@ button.landing-signup {
 
 .node-panel {
   position: absolute;
-  z-index: 40;
+  z-index: 32;
   top: 4rem;
   bottom: 0.75rem;
   left: 80px;
@@ -2516,6 +2528,7 @@ button.landing-signup {
     inset 0 1px 0 rgba(255, 255, 255, 0.09);
   animation: node-panel-in 260ms cubic-bezier(0.22, 1, 0.36, 1);
   transition:
+    filter 380ms cubic-bezier(0.22, 1, 0.36, 1),
     left 260ms cubic-bezier(0.22, 1, 0.36, 1),
     width 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }

@@ -1,8 +1,25 @@
-import { memo, type RefObject } from "react";
+"use client";
+
+import { memo, useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useTheme } from "@/lib/theme";
+import CrystalizedBall, { type CrystalizedBallMorphBox } from "./CrystalizedBall";
+
+interface OrbStageGeometry {
+  orbCenter: [number, number];
+  morphBox: CrystalizedBallMorphBox;
+  stageHeight: number;
+}
+
+const DEFAULT_GEOMETRY: OrbStageGeometry = {
+  orbCenter: [46, 40],
+  morphBox: { x: 9, y: 70, width: 74, height: 356, radius: 22 },
+  stageHeight: 560,
+};
 
 /**
- * Flat 2D geometric three-blade Nexus menu trigger.
- * Pressing it smoothly rotates and spreads the three identical 120° vector blades apart.
+ * Interactive WebGL <CrystalizedBall /> orb menu trigger.
+ * When pressed, the active dashboard surface blurs and darkens while the orb's
+ * particles stream downward to form the rounded frame of `#nexus-network-menu`.
  */
 export const NexusMenuButton = memo(function NexusMenuButton({
   open,
@@ -17,9 +34,89 @@ export const NexusMenuButton = memo(function NexusMenuButton({
   buttonRef?: RefObject<HTMLButtonElement | null>;
   onClick: () => void;
 }) {
+  const { theme } = useTheme();
+  const localBtnRef = useRef<HTMLButtonElement | null>(null);
+  const stageRef = useRef<HTMLSpanElement | null>(null);
+  const [geometry, setGeometry] = useState<OrbStageGeometry>(DEFAULT_GEOMETRY);
+
+  const setBtnRefs = useCallback(
+    (node: HTMLButtonElement | null) => {
+      localBtnRef.current = node;
+      if (buttonRef) {
+        buttonRef.current = node;
+      }
+    },
+    [buttonRef],
+  );
+
+  const measureGeometry = useCallback(() => {
+    const btnEl = localBtnRef.current;
+    const stageEl = stageRef.current;
+    if (!btnEl || !stageEl) return;
+
+    const btnRect = btnEl.getBoundingClientRect();
+    const stageRect = stageEl.getBoundingClientRect();
+    const orbCenter: [number, number] = [
+      btnRect.left - stageRect.left + btnRect.width * 0.5,
+      btnRect.top - stageRect.top + btnRect.height * 0.5,
+    ];
+
+    const menuEl = document.getElementById(controlsId);
+    if (!menuEl) {
+      setGeometry((prev) => ({ ...prev, orbCenter }));
+      return;
+    }
+
+    const parentEl = (menuEl.offsetParent as HTMLElement | null) ?? document.body;
+    const parentRect = parentEl.getBoundingClientRect();
+    const boxX = parentRect.left + menuEl.offsetLeft - stageRect.left;
+    const boxY = parentRect.top + menuEl.offsetTop - stageRect.top;
+    const boxWidth = menuEl.offsetWidth || 74;
+    const boxHeight = menuEl.offsetHeight || 356;
+    const neededHeight = Math.max(540, Math.ceil(boxY + boxHeight + 36));
+
+    setGeometry((prev) => {
+      const sameCenter =
+        Math.abs(prev.orbCenter[0] - orbCenter[0]) < 0.5 &&
+        Math.abs(prev.orbCenter[1] - orbCenter[1]) < 0.5;
+      const sameBox =
+        Math.abs(prev.morphBox.x - boxX) < 0.5 &&
+        Math.abs(prev.morphBox.y - boxY) < 0.5 &&
+        Math.abs(prev.morphBox.width - boxWidth) < 0.5 &&
+        Math.abs(prev.morphBox.height - boxHeight) < 0.5 &&
+        prev.stageHeight === neededHeight;
+      if (sameCenter && sameBox) return prev;
+      return {
+        orbCenter,
+        morphBox: {
+          x: boxX,
+          y: boxY,
+          width: boxWidth,
+          height: boxHeight,
+          radius: 22,
+        },
+        stageHeight: neededHeight,
+      };
+    });
+  }, [controlsId]);
+
+  useEffect(() => {
+    measureGeometry();
+    const menuEl = document.getElementById(controlsId);
+    const btnEl = localBtnRef.current;
+    const ro = new ResizeObserver(() => measureGeometry());
+    if (btnEl) ro.observe(btnEl);
+    if (menuEl) ro.observe(menuEl);
+    window.addEventListener("resize", measureGeometry);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measureGeometry);
+    };
+  }, [controlsId, measureGeometry, open]);
+
   return (
     <button
-      ref={buttonRef}
+      ref={setBtnRefs}
       type="button"
       onClick={onClick}
       aria-expanded={open}
@@ -28,20 +125,39 @@ export const NexusMenuButton = memo(function NexusMenuButton({
       title={open ? "Close menu" : "Menu"}
       className={`nexus-mark-button ${open ? "nexus-mark-button--open" : ""}`}
     >
+      <span
+        ref={stageRef}
+        className="nexus-orb-canvas-stage"
+        style={{ height: `${geometry.stageHeight}px` }}
+        aria-hidden
+      >
+        <CrystalizedBall
+          preset="ember"
+          color="#F0B54A"
+          theme={theme}
+          orbCenter={geometry.orbCenter}
+          orbRadius={17.5}
+          morphOpen={open}
+          morphBox={geometry.morphBox}
+          crackle={0.9}
+          fill={0.42}
+          interactive
+          hoverStrength={0.75}
+          strands={5}
+          flares={0.8}
+          glow={1}
+          sparks={0.8}
+          particleCount={12000}
+          motion="drift"
+          particleShape="round"
+          depth={0.7}
+          sway={0.35}
+          twinkle={0.7}
+          haze={0.9}
+          dustSpeed={1.5}
+        />
+      </span>
       <span className="nexus-mark-stage dash-brand-mark" aria-hidden>
-        <svg viewBox="0 0 100 100" className="h-full w-full overflow-visible" fill="none">
-          <g className="nexus-svg-rotor" fill="var(--nexus-mark-fill, #d49a1a)">
-            <g className="nexus-svg-blade nexus-svg-blade--top">
-              <path d="M58.5 7.5 L85.5 23 L85.5 52 L58.5 52 Z" />
-            </g>
-            <g className="nexus-svg-blade nexus-svg-blade--bottom">
-              <path d="M58.5 7.5 L85.5 23 L85.5 52 L58.5 52 Z" transform="rotate(120 50 52)" />
-            </g>
-            <g className="nexus-svg-blade nexus-svg-blade--left">
-              <path d="M58.5 7.5 L85.5 23 L85.5 52 L58.5 52 Z" transform="rotate(240 50 52)" />
-            </g>
-          </g>
-        </svg>
         {hasActivePanel && !open ? <span className="nexus-mark-dot" /> : null}
       </span>
     </button>

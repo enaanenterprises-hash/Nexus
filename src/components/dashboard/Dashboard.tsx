@@ -200,6 +200,7 @@ export function Dashboard({
         openStudio();
         return;
       }
+      setMenuOpen(false);
       setSurface((s) => {
         const same =
           typeof panel === "string"
@@ -426,7 +427,9 @@ export function Dashboard({
       ) {
         return;
       }
-      if (surface.panel) {
+      if (menuOpen) {
+        setMenuOpen(false);
+      } else if (surface.panel) {
         setSurface((s) => ({ ...s, panel: null }));
       } else if (
         surface.view === "command" ||
@@ -435,8 +438,6 @@ export function Dashboard({
         surface.view === "nodes"
       ) {
         setSurface({ view: "home", panel: null });
-      } else if (menuOpen) {
-        setMenuOpen(false);
       }
     }
     window.addEventListener("keydown", onKey);
@@ -465,8 +466,7 @@ export function Dashboard({
       }
       if (
         menuTriggerRef.current?.contains(target) ||
-        menuNavRef.current?.contains(target) ||
-        panelRef.current?.contains(target)
+        menuNavRef.current?.contains(target)
       ) {
         return;
       }
@@ -715,6 +715,7 @@ export function Dashboard({
       className={`dash ${theme === "dark" ? "dark" : "light"} relative h-[100svh] w-full flex-1 overflow-hidden`}
       data-theme={theme}
       data-nav-open={usesFloatingMenu ? (menuOpen ? "true" : "false") : "true"}
+      data-menu-modal={usesFloatingMenu && menuOpen ? "true" : "false"}
     >
       {setupReveal ? (
         <div
@@ -730,15 +731,22 @@ export function Dashboard({
       ) : null}
       <section
         aria-label="Nexus Laniakea network"
-        className="absolute inset-0"
+        className="dash-stage-layer absolute inset-0"
         hidden={surface.view === "command" || surface.view === "nodes"}
       >
         <NeuralStage signal={signal} onSelectSocket={handleSelectSocket} />
         <div className="dash-scrim--home pointer-events-none absolute inset-0" />
       </section>
 
+      {usesFloatingMenu ? (
+        <div
+          className={`dash-menu-backdrop ${menuOpen ? "dash-menu-backdrop--open" : ""}`}
+          aria-hidden="true"
+        />
+      ) : null}
+
       <header
-        className={`landing-enter pointer-events-none absolute inset-x-0 top-0 z-40 flex items-center ${
+        className={`landing-enter pointer-events-none absolute inset-x-0 top-0 z-[46] flex items-center ${
           hasCompactTopBar ? "h-12" : "h-16"
         }`}
       >
