@@ -14,11 +14,11 @@ export function LightfallTransition() {
     <div
       id="lightfall-transition"
       aria-hidden="true"
-      className="relative h-[460px] w-full select-none overflow-hidden sm:h-[540px] lg:h-[600px]"
+      className="relative h-[480px] w-full select-none overflow-hidden sm:h-[580px] lg:h-[660px]"
       style={{
-        // Matching top-edge Gaussian Oklab fallback for SSR / non-WebGL frames
+        // Matching C2-continuous composed quintic Oklab fallback for SSR / non-WebGL frames
         background:
-          "linear-gradient(180deg, #ffffff 0%, #ebeae8 4%, #b9b8b5 8%, #7c7b78 12%, #474644 16%, #222120 20%, #0e0e0e 24%, #050505 28%, #010101 32%, #000000 38%, #000000 100%)",
+          "linear-gradient(180deg, #ffffff 0%, #f9f9f8 10%, #dbd9d5 20%, #a3a19c 30%, #62605d 40%, #2c2b29 50%, #0e0e0e 60%, #020202 70%, #000000 80%, #000000 100%)",
       }}
     >
       <div className="absolute inset-0">

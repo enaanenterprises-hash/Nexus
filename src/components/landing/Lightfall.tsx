@@ -66,7 +66,9 @@ float orb(float d, float r) {
 
 void main() {
   vec2 frag = gl_FragCoord.xy;
-  vec2 screen = (2.0 * frag - uView) / uView.x;
+  // Use landscape-safe basis so portrait mobile viewports preserve full tunnel perspective & crisp streak density
+  float basis = max(uView.x, uView.y * 1.55);
+  vec2 screen = (2.0 * frag - uView) / basis;
   vec2 p = screen;
   mat2 warp = mat2(1.0);
   if (uLens.z > 0.0) {
@@ -96,7 +98,7 @@ void main() {
     (hit.y * stepX.z - hit.z * stepX.y) / ring,
     stepY.x,
     (hit.y * stepY.z - hit.z * stepY.y) / ring
-  ) * warp * (2.0 / uView.x);
+  ) * warp * (2.0 / basis);
 
   vec2 gradX = vec2(jacobian[0][0], jacobian[1][0]);
   vec2 gradTheta = vec2(jacobian[0][1], jacobian[1][1]);
@@ -242,13 +244,13 @@ void main() {
   float peak = max(mapped.r, max(mapped.g, mapped.b));
 
   if (uBackdropTransition > 0.5) {
-    // Single-pass C-infinity Gaussian Oklab fade pinned right at the very top of the Lightfall band:
-    // L(0) = 1.0, L'(0) = 0 — resolves smoothly into pure #000000 within the top ~25% (zero harsh line,
-    // zero Mach banding, triangular-PDF dithered) so the Lightfall comets pour straight out of the top
-    // light into deep obsidian darkness.
+    // Single-pass C2-continuous Oklab white (#ffffff) -> obsidian (#000000) transition:
+    // L'(0) = L''(0) = 0 and L'(1) = L''(1) = 0 (mathematically zero Mach bands at either seam),
+    // with triangular-PDF dithering and depth-linked star opacity (translucent near white,
+    // blooming to full luminous brilliance as comets fall into obsidian darkness).
     float t = clamp(1.0 - uv.y, 0.0, 1.0);
-    float u = t / 0.165;
-    float L = exp(-u * u) * (1.0 - smoothstep(0.45, 0.62, t));
+    float s = smootherstep01(t);
+    float L = pow(1.0 - s, 1.85);
 
     float warmth = 4.0 * L * (1.0 - L);
     float a = 0.0014 * warmth;
@@ -270,18 +272,21 @@ void main() {
       step(vec3(0.0031308), linBg)
     );
 
-    // Golden Lightfall streaks pour smoothly out of the top white fade and dissolve cleanly into #000000
-    float streakEnv = smootherstep01(clamp((t - 0.05) / 0.18, 0.0, 1.0)) *
-                      (1.0 - smootherstep01(clamp((t - 0.80) / 0.20, 0.0, 1.0))) *
-                      uOpacity;
+    // Stars start whisper-translucent near the white top and become progressively more visible
+    // as they fall into the deepening obsidian dark lower zone
+    float darkness = 1.0 - L;
+    float starReveal = pow(smootherstep01(clamp(darkness / 0.86, 0.0, 1.0)), 1.35);
+    float bottomDissolve = 1.0 - smootherstep01(clamp((t - 0.80) / 0.20, 0.0, 1.0));
+    float streakEnv = starReveal * bottomDissolve * uOpacity;
 
-    // Daylight sculptural gold filaments softly painted across the sunlit upper half
-    float dayInk = smoothstep(0.0, 0.56, peak) * streakEnv * L * 0.68;
-    vec3 dayGold = vec3(0.84, 0.58, 0.05);
-    vec3 composed = mix(srgbBg, dayGold, clamp(dayInk, 0.0, 0.84));
+    // Subtle translucent gold tint in the upper twilight so stars materialize gently out of white
+    float twilightInk = smoothstep(0.06, 0.62, peak) * streakEnv * L * 0.34;
+    vec3 dayGold = vec3(0.86, 0.62, 0.08);
+    vec3 composed = mix(srgbBg, dayGold, clamp(twilightInk, 0.0, 0.45));
 
-    // Luminous 24k gold comets crossfading seamlessly as the surface deepens into pitch black
-    vec3 nightGlow = mapped * streakEnv * (1.0 - 0.62 * L * L);
+    // Luminous 24k gold comets blooming to full intensity as the sky deepens into pure pitch black
+    float nightVisibility = smoothstep(0.06, 0.72, darkness);
+    vec3 nightGlow = mapped * streakEnv * (0.20 + 0.80 * nightVisibility);
     composed = 1.0 - (1.0 - composed) * (1.0 - clamp(nightGlow, 0.0, 1.0));
 
     // Triangular-PDF sub-pixel dithering kills 8-bit gradient banding completely
@@ -654,8 +659,9 @@ export default function Lightfall(props: LightfallProps) {
         palette.set(rgb, i * 3);
       }
 
-      const toScreenX = (value: number) => (2 * value - width) / width;
-      const toScreenY = (value: number) => (2 * value - height) / width;
+      const basis = Math.max(width, height * 1.55);
+      const toScreenX = (value: number) => (2 * value - width) / basis;
+      const toScreenY = (value: number) => (2 * value - height) / basis;
 
       const r = pass(scene, streakProgram);
       gl.uniform2f(r.uView, width, height);

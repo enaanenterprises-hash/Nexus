@@ -69,7 +69,7 @@ export function HeroStage() {
       const transitionEl = document.getElementById("lightfall-transition");
       if (transitionEl) {
         const r = transitionEl.getBoundingClientRect();
-        if (r.top + r.height * 0.14 <= probeY && r.bottom >= probeY) {
+        if (r.top + r.height * 0.38 <= probeY && r.bottom >= probeY) {
           overDark = true;
         }
       }
