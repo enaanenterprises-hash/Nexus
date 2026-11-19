@@ -2,51 +2,14 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ArrowDown, ArrowRight, Check, X } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 import GlassSurface from "./GlassSurface";
 import { GoldenNetwork } from "./GoldenNetwork";
 import { NexusMark } from "./NexusLogo";
 
-type PreviewTopicId = "command" | "sockets" | "privacy";
-
-type PreviewTopic = {
-  id: PreviewTopicId;
-  prompt: string;
-  answer: string;
-  href: string;
-  cta: string;
-};
-
-const PREVIEW_TOPICS: PreviewTopic[] = [
-  {
-    id: "command",
-    prompt: "How Command works",
-    answer:
-      "Command brings Gmail, 30-day Google Calendar, Tasks, GitHub, Weather, Night Sky, Markets, and Formula 1 onto one 4×2 board. Click any tile to expand it into a full-screen workspace without leaving the room.",
-    href: "#workspace",
-    cta: "Explore interactive board",
-  },
-  {
-    id: "sockets",
-    prompt: "How sockets stay isolated",
-    answer:
-      "Every orbital workspace—Recording Studio, Research Reader, or custom SDK v1 nodes—declares an explicit capability manifest up front. Unrequested streams never cross the socket boundary.",
-    href: "#roadmap",
-    cta: "See platform roadmap",
-  },
-  {
-    id: "privacy",
-    prompt: "What stays private",
-    answer:
-      "Live conversations remain ephemeral in your browser session and clear when you leave. OAuth tokens and keys stay encrypted server-side with AES-256-GCM and are never returned to the browser.",
-    href: "#security",
-    cta: "Inspect security ledger",
-  },
-];
-
 const NAV_LINKS = [
   { id: "workspace", href: "#workspace", label: "Workspace" },
-  { id: "philosophy", href: "#philosophy", label: "Philosophy" },
+  { id: "integrations", href: "#integrations", label: "Integrations" },
   { id: "roadmap", href: "#roadmap", label: "Roadmap" },
   { id: "security", href: "#security", label: "Security" },
 ] as const;
@@ -55,11 +18,8 @@ export function HeroStage() {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [activeTopicId, setActiveTopicId] = useState<PreviewTopicId | null>(null);
   const [activeNavId, setActiveNavId] = useState<string | null>(null);
   const [darkHeader, setDarkHeader] = useState(false);
-
-  const activeTopic = PREVIEW_TOPICS.find((t) => t.id === activeTopicId) ?? null;
 
   useEffect(() => {
     let raf = 0;
@@ -195,7 +155,7 @@ export function HeroStage() {
                 href="/"
                 aria-label="Nexus home"
                 className={`inline-flex items-center gap-2 rounded-full py-1 focus-visible:outline-2 focus-visible:outline-offset-4 ${
-                  darkHeader ? "focus-visible:outline-[#f0b54a]" : "focus-visible:outline-[#9a6910]"
+                  darkHeader ? "focus-visible:outline-white/75" : "focus-visible:outline-[#0e0f12]"
                 }`}
               >
                 <span
@@ -218,12 +178,12 @@ export function HeroStage() {
               <span
                 className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium leading-none transition-colors duration-300 ${
                   darkHeader
-                    ? "border-[#f0b54a]/40 bg-black/30 text-[#ffe0a3]"
-                    : "border-[#9a6910]/30 bg-white/50 text-[#744c07]"
+                    ? "border-white/[0.16] bg-white/[0.06] text-white/85"
+                    : "border-[#0e0f12]/[0.14] bg-white/55 text-[#1c1e24]"
                 }`}
               >
                 <span
-                  className={`h-1.5 w-1.5 rounded-full ${darkHeader ? "bg-[#f0b54a]" : "bg-[#c88d18]"}`}
+                  className={`h-1.5 w-1.5 rounded-full ${darkHeader ? "bg-white/70" : "bg-[#0e0f12]/55"}`}
                   aria-hidden="true"
                 />
                 Beta
@@ -241,16 +201,16 @@ export function HeroStage() {
                     className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[13.5px] font-medium transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 ${
                       darkHeader
                         ? isActive
-                          ? "landing-glass-text--dark bg-white/[0.13] text-[#ffffff] ring-1 ring-inset ring-white/[0.18] focus-visible:outline-[#f0b54a]"
-                          : "landing-glass-text--dark text-white/[0.84] hover:bg-white/[0.09] hover:text-white focus-visible:outline-[#f0b54a]"
+                          ? "landing-glass-text--dark bg-white/[0.13] text-[#ffffff] ring-1 ring-inset ring-white/[0.18] focus-visible:outline-white/75"
+                          : "landing-glass-text--dark text-white/[0.84] hover:bg-white/[0.09] hover:text-white focus-visible:outline-white/75"
                         : isActive
-                          ? "landing-glass-text--light bg-[#0e0f12]/[0.08] text-[#09090b] ring-1 ring-inset ring-[#0e0f12]/[0.1] focus-visible:outline-[#9a6910]"
-                          : "landing-glass-text--light text-[#16171d] hover:bg-[#0e0f12]/[0.055] hover:text-[#09090b] focus-visible:outline-[#9a6910]"
+                          ? "landing-glass-text--light bg-[#0e0f12]/[0.08] text-[#09090b] ring-1 ring-inset ring-[#0e0f12]/[0.1] focus-visible:outline-[#0e0f12]"
+                          : "landing-glass-text--light text-[#16171d] hover:bg-[#0e0f12]/[0.055] hover:text-[#09090b] focus-visible:outline-[#0e0f12]"
                     }`}
                   >
                     {isActive ? (
                       <span
-                        className={`h-1.5 w-1.5 rounded-full ${darkHeader ? "bg-[#f0b54a]" : "bg-[#b47c10]"}`}
+                        className={`h-1.5 w-1.5 rounded-full ${darkHeader ? "bg-white" : "bg-[#0e0f12]"}`}
                         aria-hidden="true"
                       />
                     ) : null}
@@ -265,8 +225,8 @@ export function HeroStage() {
                 href="/signup"
                 className={`hidden h-9 items-center justify-center rounded-full px-3.5 text-[13.5px] font-medium transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 sm:inline-flex ${
                   darkHeader
-                    ? "landing-glass-text--dark text-white/[0.86] hover:bg-white/[0.1] hover:text-white focus-visible:outline-[#f0b54a]"
-                    : "landing-glass-text--light text-[#16171d] hover:bg-[#0e0f12]/[0.06] hover:text-[#09090b] focus-visible:outline-[#9a6910]"
+                    ? "landing-glass-text--dark text-white/[0.86] hover:bg-white/[0.1] hover:text-white focus-visible:outline-white/75"
+                    : "landing-glass-text--light text-[#16171d] hover:bg-[#0e0f12]/[0.06] hover:text-[#09090b] focus-visible:outline-[#0e0f12]"
                 }`}
               >
                 Sign in
@@ -275,8 +235,8 @@ export function HeroStage() {
                 href="#waitlist"
                 className={`gal-btn-tactile group inline-flex h-10 items-center justify-center gap-1.5 rounded-full px-4 text-[13.5px] font-medium transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 sm:px-4.5 ${
                   darkHeader
-                    ? "bg-[#f5f5f7] text-[#09090b] shadow-[0_6px_18px_-6px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,1)] hover:bg-white focus-visible:outline-[#f0b54a]"
-                    : "bg-[#0e0f12] text-white shadow-[0_6px_18px_-6px_rgba(14,15,18,0.45),inset_0_1px_0_rgba(255,255,255,0.16)] hover:bg-[#22242c] focus-visible:outline-[#9a6910]"
+                    ? "bg-[#f5f5f7] text-[#09090b] shadow-[0_6px_18px_-6px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,1)] hover:bg-white focus-visible:outline-white/75"
+                    : "bg-[#0e0f12] text-white shadow-[0_6px_18px_-6px_rgba(14,15,18,0.45),inset_0_1px_0_rgba(255,255,255,0.16)] hover:bg-[#22242c] focus-visible:outline-[#0e0f12]"
                 }`}
               >
                 <span>Join waitlist</span>
@@ -291,7 +251,7 @@ export function HeroStage() {
       <section
         id="hero-top"
         aria-label="Nexus"
-        className="relative flex min-h-[min(100svh,940px)] flex-col items-center justify-center overflow-hidden bg-white px-6 pb-16 pt-28 sm:px-10 sm:pt-32"
+        className="relative flex min-h-[min(100svh,920px)] flex-col items-center justify-center overflow-hidden bg-white px-6 pb-16 pt-28 sm:px-10 sm:pt-32"
       >
         <div className="pointer-events-none absolute inset-0">
           <GoldenNetwork theme="light" />
@@ -313,21 +273,19 @@ export function HeroStage() {
           aria-hidden="true"
         />
 
-        <div className="relative z-10 mx-auto flex w-full max-w-[920px] flex-col items-center text-center">
+        <div className="relative z-10 mx-auto flex w-full max-w-[820px] flex-col items-center text-center">
           <h1 className="font-editorial text-[clamp(3.75rem,8.4vw,7.1rem)] font-normal leading-[0.98] tracking-[-0.045em] text-[#0e0f12]">
             <span className="gal-line-mask">
               <span className="gal-line-inner gal-line-inner--1">Welcome</span>
             </span>
           </h1>
 
-          <p className="gal-enter gal-enter-delay-1 mt-6 max-w-[54ch] text-[16px] leading-[1.65] text-[#4a4c55] [text-wrap:pretty] sm:text-[18px]">
-            Nexus is an architectural design built to connect your workflows into one continuous, unbroken flow, with
-            modular components that let you curate your workspace to you.{" "}
-            <span className="font-medium text-[#0e0f12]">Nexus is yours.</span>
+          <p className="gal-enter gal-enter-delay-1 mt-5 max-w-[44ch] text-[16.5px] leading-[1.6] text-[#4a4c55] [text-wrap:pretty] sm:text-[18.5px]">
+            Your personal assistant, daily dashboard, and everyday tools—connected in one calm workspace.
           </p>
 
-          {/* Interactive Apple Liquid Glass Hero Waitlist & Preview Pill */}
-          <div className="gal-enter gal-enter-delay-2 mt-9 w-full max-w-[560px]">
+          {/* Interactive Apple Liquid Glass Hero Waitlist Pill */}
+          <div className="gal-enter gal-enter-delay-2 mt-8 w-full max-w-[520px]">
             {status === "success" ? (
               <div
                 className="apple-glass lp-stage-panel mx-auto flex items-center justify-center gap-3 rounded-full px-5 py-3.5 text-left"
@@ -341,7 +299,7 @@ export function HeroStage() {
             ) : (
               <form
                 onSubmit={handleSubmit}
-                className="apple-glass flex flex-col gap-2 rounded-[26px] p-2 transition-shadow duration-200 focus-within:ring-2 focus-within:ring-[#9a6910]/30 sm:flex-row sm:items-center sm:rounded-full sm:p-1.5"
+                className="apple-glass flex flex-col gap-2 rounded-[26px] p-2 transition-shadow duration-200 focus-within:ring-2 focus-within:ring-[#0e0f12]/20 sm:flex-row sm:items-center sm:rounded-full sm:p-1.5"
               >
                 <label htmlFor="hero-waitlist-email" className="sr-only">
                   Email address for open beta
@@ -361,7 +319,7 @@ export function HeroStage() {
                 <button
                   type="submit"
                   disabled={status === "loading"}
-                  className="gal-btn-tactile inline-flex min-h-[44px] shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-full bg-[#0e0f12] px-5.5 text-[14.5px] font-medium text-white hover:bg-[#252730] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="gal-btn-tactile inline-flex min-h-[44px] shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-full bg-[#0e0f12] px-5.5 text-[14.5px] font-medium text-white hover:bg-[#252730] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0e0f12] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <span>{status === "loading" ? "Joining…" : "Join waitlist"}</span>
                   <ArrowRight className="gal-arrow-shift h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
@@ -374,70 +332,6 @@ export function HeroStage() {
                 {feedback}
               </p>
             ) : null}
-
-            {/* Interactive preview chips */}
-            <div
-              className="mt-4 flex flex-wrap items-center justify-center gap-2 sm:flex-nowrap"
-              role="group"
-              aria-label="Quick architecture previews"
-            >
-              {PREVIEW_TOPICS.map((topic) => {
-                const selected = activeTopicId === topic.id;
-                return (
-                  <button
-                    key={topic.id}
-                    type="button"
-                    aria-pressed={selected}
-                    onClick={() => setActiveTopicId((cur) => (cur === topic.id ? null : topic.id))}
-                    className={`gal-btn-tactile min-h-[36px] shrink-0 cursor-pointer whitespace-nowrap rounded-full border px-3.5 py-1.5 text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910] ${
-                      selected
-                        ? "border-[#9a6910]/45 bg-[#c9932c]/12 font-medium text-[#0e0f12]"
-                        : "border-[#0e0f12]/[0.11] bg-white/85 text-[#52545d] hover:border-[#0e0f12]/[0.24] hover:text-[#0e0f12]"
-                    }`}
-                  >
-                    {topic.prompt}
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="gal-accordion-grid" data-open={activeTopic ? "true" : "false"}>
-              <div className="gal-accordion-inner">
-                {activeTopic ? (
-                  <div
-                    className="apple-glass mt-3.5 rounded-[20px] p-4 text-left sm:p-5"
-                    role="region"
-                    aria-label={activeTopic.prompt}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <p className="text-[14px] leading-[1.6] text-[#2c2e35]">{activeTopic.answer}</p>
-                      <button
-                        type="button"
-                        onClick={() => setActiveTopicId(null)}
-                        aria-label="Close preview"
-                        className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-[#636570] transition-colors hover:bg-[#0e0f12]/[0.06] hover:text-[#0e0f12] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910]"
-                      >
-                        <X className="h-3.5 w-3.5" strokeWidth={1.8} />
-                      </button>
-                    </div>
-                    <div className="mt-3 flex items-center justify-between border-t border-[#0e0f12]/[0.07] pt-2.5 text-[13px]">
-                      <span className="text-[#636570]">Nexus architecture preview</span>
-                      <a
-                        href={activeTopic.href}
-                        className="group inline-flex items-center gap-1 font-medium text-[#9a6910] transition-colors hover:text-[#78500b] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910]"
-                      >
-                        <span>{activeTopic.cta}</span>
-                        <ArrowDown
-                          className="h-3.5 w-3.5 transition-transform duration-150 group-hover:translate-y-0.5"
-                          strokeWidth={1.8}
-                          aria-hidden="true"
-                        />
-                      </a>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </div>
           </div>
         </div>
       </section>

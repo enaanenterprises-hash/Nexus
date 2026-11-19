@@ -218,28 +218,10 @@ export function EcosystemField({ activeLayer }: { activeLayer: EcosystemLayer })
   );
 }
 
-const BRIDGE_SIGNALS: Record<
-  EcosystemLayer,
-  { from: string; to: string; event: string; detail: string }
-> = {
-  network: {
-    from: "Neural Network",
-    to: "Command & Nodes",
-    event: "nexus:intent",
-    detail: "Assistant reads calendar context & routes Studio takes across the shared bus.",
-  },
-  command: {
-    from: "Command",
-    to: "Neural Network & Nodes",
-    event: "command:focus-changed",
-    detail: "Starting a 25m deep-work block automatically engages Focus Guard and quiets alerts.",
-  },
-  nodes: {
-    from: "Nodes",
-    to: "Neural Network & Command",
-    event: "studio:take-routed",
-    detail: "Modular sockets publish capability-scoped events back into your assistant and board.",
-  },
+const BRIDGE_EVENTS: Record<EcosystemLayer, string> = {
+  network: "nexus:intent",
+  command: "command:focus-changed",
+  nodes: "studio:take-routed",
 };
 
 /**
@@ -253,7 +235,7 @@ export function EcosystemBridgeVisual({
   activeLayer: EcosystemLayer;
   onSelect: (layer: EcosystemLayer) => void;
 }) {
-  const sig = BRIDGE_SIGNALS[activeLayer];
+  const eventTopic = BRIDGE_EVENTS[activeLayer];
   const nodes: Array<{ id: EcosystemLayer; label: string; sub: string; cx: number }> = [
     { id: "network", label: "Neural Network", sub: "Assistant", cx: 74 },
     { id: "command", label: "Command", sub: "Dashboard", cx: 220 },
@@ -261,18 +243,15 @@ export function EcosystemBridgeVisual({
   ];
 
   return (
-    <div className="relative overflow-hidden rounded-[18px] border border-white/[0.09] bg-[#09090d]/90 p-4 sm:p-5">
+    <div className="relative overflow-hidden rounded-[18px] border border-white/[0.09] bg-[#09090d]/90 p-4">
       <div className="flex items-center justify-between gap-2 text-[12px]">
-        <span className="inline-flex items-center gap-2 font-medium text-[#d1d1d6]">
-          <span className="h-1.5 w-1.5 rounded-full bg-[#f0b54a]" aria-hidden="true" />
-          Shared signal bus
-        </span>
-        <span className="font-mono text-[11px] text-[#ffd99a]">{sig.event}</span>
+        <span className="font-medium text-[#d1d1d6]">Shared signal bus</span>
+        <span className="font-mono text-[11px] text-[#9d9da6]">{eventTopic}</span>
       </div>
 
       <svg
-        viewBox="0 0 440 124"
-        className="mt-2 block h-auto w-full overflow-visible"
+        viewBox="0 0 440 116"
+        className="mt-1.5 block h-auto w-full overflow-visible"
         role="group"
         aria-label="Interactive Nexus shared ecosystem diagram"
       >
@@ -286,7 +265,7 @@ export function EcosystemBridgeVisual({
 
         {/* Upper arched direct bus link (Neural Network <-> Nodes) */}
         <path
-          d="M 74 52 C 146 6, 294 6, 366 52"
+          d="M 74 48 C 146 6, 294 6, 366 48"
           fill="none"
           stroke={activeLayer !== "command" ? "url(#eco-bridge-gold)" : "rgba(255,255,255,0.14)"}
           strokeWidth={activeLayer !== "command" ? 1.35 : 1}
@@ -296,18 +275,18 @@ export function EcosystemBridgeVisual({
         {/* Direct horizontal bus lines (Network <-> Command <-> Nodes) */}
         <line
           x1="100"
-          y1="52"
+          y1="48"
           x2="194"
-          y2="52"
+          y2="48"
           stroke={activeLayer === "network" || activeLayer === "command" ? "#f0b54a" : "rgba(255,255,255,0.16)"}
           strokeOpacity={activeLayer === "network" || activeLayer === "command" ? 0.72 : 1}
           strokeWidth="1.25"
         />
         <line
           x1="246"
-          y1="52"
+          y1="48"
           x2="340"
-          y2="52"
+          y2="48"
           stroke={activeLayer === "command" || activeLayer === "nodes" ? "#f0b54a" : "rgba(255,255,255,0.16)"}
           strokeOpacity={activeLayer === "command" || activeLayer === "nodes" ? 0.72 : 1}
           strokeWidth="1.25"
@@ -315,10 +294,10 @@ export function EcosystemBridgeVisual({
 
         {/* Animated travelling signal beads along the shared bus */}
         <circle r="2.6" fill="#fff7e2">
-          <animateMotion dur="2.8s" repeatCount="indefinite" path="M 74 52 L 220 52 L 366 52" />
+          <animateMotion dur="2.8s" repeatCount="indefinite" path="M 74 48 L 220 48 L 366 48" />
         </circle>
         <circle r="2.2" fill="#f0b54a">
-          <animateMotion dur="3.6s" repeatCount="indefinite" path="M 366 52 C 294 6, 146 6, 74 52" />
+          <animateMotion dur="3.6s" repeatCount="indefinite" path="M 366 48 C 294 6, 146 6, 74 48" />
         </circle>
 
         {/* Three Interactive Architectural Layer Nodes */}
@@ -342,8 +321,8 @@ export function EcosystemBridgeVisual({
               {isSelected ? (
                 <circle
                   cx={node.cx}
-                  cy="52"
-                  r="25"
+                  cy="48"
+                  r="24"
                   fill="none"
                   stroke="#f0b54a"
                   strokeOpacity="0.45"
@@ -354,21 +333,21 @@ export function EcosystemBridgeVisual({
               ) : null}
               <circle
                 cx={node.cx}
-                cy="52"
-                r="19"
+                cy="48"
+                r="18"
                 fill={isSelected ? "#17171c" : "#0e0e12"}
                 stroke={isSelected ? "#f0b54a" : "rgba(255,255,255,0.18)"}
                 strokeWidth={isSelected ? 1.5 : 1}
               />
               <circle
                 cx={node.cx}
-                cy="52"
-                r="4.2"
+                cy="48"
+                r="4"
                 fill={isSelected ? "#f0b54a" : "rgba(245,245,247,0.45)"}
               />
               <text
                 x={node.cx}
-                y="93"
+                y="88"
                 textAnchor="middle"
                 fill={isSelected ? "#f5f5f7" : "#a1a1a6"}
                 fontSize="11.5"
@@ -378,9 +357,9 @@ export function EcosystemBridgeVisual({
               </text>
               <text
                 x={node.cx}
-                y="109"
+                y="104"
                 textAnchor="middle"
-                fill={isSelected ? "#ffd99a" : "#7c7c85"}
+                fill={isSelected ? "#d1d1d6" : "#7c7c85"}
                 fontSize="10"
               >
                 {node.sub}
@@ -389,12 +368,6 @@ export function EcosystemBridgeVisual({
           );
         })}
       </svg>
-
-      <p className="mt-2 border-t border-white/[0.07] pt-3 text-[12.5px] leading-[1.5] text-[#9d9da6]">
-        <span className="font-medium text-[#e4e4e8]">{sig.from}</span>
-        {" → "}
-        <span className="text-[#c9c9d0]">{sig.to}:</span> {sig.detail}
-      </p>
     </div>
   );
 }
@@ -646,14 +619,16 @@ export function NeuralNetworkPreview({ theme }: { theme: "dark" | "light" }) {
             key={s.name + idx}
             className={`h-1.5 w-1.5 rounded-full transition-colors ${
               s.status === "occupied"
-                ? "bg-[#f0b54a]"
+                ? isLight
+                  ? "bg-[#0e0f12]"
+                  : "bg-[#f5f5f7]"
                 : s.status === "open"
                   ? isLight
-                    ? "bg-[#9a6910]/45"
-                    : "bg-[#f0b54a]/45"
+                    ? "bg-[#0e0f12]/45"
+                    : "bg-white/45"
                   : isLight
                     ? "bg-[#0e0f12]/18"
-                    : "bg-white/20"
+                    : "bg-white/18"
             }`}
           />
         ))}
@@ -677,7 +652,7 @@ export function NeuralNetworkPreview({ theme }: { theme: "dark" | "light" }) {
               onMouseLeave={() => setHoveredIdx((c) => (c === idx ? -1 : c))}
               onClick={() => handleNodeClick(idx)}
               aria-label={`Trigger ${sock.name} node in preview`}
-              className="pointer-events-auto absolute top-0 left-0 flex h-11 w-11 cursor-pointer items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f0b54a]"
+              className="pointer-events-auto absolute top-0 left-0 flex h-11 w-11 cursor-pointer items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white/75"
               style={{ transform: `translate3d(${pt.x - 22}px, ${pt.y - 22}px, 0)` }}
             >
               <svg viewBox="0 0 44 44" className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" aria-hidden="true">
@@ -719,12 +694,12 @@ export function NeuralNetworkPreview({ theme }: { theme: "dark" | "light" }) {
                 className={`relative z-10 flex items-center justify-center text-[10.5px] font-semibold ${
                   isOccupied
                     ? isLight
-                      ? "text-[#5e3e06]"
-                      : "text-[#fff6dc]"
+                      ? "text-[#0e0f12]"
+                      : "text-[#f5f5f7]"
                     : isOpen
                       ? isLight
-                        ? "text-[#9a6910]"
-                        : "text-[#ffd99a]"
+                        ? "text-[#3a3d46]"
+                        : "text-[#d1d1d6]"
                       : isLight
                         ? "text-[#686a73]"
                         : "text-[#8e8e95]"
@@ -748,7 +723,10 @@ export function NeuralNetworkPreview({ theme }: { theme: "dark" | "light" }) {
                   }`}
                 >
                   {isOccupied ? (
-                    <span className="h-1.5 w-1.5 rounded-full bg-[#f0b54a]" aria-hidden="true" />
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${isLight ? "bg-[#0e0f12]" : "bg-[#f5f5f7]"}`}
+                      aria-hidden="true"
+                    />
                   ) : null}
                   {sock.name}
                 </span>
@@ -771,7 +749,7 @@ export function NeuralNetworkPreview({ theme }: { theme: "dark" | "light" }) {
                 Hello, Elena
               </p>
               <p className={`text-[12.5px] ${isLight ? "text-[#52545e]" : "text-[#9d9da6]"}`}>
-                Touch the filaments, click a node, or ask Nexus directly
+                Click a node or ask Nexus
               </p>
             </div>
           ) : (
@@ -793,7 +771,13 @@ export function NeuralNetworkPreview({ theme }: { theme: "dark" | "light" }) {
           <div className="inline-flex items-center gap-2 text-[11.5px] font-medium">
             <span
               className={`h-1.5 w-1.5 rounded-full ${
-                brainState === "idle" ? "bg-[#f0b54a]" : "animate-pulse bg-[#ffd99a]"
+                brainState === "idle"
+                  ? isLight
+                    ? "bg-[#0e0f12]/70"
+                    : "bg-white/75"
+                  : isLight
+                    ? "animate-pulse bg-[#0e0f12]"
+                    : "animate-pulse bg-white"
               }`}
               aria-hidden="true"
             />
@@ -811,8 +795,8 @@ export function NeuralNetworkPreview({ theme }: { theme: "dark" | "light" }) {
                 onClick={() => triggerPrompt(item)}
                 className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer sm:px-3 sm:text-[11.5px] ${
                   isLight
-                    ? "border-[#0e0f12]/[0.1] bg-white/85 text-[#22242c] hover:border-[#9a6910]/45 hover:bg-white"
-                    : "border-white/[0.12] bg-[#121217]/75 text-[#d1d1d6] hover:border-[#f0b54a]/45 hover:text-white"
+                    ? "border-[#0e0f12]/[0.12] bg-white/85 text-[#22242c] hover:border-[#0e0f12]/35 hover:bg-white"
+                    : "border-white/[0.13] bg-[#121217]/75 text-[#d1d1d6] hover:border-white/35 hover:text-white"
                 }`}
               >
                 {item.label}
@@ -825,8 +809,8 @@ export function NeuralNetworkPreview({ theme }: { theme: "dark" | "light" }) {
             onSubmit={handleSubmit}
             className={`flex h-12 w-full items-center gap-2 rounded-full border pr-1.5 pl-4 backdrop-blur-xl transition-colors ${
               isLight
-                ? "border-[#0e0f12]/[0.12] bg-white/88 shadow-[0_14px_34px_-12px_rgba(14,15,18,0.16)] focus-within:border-[#b47c10]/60"
-                : "border-white/[0.14] bg-[#111116]/82 shadow-[0_14px_36px_-12px_rgba(0,0,0,0.7)] focus-within:border-[#f0b54a]/55"
+                ? "border-[#0e0f12]/[0.12] bg-white/88 shadow-[0_14px_34px_-12px_rgba(14,15,18,0.16)] focus-within:border-[#0e0f12]/40"
+                : "border-white/[0.14] bg-[#111116]/82 shadow-[0_14px_36px_-12px_rgba(0,0,0,0.7)] focus-within:border-white/40"
             }`}
           >
             <input

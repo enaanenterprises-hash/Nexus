@@ -180,8 +180,8 @@ export function FloatingWaitlistPill() {
               disabled={status === "loading"}
               className={`gal-btn-tactile inline-flex min-h-[38px] shrink-0 cursor-pointer items-center gap-1 rounded-full px-4 text-[13.5px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-60 ${
                 overDark
-                  ? "bg-[#f5f5f7] text-[#09090b] hover:bg-white focus-visible:outline-[#f0b54a]"
-                  : "bg-[#0e0f12] text-white hover:bg-[#252730] focus-visible:outline-[#9a6910]"
+                  ? "bg-[#f5f5f7] text-[#09090b] hover:bg-white focus-visible:outline-white/75"
+                  : "bg-[#0e0f12] text-white hover:bg-[#252730] focus-visible:outline-[#0e0f12]"
               }`}
             >
               <span>{status === "loading" ? "…" : "Join beta"}</span>
@@ -193,8 +193,8 @@ export function FloatingWaitlistPill() {
               aria-label="Dismiss waitlist bar"
               className={`flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${
                 overDark
-                  ? "text-[#8e8e95] hover:bg-white/[0.08] hover:text-[#f5f5f7] focus-visible:outline-[#f0b54a]"
-                  : "text-[#636570] hover:bg-[#0e0f12]/[0.06] hover:text-[#0e0f12] focus-visible:outline-[#9a6910]"
+                  ? "text-[#8e8e95] hover:bg-white/[0.08] hover:text-[#f5f5f7] focus-visible:outline-white/75"
+                  : "text-[#636570] hover:bg-[#0e0f12]/[0.06] hover:text-[#0e0f12] focus-visible:outline-[#0e0f12]"
               }`}
             >
               <X className="h-3.5 w-3.5" strokeWidth={1.8} />

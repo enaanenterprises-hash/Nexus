@@ -37,7 +37,7 @@ type PreviewTheme = "dark" | "light";
 type CommandTab = "overview" | "automations" | "connections";
 type CommandPreset = "morning" | "deep-work";
 
-/* ─── Layer Metadata (3 Switchable Menus) ─────────────────────────────────── */
+/* ─── Layer Metadata (3 Switchable Menus — Slim Copy) ─────────────────────── */
 
 const LAYER_TABS: Array<{
   id: EcosystemLayer;
@@ -51,75 +51,27 @@ const LAYER_TABS: Array<{
     id: "network",
     title: "Neural Network",
     role: "Personal assistant",
-    description:
-      "Your ambient personal assistant—wired live across your schedule, inbox, and tools in an ephemeral session.",
+    description: "Ambient assistant wired across your workspace.",
     breadcrumb: "Nexus · Neural Network",
-    chromeStatus: "Live WebGL canopy · 5 orbital sockets",
+    chromeStatus: "WebGL canopy · 5 orbital sockets",
   },
   {
     id: "command",
     title: "Command",
     role: "Daily dashboard",
-    description:
-      "Your calm daily dashboard uniting calendar, Gmail, tasks, focus blocks, automations, and encrypted connections.",
+    description: "Calendar, mail, tasks, focus, and automations.",
     breadcrumb: "Nexus · Command",
-    chromeStatus: "4×2 modular board · AES-256 vault",
+    chromeStatus: "4×2 board · AES-256 vault",
   },
   {
     id: "nodes",
     title: "Nodes",
     role: "Modular extensions",
-    description:
-      "Snap isolated extensions into orbital sockets with plain-English capabilities and live cross-tool signal routing.",
+    description: "Isolated tools snapped into orbital sockets.",
     breadcrumb: "Nexus · Nodes",
     chromeStatus: "Spatial Studio · nexusBus v1",
   },
 ];
-
-const LAYER_NOTES: Record<EcosystemLayer, Array<{ title: string; body: string }>> = {
-  network: [
-    {
-      title: "Grounded in your real workspace",
-      body: "Ask Nexus to brief your morning, trigger a focus block, or hand a Studio recording directly to Daily Brief.",
-    },
-    {
-      title: "Ephemeral session memory",
-      body: "Context stays alive while you work and vanishes cleanly when the tab closes—never stored or trained on.",
-    },
-    {
-      title: "Visual orbital routing",
-      body: "Watch signals travel from the Singularity Core straight into the exact modular socket handling your request.",
-    },
-  ],
-  command: [
-    {
-      title: "One calm daily surface",
-      body: "Calendar, Gmail, tasks, weather, and live telemetry sit on a single modular board without switching browser tabs.",
-    },
-    {
-      title: "Visual automations, zero code",
-      body: "Link incoming mail, focus timers, and Node events into deterministic conduits that run quietly in the background.",
-    },
-    {
-      title: "Incremental encrypted connections",
-      body: "Connect Google, GitHub, or fitness feeds only when you want them—tokens stay encrypted at rest with AES-256-GCM.",
-    },
-  ],
-  nodes: [
-    {
-      title: "Capability-scoped isolation",
-      body: "Every Node runs in its own sandbox and declares plain-English permissions before it can read or publish a single event.",
-    },
-    {
-      title: "Shared event bus across tools",
-      body: "Snapped modules publish structured signals over nexusBus so Neural Network and Command react the instant work finishes.",
-    },
-    {
-      title: "Built on Open SDK v1",
-      body: "Start with built-in Studio, Daily Brief, and Focus Guard sockets—or snap in custom tools built for your own craft.",
-    },
-  ],
-};
 
 /* ─── Command Preview Data (Mirrors Real /dashboard CommandView) ──────────── */
 
@@ -140,7 +92,7 @@ const MAIL_MESSAGES: MailMessage[] = [
     time: "9:42 AM",
     unread: true,
     body: [
-      "Hi team, the shared workspace socket spec is ready for final review ahead of Friday's build. Let me know if the Command grid timing looks clean.",
+      "The shared workspace socket spec is ready for review ahead of Friday's build. Let me know if the Command grid timing looks clean.",
       "Best,\nElena",
     ],
   },
@@ -150,7 +102,7 @@ const MAIL_MESSAGES: MailMessage[] = [
     subject: "Studio Audio Routing",
     time: "Yesterday",
     body: [
-      "Tested the multi-track capture export with cloud sync on Chrome and Safari. Both stem waveforms align cleanly on reload.",
+      "Multi-track capture export with cloud sync tested cleanly on Chrome and Safari.",
       "Ready to wire the Daily Brief socket handoff next.",
     ],
   },
@@ -160,7 +112,7 @@ const MAIL_MESSAGES: MailMessage[] = [
     subject: "PR #48 merged to main",
     time: "Nov 16",
     body: [
-      "Merged pull request #48: Expand Command calendar widget to a full 30-day interactive month view with incremental Google OAuth scopes.",
+      "Merged #48: Expand Command calendar to a 30-day month view with incremental OAuth scopes.",
       "All extension contract smoke checks passed.",
     ],
   },
@@ -201,7 +153,7 @@ const INITIAL_AUTOMATIONS = [
     id: "auto-focus",
     name: "Deep work quiet mode",
     trigger: "Command · Focus starts",
-    action: "Focus Guard · Mute non-urgent alerts",
+    action: "Focus Guard · Mute alerts",
     topic: "command:focus-changed",
     enabled: true,
     lastRun: "14m ago",
@@ -210,7 +162,7 @@ const INITIAL_AUTOMATIONS = [
     id: "auto-studio",
     name: "Route finished takes",
     trigger: "Studio · Take exported",
-    action: "Daily Brief · Attach transcript summary",
+    action: "Daily Brief · Attach summary",
     topic: "studio:take-routed",
     enabled: true,
     lastRun: "1h ago",
@@ -219,7 +171,7 @@ const INITIAL_AUTOMATIONS = [
     id: "auto-receipt",
     name: "File billing receipts",
     trigger: "Gmail · Invoice detected",
-    action: "Ledger · Append monthly entry",
+    action: "Ledger · Append entry",
     topic: "mail:receipt-parsed",
     enabled: false,
     lastRun: "Nov 16",
@@ -253,7 +205,7 @@ const NODE_CATALOG: Record<string, NodeModuleDef> = {
     id: "studio",
     monogram: "St",
     name: "Studio",
-    tagline: "Multi-track audio capture & instant take routing into your shared workspace.",
+    tagline: "Multi-track audio capture routed straight into your workspace.",
     capabilities: ["Audio & Media", "Shared Context", "Cloud Export"],
     scope: "content:studio.recording:read",
     topic: "studio:take-routed",
@@ -263,7 +215,7 @@ const NODE_CATALOG: Record<string, NodeModuleDef> = {
     id: "brief",
     monogram: "DB",
     name: "Daily Brief",
-    tagline: "Synthesizes schedule, unread mail, and active takes for Neural Network and Command.",
+    tagline: "Synthesizes schedule, mail, and active takes for Neural Network.",
     capabilities: ["Calendar Read", "Shared Context", "Assistant Feed"],
     scope: "context:brief.digest:write",
     topic: "brief:digest-updated",
@@ -273,7 +225,7 @@ const NODE_CATALOG: Record<string, NodeModuleDef> = {
     id: "focus",
     monogram: "FG",
     name: "Focus Guard",
-    tagline: "Listens to Command deep-work timers and quiets distracting channels automatically.",
+    tagline: "Listens to Command focus timers and quiets distracting alerts.",
     capabilities: ["Focus State", "Notifications", "Automation Hook"],
     scope: "command:focus.session:subscribe",
     topic: "focus:shield-engaged",
@@ -283,7 +235,7 @@ const NODE_CATALOG: Record<string, NodeModuleDef> = {
     id: "capture",
     monogram: "QC",
     name: "Quick Capture",
-    tagline: "Zero-friction voice & markdown notes routed straight into your Command tasks.",
+    tagline: "Voice and markdown notes routed directly into Command tasks.",
     capabilities: ["Tasks Write", "Voice Input", "Local Cache"],
     scope: "command:tasks.item:create",
     topic: "capture:note-queued",
@@ -293,11 +245,11 @@ const NODE_CATALOG: Record<string, NodeModuleDef> = {
     id: "ledger",
     monogram: "Lg",
     name: "Ledger",
-    tagline: "Turns verified receipt emails into structured personal expense summaries.",
+    tagline: "Turns verified receipt emails into personal expense summaries.",
     capabilities: ["Mail Metadata", "Encrypted Vault", "CSV Export"],
     scope: "vault:ledger.entry:append",
     topic: "ledger:receipt-logged",
-    routeMessage: "Logged verified cloud invoice → Encrypted Vault",
+    routeMessage: "Logged verified invoice → Encrypted Vault",
   },
 };
 
@@ -330,44 +282,43 @@ function formatClock(totalSeconds: number): string {
 
 /* ─── Bespoke 1.5px Architectural Icons for the 3 Menus ───────────────────── */
 
-function LayerGlyph({ layer, active }: { layer: EcosystemLayer; active: boolean }) {
-  const stroke = active ? "#f0b54a" : "currentColor";
+function LayerGlyph({ layer }: { layer: EcosystemLayer }) {
   if (layer === "network") {
     return (
       <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" fill="none" aria-hidden="true">
-        <circle cx="12" cy="14" r="3.2" stroke={stroke} strokeWidth="1.5" />
-        <path d="M12 10.8 C12 7.5 12 6 12 4.5" stroke={stroke} strokeWidth="1.4" strokeLinecap="round" />
-        <path d="M9.4 12 C7.2 10.2 5.8 8.4 4.8 6.4" stroke={stroke} strokeWidth="1.4" strokeLinecap="round" />
-        <path d="M14.6 12 C16.8 10.2 18.2 8.4 19.2 6.4" stroke={stroke} strokeWidth="1.4" strokeLinecap="round" />
-        <circle cx="12" cy="4" r="1.4" fill={stroke} />
-        <circle cx="4.5" cy="6" r="1.4" fill={stroke} />
-        <circle cx="19.5" cy="6" r="1.4" fill={stroke} />
-        <path d="M4.5 18.5 Q12 15.2 19.5 18.5" stroke={stroke} strokeWidth="1.25" strokeOpacity="0.55" strokeLinecap="round" />
+        <circle cx="12" cy="14" r="3.2" stroke="currentColor" strokeWidth="1.5" />
+        <path d="M12 10.8 C12 7.5 12 6 12 4.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        <path d="M9.4 12 C7.2 10.2 5.8 8.4 4.8 6.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        <path d="M14.6 12 C16.8 10.2 18.2 8.4 19.2 6.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        <circle cx="12" cy="4" r="1.4" fill="currentColor" />
+        <circle cx="4.5" cy="6" r="1.4" fill="currentColor" />
+        <circle cx="19.5" cy="6" r="1.4" fill="currentColor" />
+        <path d="M4.5 18.5 Q12 15.2 19.5 18.5" stroke="currentColor" strokeWidth="1.25" strokeOpacity="0.55" strokeLinecap="round" />
       </svg>
     );
   }
   if (layer === "command") {
     return (
       <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" fill="none" aria-hidden="true">
-        <rect x="3.5" y="4" width="7.5" height="9.5" rx="2" stroke={stroke} strokeWidth="1.5" />
-        <rect x="13" y="4" width="7.5" height="6" rx="2" stroke={stroke} strokeWidth="1.5" />
-        <rect x="13" y="12" width="7.5" height="8" rx="2" stroke={stroke} strokeWidth="1.5" />
-        <rect x="3.5" y="15.5" width="7.5" height="4.5" rx="1.8" stroke={stroke} strokeWidth="1.5" strokeOpacity="0.65" />
+        <rect x="3.5" y="4" width="7.5" height="9.5" rx="2" stroke="currentColor" strokeWidth="1.5" />
+        <rect x="13" y="4" width="7.5" height="6" rx="2" stroke="currentColor" strokeWidth="1.5" />
+        <rect x="13" y="12" width="7.5" height="8" rx="2" stroke="currentColor" strokeWidth="1.5" />
+        <rect x="3.5" y="15.5" width="7.5" height="4.5" rx="1.8" stroke="currentColor" strokeWidth="1.5" strokeOpacity="0.65" />
       </svg>
     );
   }
   return (
     <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" fill="none" aria-hidden="true">
-      <circle cx="12" cy="18" r="2.2" fill={stroke} />
-      <path d="M12 15.8 L6.2 9.4 M12 15.8 L12 6.8 M12 15.8 L17.8 9.4" stroke={stroke} strokeWidth="1.35" strokeOpacity="0.7" />
-      <circle cx="5.5" cy="8.5" r="2.2" stroke={stroke} strokeWidth="1.45" />
-      <circle cx="12" cy="5.2" r="2.2" stroke={stroke} strokeWidth="1.45" />
-      <circle cx="18.5" cy="8.5" r="2.2" stroke={stroke} strokeWidth="1.45" />
+      <circle cx="12" cy="18" r="2.2" fill="currentColor" />
+      <path d="M12 15.8 L6.2 9.4 M12 15.8 L12 6.8 M12 15.8 L17.8 9.4" stroke="currentColor" strokeWidth="1.35" strokeOpacity="0.7" />
+      <circle cx="5.5" cy="8.5" r="2.2" stroke="currentColor" strokeWidth="1.45" />
+      <circle cx="12" cy="5.2" r="2.2" stroke="currentColor" strokeWidth="1.45" />
+      <circle cx="18.5" cy="8.5" r="2.2" stroke="currentColor" strokeWidth="1.45" />
     </svg>
   );
 }
 
-/* ─── Authentic Command Dashboard Preview ─────────────────────────────────── */
+/* ─── Authentic Command Dashboard Preview (Monochrome Precision UI) ───────── */
 
 function CommandPreview({ theme }: { theme: PreviewTheme }) {
   const isLight = theme === "light";
@@ -420,16 +371,16 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
     : "border-white/[0.08] bg-[#101015]";
   const innerSurface = isLight ? "bg-[#f5f6f8] border-[#0e0f12]/[0.07]" : "bg-[#15151c] border-white/[0.07]";
   const textPrimary = isLight ? "text-[#0e0f12]" : "text-[#f5f5f7]";
+  const textSecondary = isLight ? "text-[#2c2e36]" : "text-[#d1d1d6]";
   const textMuted = isLight ? "text-[#575b66]" : "text-[#9d9da6]";
   const textSubtle = isLight ? "text-[#6c707c]" : "text-[#8a8a94]";
-  const goldText = isLight ? "text-[#9a6910]" : "text-[#f0b54a]";
 
   return (
     <div
       className="min-h-[540px] w-full p-4 sm:min-h-[590px] sm:p-5 lg:p-6"
       style={{ background: isLight ? "#f6f7f9" : "#08080b" }}
     >
-      {/* Authentic Command Header Bar (Greeting · Overview/Automations/Connections · Focus Pill · ⌘K) */}
+      {/* Command Header Bar */}
       <div
         className={`flex flex-wrap items-center justify-between gap-3 rounded-[15px] border px-3.5 py-2.5 sm:px-4 ${cardSurface}`}
       >
@@ -473,7 +424,7 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
           </div>
         </div>
 
-        {/* Center Segmented Control: Overview | Automations | Connections */}
+        {/* Center Segmented Control */}
         <div
           role="tablist"
           aria-label="Command workspace views"
@@ -521,8 +472,8 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
             className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors ${
               focusRunning
                 ? isLight
-                  ? "border-[#b47c10]/45 bg-[#fef7e6] text-[#7c5308]"
-                  : "border-[#f0b54a]/45 bg-[#f0b54a]/[0.14] text-[#ffd99a]"
+                  ? "border-[#0e0f12] bg-[#0e0f12] text-white"
+                  : "border-white/30 bg-white/[0.15] text-white"
                 : isLight
                   ? "border-[#0e0f12]/[0.1] bg-[#f5f6f8] text-[#1c1e24] hover:bg-[#eceef2]"
                   : "border-white/[0.1] bg-[#16161d] text-[#d1d1d6] hover:bg-white/[0.1]"
@@ -545,7 +496,7 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
               quickOpen
                 ? isLight
                   ? "border-[#0e0f12] bg-[#0e0f12] text-white"
-                  : "border-[#f0b54a]/50 bg-[#f0b54a]/15 text-[#ffd99a]"
+                  : "border-white/30 bg-white/[0.16] text-white"
                 : isLight
                   ? "border-[#0e0f12]/[0.1] bg-white text-[#22242c] hover:bg-[#f3f4f6]"
                   : "border-white/[0.1] bg-[#16161d] text-[#d1d1d6] hover:bg-white/[0.1]"
@@ -557,17 +508,17 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
         </div>
       </div>
 
-      {/* Inline ⌘K Command Palette Strip or Transient Execution Feedback */}
+      {/* Inline ⌘K Command Palette Strip */}
       {quickOpen ? (
         <div
           className={`mt-3 flex flex-wrap items-center justify-between gap-2 rounded-[13px] border px-3.5 py-2.5 text-[12px] ${
             isLight
-              ? "border-[#b47c10]/35 bg-[#fffcf4] text-[#0e0f12]"
-              : "border-[#f0b54a]/35 bg-[#14120c] text-[#f5f5f7]"
+              ? "border-[#0e0f12]/[0.14] bg-white text-[#0e0f12]"
+              : "border-white/[0.14] bg-[#14141a] text-[#f5f5f7]"
           }`}
         >
           <div className="flex items-center gap-2">
-            <Search className={`size-3.5 ${goldText}`} strokeWidth={1.8} aria-hidden="true" />
+            <Search className={`size-3.5 ${textSecondary}`} strokeWidth={1.8} aria-hidden="true" />
             <span className="font-medium">Quick command</span>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
@@ -578,8 +529,8 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
               }
               className={`cursor-pointer rounded-full border px-2.5 py-1 text-[11.5px] font-medium ${
                 isLight
-                  ? "border-[#0e0f12]/12 bg-white hover:border-[#b47c10]/50"
-                  : "border-white/12 bg-white/[0.05] hover:border-[#f0b54a]/50"
+                  ? "border-[#0e0f12]/12 bg-[#f5f6f8] hover:border-[#0e0f12]/35"
+                  : "border-white/12 bg-white/[0.05] hover:border-white/35"
               }`}
             >
               Start 25m focus
@@ -591,8 +542,8 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
               }
               className={`cursor-pointer rounded-full border px-2.5 py-1 text-[11.5px] font-medium ${
                 isLight
-                  ? "border-[#0e0f12]/12 bg-white hover:border-[#b47c10]/50"
-                  : "border-white/12 bg-white/[0.05] hover:border-[#f0b54a]/50"
+                  ? "border-[#0e0f12]/12 bg-[#f5f6f8] hover:border-[#0e0f12]/35"
+                  : "border-white/12 bg-white/[0.05] hover:border-white/35"
               }`}
             >
               Inspect Automations
@@ -600,12 +551,12 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
             <button
               type="button"
               onClick={() =>
-                runQuickCommand("Opened Encrypted Connections Vault", () => setSubTab("connections"))
+                runQuickCommand("Opened Connections Vault", () => setSubTab("connections"))
               }
               className={`cursor-pointer rounded-full border px-2.5 py-1 text-[11.5px] font-medium ${
                 isLight
-                  ? "border-[#0e0f12]/12 bg-white hover:border-[#b47c10]/50"
-                  : "border-white/12 bg-white/[0.05] hover:border-[#f0b54a]/50"
+                  ? "border-[#0e0f12]/12 bg-[#f5f6f8] hover:border-[#0e0f12]/35"
+                  : "border-white/12 bg-white/[0.05] hover:border-white/35"
               }`}
             >
               Manage Vault
@@ -616,8 +567,8 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
         <div
           className={`mt-3 flex items-center gap-2 rounded-[12px] border px-3.5 py-2 text-[12px] ${
             isLight
-              ? "border-[#b47c10]/30 bg-[#fef8ea] text-[#6d4907]"
-              : "border-[#f0b54a]/30 bg-[#f0b54a]/10 text-[#ffd99a]"
+              ? "border-[#0e0f12]/[0.12] bg-white text-[#0e0f12]"
+              : "border-white/[0.14] bg-white/[0.06] text-[#f5f5f7]"
           }`}
         >
           <Zap className="size-3.5 shrink-0" strokeWidth={1.9} aria-hidden="true" />
@@ -625,15 +576,15 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
         </div>
       ) : null}
 
-      {/* ── Sub-view 1: Overview (4×2 Authentic Command Board) ── */}
+      {/* ── Sub-view 1: Overview ── */}
       {subTab === "overview" ? (
         <div className="mt-4 grid grid-cols-1 gap-3.5 lg:grid-cols-12">
           {/* Calendar Widget */}
           <div className={`rounded-[16px] border p-4 lg:col-span-4 ${cardSurface}`}>
             <div className="flex items-baseline justify-between gap-2">
               <p className={`text-[14px] font-semibold ${textPrimary}`}>November</p>
-              <p className={`truncate text-[11.5px] ${goldText}`}>
-                {CALENDAR_EVENTS[selectedDay] ?? "No events scheduled"}
+              <p className={`truncate text-[11.5px] ${textMuted}`}>
+                {CALENDAR_EVENTS[selectedDay] ?? "No events"}
               </p>
             </div>
 
@@ -670,7 +621,13 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
                     {hasEvent ? (
                       <span
                         className={`h-1 w-1 rounded-full ${
-                          isSelected ? "bg-[#f0b54a]" : isLight ? "bg-[#b47c10]" : "bg-[#f0b54a]"
+                          isSelected
+                            ? isLight
+                              ? "bg-white"
+                              : "bg-white"
+                            : isLight
+                              ? "bg-[#0e0f12]/60"
+                              : "bg-white/65"
                         }`}
                       />
                     ) : null}
@@ -680,7 +637,7 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
             </div>
           </div>
 
-          {/* 2-Pane Interactive Gmail Widget */}
+          {/* 2-Pane Gmail Widget */}
           <div
             className={`grid grid-cols-1 overflow-hidden rounded-[16px] border sm:grid-cols-12 lg:col-span-5 ${cardSurface} ${
               preset === "deep-work" ? "opacity-75" : ""
@@ -723,7 +680,10 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
                       <div className="flex items-center justify-between gap-2">
                         <span className={`inline-flex items-center gap-1.5 truncate text-[12px] font-medium ${textPrimary}`}>
                           {m.unread ? (
-                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#f0b54a]" aria-hidden="true" />
+                            <span
+                              className={`h-1.5 w-1.5 shrink-0 rounded-full ${isLight ? "bg-[#0e0f12]" : "bg-[#f5f5f7]"}`}
+                              aria-hidden="true"
+                            />
                           ) : null}
                           {m.sender}
                         </span>
@@ -757,22 +717,26 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
                 </div>
               </div>
 
-              <div className={`mt-3 flex items-center justify-between border-t pt-2.5 text-[11px] ${isLight ? "border-[#0e0f12]/[0.07]" : "border-white/[0.07]"} ${textSubtle}`}>
+              <div
+                className={`mt-3 flex items-center justify-between border-t pt-2.5 text-[11px] ${
+                  isLight ? "border-[#0e0f12]/[0.07]" : "border-white/[0.07]"
+                } ${textSubtle}`}
+              >
                 <span className="inline-flex items-center gap-1">
                   <PenSquare className="size-3" strokeWidth={1.7} aria-hidden="true" />
                   Draft with Neural Network
                 </span>
-                <span>Read-only scope</span>
+                <span>Read-only</span>
               </div>
             </div>
           </div>
 
-          {/* Interactive Today Tasks Widget */}
+          {/* Today Tasks Widget */}
           <div className={`flex flex-col justify-between rounded-[16px] border p-4 lg:col-span-3 ${cardSurface}`}>
             <div>
               <div className="flex items-center justify-between gap-2">
                 <p className={`text-[14px] font-semibold ${textPrimary}`}>Today</p>
-                <span className={`text-[11.5px] font-medium tabular-nums ${goldText}`}>
+                <span className={`text-[11.5px] font-medium tabular-nums ${textSecondary}`}>
                   {completedCount} / {tasks.length} done
                 </span>
               </div>
@@ -792,7 +756,9 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
                     <span
                       className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] border transition-colors ${
                         task.done
-                          ? "border-[#f0b54a] bg-[#f0b54a] text-[#09090b]"
+                          ? isLight
+                            ? "border-[#0e0f12] bg-[#0e0f12] text-white"
+                            : "border-[#f5f5f7] bg-[#f5f5f7] text-[#09090b]"
                           : isLight
                             ? "border-[#0e0f12]/25 bg-white"
                             : "border-white/25 bg-transparent"
@@ -821,13 +787,15 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
               }`}
             >
               <div
-                className="h-full rounded-full bg-[#f0b54a] transition-all duration-300"
+                className={`h-full rounded-full transition-all duration-300 ${
+                  isLight ? "bg-[#0e0f12]" : "bg-[#f5f5f7]"
+                }`}
                 style={{ width: `${(completedCount / tasks.length) * 100}%` }}
               />
             </div>
           </div>
 
-          {/* Bottom Row Left: Weather Tile */}
+          {/* Bottom Row Left: Weather */}
           <div className={`rounded-[16px] border p-4 lg:col-span-5 ${cardSurface}`}>
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -839,7 +807,7 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
                   <span className={`text-[12.5px] ${textMuted}`}>Partly cloudy · H 14° L 7°</span>
                 </div>
               </div>
-              <CloudSun className={`size-6 ${goldText}`} strokeWidth={1.6} aria-hidden="true" />
+              <CloudSun className={`size-6 ${textSecondary}`} strokeWidth={1.6} aria-hidden="true" />
             </div>
 
             <div className="mt-4 grid grid-cols-5 gap-2">
@@ -850,7 +818,7 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
                 >
                   <span className={`text-[10.5px] ${textSubtle}`}>{slot.label}</span>
                   {slot.icon === "partly" ? (
-                    <CloudSun className={`size-3.5 ${goldText}`} strokeWidth={1.7} aria-hidden="true" />
+                    <CloudSun className={`size-3.5 ${textSecondary}`} strokeWidth={1.7} aria-hidden="true" />
                   ) : (
                     <Cloud className={`size-3.5 ${textMuted}`} strokeWidth={1.7} aria-hidden="true" />
                   )}
@@ -860,17 +828,21 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
             </div>
           </div>
 
-          {/* Bottom Row Right: Formula 1 Live Telemetry Tile */}
+          {/* Bottom Row Right: Formula 1 */}
           <div className={`rounded-[16px] border p-4 lg:col-span-7 ${cardSurface}`}>
             <div className="flex items-center justify-between gap-2">
               <p className={`text-[14px] font-semibold ${textPrimary}`}>Formula 1</p>
-              <span className={`text-[11.5px] ${textMuted}`}>Las Vegas · Qualifying timing</span>
+              <span className={`text-[11.5px] ${textMuted}`}>Las Vegas · Qualifying</span>
             </div>
 
             <div className="mt-3 overflow-x-auto">
               <table className="w-full border-collapse text-left text-[12px] tabular-nums">
                 <thead>
-                  <tr className={`border-b text-[10.5px] ${isLight ? "border-[#0e0f12]/[0.08]" : "border-white/[0.08]"} ${textSubtle}`}>
+                  <tr
+                    className={`border-b text-[10.5px] ${
+                      isLight ? "border-[#0e0f12]/[0.08]" : "border-white/[0.08]"
+                    } ${textSubtle}`}
+                  >
                     <th className="pb-2 font-medium">Pos</th>
                     <th className="pb-2 font-medium">Driver</th>
                     <th className="pb-2 font-medium">Gap</th>
@@ -897,7 +869,9 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
                         </span>
                       </td>
                       <td className={`py-2 ${textMuted}`}>{row.gap}</td>
-                      <td className={`py-2 ${row.fastest ? goldText : textMuted}`}>{row.sector}</td>
+                      <td className={`py-2 ${row.fastest ? `font-semibold ${textPrimary}` : textMuted}`}>
+                        {row.sector}
+                      </td>
                       <td className={`py-2 text-right font-medium ${textPrimary}`}>{row.lap}</td>
                     </tr>
                   ))}
@@ -908,14 +882,12 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
         </div>
       ) : null}
 
-      {/* ── Sub-view 2: Automations (Visual Signal Conduit Recipes) ── */}
+      {/* ── Sub-view 2: Automations ── */}
       {subTab === "automations" ? (
         <div className="mt-4 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-            <p className={`text-[13px] ${textMuted}`}>
-              Deterministic cross-ecosystem workflows linking Command, Neural Network, and Nodes.
-            </p>
-            <span className={`font-mono text-[11.5px] tabular-nums ${goldText}`}>
+            <p className={`text-[13px] ${textMuted}`}>Deterministic workflows across Command, Neural Network, and Nodes.</p>
+            <span className={`font-mono text-[11.5px] tabular-nums ${textSecondary}`}>
               {automations.filter((a) => a.enabled).length} of {automations.length} active
             </span>
           </div>
@@ -927,16 +899,15 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
                 <div
                   key={auto.id}
                   className={`flex flex-col gap-3 rounded-[16px] border p-4 transition-colors lg:flex-row lg:items-center lg:justify-between ${cardSurface} ${
-                    pulsing ? "border-[#f0b54a]/60" : ""
+                    pulsing ? (isLight ? "border-[#0e0f12]/45" : "border-white/40") : ""
                   }`}
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className={`text-[14px] font-semibold ${textPrimary}`}>{auto.name}</p>
-                      <span className={`font-mono text-[11px] ${goldText}`}>{auto.topic}</span>
+                      <span className={`font-mono text-[11px] ${textSubtle}`}>{auto.topic}</span>
                     </div>
 
-                    {/* Visual Trigger -> Signal Conduit -> Action schematic */}
                     <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[12px]">
                       <span className={`rounded-[9px] border px-2.5 py-1 font-medium ${innerSurface} ${textPrimary}`}>
                         {auto.trigger}
@@ -945,16 +916,20 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
                         <span
                           className={`h-[1.5px] w-7 transition-colors ${
                             pulsing
-                              ? "bg-[#ffd99a]"
+                              ? isLight
+                                ? "bg-[#0e0f12]"
+                                : "bg-white"
                               : auto.enabled
-                                ? "bg-[#f0b54a]/70"
+                                ? isLight
+                                  ? "bg-[#0e0f12]/45"
+                                  : "bg-white/45"
                                 : isLight
-                                  ? "bg-[#0e0f12]/20"
-                                  : "bg-white/20"
+                                  ? "bg-[#0e0f12]/18"
+                                  : "bg-white/18"
                           }`}
                         />
                         <ArrowRight
-                          className={`size-3.5 ${auto.enabled ? goldText : textSubtle}`}
+                          className={`size-3.5 ${auto.enabled ? textPrimary : textSubtle}`}
                           strokeWidth={1.8}
                         />
                       </span>
@@ -973,11 +948,11 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
                       onClick={() => triggerAutomationTest(auto.id)}
                       className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors ${
                         isLight
-                          ? "border-[#0e0f12]/[0.12] bg-white text-[#0e0f12] hover:border-[#b47c10]/60"
-                          : "border-white/[0.12] bg-[#16161e] text-[#f5f5f7] hover:border-[#f0b54a]/55"
+                          ? "border-[#0e0f12]/[0.12] bg-white text-[#0e0f12] hover:border-[#0e0f12]/35"
+                          : "border-white/[0.12] bg-[#16161e] text-[#f5f5f7] hover:border-white/35"
                       }`}
                     >
-                      <Zap className={`size-3.5 ${goldText}`} strokeWidth={1.8} aria-hidden="true" />
+                      <Zap className="size-3.5" strokeWidth={1.8} aria-hidden="true" />
                       Run test
                     </button>
                     <button
@@ -994,15 +969,21 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
                       }
                       className={`relative h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors ${
                         auto.enabled
-                          ? "bg-[#f0b54a]"
+                          ? isLight
+                            ? "bg-[#0e0f12]"
+                            : "bg-[#f5f5f7]"
                           : isLight
                             ? "bg-[#d6d8df]"
                             : "bg-white/[0.15]"
                       }`}
                     >
                       <span
-                        className={`block h-4 w-4 rounded-full bg-white shadow-xs transition-transform ${
-                          auto.enabled ? "translate-x-6" : "translate-x-1"
+                        className={`block h-4 w-4 rounded-full shadow-xs transition-transform ${
+                          auto.enabled
+                            ? isLight
+                              ? "translate-x-6 bg-white"
+                              : "translate-x-6 bg-[#09090b]"
+                            : "translate-x-1 bg-white"
                         }`}
                       />
                     </button>
@@ -1014,15 +995,15 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
         </div>
       ) : null}
 
-      {/* ── Sub-view 3: Connections (Encrypted AES-256-GCM Connector Vault) ── */}
+      {/* ── Sub-view 3: Connections ── */}
       {subTab === "connections" ? (
         <div className="mt-4 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2 px-1">
             <span className={`inline-flex items-center gap-2 text-[13px] ${textMuted}`}>
-              <ShieldCheck className={`size-4 ${goldText}`} strokeWidth={1.75} aria-hidden="true" />
-              Incremental OAuth scopes encrypted at rest with AES-256-GCM.
+              <ShieldCheck className={`size-4 ${textSecondary}`} strokeWidth={1.75} aria-hidden="true" />
+              Incremental OAuth encrypted with AES-256-GCM.
             </span>
-            <span className={`text-[12px] font-medium tabular-nums ${goldText}`}>
+            <span className={`text-[12px] font-medium tabular-nums ${textSecondary}`}>
               {connections.filter((c) => c.connected).length} of {connections.length} connected
             </span>
           </div>
@@ -1040,15 +1021,21 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
                       className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ${
                         conn.connected
                           ? isLight
-                            ? "bg-[#fef7e6] text-[#7c5308]"
-                            : "bg-[#f0b54a]/14 text-[#ffd99a]"
+                            ? "bg-[#0e0f12]/[0.07] text-[#0e0f12]"
+                            : "bg-white/[0.1] text-[#f5f5f7]"
                           : isLight
                             ? "bg-[#f1f2f5] text-[#5c606a]"
-                            : "bg-white/[0.06] text-[#8e8e95]"
+                            : "bg-white/[0.05] text-[#8e8e95]"
                       }`}
                     >
                       <span
-                        className={`h-1.5 w-1.5 rounded-full ${conn.connected ? "bg-[#f0b54a]" : "bg-current opacity-40"}`}
+                        className={`h-1.5 w-1.5 rounded-full ${
+                          conn.connected
+                            ? isLight
+                              ? "bg-[#0e0f12]"
+                              : "bg-[#f5f5f7]"
+                            : "bg-current opacity-40"
+                        }`}
                         aria-hidden="true"
                       />
                       {conn.connected ? "Encrypted" : "Disconnected"}
@@ -1083,7 +1070,7 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
                           : "border-white/12 bg-white/[0.04] text-[#d1d1d6] hover:bg-white/[0.09]"
                         : isLight
                           ? "border-[#0e0f12] bg-[#0e0f12] text-white"
-                          : "border-[#f0b54a]/45 bg-[#f0b54a]/16 text-[#ffd99a] hover:bg-[#f0b54a]/24"
+                          : "border-white/25 bg-[#f5f5f7] text-[#09090b] hover:bg-white"
                     }`}
                   >
                     {conn.connected ? "Disconnect" : "Connect"}
@@ -1098,7 +1085,7 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
   );
 }
 
-/* ─── Authentic Spatial Nodes Studio Preview ──────────────────────────────── */
+/* ─── Authentic Spatial Nodes Studio Preview (Gold strictly on SVG visual) ── */
 
 type BusEvent = {
   id: number;
@@ -1180,7 +1167,6 @@ function NodesPreview({ theme }: { theme: PreviewTheme }) {
         : sockets.findIndex((val, idx) => idx < maxSlots && val === null);
 
     if (targetIdx < 0) {
-      // Unlock pro preview automatically if all 3 free slots are occupied
       setProUnlocked(true);
       targetIdx = sockets.findIndex((val) => val === null);
     }
@@ -1198,16 +1184,16 @@ function NodesPreview({ theme }: { theme: PreviewTheme }) {
     : "border-white/[0.08] bg-[#101015]";
   const innerSurface = isLight ? "bg-[#f5f6f8] border-[#0e0f12]/[0.07]" : "bg-[#15151c] border-white/[0.07]";
   const textPrimary = isLight ? "text-[#0e0f12]" : "text-[#f5f5f7]";
+  const textSecondary = isLight ? "text-[#2c2e36]" : "text-[#d1d1d6]";
   const textMuted = isLight ? "text-[#575b66]" : "text-[#9d9da6]";
   const textSubtle = isLight ? "text-[#6c707c]" : "text-[#8a8a94]";
-  const goldText = isLight ? "text-[#9a6910]" : "text-[#f0b54a]";
 
   return (
     <div
       className="min-h-[540px] w-full p-4 sm:min-h-[590px] sm:p-5 lg:p-6"
       style={{ background: isLight ? "#f6f7f9" : "#08080b" }}
     >
-      {/* Top Studio Header Bar (Occupancy Meter · Test Route · Preview Pro) */}
+      {/* Top Studio Header Bar */}
       <div
         className={`flex flex-wrap items-center justify-between gap-3 rounded-[15px] border px-4 py-2.5 ${cardSurface}`}
       >
@@ -1219,7 +1205,7 @@ function NodesPreview({ theme }: { theme: PreviewTheme }) {
             </p>
           </div>
 
-          {/* 5-pip occupancy meter */}
+          {/* 5-pip monochrome occupancy meter */}
           <div className="flex items-center gap-1.5" aria-hidden="true">
             {sockets.map((val, idx) => {
               const locked = idx >= maxSlots;
@@ -1228,14 +1214,16 @@ function NodesPreview({ theme }: { theme: PreviewTheme }) {
                   key={idx}
                   className={`h-2 w-4 rounded-full transition-colors ${
                     val
-                      ? "bg-[#f0b54a]"
+                      ? isLight
+                        ? "bg-[#0e0f12]"
+                        : "bg-[#f5f5f7]"
                       : locked
                         ? isLight
                           ? "bg-[#0e0f12]/[0.1]"
                           : "bg-white/[0.1]"
                         : isLight
-                          ? "bg-[#b47c10]/30"
-                          : "bg-[#f0b54a]/30"
+                          ? "bg-[#0e0f12]/30"
+                          : "bg-white/30"
                   }`}
                 />
               );
@@ -1252,8 +1240,8 @@ function NodesPreview({ theme }: { theme: PreviewTheme }) {
             }}
             className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors ${
               isLight
-                ? "border-[#b47c10]/40 bg-[#fef7e6] text-[#7c5308] hover:bg-[#fceec9]"
-                : "border-[#f0b54a]/45 bg-[#f0b54a]/14 text-[#ffd99a] hover:bg-[#f0b54a]/22"
+                ? "border-[#0e0f12]/[0.14] bg-[#f5f6f8] text-[#0e0f12] hover:bg-[#e9ebf0]"
+                : "border-white/[0.14] bg-white/[0.07] text-[#f5f5f7] hover:bg-white/[0.13]"
             }`}
           >
             <Radio className="size-3.5" strokeWidth={1.85} aria-hidden="true" />
@@ -1278,7 +1266,7 @@ function NodesPreview({ theme }: { theme: PreviewTheme }) {
               proUnlocked
                 ? isLight
                   ? "border-[#0e0f12] bg-[#0e0f12] text-white"
-                  : "border-white/25 bg-white/[0.15] text-white"
+                  : "border-white/25 bg-[#f5f5f7] text-[#09090b]"
                 : isLight
                   ? "border-[#0e0f12]/[0.12] bg-white text-[#22242c] hover:bg-[#f3f4f6]"
                   : "border-white/[0.12] bg-[#16161d] text-[#d1d1d6] hover:bg-white/[0.09]"
@@ -1290,224 +1278,219 @@ function NodesPreview({ theme }: { theme: PreviewTheme }) {
         </div>
       </div>
 
-      {/* Main Spatial Studio Grid: Orbital Constellation + Precision Capability Inspector */}
+      {/* Main Spatial Studio Grid */}
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-12">
-        {/* Left: Interactive 5-Socket Orbital Constellation SVG */}
+        {/* Left: Interactive 5-Socket Orbital Constellation SVG (Gold preserved on graphic geometry) */}
         <div className={`relative flex flex-col overflow-hidden rounded-[16px] border p-4 lg:col-span-7 ${cardSurface}`}>
           <div className="flex items-center justify-between gap-2 text-[12px]">
             <span className={`font-medium ${textPrimary}`}>Orbital socket constellation</span>
-            <span className={`font-mono text-[11px] ${textSubtle}`}>Click any node to inspect or route</span>
+            <span className={`font-mono text-[11px] ${textSubtle}`}>Click any node to inspect</span>
           </div>
 
           <div className="flex flex-1 items-center justify-center py-2">
-          <svg
-            viewBox="0 0 600 314"
-            className="block h-auto w-full max-w-[680px] overflow-visible"
-            role="group"
-            aria-label="Interactive 5-socket Nexus spatial constellation"
-          >
-            {/* Concentric range arcs centered on the Core */}
-            {[96, 152, 208, 256].map((r, i) => (
-              <path
-                key={r}
-                d={`M ${CONSTELLATION_CORE.x - r} ${CONSTELLATION_CORE.y} A ${r} ${r} 0 0 1 ${CONSTELLATION_CORE.x + r} ${CONSTELLATION_CORE.y}`}
-                fill="none"
-                stroke={
-                  isLight
-                    ? i === 1 || i === 2
-                      ? "rgba(154,105,16,0.16)"
-                      : "rgba(14,15,18,0.07)"
-                    : i === 1 || i === 2
-                      ? "rgba(240,181,74,0.14)"
-                      : "rgba(255,255,255,0.06)"
-                }
-                strokeWidth="1"
-              />
-            ))}
+            <svg
+              viewBox="0 0 600 314"
+              className="block h-auto w-full max-w-[680px] overflow-visible"
+              role="group"
+              aria-label="Interactive 5-socket Nexus spatial constellation"
+            >
+              {[96, 152, 208, 256].map((r, i) => (
+                <path
+                  key={r}
+                  d={`M ${CONSTELLATION_CORE.x - r} ${CONSTELLATION_CORE.y} A ${r} ${r} 0 0 1 ${CONSTELLATION_CORE.x + r} ${CONSTELLATION_CORE.y}`}
+                  fill="none"
+                  stroke={
+                    isLight
+                      ? i === 1 || i === 2
+                        ? "rgba(154,105,16,0.16)"
+                        : "rgba(14,15,18,0.07)"
+                      : i === 1 || i === 2
+                        ? "rgba(240,181,74,0.14)"
+                        : "rgba(255,255,255,0.06)"
+                  }
+                  strokeWidth="1"
+                />
+              ))}
 
-            {/* 5 Curved Optical Conduits from Core to Orbital Sockets */}
-            {NODE_COORDS.map((pt, idx) => {
-              const modId = sockets[idx];
-              const locked = idx >= maxSlots;
-              const isSelected = selectedSocket === idx;
-              const path = socketCurvePath(idx);
-              const isPulsing = routingPulse?.socketIdx === idx;
+              {NODE_COORDS.map((pt, idx) => {
+                const modId = sockets[idx];
+                const locked = idx >= maxSlots;
+                const isSelected = selectedSocket === idx;
+                const path = socketCurvePath(idx);
+                const isPulsing = routingPulse?.socketIdx === idx;
 
-              return (
-                <g key={`conduit-${idx}`}>
-                  <path
-                    d={path}
-                    fill="none"
-                    stroke={
-                      modId
-                        ? isSelected
-                          ? "#f0b54a"
-                          : isLight
-                            ? "rgba(180,124,16,0.55)"
-                            : "rgba(240,181,74,0.48)"
-                        : locked
-                          ? isLight
-                            ? "rgba(14,15,18,0.12)"
-                            : "rgba(255,255,255,0.1)"
-                          : isLight
-                            ? "rgba(180,124,16,0.28)"
-                            : "rgba(240,181,74,0.28)"
-                    }
-                    strokeWidth={isSelected && modId ? 2 : modId ? 1.45 : 1}
-                    strokeDasharray={modId ? undefined : "4 4"}
-                  />
-
-                  {/* Animated Signal Photon gliding cleanly along occupied selected or pulsed conduit */}
-                  {modId && (isSelected || isPulsing) ? (
-                    <circle
-                      key={`pulse-${idx}-${routingPulse?.serial ?? 0}`}
-                      r={isPulsing ? 4 : 2.8}
-                      fill={isLight ? "#b47c10" : "#fff4d2"}
-                    >
-                      <animateMotion dur={isPulsing ? "1.1s" : "2.6s"} repeatCount="indefinite" path={path} />
-                    </circle>
-                  ) : null}
-
-                  {/* Clickable Socket Node Reticle */}
-                  <g
-                    onClick={() => setSelectedSocket(idx)}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={
-                      modId
-                        ? `Inspect ${NODE_CATALOG[modId]?.name} on Socket ${idx + 1}`
-                        : locked
-                          ? `Pro Socket ${idx + 1} (locked)`
-                          : `Open Socket ${idx + 1}`
-                    }
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setSelectedSocket(idx);
+                return (
+                  <g key={`conduit-${idx}`}>
+                    <path
+                      d={path}
+                      fill="none"
+                      stroke={
+                        modId
+                          ? isSelected
+                            ? "#f0b54a"
+                            : isLight
+                              ? "rgba(180,124,16,0.55)"
+                              : "rgba(240,181,74,0.48)"
+                          : locked
+                            ? isLight
+                              ? "rgba(14,15,18,0.12)"
+                              : "rgba(255,255,255,0.1)"
+                            : isLight
+                              ? "rgba(180,124,16,0.28)"
+                              : "rgba(240,181,74,0.28)"
                       }
-                    }}
-                    className="cursor-pointer"
-                  >
-                    {isSelected ? (
+                      strokeWidth={isSelected && modId ? 2 : modId ? 1.45 : 1}
+                      strokeDasharray={modId ? undefined : "4 4"}
+                    />
+
+                    {modId && (isSelected || isPulsing) ? (
+                      <circle
+                        key={`pulse-${idx}-${routingPulse?.serial ?? 0}`}
+                        r={isPulsing ? 4 : 2.8}
+                        fill={isLight ? "#b47c10" : "#fff4d2"}
+                      >
+                        <animateMotion dur={isPulsing ? "1.1s" : "2.6s"} repeatCount="indefinite" path={path} />
+                      </circle>
+                    ) : null}
+
+                    <g
+                      onClick={() => setSelectedSocket(idx)}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={
+                        modId
+                          ? `Inspect ${NODE_CATALOG[modId]?.name} on Socket ${idx + 1}`
+                          : locked
+                            ? `Pro Socket ${idx + 1} (locked)`
+                            : `Open Socket ${idx + 1}`
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedSocket(idx);
+                        }
+                      }}
+                      className="cursor-pointer"
+                    >
+                      {isSelected ? (
+                        <circle
+                          cx={pt.x}
+                          cy={pt.y}
+                          r="31"
+                          fill="none"
+                          stroke="#f0b54a"
+                          strokeOpacity="0.55"
+                          strokeWidth="1.2"
+                          strokeDasharray="16 20"
+                        />
+                      ) : null}
+
                       <circle
                         cx={pt.x}
                         cy={pt.y}
-                        r="31"
-                        fill="none"
-                        stroke="#f0b54a"
-                        strokeOpacity="0.55"
-                        strokeWidth="1.2"
-                        strokeDasharray="16 20"
+                        r="22"
+                        fill={
+                          isLight
+                            ? modId
+                              ? "#ffffff"
+                              : "#f7f8fa"
+                            : modId
+                              ? "#15151c"
+                              : "#0d0d12"
+                        }
+                        stroke={
+                          modId
+                            ? "#f0b54a"
+                            : locked
+                              ? isLight
+                                ? "rgba(14,15,18,0.22)"
+                                : "rgba(255,255,255,0.2)"
+                              : isLight
+                                ? "rgba(180,124,16,0.55)"
+                                : "rgba(240,181,74,0.55)"
+                        }
+                        strokeWidth={isSelected ? 1.8 : 1.25}
+                        strokeDasharray={!modId && !locked ? "3 3" : undefined}
                       />
-                    ) : null}
 
-                    <circle
-                      cx={pt.x}
-                      cy={pt.y}
-                      r="22"
-                      fill={
-                        isLight
-                          ? modId
-                            ? "#ffffff"
-                            : "#f7f8fa"
-                          : modId
-                            ? "#15151c"
-                            : "#0d0d12"
-                      }
-                      stroke={
-                        modId
-                          ? "#f0b54a"
-                          : locked
+                      <text
+                        x={pt.x}
+                        y={pt.y + 4.5}
+                        textAnchor="middle"
+                        fill={
+                          modId
                             ? isLight
-                              ? "rgba(14,15,18,0.22)"
-                              : "rgba(255,255,255,0.2)"
-                            : isLight
-                              ? "rgba(180,124,16,0.55)"
-                              : "rgba(240,181,74,0.55)"
-                      }
-                      strokeWidth={isSelected ? 1.8 : 1.25}
-                      strokeDasharray={!modId && !locked ? "3 3" : undefined}
-                    />
+                              ? "#0e0f12"
+                              : "#f5f5f7"
+                            : locked
+                              ? isLight
+                                ? "#777a86"
+                                : "#7c7c86"
+                              : isLight
+                                ? "#2c2e36"
+                                : "#d1d1d6"
+                        }
+                        fontSize="13"
+                        fontWeight="600"
+                      >
+                        {modId ? NODE_CATALOG[modId]?.monogram : locked ? "Pro" : "+"}
+                      </text>
 
-                    <text
-                      x={pt.x}
-                      y={pt.y + 4.5}
-                      textAnchor="middle"
-                      fill={
-                        modId
-                          ? isLight
-                            ? "#6d4907"
-                            : "#fff5d8"
-                          : locked
-                            ? isLight
-                              ? "#777a86"
-                              : "#7c7c86"
-                            : isLight
-                              ? "#9a6910"
-                              : "#ffd99a"
-                      }
-                      fontSize="13"
-                      fontWeight="600"
-                    >
-                      {modId ? NODE_CATALOG[modId]?.monogram : locked ? "Pro" : "+"}
-                    </text>
-
-                    <text
-                      x={pt.x}
-                      y={pt.y - 31}
-                      textAnchor="middle"
-                      fill={isLight ? "#1b1d24" : "#e5e5ea"}
-                      fontSize="13"
-                      fontWeight={isSelected ? "600" : "500"}
-                    >
-                      {modId ? NODE_CATALOG[modId]?.name : locked ? `Socket ${idx + 1}` : "Open socket"}
-                    </text>
+                      <text
+                        x={pt.x}
+                        y={pt.y - 31}
+                        textAnchor="middle"
+                        fill={isLight ? "#1b1d24" : "#e5e5ea"}
+                        fontSize="13"
+                        fontWeight={isSelected ? "600" : "500"}
+                      >
+                        {modId ? NODE_CATALOG[modId]?.name : locked ? `Socket ${idx + 1}` : "Open socket"}
+                      </text>
+                    </g>
                   </g>
-                </g>
-              );
-            })}
+                );
+              })}
 
-            {/* Central Singularity Core Nucleus */}
-            <g>
-              <circle
-                cx={CONSTELLATION_CORE.x}
-                cy={CONSTELLATION_CORE.y}
-                r="26"
-                fill="none"
-                stroke={isLight ? "rgba(180,124,16,0.26)" : "rgba(240,181,74,0.28)"}
-                strokeWidth="1"
-              />
-              <circle
-                cx={CONSTELLATION_CORE.x}
-                cy={CONSTELLATION_CORE.y}
-                r="16"
-                fill={isLight ? "#fff9eb" : "#1a150b"}
-                stroke="#f0b54a"
-                strokeWidth="1.5"
-              />
-              <circle cx={CONSTELLATION_CORE.x} cy={CONSTELLATION_CORE.y} r="5" fill="#f0b54a" />
-              <text
-                x={CONSTELLATION_CORE.x}
-                y={CONSTELLATION_CORE.y + 35}
-                textAnchor="middle"
-                fill={isLight ? "#575b66" : "#a1a1a6"}
-                fontSize="12.5"
-                fontWeight="500"
-              >
-                Singularity Core · nexusBus
-              </text>
-            </g>
-          </svg>
+              {/* Central Singularity Core Nucleus */}
+              <g>
+                <circle
+                  cx={CONSTELLATION_CORE.x}
+                  cy={CONSTELLATION_CORE.y}
+                  r="26"
+                  fill="none"
+                  stroke={isLight ? "rgba(180,124,16,0.26)" : "rgba(240,181,74,0.28)"}
+                  strokeWidth="1"
+                />
+                <circle
+                  cx={CONSTELLATION_CORE.x}
+                  cy={CONSTELLATION_CORE.y}
+                  r="16"
+                  fill={isLight ? "#fff9eb" : "#1a150b"}
+                  stroke="#f0b54a"
+                  strokeWidth="1.5"
+                />
+                <circle cx={CONSTELLATION_CORE.x} cy={CONSTELLATION_CORE.y} r="5" fill="#f0b54a" />
+                <text
+                  x={CONSTELLATION_CORE.x}
+                  y={CONSTELLATION_CORE.y + 35}
+                  textAnchor="middle"
+                  fill={isLight ? "#575b66" : "#a1a1a6"}
+                  fontSize="12.5"
+                  fontWeight="500"
+                >
+                  Singularity Core · nexusBus
+                </text>
+              </g>
+            </svg>
           </div>
         </div>
 
         {/* Right: Precision Capability Inspector + Live nexusBus Event Ledger */}
         <div className="flex flex-col gap-3.5 lg:col-span-5">
-          {/* Socket Inspector Card */}
           <div className={`rounded-[16px] border p-4 ${cardSurface}`}>
             <div className="flex items-start justify-between gap-2">
               <div>
-                <p className={`text-[11.5px] font-medium tabular-nums ${goldText}`}>
+                <p className={`text-[11.5px] font-medium tabular-nums ${textMuted}`}>
                   Socket {selectedSocket + 1} of 5
                 </p>
                 <p className={`mt-0.5 text-[16px] font-semibold ${textPrimary}`}>
@@ -1522,11 +1505,11 @@ function NodesPreview({ theme }: { theme: PreviewTheme }) {
                 className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
                   selectedModule
                     ? isLight
-                      ? "bg-[#fef7e6] text-[#7c5308]"
-                      : "bg-[#f0b54a]/15 text-[#ffd99a]"
+                      ? "bg-[#0e0f12]/[0.07] text-[#0e0f12]"
+                      : "bg-white/[0.1] text-[#f5f5f7]"
                     : isLight
                       ? "bg-[#f1f2f5] text-[#575b66]"
-                      : "bg-white/[0.07] text-[#9d9da6]"
+                      : "bg-white/[0.06] text-[#9d9da6]"
                 }`}
               >
                 {selectedModule ? "Mounted" : selectedLocked ? "Pro tier" : "Ready"}
@@ -1581,7 +1564,7 @@ function NodesPreview({ theme }: { theme: PreviewTheme }) {
             ) : selectedLocked ? (
               <div className="mt-2.5 space-y-3">
                 <p className={`text-[12.5px] leading-[1.52] ${textMuted}`}>
-                  Pro unlocks 5 simultaneous orbital sockets so Quick Capture, Ledger, and custom SDK v1 modules can run side by side.
+                  Pro unlocks 5 simultaneous orbital sockets for custom SDK v1 modules.
                 </p>
                 <button
                   type="button"
@@ -1592,7 +1575,7 @@ function NodesPreview({ theme }: { theme: PreviewTheme }) {
                   className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12px] font-medium ${
                     isLight
                       ? "bg-[#0e0f12] text-white hover:bg-[#23252c]"
-                      : "bg-[#f0b54a] text-[#09090b] hover:bg-[#f5c469]"
+                      : "bg-[#f5f5f7] text-[#09090b] hover:bg-white"
                   }`}
                 >
                   Unlock in preview
@@ -1601,7 +1584,7 @@ function NodesPreview({ theme }: { theme: PreviewTheme }) {
             ) : (
               <div className="mt-2.5 space-y-3">
                 <p className={`text-[12.5px] leading-[1.52] ${textMuted}`}>
-                  This orbital socket is ready. Pick any module below to snap it in with scoped permissions.
+                  Socket ready. Pick a module below to mount it with scoped permissions.
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {Object.values(NODE_CATALOG)
@@ -1614,8 +1597,8 @@ function NodesPreview({ theme }: { theme: PreviewTheme }) {
                         onClick={() => snapModule(mod.id, selectedSocket)}
                         className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-3 py-1 text-[11.5px] font-medium transition-colors ${
                           isLight
-                            ? "border-[#b47c10]/40 bg-[#fef7e6] text-[#7c5308] hover:bg-[#fceec9]"
-                            : "border-[#f0b54a]/45 bg-[#f0b54a]/14 text-[#ffd99a] hover:bg-[#f0b54a]/22"
+                            ? "border-[#0e0f12]/16 bg-[#f5f6f8] text-[#0e0f12] hover:bg-[#e9ebf0]"
+                            : "border-white/16 bg-white/[0.08] text-[#f5f5f7] hover:bg-white/[0.14]"
                         }`}
                       >
                         <Plus className="size-3" strokeWidth={2} aria-hidden="true" />
@@ -1631,7 +1614,10 @@ function NodesPreview({ theme }: { theme: PreviewTheme }) {
           <div className={`flex-1 rounded-[16px] border p-4 ${cardSurface}`}>
             <div className="flex items-center justify-between gap-2">
               <span className={`inline-flex items-center gap-2 text-[12.5px] font-semibold ${textPrimary}`}>
-                <span className="h-1.5 w-1.5 rounded-full bg-[#f0b54a]" aria-hidden="true" />
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${isLight ? "bg-[#0e0f12]" : "bg-[#f5f5f7]"}`}
+                  aria-hidden="true"
+                />
                 Live nexusBus stream
               </span>
               <span className={`font-mono text-[10.5px] ${textSubtle}`}>Scoped IPC</span>
@@ -1644,7 +1630,7 @@ function NodesPreview({ theme }: { theme: PreviewTheme }) {
                   className={`rounded-[10px] border px-2.5 py-2 text-[11.5px] ${innerSurface}`}
                 >
                   <div className="flex items-center justify-between gap-2 font-mono text-[10.5px]">
-                    <span className={goldText}>{ev.topic}</span>
+                    <span className={textSecondary}>{ev.topic}</span>
                     <span className={`tabular-nums ${textSubtle}`}>{ev.time}</span>
                   </div>
                   <p className={`mt-0.5 truncate ${textMuted}`}>{ev.detail}</p>
@@ -1655,13 +1641,11 @@ function NodesPreview({ theme }: { theme: PreviewTheme }) {
         </div>
       </div>
 
-      {/* Bottom Module Dock (mirrors NodesView bottom catalog deck) */}
+      {/* Bottom Module Dock */}
       <div className={`mt-4 rounded-[15px] border p-3 ${cardSurface}`}>
         <div className="flex flex-wrap items-center justify-between gap-2 px-1 pb-2">
           <span className={`text-[12px] font-medium ${textPrimary}`}>Module dock</span>
-          <span className={`text-[11.5px] ${textSubtle}`}>
-            Built-in tools & Open SDK v1 extensions — click to snap or route
-          </span>
+          <span className={`text-[11.5px] ${textSubtle}`}>Click to snap or route</span>
         </div>
 
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
@@ -1676,9 +1660,9 @@ function NodesPreview({ theme }: { theme: PreviewTheme }) {
                 className={`flex cursor-pointer items-center justify-between gap-2 rounded-[11px] border px-3 py-2 text-left transition-colors ${
                   isMounted
                     ? isLight
-                      ? "border-[#b47c10]/35 bg-[#fef9ed] hover:bg-[#fcf1d4]"
-                      : "border-[#f0b54a]/35 bg-[#f0b54a]/[0.09] hover:bg-[#f0b54a]/[0.15]"
-                    : `${innerSurface} hover:border-[#f0b54a]/40`
+                      ? "border-[#0e0f12]/22 bg-[#f3f4f7] hover:bg-[#e8eaef]"
+                      : "border-white/22 bg-white/[0.07] hover:bg-white/[0.11]"
+                    : `${innerSurface} ${isLight ? "hover:border-[#0e0f12]/25" : "hover:border-white/25"}`
                 }`}
               >
                 <div className="flex min-w-0 items-center gap-2">
@@ -1686,8 +1670,8 @@ function NodesPreview({ theme }: { theme: PreviewTheme }) {
                     className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[10.5px] font-semibold ${
                       isMounted
                         ? isLight
-                          ? "border-[#b47c10]/45 bg-white text-[#7c5308]"
-                          : "border-[#f0b54a]/50 bg-[#14120c] text-[#ffd99a]"
+                          ? "border-[#0e0f12]/25 bg-white text-[#0e0f12]"
+                          : "border-white/25 bg-[#121218] text-[#f5f5f7]"
                         : isLight
                           ? "border-[#0e0f12]/12 bg-white text-[#575b66]"
                           : "border-white/12 bg-[#101015] text-[#9d9da6]"
@@ -1697,7 +1681,7 @@ function NodesPreview({ theme }: { theme: PreviewTheme }) {
                   </span>
                   <div className="min-w-0">
                     <p className={`truncate text-[12px] font-medium ${textPrimary}`}>{mod.name}</p>
-                    <p className={`text-[10.5px] tabular-nums ${isMounted ? goldText : textSubtle}`}>
+                    <p className={`text-[10.5px] tabular-nums ${isMounted ? textSecondary : textSubtle}`}>
                       {isMounted ? `Socket ${mountedIdx + 1}` : "Click to snap"}
                     </p>
                   </div>
@@ -1718,15 +1702,14 @@ export function SingularityStage() {
   const [previewTheme, setPreviewTheme] = useState<PreviewTheme>("dark");
 
   const activeMeta = LAYER_TABS.find((t) => t.id === activeLayer) ?? LAYER_TABS[0]!;
-  const notes = LAYER_NOTES[activeLayer];
   const isLightPreview = previewTheme === "light";
 
   return (
     <section
       id="workspace"
-      className="relative scroll-mt-24 overflow-hidden bg-[#000000] pt-14 pb-24 text-[#f5f5f7] sm:pt-20 sm:pb-32"
+      className="relative scroll-mt-24 overflow-hidden bg-[#000000] pt-14 pb-20 text-[#f5f5f7] sm:pt-18 sm:pb-24"
     >
-      {/* Ground-up astronomical observatory backdrop & active signal conduits */}
+      {/* Ground-up astronomical observatory backdrop & active golden signal conduits */}
       <EcosystemField activeLayer={activeLayer} />
 
       <div className="relative z-10 mx-auto max-w-[1400px] px-5 sm:px-8 lg:px-10">
@@ -1746,11 +1729,11 @@ export function SingularityStage() {
           </div>
         </div>
 
-        {/* Expansive 3-Menu Architectural Selector Rail */}
+        {/* Expansive 3-Menu Architectural Selector Rail (Monochrome Text & Chrome) */}
         <div
           role="tablist"
           aria-label="Explore Nexus surfaces"
-          className="mt-10 grid grid-cols-1 overflow-hidden rounded-t-[20px] border border-b-0 border-white/[0.1] bg-[#07070a]/95 md:mt-12 md:grid-cols-3"
+          className="mt-10 grid grid-cols-1 overflow-hidden rounded-t-[20px] border border-b-0 border-white/[0.1] bg-[#07070a]/95 md:mt-11 md:grid-cols-3"
         >
           {LAYER_TABS.map((tab, index) => {
             const active = activeLayer === tab.id;
@@ -1762,31 +1745,25 @@ export function SingularityStage() {
                 aria-selected={active}
                 aria-controls={`workspace-panel-${tab.id}`}
                 onClick={() => setActiveLayer(tab.id)}
-                className={`group relative flex cursor-pointer flex-col gap-2 px-5 py-5 text-left transition-colors focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#f0b54a] sm:px-6 sm:py-5 ${
+                className={`group relative flex cursor-pointer flex-col gap-1.5 px-5 py-4.5 text-left transition-colors focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-white/75 sm:px-6 ${
                   index > 0 ? "border-t border-white/[0.08] md:border-t-0 md:border-l" : ""
-                } ${
-                  active
-                    ? "bg-[#0e0e13]"
-                    : "bg-transparent hover:bg-white/[0.025]"
-                }`}
+                } ${active ? "bg-[#0e0e13]" : "bg-transparent hover:bg-white/[0.025]"}`}
               >
-                {/* 1.5px Singularity Gold active edge bar */}
+                {/* Crisp white top edge indicator bar */}
                 <span
-                  className={`pointer-events-none absolute inset-x-0 top-0 h-[2px] transition-opacity duration-300 ${
-                    active
-                      ? "bg-gradient-to-r from-[#f0b54a]/40 via-[#f0b54a] to-[#f0b54a]/40 opacity-100"
-                      : "opacity-0"
+                  className={`pointer-events-none absolute inset-x-0 top-0 h-[1.5px] transition-opacity duration-300 ${
+                    active ? "bg-gradient-to-r from-white/15 via-white/80 to-white/15 opacity-100" : "opacity-0"
                   }`}
                   aria-hidden="true"
                 />
 
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2.5">
-                    <span className={active ? "text-[#f0b54a]" : "text-[#8e8e95] group-hover:text-[#c9c9d0]"}>
-                      <LayerGlyph layer={tab.id} active={active} />
+                    <span className={active ? "text-[#f5f5f7]" : "text-[#8e8e95] group-hover:text-[#c9c9d0]"}>
+                      <LayerGlyph layer={tab.id} />
                     </span>
                     <span
-                      className={`text-[16px] font-semibold tracking-[-0.015em] transition-colors ${
+                      className={`text-[15.5px] font-semibold tracking-[-0.015em] transition-colors ${
                         active ? "text-[#f5f5f7]" : "text-[#b8b8c0] group-hover:text-[#f5f5f7]"
                       }`}
                     >
@@ -1796,9 +1773,7 @@ export function SingularityStage() {
 
                   <span
                     className={`rounded-full px-2.5 py-0.5 text-[11.5px] font-medium transition-colors ${
-                      active
-                        ? "bg-[#f0b54a]/[0.14] text-[#ffd99a]"
-                        : "bg-white/[0.05] text-[#8e8e95]"
+                      active ? "bg-white/[0.11] text-[#f5f5f7]" : "bg-white/[0.04] text-[#8e8e95]"
                     }`}
                   >
                     {tab.role}
@@ -1806,8 +1781,8 @@ export function SingularityStage() {
                 </div>
 
                 <p
-                  className={`text-[13.5px] leading-[1.52] transition-colors ${
-                    active ? "text-[#c4c4cc]" : "text-[#8a8a93] group-hover:text-[#a8a8b2]"
+                  className={`text-[13px] leading-[1.48] transition-colors ${
+                    active ? "text-[#b8b8c0]" : "text-[#85858e] group-hover:text-[#a8a8b2]"
                   }`}
                 >
                   {tab.description}
@@ -1817,14 +1792,14 @@ export function SingularityStage() {
           })}
         </div>
 
-        {/* Expansive Widescreen Observatory Frame bonded directly beneath the 3-menu rail */}
+        {/* Expansive Widescreen Observatory Frame */}
         <div
           id={`workspace-panel-${activeLayer}`}
           role="tabpanel"
           aria-label={`${activeMeta.title} interactive preview`}
           className="relative overflow-hidden rounded-b-[22px] border border-white/[0.11] bg-[#0a0a0e] shadow-[0_32px_90px_-34px_rgba(0,0,0,0.92)]"
         >
-          {/* Unified Window Chrome with Nexus Mark, Live Breadcrumb & Working Light/Dark Switcher */}
+          {/* Unified Window Chrome */}
           <div
             className={`flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-5 ${
               isLightPreview
@@ -1868,7 +1843,10 @@ export function SingularityStage() {
                   isLightPreview ? "text-[#575b66]" : "text-[#9d9da6]"
                 }`}
               >
-                <span className="h-1.5 w-1.5 rounded-full bg-[#f0b54a]" aria-hidden="true" />
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${isLightPreview ? "bg-[#0e0f12]/55" : "bg-white/60"}`}
+                  aria-hidden="true"
+                />
                 {activeMeta.chromeStatus}
               </span>
 
@@ -1918,34 +1896,20 @@ export function SingularityStage() {
           </div>
         </div>
 
-        {/* Hairline-Divided Swiss Architectural Ledger (Adapts per Active Menu) */}
-        <div className="mt-8 grid grid-cols-1 gap-6 border-t border-white/[0.09] pt-7 md:grid-cols-3 md:gap-8">
-          {notes.map((note) => (
-            <div key={note.title} className="space-y-1.5">
-              <h3 className="text-[14.5px] font-semibold tracking-[-0.01em] text-[#f5f5f7]">
-                {note.title}
-              </h3>
-              <p className="text-[13.5px] leading-[1.58] text-[#9d9da6]">{note.body}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Quiet Footer Action Strip */}
-        <div className="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-white/[0.08] pt-6 text-[13px]">
-          <span className="text-[#9d9da6]">
-            Interactive preview using sample data — switch between Neural Network, Command, and Nodes above.
-          </span>
+        {/* Quiet Minimal Footer Strip */}
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-4 text-[13px]">
+          <span className="text-[#8e8e95]">Interactive preview</span>
           <div className="flex items-center gap-5">
             <a
               href="#waitlist"
-              className="inline-flex items-center gap-1.5 font-medium text-[#ffd99a] transition-colors hover:text-white"
+              className="inline-flex items-center gap-1.5 font-medium text-[#f5f5f7] transition-colors hover:text-white"
             >
               Join waitlist
               <ArrowRight className="size-3.5" strokeWidth={1.85} aria-hidden="true" />
             </a>
             <Link
               href="/signup"
-              className="font-medium text-[#b8b8c0] transition-colors hover:text-white"
+              className="font-medium text-[#9d9da6] transition-colors hover:text-white"
             >
               Sign in
             </Link>
