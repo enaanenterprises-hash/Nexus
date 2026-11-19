@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { ArrowUp, Lock, Plus } from "lucide-react";
 import { NeuralThreadsWebGL } from "@/components/dashboard/NeuralThreadsWebGL";
 import { computeStageLayout } from "@/components/dashboard/stage-layout";
@@ -15,36 +15,21 @@ const LAYER_INDEX: Record<EcosystemLayer, number> = {
   nodes: 2,
 };
 
-type FilamentArm = {
-  /** Base polar angle in radians (0 = right, -PI/2 = straight up, -PI = left). */
-  angle: number;
-  /** Slight organic S-curve bend across the arm length. */
-  curve: number;
-  /** Normalized reach radius multiplier relative to stage scale. */
-  reach: number;
-  /** Number of interwoven silk strands in this bundle. */
-  strands: number;
-  /** Normalized position along arm (0..1) where the hourglass waist pinches tightest. */
-  waistT: number;
-  /** Maximum swell width before waist pinch (px multiplier). */
-  swell: number;
-  /** Maximum fan flare width after waist pinch (px multiplier). */
-  flare: number;
-  /** Optional linked ecosystem layer index (0 = network, 1 = command, 2 = nodes). */
-  layerIdx: number | null;
+const BRIDGE_EVENTS: Record<EcosystemLayer, string> = {
+  network: "nexus:intent",
+  command: "command:focus-changed",
+  nodes: "studio:take-routed",
 };
 
-const SIGNAL_ARMS: FilamentArm[] = [
-  // Sweeping left lateral silk wing
-  { angle: -Math.PI + 0.16, curve: -0.14, reach: 1.08, strands: 22, waistT: 0.56, swell: 28, flare: 52, layerIdx: null },
-  // Upper-left braided stream — Neural Network
-  { angle: -Math.PI * 0.72, curve: -0.06, reach: 1.06, strands: 24, waistT: 0.55, swell: 32, flare: 62, layerIdx: 0 },
-  // Vertical center braided stream — Command
-  { angle: -Math.PI * 0.5, curve: 0.0, reach: 1.02, strands: 24, waistT: 0.56, swell: 30, flare: 54, layerIdx: 1 },
-  // Upper-right braided stream — Nodes
-  { angle: -Math.PI * 0.28, curve: 0.06, reach: 1.06, strands: 24, waistT: 0.55, swell: 32, flare: 62, layerIdx: 2 },
-  // Sweeping right lateral silk wing
-  { angle: -0.16, curve: 0.14, reach: 1.08, strands: 22, waistT: 0.56, swell: 28, flare: 52, layerIdx: null },
+const BRIDGE_NODES: Array<{
+  id: EcosystemLayer;
+  label: string;
+  sub: string;
+  nx: number;
+}> = [
+  { id: "network", label: "Neural Network", sub: "Assistant", nx: 0.18 },
+  { id: "command", label: "Command", sub: "Dashboard", nx: 0.5 },
+  { id: "nodes", label: "Nodes", sub: "Extensions", nx: 0.82 },
 ];
 
 function deterministicHash(n: number): number {
@@ -53,9 +38,9 @@ function deterministicHash(n: number): number {
 }
 
 /**
- * Braided golden filament signal-bus sculpture inspired by luminous optical silk bundles:
- * five interwoven golden streams emerging from a radiant pearl-white core on pitch black,
- * pinching cleanly through hourglass waists and fanning into gossamer threads.
+ * Interactive 3-Node Shared Signal Bus where Neural Network, Command, and Nodes
+ * are connected by living braided golden optical filaments that pinch cleanly at each
+ * node and swell into interwoven silk bundles between them.
  */
 export function EcosystemBridgeVisual({
   activeLayer,
@@ -85,171 +70,231 @@ export function EcosystemBridgeVisual({
     let smoothIdx = targetIdxRef.current;
     let active = true;
 
+    const drawBraidedBundle = (
+      x0: number,
+      y0: number,
+      x1: number,
+      y1: number,
+      archY: number,
+      strands: number,
+      swellPx: number,
+      intensity: number,
+      seedBase: number,
+      pinchStart: boolean,
+      pinchEnd: boolean,
+    ) => {
+      const samples = 28;
+      const dx = x1 - x0;
+      const dy = y1 - y0;
+      const len = Math.max(1, Math.hypot(dx, dy));
+      const perpX = -dy / len;
+      const perpY = dx / len;
+
+      for (let s = 0; s < strands; s++) {
+        const seed = seedBase + s * 17;
+        const u = strands > 1 ? (s / (strands - 1)) * 2 - 1 : 0;
+        const phase = deterministicHash(seed) * Math.PI * 2;
+        const freq = 1.8 + deterministicHash(seed + 5) * 1.3;
+        const strandScale = 0.72 + deterministicHash(seed + 11) * 0.54;
+        const isHotCore = Math.abs(u) < 0.34;
+
+        ctx.beginPath();
+        for (let i = 0; i <= samples; i++) {
+          const t = i / samples;
+          // Base quadratic curve between endpoints with optional vertical arch
+          const inv = 1 - t;
+          const midX = (x0 + x1) * 0.5;
+          const midY = (y0 + y1) * 0.5 + archY;
+          const bx = inv * inv * x0 + 2 * inv * t * midX + t * t * x1;
+          const by = inv * inv * y0 + 2 * inv * t * midY + t * t * y1;
+
+          // Envelope: pinches razor-tight at node sockets, swells into braided silk between nodes,
+          // or flares outward at open outer wings
+          let env: number;
+          if (pinchStart && pinchEnd) {
+            const bell = Math.sin(t * Math.PI);
+            // Double-swell braided wave between two nodes with a subtle mid-pinch waist
+            const harmonic = 0.72 + 0.28 * Math.sin(t * Math.PI * 2 + phase * 0.35);
+            env = 1.6 + swellPx * Math.pow(bell, 0.78) * harmonic;
+          } else if (pinchStart && !pinchEnd) {
+            env = 1.6 + swellPx * Math.pow(t, 1.18);
+          } else {
+            env = 1.6 + swellPx * Math.pow(1 - t, 1.18);
+          }
+
+          const twist = Math.sin(t * Math.PI * freq + phase + clock * (0.55 + 0.2 * intensity));
+          const lateral =
+            (u * 0.74 + twist * 0.44 * (0.38 + 0.62 * (1 - Math.abs(u)))) * env * strandScale;
+
+          const px = bx + perpX * lateral;
+          const py = by + perpY * lateral;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+
+        const alpha = (isHotCore ? 0.31 : 0.155) * intensity * (0.72 + 0.28 * (1 - Math.abs(u)));
+        ctx.strokeStyle = isHotCore
+          ? `rgba(255, 245, 214, ${alpha.toFixed(3)})`
+          : `rgba(240, 185, 82, ${alpha.toFixed(3)})`;
+        ctx.lineWidth = isHotCore ? 0.95 : 0.64;
+        ctx.stroke();
+      }
+    };
+
     const draw = (dt: number) => {
       if (!reduceMotion) {
         clock += dt;
-        smoothIdx += (targetIdxRef.current - smoothIdx) * (1 - Math.exp(-dt * 5.0));
+        smoothIdx += (targetIdxRef.current - smoothIdx) * (1 - Math.exp(-dt * 5.2));
       } else {
         smoothIdx = targetIdxRef.current;
       }
 
       ctx.globalCompositeOperation = "source-over";
-      ctx.fillStyle = "#111216";
-      ctx.fillRect(0, 0, width, height);
+      ctx.clearRect(0, 0, width, height);
 
-      const cx = width * 0.5;
-      const cy = height * 0.87;
-      const rx = width * 0.54;
-      const ry = height * 0.92;
-      const samples = 26;
+      const nodeY = height * 0.48;
+      const pts = BRIDGE_NODES.map((n) => ({ x: width * n.nx, y: nodeY }));
+      const p0 = pts[0]!;
+      const p1 = pts[1]!;
+      const p2 = pts[2]!;
+
+      // Active intensities for each connection based on selected node
+      const w0 = Math.max(0, 1 - Math.abs(smoothIdx - 0));
+      const w1 = Math.max(0, 1 - Math.abs(smoothIdx - 1));
+      const w2 = Math.max(0, 1 - Math.abs(smoothIdx - 2));
+
+      const link01Intensity = 0.68 + Math.max(w0, w1) * 0.52;
+      const link12Intensity = 0.68 + Math.max(w1, w2) * 0.52;
+      const arch02Intensity = 0.52 + Math.max(w0, w2) * 0.52;
 
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
 
-      // 1. Braided golden silk filament bundles
-      SIGNAL_ARMS.forEach((arm, armIdx) => {
-        const proximity =
-          arm.layerIdx === null ? 0.25 : Math.max(0, 1 - Math.abs(smoothIdx - arm.layerIdx));
-        const boost = 0.64 + proximity * 0.52;
+      // 1. Subtle outer gossamer silk wings fanning left of Node 0 and right of Node 2
+      drawBraidedBundle(
+        p0.x,
+        p0.y,
+        -width * 0.04,
+        p0.y - height * 0.14,
+        -height * 0.04,
+        14,
+        24,
+        0.5 + w0 * 0.35,
+        101,
+        true,
+        false,
+      );
+      drawBraidedBundle(
+        p2.x,
+        p2.y,
+        width * 1.04,
+        p2.y - height * 0.14,
+        -height * 0.04,
+        14,
+        24,
+        0.5 + w2 * 0.35,
+        211,
+        true,
+        false,
+      );
 
-        const dirX = Math.cos(arm.angle);
-        const dirY = Math.sin(arm.angle);
-        const perpX = -dirY;
-        const perpY = dirX;
+      // 2. Overarching braided golden filament bridge (Neural Network <-> Nodes)
+      drawBraidedBundle(
+        p0.x,
+        p0.y,
+        p2.x,
+        p2.y,
+        -height * 0.52,
+        16,
+        19,
+        arch02Intensity,
+        307,
+        true,
+        true,
+      );
 
-        for (let s = 0; s < arm.strands; s++) {
-          const seed = armIdx * 97 + s * 13 + 1;
-          const u = arm.strands > 1 ? (s / (arm.strands - 1)) * 2 - 1 : 0;
-          const phase = deterministicHash(seed) * Math.PI * 2;
-          const freq = 1.65 + deterministicHash(seed + 3) * 1.15;
-          const strandScale = 0.72 + deterministicHash(seed + 7) * 0.56;
-          const isHotCore = Math.abs(u) < 0.36;
+      // 3. Primary braided golden filament connection: Neural Network <-> Command
+      drawBraidedBundle(
+        p0.x,
+        p0.y,
+        p1.x,
+        p1.y,
+        height * 0.04,
+        22,
+        22,
+        link01Intensity,
+        409,
+        true,
+        true,
+      );
 
-          ctx.beginPath();
-          for (let i = 0; i <= samples; i++) {
-            const t = i / samples;
-            // Radial progression scaled cleanly to container aspect ratio
-            const distX = dirX * t * rx * arm.reach;
-            const distY = dirY * t * ry * arm.reach;
-            // Subtle graceful S-curve sweep
-            const bend = Math.sin(t * Math.PI) * arm.curve * Math.min(rx, ry) * 0.55;
+      // 4. Primary braided golden filament connection: Command <-> Nodes
+      drawBraidedBundle(
+        p1.x,
+        p1.y,
+        p2.x,
+        p2.y,
+        height * 0.04,
+        22,
+        22,
+        link12Intensity,
+        523,
+        true,
+        true,
+      );
 
-            // Hourglass lotus envelope: tight at core -> organic swell -> crisp focal waist pinch -> gossamer fan
-            let env: number;
-            if (t < arm.waistT) {
-              const p = t / arm.waistT;
-              const petal = Math.sin(p * Math.PI);
-              env = 2.0 + arm.swell * Math.pow(petal, 0.85) * (1 - 0.1 * p);
-            } else {
-              const q = (t - arm.waistT) / (1 - arm.waistT);
-              env = 2.2 + arm.flare * Math.pow(q, 1.32);
-            }
-
-            // Helical intertwining weave so fibers genuinely cross & shimmer at the waist
-            const twist = Math.sin(t * Math.PI * freq + phase + clock * (0.45 + 0.14 * proximity));
-            const lateral =
-              (u * 0.76 + twist * 0.42 * (0.4 + 0.6 * (1 - Math.abs(u)))) * env * strandScale;
-
-            const px = cx + distX + perpX * (bend + lateral);
-            const py = cy + distY + perpY * (bend + lateral);
-            if (i === 0) ctx.moveTo(px, py);
-            else ctx.lineTo(px, py);
-          }
-
-          const alpha = (isHotCore ? 0.29 : 0.15) * boost * (0.72 + 0.28 * (1 - Math.abs(u)));
-          ctx.strokeStyle = isHotCore
-            ? `rgba(255, 244, 212, ${alpha.toFixed(3)})`
-            : `rgba(240, 186, 84, ${alpha.toFixed(3)})`;
-          ctx.lineWidth = isHotCore ? 0.95 : 0.65;
-          ctx.stroke();
-        }
-
-        // Subtle luminous focal bloom right at each waist neck
-        const wx = cx + dirX * arm.waistT * rx * arm.reach + perpX * (Math.sin(arm.waistT * Math.PI) * arm.curve * Math.min(rx, ry) * 0.55);
-        const wy = cy + dirY * arm.waistT * ry * arm.reach + perpY * (Math.sin(arm.waistT * Math.PI) * arm.curve * Math.min(rx, ry) * 0.55);
-        const waistR = 16 + proximity * 14;
-        const waistGlow = ctx.createRadialGradient(wx, wy, 0, wx, wy, waistR);
-        waistGlow.addColorStop(0, `rgba(255, 246, 218, ${(0.22 * boost).toFixed(3)})`);
-        waistGlow.addColorStop(0.45, `rgba(240, 181, 74, ${(0.1 * boost).toFixed(3)})`);
-        waistGlow.addColorStop(1, "rgba(240, 181, 74, 0)");
-        ctx.fillStyle = waistGlow;
+      // 5. Travelling white-gold signal sparks gliding along the braided filaments between the 3 nodes
+      if (!reduceMotion) {
+        const u1 = (clock * 0.38) % 1;
+        const sx1 = p0.x + (p1.x - p0.x) * u1;
+        const sy1 = p0.y + Math.sin(u1 * Math.PI) * (height * 0.02);
+        const g1 = ctx.createRadialGradient(sx1, sy1, 0, sx1, sy1, 10);
+        g1.addColorStop(0, "rgba(255, 250, 232, 0.92)");
+        g1.addColorStop(0.4, "rgba(240, 181, 74, 0.36)");
+        g1.addColorStop(1, "rgba(240, 181, 74, 0)");
+        ctx.fillStyle = g1;
         ctx.beginPath();
-        ctx.arc(wx, wy, waistR, 0, Math.PI * 2);
+        ctx.arc(sx1, sy1, 10, 0, Math.PI * 2);
         ctx.fill();
 
-        // Travelling luminous signal sparks along the active arm
-        if (arm.layerIdx !== null && proximity > 0.25 && !reduceMotion) {
-          for (let m = 0; m < 2; m++) {
-            const mt = (clock * 0.34 + m * 0.5 + armIdx * 0.19) % 1;
-            const bend = Math.sin(mt * Math.PI) * arm.curve * Math.min(rx, ry) * 0.55;
-            const sx = cx + dirX * mt * rx * arm.reach + perpX * bend;
-            const sy = cy + dirY * mt * ry * arm.reach + perpY * bend;
-            const fade = Math.sin(mt * Math.PI) * proximity;
-            const spark = ctx.createRadialGradient(sx, sy, 0, sx, sy, 9);
-            spark.addColorStop(0, `rgba(255, 250, 232, ${(0.9 * fade).toFixed(3)})`);
-            spark.addColorStop(0.4, `rgba(240, 181, 74, ${(0.35 * fade).toFixed(3)})`);
-            spark.addColorStop(1, "rgba(240, 181, 74, 0)");
-            ctx.fillStyle = spark;
-            ctx.beginPath();
-            ctx.arc(sx, sy, 9, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
-      });
-
-      // 2. Fine starlight dust motes drifting delicately around the golden silk
-      for (let d = 0; d < 28; d++) {
-        const a = -Math.PI + 0.1 + deterministicHash(d * 19 + 5) * (Math.PI - 0.2);
-        const rBase = 0.22 + deterministicHash(d * 31 + 11) * 0.72;
-        const drift = reduceMotion ? 0 : Math.sin(clock * 0.7 + d) * 0.02;
-        const dx = cx + Math.cos(a) * (rBase + drift) * rx * 0.96;
-        const dy = cy + Math.sin(a) * (rBase + drift) * ry * 0.92;
-        const twinkle = 0.35 + 0.55 * (0.5 + 0.5 * Math.sin(clock * 1.4 + d * 2.1));
-        ctx.fillStyle = `rgba(255, 242, 206, ${(0.42 * twinkle).toFixed(3)})`;
+        const u2 = (clock * 0.38 + 0.45) % 1;
+        const sx2 = p1.x + (p2.x - p1.x) * u2;
+        const sy2 = p1.y + Math.sin(u2 * Math.PI) * (height * 0.02);
+        const g2 = ctx.createRadialGradient(sx2, sy2, 0, sx2, sy2, 10);
+        g2.addColorStop(0, "rgba(255, 250, 232, 0.92)");
+        g2.addColorStop(0.4, "rgba(240, 181, 74, 0.36)");
+        g2.addColorStop(1, "rgba(240, 181, 74, 0)");
+        ctx.fillStyle = g2;
         ctx.beginPath();
-        ctx.arc(dx, dy, 0.75 + deterministicHash(d * 7) * 0.65, 0, Math.PI * 2);
+        ctx.arc(sx2, sy2, 10, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      // 3. Radiant Pearl-White / Burnished-Gold Singularity Core at bottom center
-      const coreOuter = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.min(width * 0.24, 96));
-      coreOuter.addColorStop(0, "rgba(255, 253, 246, 0.98)");
-      coreOuter.addColorStop(0.16, "rgba(255, 244, 212, 0.82)");
-      coreOuter.addColorStop(0.42, "rgba(240, 181, 74, 0.32)");
-      coreOuter.addColorStop(1, "rgba(240, 181, 74, 0)");
-      ctx.fillStyle = coreOuter;
-      ctx.beginPath();
-      ctx.arc(cx, cy, Math.min(width * 0.24, 96), 0, Math.PI * 2);
-      ctx.fill();
+      // 6. Luminous golden pinch-bloom at each of the 3 node waists
+      pts.forEach((pt, idx) => {
+        const prox = Math.max(0, 1 - Math.abs(smoothIdx - idx));
+        const r = 24 + prox * 14;
+        const glow = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, r);
+        glow.addColorStop(0, `rgba(255, 248, 224, ${(0.55 + prox * 0.38).toFixed(3)})`);
+        glow.addColorStop(0.42, `rgba(240, 181, 74, ${(0.22 + prox * 0.22).toFixed(3)})`);
+        glow.addColorStop(1, "rgba(240, 181, 74, 0)");
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+        ctx.fill();
+      });
 
-      ctx.restore();
+      // 7. Fine starlight dust motes along the braided bridge
+      for (let d = 0; d < 22; d++) {
+        const dx = width * (0.08 + deterministicHash(d * 19 + 3) * 0.84);
+        const dy = nodeY + (deterministicHash(d * 31 + 7) - 0.56) * height * 0.62;
+        const twinkle = 0.35 + 0.6 * (0.5 + 0.5 * Math.sin(clock * 1.5 + d * 2.3));
+        ctx.fillStyle = `rgba(255, 242, 206, ${(0.4 * twinkle).toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(dx, dy, 0.75 + deterministicHash(d * 11) * 0.55, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
-      // Clean horizon mask below core & subtle edge feathering into deep charcoal #111216
-      ctx.save();
-      ctx.globalCompositeOperation = "source-over";
-      const baseMask = ctx.createLinearGradient(0, cy + 1, 0, height);
-      baseMask.addColorStop(0, "rgba(17, 18, 22, 0.78)");
-      baseMask.addColorStop(0.35, "rgba(17, 18, 22, 1)");
-      ctx.fillStyle = baseMask;
-      ctx.fillRect(0, cy + 1, width, height - cy);
-
-      const leftFade = ctx.createLinearGradient(0, 0, width * 0.12, 0);
-      leftFade.addColorStop(0, "rgba(17, 18, 22, 1)");
-      leftFade.addColorStop(1, "rgba(17, 18, 22, 0)");
-      ctx.fillStyle = leftFade;
-      ctx.fillRect(0, 0, width * 0.12, height);
-
-      const rightFade = ctx.createLinearGradient(width * 0.88, 0, width, 0);
-      rightFade.addColorStop(0, "rgba(17, 18, 22, 0)");
-      rightFade.addColorStop(1, "rgba(17, 18, 22, 1)");
-      ctx.fillStyle = rightFade;
-      ctx.fillRect(width * 0.88, 0, width * 0.12, height);
-
-      const topFade = ctx.createLinearGradient(0, 0, 0, height * 0.16);
-      topFade.addColorStop(0, "rgba(17, 18, 22, 0.92)");
-      topFade.addColorStop(1, "rgba(17, 18, 22, 0)");
-      ctx.fillStyle = topFade;
-      ctx.fillRect(0, 0, width, height * 0.16);
       ctx.restore();
     };
 
@@ -296,21 +341,92 @@ export function EcosystemBridgeVisual({
     };
   }, []);
 
-  function handleCanvasClick(event: MouseEvent<HTMLDivElement>) {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const rx = (event.clientX - rect.left) / Math.max(rect.width, 1);
-    if (rx < 0.36) onSelect("network");
-    else if (rx > 0.64) onSelect("nodes");
-    else onSelect("command");
-  }
+  const eventTopic = BRIDGE_EVENTS[activeLayer];
 
   return (
     <div
-      onClick={handleCanvasClick}
-      className="relative h-[210px] w-full cursor-pointer overflow-hidden bg-[#111216] sm:h-[246px]"
-      aria-hidden="true"
+      className="relative overflow-hidden rounded-[18px] border border-white/[0.09] bg-[#15161c]/90 p-4 sm:p-5"
+      role="group"
+      aria-label="Interactive Nexus shared signal bus"
     >
-      <canvas ref={canvasRef} className="block h-full w-full" />
+      <div className="flex items-center justify-between gap-2 text-[12px]">
+        <span className="font-medium text-[#d1d1d6]">Shared signal bus</span>
+        <span className="font-mono text-[11px] text-[#9d9da6]">{eventTopic}</span>
+      </div>
+
+      {/* Braided Golden Filament Canvas + 3 Interactive Nodes */}
+      <div className="relative mt-1.5 h-[136px] w-full sm:h-[148px]">
+        <canvas
+          ref={canvasRef}
+          className="pointer-events-none absolute inset-0 block h-full w-full"
+          aria-hidden="true"
+        />
+
+        {BRIDGE_NODES.map((node) => {
+          const isSelected = activeLayer === node.id;
+          return (
+            <button
+              key={node.id}
+              type="button"
+              onClick={() => onSelect(node.id)}
+              aria-pressed={isSelected}
+              style={{ left: `${node.nx * 100}%` }}
+              className="group absolute top-[48%] flex -translate-x-1/2 -translate-y-[19px] cursor-pointer flex-col items-center focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white/75"
+            >
+              {/* Node optical reticle sitting right at the braided filament pinch waist */}
+              <span className="relative flex h-[38px] w-[38px] items-center justify-center">
+                {isSelected ? (
+                  <svg
+                    viewBox="0 0 50 50"
+                    className="neural-reticle-orbit pointer-events-none absolute -inset-1.5 h-[50px] w-[50px]"
+                    aria-hidden="true"
+                  >
+                    <circle
+                      cx="25"
+                      cy="25"
+                      r="23"
+                      fill="none"
+                      stroke="#f0b54a"
+                      strokeOpacity="0.55"
+                      strokeWidth="1.1"
+                      strokeDasharray="14 18"
+                    />
+                  </svg>
+                ) : null}
+                <span
+                  className={`flex h-9 w-9 items-center justify-center rounded-full border transition-all ${
+                    isSelected
+                      ? "border-[#f0b54a] bg-[#181610]/90 shadow-[0_0_20px_rgba(240,181,74,0.35)]"
+                      : "border-white/[0.22] bg-[#13141a]/90 group-hover:border-[#f0b54a]/55"
+                  }`}
+                >
+                  <span
+                    className={`h-2 w-2 rounded-full transition-colors ${
+                      isSelected ? "bg-[#fff4d4]" : "bg-white/45 group-hover:bg-[#f0b54a]"
+                    }`}
+                  />
+                </span>
+              </span>
+
+              {/* Monochrome Node Title & Sub-caption */}
+              <span
+                className={`mt-2.5 text-[11.5px] leading-tight font-semibold whitespace-nowrap transition-colors ${
+                  isSelected ? "text-[#f5f5f7]" : "text-[#a1a1a6] group-hover:text-[#f5f5f7]"
+                }`}
+              >
+                {node.label}
+              </span>
+              <span
+                className={`mt-0.5 text-[10px] leading-tight whitespace-nowrap transition-colors ${
+                  isSelected ? "text-[#d1d1d6]" : "text-[#7c7c85]"
+                }`}
+              >
+                {node.sub}
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
