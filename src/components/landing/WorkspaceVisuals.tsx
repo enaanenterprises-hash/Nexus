@@ -18,15 +18,47 @@ const LAYER_INDEX: Record<EcosystemLayer, number> = {
 const BRIDGE_NODES: Array<{
   id: EcosystemLayer;
   label: string;
-  sub: string;
   nx: number;
   ny: number;
   labelPlacement: "top" | "bottom";
 }> = [
-  { id: "network", label: "Neural Network", sub: "Assistant", nx: 0.5, ny: 0.28, labelPlacement: "top" },
-  { id: "command", label: "Command", sub: "Dashboard", nx: 0.21, ny: 0.72, labelPlacement: "bottom" },
-  { id: "nodes", label: "Nodes", sub: "Extensions", nx: 0.79, ny: 0.72, labelPlacement: "bottom" },
+  { id: "network", label: "Neural Network", nx: 0.5, ny: 0.27, labelPlacement: "top" },
+  { id: "command", label: "Command", nx: 0.22, ny: 0.74, labelPlacement: "bottom" },
+  { id: "nodes", label: "Nodes", nx: 0.78, ny: 0.74, labelPlacement: "bottom" },
 ];
+
+function TriangleNodeGlyph({ id }: { id: EcosystemLayer }) {
+  if (id === "network") {
+    return (
+      <svg viewBox="0 0 18 18" className="relative z-10 h-3.5 w-3.5" fill="none" aria-hidden="true">
+        <circle cx="9" cy="11.2" r="2.1" stroke="currentColor" strokeWidth="1.4" />
+        <path d="M9 9.1V3.8M7.3 9.9 4.2 5.4M10.7 9.9l3.1-4.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        <circle cx="9" cy="3.4" r="1" fill="currentColor" />
+        <circle cx="3.9" cy="5" r="1" fill="currentColor" />
+        <circle cx="14.1" cy="5" r="1" fill="currentColor" />
+      </svg>
+    );
+  }
+  if (id === "command") {
+    return (
+      <svg viewBox="0 0 18 18" className="relative z-10 h-3.5 w-3.5" fill="none" aria-hidden="true">
+        <rect x="3" y="3.2" width="5.2" height="6.6" rx="1.3" stroke="currentColor" strokeWidth="1.35" />
+        <rect x="9.8" y="3.2" width="5.2" height="4.2" rx="1.3" stroke="currentColor" strokeWidth="1.35" />
+        <rect x="9.8" y="9" width="5.2" height="5.8" rx="1.3" stroke="currentColor" strokeWidth="1.35" />
+        <rect x="3" y="11.4" width="5.2" height="3.4" rx="1.2" stroke="currentColor" strokeWidth="1.35" strokeOpacity="0.7" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 18 18" className="relative z-10 h-3.5 w-3.5" fill="none" aria-hidden="true">
+      <circle cx="9" cy="13.2" r="1.6" fill="currentColor" />
+      <path d="M9 11.6 4.6 6.8M9 11.6V5M9 11.6l4.4-4.8" stroke="currentColor" strokeWidth="1.25" strokeOpacity="0.75" />
+      <circle cx="4.2" cy="6.2" r="1.6" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="9" cy="3.8" r="1.6" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="13.8" cy="6.2" r="1.6" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
+  );
+}
 
 function deterministicHash(n: number): number {
   const s = Math.sin(n * 127.1 + 311.7) * 43758.5453123;
@@ -191,57 +223,29 @@ export function EcosystemBridgeVisual({
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
 
-      // 1. Subtle outer gossamer silk wisps fanning outward from the two basal triangle vertices
-      drawBraidedBundle(
-        p1.x,
-        p1.y,
-        width * 0.02,
-        height * 0.82,
-        -6,
-        12,
-        18,
-        0.46 + w1 * 0.3,
-        101,
-        true,
-        false,
-      );
-      drawBraidedBundle(
-        p2.x,
-        p2.y,
-        width * 0.98,
-        height * 0.82,
-        6,
-        12,
-        18,
-        0.46 + w2 * 0.3,
-        211,
-        true,
-        false,
-      );
+      // 1. Left Triangle Edge: Neural Network (top) <-> Command (bottom-left)
+      drawBraidedBundle(p0.x, p0.y, p1.x, p1.y, 11, 22, 17, link01Intensity, 307, true, true);
 
-      // 2. Left Triangle Edge: Neural Network (top) <-> Command (bottom-left)
-      drawBraidedBundle(p0.x, p0.y, p1.x, p1.y, 12, 22, 18, link01Intensity, 307, true, true);
+      // 2. Right Triangle Edge: Neural Network (top) <-> Nodes (bottom-right)
+      drawBraidedBundle(p0.x, p0.y, p2.x, p2.y, -11, 22, 17, link02Intensity, 409, true, true);
 
-      // 3. Right Triangle Edge: Neural Network (top) <-> Nodes (bottom-right)
-      drawBraidedBundle(p0.x, p0.y, p2.x, p2.y, -12, 22, 18, link02Intensity, 409, true, true);
+      // 3. Bottom Base Triangle Edge: Command (bottom-left) <-> Nodes (bottom-right)
+      drawBraidedBundle(p1.x, p1.y, p2.x, p2.y, 9, 22, 18, link12Intensity, 523, true, true);
 
-      // 4. Bottom Base Triangle Edge: Command (bottom-left) <-> Nodes (bottom-right)
-      drawBraidedBundle(p1.x, p1.y, p2.x, p2.y, 10, 22, 19, link12Intensity, 523, true, true);
-
-      // 5. Travelling white-gold signal sparks gliding along all 3 braided triangle sides
+      // 4. Travelling white-gold signal sparks gliding along all 3 braided triangle sides
       if (!reduceMotion) {
-        drawSparkAlong(p0.x, p0.y, p1.x, p1.y, 12, (clock * 0.36) % 1, link01Intensity);
-        drawSparkAlong(p1.x, p1.y, p2.x, p2.y, 10, (clock * 0.36 + 0.33) % 1, link12Intensity);
-        drawSparkAlong(p2.x, p2.y, p0.x, p0.y, 12, (clock * 0.36 + 0.66) % 1, link02Intensity);
+        drawSparkAlong(p0.x, p0.y, p1.x, p1.y, 11, (clock * 0.36) % 1, link01Intensity);
+        drawSparkAlong(p1.x, p1.y, p2.x, p2.y, 9, (clock * 0.36 + 0.33) % 1, link12Intensity);
+        drawSparkAlong(p2.x, p2.y, p0.x, p0.y, 11, (clock * 0.36 + 0.66) % 1, link02Intensity);
       }
 
-      // 6. Luminous golden pinch-bloom at each of the 3 triangle node vertices
+      // 5. Tight optical pinch-point at each of the 3 triangle vertices (no wide fuzzy halo)
       pts.forEach((pt, idx) => {
         const prox = Math.max(0, 1 - Math.abs(smoothIdx - idx));
-        const r = 24 + prox * 14;
+        const r = 15 + prox * 6;
         const glow = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, r);
-        glow.addColorStop(0, `rgba(255, 248, 224, ${(0.55 + prox * 0.38).toFixed(3)})`);
-        glow.addColorStop(0.42, `rgba(240, 181, 74, ${(0.22 + prox * 0.22).toFixed(3)})`);
+        glow.addColorStop(0, `rgba(255, 248, 224, ${(0.38 + prox * 0.26).toFixed(3)})`);
+        glow.addColorStop(0.5, `rgba(240, 181, 74, ${(0.14 + prox * 0.14).toFixed(3)})`);
         glow.addColorStop(1, "rgba(240, 181, 74, 0)");
         ctx.fillStyle = glow;
         ctx.beginPath();
@@ -249,14 +253,14 @@ export function EcosystemBridgeVisual({
         ctx.fill();
       });
 
-      // 7. Fine starlight dust motes drifting around the braided golden triangle
-      for (let d = 0; d < 24; d++) {
-        const dx = width * (0.12 + deterministicHash(d * 19 + 3) * 0.76);
-        const dy = height * (0.16 + deterministicHash(d * 31 + 7) * 0.68);
+      // 6. Fine starlight dust motes drifting inside the braided golden triangle
+      for (let d = 0; d < 18; d++) {
+        const dx = width * (0.2 + deterministicHash(d * 19 + 3) * 0.6);
+        const dy = height * (0.22 + deterministicHash(d * 31 + 7) * 0.56);
         const twinkle = 0.35 + 0.6 * (0.5 + 0.5 * Math.sin(clock * 1.5 + d * 2.3));
-        ctx.fillStyle = `rgba(255, 242, 206, ${(0.38 * twinkle).toFixed(3)})`;
+        ctx.fillStyle = `rgba(255, 242, 206, ${(0.34 * twinkle).toFixed(3)})`;
         ctx.beginPath();
-        ctx.arc(dx, dy, 0.75 + deterministicHash(d * 11) * 0.55, 0, Math.PI * 2);
+        ctx.arc(dx, dy, 0.75 + deterministicHash(d * 11) * 0.5, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -326,64 +330,74 @@ export function EcosystemBridgeVisual({
             type="button"
             onClick={() => onSelect(node.id)}
             aria-pressed={isSelected}
+            aria-label={`Select ${node.label}`}
             style={{ left: `${node.nx * 100}%`, top: `${node.ny * 100}%` }}
-            className="group absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white/75"
+            className="group absolute flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white/75"
           >
-            {/* Node optical reticle sitting right at the triangle vertex pinch waist */}
-            <span className="relative flex h-[38px] w-[38px] items-center justify-center">
+            {/* Precision Concentric Optical Node Reticle (matches /dashboard & NeuralNetworkPreview) */}
+            <svg
+              viewBox="0 0 44 44"
+              className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
+              aria-hidden="true"
+            >
               {isSelected ? (
-                <svg
-                  viewBox="0 0 50 50"
-                  className="neural-reticle-orbit pointer-events-none absolute -inset-1.5 h-[50px] w-[50px]"
-                  aria-hidden="true"
-                >
-                  <circle
-                    cx="25"
-                    cy="25"
-                    r="23"
-                    fill="none"
-                    stroke="#f0b54a"
-                    strokeOpacity="0.55"
-                    strokeWidth="1.1"
-                    strokeDasharray="14 18"
-                  />
-                </svg>
-              ) : null}
-              <span
-                className={`flex h-9 w-9 items-center justify-center rounded-full border transition-all ${
-                  isSelected
-                    ? "border-[#f0b54a] bg-[#181610]/90 shadow-[0_0_20px_rgba(240,181,74,0.35)]"
-                    : "border-white/[0.22] bg-[#13141a]/90 group-hover:border-[#f0b54a]/55"
-                }`}
-              >
-                <span
-                  className={`h-2 w-2 rounded-full transition-colors ${
-                    isSelected ? "bg-[#fff4d4]" : "bg-white/45 group-hover:bg-[#f0b54a]"
-                  }`}
+                <circle
+                  cx="22"
+                  cy="22"
+                  r="19.5"
+                  fill="none"
+                  stroke="#f0b54a"
+                  strokeOpacity="0.34"
+                  strokeWidth="1"
                 />
-              </span>
+              ) : null}
+              <circle
+                cx="22"
+                cy="22"
+                r="15.5"
+                fill={isSelected ? "rgba(20, 21, 27, 0.96)" : "rgba(17, 18, 22, 0.92)"}
+                stroke="#f0b54a"
+                strokeOpacity={isSelected ? 0.95 : 0.45}
+                strokeWidth={isSelected ? 1.45 : 1.1}
+              />
+              <g
+                stroke="#f0b54a"
+                strokeWidth="1"
+                strokeLinecap="round"
+                strokeOpacity={isSelected ? 0.85 : 0.32}
+              >
+                <line x1="22" y1="3.6" x2="22" y2="5.8" />
+                <line x1="22" y1="38.2" x2="22" y2="40.4" />
+                <line x1="3.6" y1="22" x2="5.8" y2="22" />
+                <line x1="38.2" y1="22" x2="40.4" y2="22" />
+              </g>
+            </svg>
+
+            <span
+              className={`relative z-10 flex items-center justify-center transition-colors ${
+                isSelected ? "text-[#f5f5f7]" : "text-[#a1a1a6] group-hover:text-[#f5f5f7]"
+              }`}
+            >
+              <TriangleNodeGlyph id={node.id} />
             </span>
 
-            {/* Monochrome Node Title & Sub-caption placed cleanly outside the triangle */}
+            {/* Crisp Apple HIG Floating Pill Badge placed cleanly outside the triangle */}
             <span
-              className={`pointer-events-none absolute left-1/2 flex -translate-x-1/2 flex-col items-center whitespace-nowrap ${
-                node.labelPlacement === "top" ? "bottom-full mb-2" : "top-full mt-2"
+              className={`pointer-events-none absolute left-1/2 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium whitespace-nowrap backdrop-blur-md transition-colors ${
+                node.labelPlacement === "top" ? "bottom-[calc(100%+5px)]" : "top-[calc(100%+5px)]"
+              } ${
+                isSelected
+                  ? "border-white/[0.16] bg-[#171820]/92 text-[#f5f5f7]"
+                  : "border-white/[0.09] bg-[#13141a]/82 text-[#9d9da6] group-hover:border-white/[0.14] group-hover:text-[#e5e5ea]"
               }`}
             >
               <span
-                className={`text-[11.5px] leading-tight font-semibold transition-colors ${
-                  isSelected ? "text-[#f5f5f7]" : "text-[#a1a1a6] group-hover:text-[#f5f5f7]"
+                className={`h-1.5 w-1.5 rounded-full transition-colors ${
+                  isSelected ? "bg-[#f5f5f7]" : "bg-white/30 group-hover:bg-white/55"
                 }`}
-              >
-                {node.label}
-              </span>
-              <span
-                className={`mt-0.5 text-[10px] leading-tight transition-colors ${
-                  isSelected ? "text-[#d1d1d6]" : "text-[#7c7c85]"
-                }`}
-              >
-                {node.sub}
-              </span>
+                aria-hidden="true"
+              />
+              {node.label}
             </span>
           </button>
         );
