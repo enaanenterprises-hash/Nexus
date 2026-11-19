@@ -41,6 +41,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { STUDIO_NODE_ID } from "@/extensions/studio/node";
 import type { ExtensionHubSnapshot, ExtensionId } from "@/lib/extensions";
 import { loadAudioBlob, saveAudioBlob } from "@/lib/studio/audio-db";
+import { defaultStudioColorForSlot } from "@/lib/studio/colors";
 import {
   createStudioCollection,
   deleteStudioRecording,
@@ -87,11 +88,7 @@ type HistorySnapshot = {
 const MAX_HISTORY = 30;
 
 function defaultLayerColor(idx: number): StudioTrackColor {
-  if (idx === 0) return "gold";
-  if (idx === 1) return "sky";
-  if (idx === 2) return "emerald";
-  if (idx === 3) return "coral";
-  return "slate";
+  return defaultStudioColorForSlot(idx);
 }
 
 function fmtDuration(ms: number): string {
@@ -134,8 +131,8 @@ function triggerDownload(blob: Blob, filename: string) {
 
 function deriveLayerMixers(list: StudioTrackV1[]): Record<number, LayerMixerState> {
   const map: Record<number, LayerMixerState> = {
-    0: { ...DEFAULT_LAYER_MIXER, name: "Track 1", colorTag: "gold" },
-    1: { ...DEFAULT_LAYER_MIXER, name: "Track 2", colorTag: "sky" },
+    0: { ...DEFAULT_LAYER_MIXER, name: "Track 1", colorTag: "blue" },
+    1: { ...DEFAULT_LAYER_MIXER, name: "Track 2", colorTag: "teal" },
   };
   for (const tr of list) {
     const idx = Math.max(0, tr.layerIndex ?? 0);
@@ -188,8 +185,8 @@ export function StudioView({
   const [layerCount, setLayerCount] = useState(2);
   const [activeLayerIndex, setActiveLayerIndex] = useState(0);
   const [layerMixers, setLayerMixers] = useState<Record<number, LayerMixerState>>({
-    0: { ...DEFAULT_LAYER_MIXER, name: "Track 1", colorTag: "gold" },
-    1: { ...DEFAULT_LAYER_MIXER, name: "Track 2", colorTag: "sky" },
+    0: { ...DEFAULT_LAYER_MIXER, name: "Track 1", colorTag: "blue" },
+    1: { ...DEFAULT_LAYER_MIXER, name: "Track 2", colorTag: "teal" },
   });
 
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
@@ -482,8 +479,8 @@ export function StudioView({
     setLayerCount(2);
     setActiveLayerIndex(0);
     setLayerMixers({
-      0: { ...DEFAULT_LAYER_MIXER, name: audio.inputs[0]?.label || "Track 1", colorTag: "gold" },
-      1: { ...DEFAULT_LAYER_MIXER, name: audio.inputs[1]?.label || "Track 2", colorTag: "sky" },
+      0: { ...DEFAULT_LAYER_MIXER, name: audio.inputs[0]?.label || "Track 1", colorTag: "blue" },
+      1: { ...DEFAULT_LAYER_MIXER, name: audio.inputs[1]?.label || "Track 2", colorTag: "teal" },
     });
     setSelectedTrackId(null);
     setSavedProjectSnapshot(null);
@@ -1219,7 +1216,7 @@ export function StudioView({
                   onClick={() => void handleExportStems()}
                   className="flex w-full items-start gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-foreground/[0.06] disabled:opacity-45"
                 >
-                  <Layers className="mt-0.5 size-4 shrink-0 text-[color:var(--land-gold)]" />
+                  <Layers className="mt-0.5 size-4 shrink-0 text-[color:var(--studio-accent)]" />
                   <div className="min-w-0">
                     <div className="text-[12.5px] font-medium text-foreground">Isolated Track Stems (.WAV)</div>
                     <div className="text-[11px] text-muted-foreground">Synced per-mic stems from 00:00</div>
@@ -1241,7 +1238,7 @@ export function StudioView({
                   onClick={() => void openRouting()}
                   className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[12.5px] font-medium text-foreground transition-colors hover:bg-foreground/[0.06]"
                 >
-                  <Zap className="size-4 shrink-0 text-[color:var(--land-gold)]" />
+                  <Zap className="size-4 shrink-0 text-[color:var(--studio-accent)]" />
                   <span>Route to Nexus Node</span>
                 </button>
 
@@ -1855,7 +1852,7 @@ export function StudioView({
                         key={item.id}
                         className={`group flex items-center justify-between gap-2 rounded-xl border px-2.5 py-2 transition-colors ${
                           selected
-                            ? "border-[color:var(--land-gold)]/55 bg-[color:var(--land-gold)]/10"
+                            ? "border-[color:var(--studio-accent)]/55 bg-[color:var(--studio-accent)]/10"
                             : "border-transparent hover:border-border/70 hover:bg-muted/35"
                         }`}
                       >

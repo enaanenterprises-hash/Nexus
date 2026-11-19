@@ -29,24 +29,13 @@ import {
   type MicDeviceOption,
   type StudioCaptureMode,
 } from "@/lib/studio/capture-engine";
-import type { StudioTrackColor } from "@/lib/studio/types";
+import { STUDIO_STEM_COLORS, normalizeStudioColor } from "@/lib/studio/colors";
 import type {
   ChannelMeterTelemetry,
   LiveAudioTelemetry,
   MicChannelConfig,
   StudioTransportState,
 } from "./use-studio-audio";
-
-const RIBBON_PALETTE: Record<
-  StudioTrackColor,
-  { darkRgb: readonly [number, number, number]; lightRgb: readonly [number, number, number]; dotClass: string }
-> = {
-  gold: { darkRgb: [240, 181, 74], lightRgb: [166, 116, 18], dotClass: "bg-[#f0b54a]" },
-  sky: { darkRgb: [186, 206, 226], lightRgb: [72, 92, 114], dotClass: "bg-[#94b2d0]" },
-  emerald: { darkRgb: [134, 204, 174], lightRgb: [28, 122, 86], dotClass: "bg-[#6ec49f]" },
-  coral: { darkRgb: [232, 152, 134], lightRgb: [176, 78, 58], dotClass: "bg-[#e29584]" },
-  slate: { darkRgb: [192, 192, 200], lightRgb: [92, 94, 104], dotClass: "bg-[#a1a1aa]" },
-};
 
 function formatStageClock(ms: number): string {
   const safe = Math.max(0, ms);
@@ -233,7 +222,7 @@ function InputStripRow({
   onRemove: () => void;
   onOpenPatchbay: () => void;
 }) {
-  const dotClass = RIBBON_PALETTE[cfg.colorTag]?.dotClass ?? "bg-[#f0b54a]";
+  const dotClass = STUDIO_STEM_COLORS[normalizeStudioColor(cfg.colorTag, slotIndex)].dotClass;
 
   return (
     <div className="flex flex-col gap-2.5 py-3 first:pt-1 last:pb-1">
@@ -346,7 +335,7 @@ function InputStripRow({
           <div
             ref={(el) => onRegisterMeter(cfg.id, el)}
             style={{ transform: "scaleX(0.004)", transformOrigin: "left center" }}
-            className="h-full w-full rounded-full bg-[linear-gradient(90deg,#34d399_0%,#34d399_72%,#f0b54a_88%,#e12621_98%)] will-change-transform"
+            className="h-full w-full rounded-full bg-[linear-gradient(90deg,#22c55e_0%,#22c55e_70%,#f97316_88%,#e12621_98%)] will-change-transform"
           />
         </div>
         <span
@@ -575,7 +564,7 @@ export function StudioCaptureStage({
             const hist = historiesRef.current.get(inp.id) ?? [];
             const cy = laneH * (i + 0.5);
             const maxBarH = laneH * (count === 1 ? 0.42 : 0.38);
-            const palette = RIBBON_PALETTE[inp.colorTag] ?? RIBBON_PALETTE.gold;
+            const palette = STUDIO_STEM_COLORS[normalizeStudioColor(inp.colorTag, i)];
 
             if (i > 0) {
               ctx.strokeStyle = isLight ? "rgba(14, 15, 18, 0.05)" : "rgba(255, 255, 255, 0.045)";
@@ -808,7 +797,7 @@ export function StudioCaptureStage({
               }}
               data-recording={isActiveTake ? "true" : "false"}
               aria-label={isActiveTake ? "Stop and keep take" : "Start recording (R)"}
-              className="studio-shutter-ring flex h-[68px] w-[68px] items-center justify-center rounded-full transition-transform active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[color:var(--land-gold)]"
+              className="studio-shutter-ring flex h-[68px] w-[68px] items-center justify-center rounded-full transition-transform active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[color:var(--studio-accent)]"
             >
               <span className="studio-shutter-core" aria-hidden />
             </button>
@@ -825,7 +814,7 @@ export function StudioCaptureStage({
                         aria-label="Drop marker (M)"
                         className="h-11 w-11 rounded-full p-0"
                       >
-                        <BookmarkPlus className="size-4 text-[color:var(--land-gold)]" />
+                        <BookmarkPlus className="size-4 text-[color:var(--studio-accent)]" />
                       </Button>
                     }
                   />

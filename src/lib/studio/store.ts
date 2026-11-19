@@ -31,13 +31,16 @@ const TRACK_ROLES: ReadonlySet<StudioTrackRole> = new Set([
   "scratch",
   "overdub",
 ]);
-const TRACK_COLORS: ReadonlySet<StudioTrackColor> = new Set([
-  "gold",
-  "sky",
-  "emerald",
-  "coral",
-  "slate",
-]);
+const LEGACY_COLOR_MAP: Record<string, StudioTrackColor> = {
+  blue: "blue",
+  teal: "teal",
+  indigo: "indigo",
+  coral: "coral",
+  slate: "slate",
+  gold: "blue",
+  sky: "teal",
+  emerald: "indigo",
+};
 const MARKER_KINDS: ReadonlySet<StudioMarkerKind> = new Set([
   "cue",
   "chapter",
@@ -119,7 +122,10 @@ export function sanitizeTracks(raw: unknown): StudioTrackV1[] {
         : undefined;
     const inputSource =
       typeof t.inputSource === "string" && t.inputSource.trim() ? t.inputSource.trim().slice(0, 80) : undefined;
-    const colorTag = TRACK_COLORS.has(t.colorTag as StudioTrackColor) ? (t.colorTag as StudioTrackColor) : undefined;
+    const colorTag =
+      typeof t.colorTag === "string" && t.colorTag in LEGACY_COLOR_MAP
+        ? LEGACY_COLOR_MAP[t.colorTag]
+        : undefined;
     const eqLowDb =
       t.eqLowDb !== undefined ? Math.round(clamp(Number(t.eqLowDb) || 0, -6, 6) * 10) / 10 : undefined;
     const eqMidDb =

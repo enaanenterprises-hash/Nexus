@@ -18,10 +18,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { formatGainDb } from "@/lib/studio/capture-engine";
+import { STUDIO_COLOR_CYCLE, STUDIO_STEM_COLORS, normalizeStudioColor } from "@/lib/studio/colors";
 import type {
   StudioMarkerKind,
   StudioMarkerV1,
-  StudioTrackColor,
   StudioTrackV1,
 } from "@/lib/studio/types";
 
@@ -40,13 +40,11 @@ const COUNT_IN_LABELS: Record<string, string> = {
   "2": "2 bars",
 };
 
-const COLOR_SWATCHES: Array<{ id: StudioTrackColor; label: string; dotClass: string }> = [
-  { id: "gold", label: "Gold (Host)", dotClass: "bg-[#f0b54a]" },
-  { id: "sky", label: "Slate Blue (Guest)", dotClass: "bg-[#94b2d0]" },
-  { id: "emerald", label: "Sage (Stem)", dotClass: "bg-[#6ec49f]" },
-  { id: "coral", label: "Clay (Overdub)", dotClass: "bg-[#e29584]" },
-  { id: "slate", label: "Silver (Safety)", dotClass: "bg-[#a1a1aa]" },
-];
+const COLOR_SWATCHES = STUDIO_COLOR_CYCLE.map((id) => ({
+  id,
+  label: STUDIO_STEM_COLORS[id].label,
+  dotClass: STUDIO_STEM_COLORS[id].dotClass,
+}));
 
 function fmtExactSec(ms: number): string {
   const safe = Math.max(0, ms);
@@ -214,7 +212,7 @@ export function StudioInspectorContent({
                   <span className="text-[11.5px] text-muted-foreground">Color</span>
                   <div className="flex items-center gap-1.5" role="radiogroup" aria-label="Clip color accent">
                     {COLOR_SWATCHES.map((sw) => {
-                      const active = (selectedTrack.colorTag ?? "gold") === sw.id;
+                      const active = normalizeStudioColor(selectedTrack.colorTag, selectedTrack.layerIndex ?? 0) === sw.id;
                       return (
                         <button
                           key={sw.id}
@@ -288,7 +286,7 @@ export function StudioInspectorContent({
                     onClick={() => onNormalizeClip(selectedTrack)}
                     className="h-8 justify-start gap-1.5 rounded-lg text-[11.5px]"
                   >
-                    <Sparkles className="size-3.5 text-[color:var(--land-gold)]" />
+                    <Sparkles className="size-3.5 text-[color:var(--studio-accent)]" />
                     <span>{normalizing ? "Measuring…" : "Normalize"}</span>
                   </Button>
                   <Button
@@ -526,7 +524,7 @@ export function StudioInspectorContent({
                 onClick={onDropMarker}
                 className="h-8 shrink-0 gap-1.5 rounded-lg px-2.5 text-[11.5px]"
               >
-                <BookmarkPlus className="size-3.5 text-[color:var(--land-gold)]" />
+                <BookmarkPlus className="size-3.5 text-[color:var(--studio-accent)]" />
                 <span className="font-mono tabular-nums">{fmtDuration(playheadMs)}</span>
               </Button>
             </div>
@@ -546,7 +544,7 @@ export function StudioInspectorContent({
                     <button
                       type="button"
                       onClick={() => onSeek(m.atMs)}
-                      className="shrink-0 font-mono text-[11px] font-medium text-[color:var(--land-gold)] tabular-nums hover:underline"
+                      className="shrink-0 font-mono text-[11px] font-medium text-[color:var(--studio-accent)] tabular-nums hover:underline"
                     >
                       {fmtDuration(m.atMs)}
                     </button>
@@ -653,7 +651,7 @@ export function StudioInspectorContent({
                 onBlur={onBlurDescription}
                 rows={5}
                 placeholder="Episode topics, guest notes, sponsor cues, or edit reminders…"
-                className="w-full resize-none rounded-xl border border-border/80 bg-foreground/[0.02] p-2.5 text-[12.5px] leading-relaxed text-foreground placeholder:text-muted-foreground/70 focus:border-[color:var(--land-gold)]/70 focus:outline-none"
+                className="w-full resize-none rounded-xl border border-border/80 bg-foreground/[0.02] p-2.5 text-[12.5px] leading-relaxed text-foreground placeholder:text-muted-foreground/70 focus:border-[color:var(--studio-accent)]/70 focus:outline-none"
               />
             </div>
 

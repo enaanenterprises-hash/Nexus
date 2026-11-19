@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { deleteAudioBlob, loadAudioBlob, saveAudioBlob } from "@/lib/studio/audio-db";
+import { defaultStudioColorForSlot } from "@/lib/studio/colors";
 import {
   MAX_STUDIO_INPUTS,
   MultiChannelPcmRecorder,
@@ -73,10 +74,8 @@ export type LiveAudioTelemetry = {
   recordingProgressMs: number;
 };
 
-const INPUT_COLOR_CYCLE: readonly StudioTrackColor[] = ["gold", "sky", "emerald", "coral", "slate"];
-
 function colorForSlot(index: number): StudioTrackColor {
-  return INPUT_COLOR_CYCLE[index % INPUT_COLOR_CYCLE.length]!;
+  return defaultStudioColorForSlot(index);
 }
 
 function makeTrackId(): string {
@@ -123,7 +122,7 @@ function createInitialInputs(): MicChannelConfig[] {
       invertPhase: false,
       channelIndex: 0,
       deviceId: "default",
-      colorTag: "gold",
+      colorTag: "blue",
     },
   ];
 }
@@ -1639,7 +1638,7 @@ export function useStudioAudio({
           durationMs,
           sourceDurationMs: durationMs,
           inputSource: "Imported file",
-          colorTag: "emerald",
+          colorTag: "teal",
           gain: 0.92,
           pan: 0,
           muted: false,

@@ -19,7 +19,7 @@ export interface StudioAudioRef {
 
 export type StudioTrackRole = "voice" | "instrumental" | "scratch" | "overdub";
 
-export type StudioTrackColor = "gold" | "sky" | "emerald" | "coral" | "slate";
+export type StudioTrackColor = "blue" | "teal" | "indigo" | "coral" | "slate";
 
 export interface StudioTrackV1 {
   id: string;

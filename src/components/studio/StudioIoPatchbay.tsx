@@ -26,6 +26,7 @@ import {
   type MicDeviceOption,
   type StudioCaptureMode,
 } from "@/lib/studio/capture-engine";
+import { STUDIO_STEM_COLORS, normalizeStudioColor } from "@/lib/studio/colors";
 import type { LiveAudioTelemetry, MicChannelConfig } from "./use-studio-audio";
 
 const MODE_OPTIONS: Array<{
@@ -58,14 +59,6 @@ const MODE_OPTIONS: Array<{
     detail: "Separate audio devices",
     icon: Usb,
   },
-];
-
-const SLOT_ACTIVE_CLASSES = [
-  "border-[#f0b54a] bg-[#f0b54a]/20 text-foreground",
-  "border-[#94b2d0] bg-[#94b2d0]/20 text-foreground",
-  "border-[#6ec49f] bg-[#6ec49f]/20 text-foreground",
-  "border-[#e29584] bg-[#e29584]/20 text-foreground",
-  "border-[#a1a1aa] bg-[#a1a1aa]/20 text-foreground",
 ];
 
 export function StudioIoPatchbay({
@@ -202,7 +195,7 @@ export function StudioIoPatchbay({
                   micReady
                     ? "bg-[#34d399]"
                     : hasExternalHardware
-                      ? "bg-[#f0b54a]"
+                      ? "bg-[color:var(--studio-accent)]"
                       : "bg-muted-foreground/45"
                 }`}
               />
@@ -262,9 +255,9 @@ export function StudioIoPatchbay({
                     disabled={isRecordingLocked}
                     aria-checked={active}
                     onClick={() => onChangeMode(opt.id)}
-                    className={`flex min-h-[58px] flex-col items-start justify-center rounded-xl border px-3 py-2 text-left transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-[color:var(--land-gold)] ${
+                    className={`flex min-h-[58px] flex-col items-start justify-center rounded-xl border px-3 py-2 text-left transition-colors disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-[color:var(--studio-accent)] ${
                       active
-                        ? "border-[color:var(--land-gold)]/70 bg-[color:var(--land-gold)]/10 text-foreground"
+                        ? "border-[color:var(--studio-accent)]/70 bg-[color:var(--studio-accent)]/12 text-foreground"
                         : "border-border/75 bg-card/40 text-muted-foreground hover:border-border hover:text-foreground"
                     }`}
                   >
@@ -273,7 +266,7 @@ export function StudioIoPatchbay({
                         <Icon className="size-3.5 shrink-0" />
                         <span>{opt.title}</span>
                       </span>
-                      {active ? <Check className="size-3.5 shrink-0 text-[color:var(--land-gold)]" /> : null}
+                      {active ? <Check className="size-3.5 shrink-0 text-[color:var(--studio-accent)]" /> : null}
                     </div>
                     <span className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{opt.detail}</span>
                   </button>
@@ -423,7 +416,7 @@ export function StudioIoPatchbay({
                             barRefs.current[chIdx] = el;
                           }}
                           style={{ transform: "scaleX(0.015)", transformOrigin: "left center" }}
-                          className="h-full w-full rounded-full bg-[linear-gradient(90deg,#34d399_0%,#f0b54a_74%,#e12621_100%)] will-change-transform"
+                          className="h-full w-full rounded-full bg-[linear-gradient(90deg,#22c55e_0%,#f97316_76%,#e12621_100%)] will-change-transform"
                         />
                       </div>
                     </div>
@@ -431,7 +424,8 @@ export function StudioIoPatchbay({
                     <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
                       {inputs.map((inp, slotIdx) => {
                         const assigned = inp.channelIndex === chIdx;
-                        const activeCls = SLOT_ACTIVE_CLASSES[slotIdx % SLOT_ACTIVE_CLASSES.length]!;
+                        const activeCls =
+                          STUDIO_STEM_COLORS[normalizeStudioColor(inp.colorTag, slotIdx)].patchActiveClass;
                         return (
                           <button
                             key={inp.id}
@@ -440,7 +434,7 @@ export function StudioIoPatchbay({
                             aria-pressed={assigned}
                             aria-label={`Assign channel ${chIdx + 1} to ${inp.label}`}
                             title={`Assign to ${inp.label}`}
-                            className={`h-7 min-w-[28px] rounded-md border px-1.5 font-mono text-[10.5px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[color:var(--land-gold)] ${
+                            className={`h-7 min-w-[28px] rounded-md border px-1.5 font-mono text-[10.5px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[color:var(--studio-accent)] ${
                               assigned
                                 ? activeCls
                                 : "border-border/70 bg-transparent text-muted-foreground hover:text-foreground"
@@ -473,7 +467,7 @@ export function StudioIoPatchbay({
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 text-[12.5px] font-medium text-foreground">
-                    <ShieldCheck className="size-3.5 text-[color:var(--land-gold)]" />
+                    <ShieldCheck className="size-3.5 text-[color:var(--studio-accent)]" />
                     <span>Main Mix safety stem (Ch 1–2)</span>
                   </div>
                   <p className="text-[11px] text-muted-foreground">

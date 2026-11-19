@@ -5,6 +5,7 @@ import { Plus, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatGainDb } from "@/lib/studio/capture-engine";
+import { STUDIO_STEM_COLORS, normalizeStudioColor } from "@/lib/studio/colors";
 import type { StudioMarkerV1, StudioTrackColor, StudioTrackV1 } from "@/lib/studio/types";
 
 export type StudioTimelineTool = "select" | "cut";
@@ -49,25 +50,6 @@ const LANE_HEIGHT = 84;
 const RULER_HEIGHT = 30;
 const EDGE_HANDLE_PX = 9;
 const MIN_CLIP_MS = 160;
-
-const COLOR_PALETTE: Record<
-  StudioTrackColor,
-  { darkRgb: readonly [number, number, number]; lightRgb: readonly [number, number, number]; dotClass: string }
-> = {
-  gold: { darkRgb: [240, 181, 74], lightRgb: [166, 116, 18], dotClass: "bg-[#f0b54a]" },
-  sky: { darkRgb: [186, 206, 226], lightRgb: [72, 92, 114], dotClass: "bg-[#94b2d0]" },
-  emerald: { darkRgb: [134, 204, 174], lightRgb: [28, 122, 86], dotClass: "bg-[#6ec49f]" },
-  coral: { darkRgb: [232, 152, 134], lightRgb: [176, 78, 58], dotClass: "bg-[#e29584]" },
-  slate: { darkRgb: [176, 176, 184], lightRgb: [92, 94, 104], dotClass: "bg-[#a1a1aa]" },
-};
-
-function defaultColorForLayer(layerIdx: number): StudioTrackColor {
-  if (layerIdx === 0) return "gold";
-  if (layerIdx === 1) return "sky";
-  if (layerIdx === 2) return "emerald";
-  if (layerIdx === 3) return "coral";
-  return "slate";
-}
 
 function formatRulerSec(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -231,7 +213,7 @@ export function TimelineWaveform({
 
     if (loopEnabled && totalTimelineMs > 0) {
       const loopW = Math.min(width, totalTimelineMs * pxPerMs);
-      ctx.fillStyle = isLight ? "rgba(184, 120, 16, 0.14)" : "rgba(240, 181, 74, 0.15)";
+      ctx.fillStyle = isLight ? "rgba(37, 99, 235, 0.24)" : "rgba(91, 156, 246, 0.28)";
       ctx.fillRect(0, 0, loopW, 3);
     }
 
@@ -279,7 +261,7 @@ export function TimelineWaveform({
       const isActiveRow = layerIdx === activeLayerIndex;
 
       if (isDropTarget) {
-        ctx.fillStyle = isLight ? "rgba(184, 120, 16, 0.09)" : "rgba(240, 181, 74, 0.09)";
+        ctx.fillStyle = isLight ? "rgba(37, 99, 235, 0.08)" : "rgba(91, 156, 246, 0.1)";
         ctx.fillRect(0, yTop, width, LANE_HEIGHT);
       } else if (isActiveRow) {
         ctx.fillStyle = isLight ? "rgba(14, 15, 18, 0.018)" : "rgba(255, 255, 255, 0.018)";
@@ -306,8 +288,8 @@ export function TimelineWaveform({
       const audible = anySolo ? solo : !muted;
       const isSelected = tr.id === selectedTrackId;
 
-      const colorKey = tr.colorTag ?? layerMix?.colorTag ?? defaultColorForLayer(layerIdx);
-      const rgb = isLight ? COLOR_PALETTE[colorKey].lightRgb : COLOR_PALETTE[colorKey].darkRgb;
+      const colorKey = normalizeStudioColor(tr.colorTag ?? layerMix?.colorTag, layerIdx);
+      const rgb = isLight ? STUDIO_STEM_COLORS[colorKey].lightRgb : STUDIO_STEM_COLORS[colorKey].darkRgb;
       const [cr, cg, cb] = rgb;
 
       const x0 = tr.offsetMs * pxPerMs;
@@ -454,17 +436,17 @@ export function TimelineWaveform({
       }
     }
 
-    // 5. Golden chapter & cue markers along ruler
+    // 5. Studio Blue chapter & cue markers along ruler
     for (const m of markers) {
       const mx = clampX(m.atMs * pxPerMs, width);
-      ctx.strokeStyle = isLight ? "rgba(184, 120, 16, 0.62)" : "rgba(240, 181, 74, 0.62)";
+      ctx.strokeStyle = isLight ? "rgba(37, 99, 235, 0.6)" : "rgba(91, 156, 246, 0.6)";
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(mx, RULER_HEIGHT);
       ctx.lineTo(mx, height);
       ctx.stroke();
 
-      ctx.fillStyle = isLight ? "#b87810" : "#f0b54a";
+      ctx.fillStyle = isLight ? "#2563eb" : "#5b9cf6";
       ctx.beginPath();
       ctx.moveTo(mx - 4, RULER_HEIGHT - 9);
       ctx.lineTo(mx + 4, RULER_HEIGHT - 9);
@@ -768,7 +750,7 @@ export function TimelineWaveform({
       }}
       onDrop={handleDrop}
       className={`studio-daw-shell relative flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[18px] border transition-colors ${
-        isFileDragOver ? "border-[color:var(--land-gold)]" : "border-border/80"
+        isFileDragOver ? "border-[color:var(--studio-accent)]" : "border-border/80"
       }`}
     >
       <div className="flex min-h-full items-stretch">
@@ -807,7 +789,7 @@ export function TimelineWaveform({
                 solo: false,
               };
               const layerClips = displayTracks.filter((t) => (t.layerIndex ?? 0) === idx);
-              const colorKey = mixer.colorTag ?? layerClips[0]?.colorTag ?? defaultColorForLayer(idx);
+              const colorKey = normalizeStudioColor(mixer.colorTag ?? layerClips[0]?.colorTag, idx);
               const inputHint = mixer.inputHint ?? layerClips[0]?.inputSource;
               const isTarget = idx === activeLayerIndex;
               const isExtraGhost = drag?.kind === "move" && idx >= layerCount && drag.previewLayerIndex === idx;
@@ -820,7 +802,7 @@ export function TimelineWaveform({
                   onClick={() => onSelectLayer(idx)}
                   className={`flex flex-col justify-between border-b border-border/65 px-3 py-2.5 transition-colors ${
                     isExtraGhost
-                      ? "bg-[color:var(--land-gold)]/10"
+                      ? "bg-[color:var(--studio-accent)]/12"
                       : isTarget
                         ? "bg-foreground/[0.035]"
                         : "hover:bg-foreground/[0.02]"
@@ -831,7 +813,7 @@ export function TimelineWaveform({
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <span
-                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${COLOR_PALETTE[colorKey].dotClass} ${
+                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${STUDIO_STEM_COLORS[colorKey].dotClass} ${
                             isTarget ? "opacity-100" : "opacity-60"
                           }`}
                           aria-hidden
@@ -877,7 +859,7 @@ export function TimelineWaveform({
                         aria-label={`Solo ${mixer.name ?? `Track ${idx + 1}`}`}
                         className={`h-6 w-6 rounded-md font-mono text-[10px] font-medium transition-colors ${
                           mixer.solo
-                            ? "bg-[color:var(--land-gold)] text-[#09090b]"
+                            ? "bg-[color:var(--studio-accent-strong)] text-white"
                             : "text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground"
                         }`}
                       >
@@ -960,9 +942,9 @@ export function TimelineWaveform({
 
       {/* Drag-and-drop file overlay */}
       {isFileDragOver ? (
-        <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-[14px] border-2 border-dashed border-[color:var(--land-gold)] bg-background/80 backdrop-blur-sm">
+        <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-[14px] border-2 border-dashed border-[color:var(--studio-accent)] bg-background/80 backdrop-blur-sm">
           <div className="flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-[13px] font-medium text-foreground">
-            <Upload className="size-4 text-[color:var(--land-gold)]" />
+            <Upload className="size-4 text-[color:var(--studio-accent)]" />
             <span>Drop audio files to import stems</span>
           </div>
         </div>

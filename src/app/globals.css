@@ -2155,6 +2155,14 @@ button.landing-signup {
   display: none !important;
 }
 
+:root {
+  --studio-accent: #5b9cf6;
+  --studio-accent-strong: #3b82f6;
+  --studio-accent-soft: rgba(91, 156, 246, 0.14);
+  --studio-accent-ring: rgba(91, 156, 246, 0.55);
+  --studio-thumb: #e4e4e7;
+}
+
 /* Studio replaces the network completely edge-to-edge; top-left orb floats inline in the Studio header. */
 .studio-fullscreen {
   position: absolute;
@@ -2162,6 +2170,13 @@ button.landing-signup {
   z-index: 20;
   padding: 0;
   background: #0c0c0f;
+  --ring: var(--studio-accent-ring);
+  --accent: var(--studio-accent-soft);
+}
+
+.studio-fullscreen input,
+.studio-fullscreen textarea {
+  caret-color: var(--studio-accent);
 }
 
 .dash[data-theme="dark"] .node-panel,
@@ -2456,7 +2471,7 @@ button.landing-signup {
   width: 12px;
   height: 12px;
   border-radius: 999px;
-  background: var(--land-gold);
+  background: var(--studio-thumb, #e4e4e7);
   border: 1.5px solid #09090b;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
   transition: transform 120ms ease;
@@ -2470,7 +2485,7 @@ button.landing-signup {
   width: 12px;
   height: 12px;
   border-radius: 999px;
-  background: var(--land-gold);
+  background: var(--studio-thumb, #e4e4e7);
   border: 1.5px solid #09090b;
 }
 
@@ -6143,9 +6158,20 @@ html[data-dash-theme="light"] {
   background: #f7f6f2;
 }
 
+.dash[data-theme="light"],
+html[data-dash-theme="light"] {
+  --studio-accent: #2563eb;
+  --studio-accent-strong: #1d4ed8;
+  --studio-accent-soft: rgba(37, 99, 235, 0.1);
+  --studio-accent-ring: rgba(37, 99, 235, 0.45);
+  --studio-thumb: #18181b;
+}
+
 .dash[data-theme="light"] .studio-fullscreen,
 html[data-dash-theme="light"] .studio-fullscreen {
   background: #f7f6f2;
+  --ring: var(--studio-accent-ring);
+  --accent: var(--studio-accent-soft);
 }
 
 .dash[data-theme="light"] .studio-screen,

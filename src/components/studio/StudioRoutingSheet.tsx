@@ -124,12 +124,12 @@ export function StudioRoutingSheet({
                       >
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5 text-[13px] font-medium">
-                            <Zap className="size-3.5 text-[color:var(--land-gold)]" />
+                            <Zap className="size-3.5 text-[color:var(--studio-accent)]" />
                             <span className="truncate">{ext.manifest.name}</span>
                           </div>
                           <p className="truncate text-[11px] text-muted-foreground">{ext.manifest.id}</p>
                         </div>
-                        {sent ? <Check className="size-4 shrink-0 text-[color:var(--land-gold)]" /> : <ArrowRight className="size-3.5 shrink-0" />}
+                        {sent ? <Check className="size-4 shrink-0 text-[color:var(--studio-accent)]" /> : <ArrowRight className="size-3.5 shrink-0" />}
                       </Button>
                     );
                   })}
@@ -150,7 +150,7 @@ export function StudioRoutingSheet({
                       <CardHeader className="pb-2">
                         <div className="flex items-center justify-between gap-2">
                           <CardTitle className="flex items-center gap-1.5 font-sans text-[13px] font-medium">
-                            <Icon className="size-3.5 text-[color:var(--land-gold)]" />
+                            <Icon className="size-3.5 text-[color:var(--studio-accent)]" />
                             <span>{target.label}</span>
                           </CardTitle>
                           <Badge variant="outline" className="text-[10px] font-normal">
