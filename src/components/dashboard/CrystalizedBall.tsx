@@ -688,17 +688,17 @@ void main() {
   if (uMorph > 0.001 && uMenuBox.z > 4.0) {
     vec2 boxP = screenPos - uMenuBox.xy;
     float dBox = sdRoundedBox(boxP, uMenuBox.zw, uMenuCorner);
-    if (abs(dBox) < 18.0) {
+    if (abs(dBox) < 16.0) {
       float boxYProg = clamp((uMenuBox.w - boxP.y) / max(2.0 * uMenuBox.w, 1.0), 0.0, 1.0);
-      float boxWave = smoothstep(boxYProg * 0.52, boxYProg * 0.52 + 0.42, uMorph);
+      float boxWave = smoothstep(boxYProg * 0.56, boxYProg * 0.56 + 0.38, uMorph);
       float boxTheta = atan(boxP.y, boxP.x);
-      float shimmer = 0.72 + 0.28 * sin(boxTheta * 6.0 - uTime * 1.8);
-      float lineW = max(uLine * 1.35, 0.85);
+      float shimmer = 0.76 + 0.24 * sin(boxTheta * 6.0 - uTime * 1.4);
+      float lineW = max(uLine * 1.6, 0.55);
       float boxCore = exp(-(dBox * dBox) / (lineW * lineW)) * boxWave;
-      float boxSheath = exp(-(dBox * dBox) / 22.0) * boxWave * shimmer;
-      float boxHalo = exp(-(dBox * dBox) / 85.0) * boxWave;
-      col += (uRimHot * boxCore * 0.58 + uRim * boxSheath * 0.26 + uRimDeep * boxHalo * 0.14 * uGlow) * uPresence;
-      hot += boxCore * 0.48 * uPresence;
+      float boxSheath = exp(-(dBox * dBox) / 14.0) * boxWave * shimmer;
+      float boxHalo = exp(-(dBox * dBox) / 56.0) * boxWave;
+      col += (uRimHot * boxCore * 0.28 + uRim * boxSheath * 0.18 + uRimDeep * boxHalo * 0.1 * uGlow) * uPresence;
+      hot += boxCore * 0.22 * uPresence;
     }
   }
 
@@ -801,58 +801,84 @@ void main() {
   vec2 screen = orbScreen;
   float morphBoost = 0.0;
 
+  // Scale active particle density to the physical area of the orb so compact orbs
+  // preserve the exact dark upper cavity and fine amber dust granulation of a 600px orb.
+  float radiusRatio = clamp(uRadius / 180.0, 0.09, 1.0);
+  float activeOrbRatio = clamp(radiusRatio * radiusRatio * 7.5, 0.065, 1.0);
+  float particleRank = float(id) / 12000.0;
+  float orbDensityMask = particleRank <= activeOrbRatio ? 1.0 : 0.0;
+  float orbGain = mix(0.34, 1.0, smoothstep(16.0, 140.0, uRadius));
+  float visibilityMask = orbDensityMask;
+
   if (uMorph > 0.001 && uMenuBox.z > 4.0) {
-    float roleHash = random(id * 13u + 7u);
-    if (roleHash >= 0.12) {
+    // Keep ~45% of the visible orb core particles inside the orb while the rest
+    // plus dormant reserve particles stream down to form the menu box perimeter.
+    bool staysInOrb = particleRank <= (activeOrbRatio * 0.45);
+    if (!staysInOrb) {
       float uBase = random(id * 17u + 11u);
       float rightSideFlag = uBase < 0.5 ? 1.0 : 0.0;
       float sideSign = rightSideFlag > 0.5 ? 1.0 : -1.0;
       float progBase = rightSideFlag > 0.5 ? (uBase * 2.0) : ((uBase - 0.5) * 2.0);
       float progDrift = clamp(
-        progBase + 0.024 * sin(uDustTime * (0.8 + 0.6 * random(id * 29u + 3u)) + seed.y * 12.566),
+        progBase + 0.018 * sin(uDustTime * (0.55 + 0.45 * random(id * 29u + 3u)) + seed.y * 12.566),
         0.0,
         1.0
       );
       vec2 boxNormal;
       vec2 perimLocal = menuPerimeterPoint(rightSideFlag, progDrift, uMenuBox.zw, uMenuCorner, boxNormal);
 
-      float delay = progBase * 0.34 + random(id * 19u + 5u) * 0.14;
-      float localT = smoothstep(delay, min(delay + 0.52, 1.0), uMorph);
-      float easedT = 1.0 - pow(1.0 - localT, 3.0);
+      float delay = progBase * 0.44 + random(id * 19u + 5u) * 0.15;
+      float localT = smoothstep(delay, min(delay + 0.41, 1.0), uMorph);
+      float easedT = localT * localT * (3.0 - 2.0 * localT);
       float inFlight = sin(localT * 3.14159265);
 
-      float radialJitter = (random(id * 31u + 9u) - 0.45) * 3.2 + 0.85 * sin(uDustTime * 1.7 + seed.y * 19.0);
-      float fillSweep = mix(0.22 + 0.78 * random(id * 37u + 2u), 1.0, smoothstep(0.25, 0.9, localT));
+      float radialJitter = (random(id * 31u + 9u) - 0.45) * 2.6 + 0.65 * sin(uDustTime * 1.2 + seed.y * 19.0);
+      float fillSweep = mix(0.25 + 0.75 * random(id * 37u + 2u), 1.0, smoothstep(0.25, 0.9, localT));
       vec2 targetScreen =
         uMenuBox.xy +
         vec2(perimLocal.x * fillSweep, perimLocal.y) +
         boxNormal * radialJitter;
 
       vec2 throat = vec2(
-        mix(uCenter.x, uMenuBox.x, 0.65) + sideSign * uMenuBox.z * (0.2 + 0.55 * random(id * 23u + 1u)),
+        mix(uCenter.x, uMenuBox.x, 0.65) + sideSign * uMenuBox.z * (0.18 + 0.5 * random(id * 23u + 1u)),
         min(uCenter.y - uRadius * 0.65, uMenuBox.y + uMenuBox.w + 4.0)
       );
       vec2 streamPos = mix(mix(orbScreen, throat, easedT), mix(throat, targetScreen, easedT), easedT);
-      streamPos.x += inFlight * sideSign * (3.6 * sin(localT * 8.5 + seed.y * 6.2831853));
+      streamPos.x += inFlight * sideSign * (3.0 * sin(localT * 7.5 + seed.y * 6.2831853));
 
       screen = mix(orbScreen, streamPos, localT);
-      inside = mix(inside, 1.0, smoothstep(0.0, 0.1, localT));
-      reveal = mix(reveal, 1.0, smoothstep(0.0, 0.1, localT));
-      fade = mix(fade, 0.94, smoothstep(0.0, 0.18, localT));
-      size *= 1.0 + 0.38 * inFlight + 0.18 * localT;
-      morphBoost = 0.75 * inFlight + 0.35 * localT;
+      // Wake up reserve particles smoothly as they depart the lower rim of the orb
+      float boxDensityMask = particleRank <= 0.34 ? 1.0 : 0.0;
+      visibilityMask = mix(orbDensityMask, boxDensityMask, smoothstep(0.02, 0.22, localT));
+      inside = mix(inside, 1.0, smoothstep(0.0, 0.12, localT));
+      reveal = mix(reveal, 1.0, smoothstep(0.0, 0.12, localT));
+      fade = mix(fade, 0.9, smoothstep(0.0, 0.2, localT));
+      size *= 1.0 + 0.22 * inFlight + 0.08 * localT;
+      morphBoost = 0.28 * inFlight + 0.12 * localT;
     }
   }
 
   gl_Position = vec4(screen / uViewport * 2.0 - 1.0, 0.0, 1.0);
   float px = size * uDpr;
-  gl_PointSize = px + 2.0;
+  gl_PointSize = visibilityMask > 0.001 ? (px + 1.2) : 0.0;
   vSize = px;
 
   int tone = int(home.w + 0.5);
   float rimLit = smoothstep(0.8, 0.97, length(p.xy));
-  vec3 color = uTones[tone] + uRimTone * (rimLit * rimLit * 0.12 + morphBoost * 0.28);
-  vColor = color * (1.0 + morphBoost * 0.55) * alpha * fade * twinkle * depthLight * reveal * inside * sqrt(spread) * uEncode;
+  vec3 color = uTones[tone] + uRimTone * (rimLit * rimLit * 0.12 + morphBoost * 0.16);
+  vColor =
+    color *
+    orbGain *
+    visibilityMask *
+    (1.0 + morphBoost * 0.25) *
+    alpha *
+    fade *
+    twinkle *
+    depthLight *
+    reveal *
+    inside *
+    sqrt(spread) *
+    uEncode;
 }
 `;
 
@@ -867,14 +893,14 @@ in float vSize;
 out vec4 fragColor;
 
 void main() {
-  vec2 q = (gl_PointCoord - 0.5) * (vSize + 2.0);
-  float half_ = max(vSize * 0.5, 0.5);
+  vec2 q = (gl_PointCoord - 0.5) * (vSize + 1.2);
+  float half_ = max(vSize * 0.5, 0.22);
   float cover;
   if (uShape < 0.5) {
-    vec2 c = clamp(half_ - abs(q) + 0.5, 0.0, 1.0);
+    vec2 c = clamp(half_ - abs(q) + 0.4, 0.0, 1.0);
     cover = c.x * c.y;
   } else {
-    cover = clamp(half_ - length(q) + 0.5, 0.0, 1.0);
+    cover = clamp(half_ - length(q) + 0.4, 0.0, 1.0);
   }
   if (cover <= 0.0) discard;
   fragColor = vec4(vColor * cover, 0.0);
@@ -1456,23 +1482,23 @@ const CrystalizedBall = ({
 
       if (s.morphOpen !== lastMorphOpen) {
         lastMorphOpen = s.morphOpen;
-        surge = Math.max(surge, 0.85);
-        spawnArc(-Math.PI * 0.5 + (random() - 0.5) * 0.6, 1.25);
-        spawnArc(Math.PI * 0.5 + (random() - 0.5) * 0.8, 1.05);
+        surge = Math.max(surge, 0.45);
+        spawnArc(-Math.PI * 0.5 + (random() - 0.5) * 0.6, 0.95);
       }
       const morphTarget = s.morphOpen ? 1 : 0;
       if (reducedMotion) {
         morphClock = morphTarget;
       } else if (morphClock < morphTarget) {
-        morphClock = Math.min(1, morphClock + dt / 0.62);
+        morphClock = Math.min(1, morphClock + dt / 1.35);
       } else if (morphClock > morphTarget) {
-        morphClock = Math.max(0, morphClock - dt / 0.44);
+        morphClock = Math.max(0, morphClock - dt / 0.95);
       }
 
       const presence = easeOut(smooth(0, 0.42, introClock));
       const unfold = easeOut(smooth(0, 0.32, introClock));
       const charge = Math.sin(Math.PI * smooth(0.22, 0.78, introClock)) * 0.35;
       const { cx, cyDom, cyWebgl, radius } = getOrbGeometry(s);
+      const compactScale = clamp(radius / 140, 0.14, 1);
 
       const strength = s.interactive && !reducedMotion ? clamp(s.hoverStrength, 0, 1) : 0;
       const px = pointer.x - cx;
@@ -1557,17 +1583,18 @@ const CrystalizedBall = ({
       fieldUniforms.uCenter.value = [cx, cyWebgl];
       fieldUniforms.uRadius.value = radius;
       fieldUniforms.uDpr.value = renderer.dpr;
-      fieldUniforms.uLine.value = Math.max(0.6, radius * 0.0035);
+      fieldUniforms.uLine.value = Math.max(0.22, radius * 0.0075);
       fieldUniforms.uTime.value = rimTime;
       fieldUniforms.uFrame.value = Math.floor(rimTime * 24) % 100000;
-      fieldUniforms.uBins.value = clamp(Math.round((Math.PI * 2 * radius) / 2.6), 240, 900);
+      fieldUniforms.uBins.value = clamp(Math.round((Math.PI * 2 * radius) / 2.2), 200, 900);
       fieldUniforms.uStrands.value = Math.round(clamp(s.strands, 1, MAX_STRANDS));
-      fieldUniforms.uCrackle.value = clamp(s.crackle, 0, 1) + surge * 0.5 + charge;
-      fieldUniforms.uFlares.value = clamp(s.flares, 0, 1);
-      fieldUniforms.uGlow.value = clamp(s.glow, 0, 2) * (1 + surge * 0.5 + charge) * (s.light ? 0.35 : 1);
-      fieldUniforms.uHaze.value = clamp(s.haze, 0, 2) * (s.light ? 0.6 : 1);
+      fieldUniforms.uCrackle.value = clamp(s.crackle, 0, 1) + surge * 0.35 + charge;
+      fieldUniforms.uFlares.value = clamp(s.flares, 0, 1) * (0.65 + 0.35 * compactScale);
+      fieldUniforms.uGlow.value =
+        clamp(s.glow, 0, 2) * (0.52 + 0.48 * compactScale) * (1 + surge * 0.35 + charge) * (s.light ? 0.35 : 1);
+      fieldUniforms.uHaze.value = clamp(s.haze, 0, 2) * (0.3 + 0.7 * compactScale) * (s.light ? 0.55 : 1);
       fieldUniforms.uFill.value = clamp(s.fill, 0, 1);
-      fieldUniforms.uPresence.value = presence;
+      fieldUniforms.uPresence.value = presence * (0.68 + 0.32 * compactScale);
       fieldUniforms.uUnfold.value = unfold;
       fieldUniforms.uBloom.value = presence * presence;
       fieldUniforms.uInside.value = smooth(0.2, 0.95, introClock);
@@ -1607,7 +1634,8 @@ const CrystalizedBall = ({
       dustUniforms.uViewport.value = [width, height];
       dustUniforms.uDepth.value = clamp(s.depth, 0, 1);
       dustUniforms.uTwinkle.value = clamp(s.twinkle, 0, 1);
-      dustUniforms.uPointScale.value = Math.max(1, radius / 491);
+      dustUniforms.uPointScale.value =
+        radius < 120 ? clamp(radius / 72, 0.25, 1) : Math.max(1, radius / 491);
       dustUniforms.uReveal.value = smooth(0.18, 1, introClock);
       dustUniforms.uTones.value = palette.tones.flat();
       dustUniforms.uRimTone.value = palette.rim;

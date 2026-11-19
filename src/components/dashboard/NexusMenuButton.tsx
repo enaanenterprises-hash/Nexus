@@ -133,28 +133,29 @@ export const NexusMenuButton = memo(function NexusMenuButton({
       >
         <CrystalizedBall
           preset="ember"
-          color="#F0B54A"
+          color="#FF8A2A"
           theme={theme}
           orbCenter={geometry.orbCenter}
-          orbRadius={17.5}
+          orbRadius={18.5}
           morphOpen={open}
           morphBox={geometry.morphBox}
           crackle={0.9}
-          fill={0.42}
+          fill={0.35}
           interactive
-          hoverStrength={0.75}
+          hoverStrength={0.65}
           strands={5}
           flares={0.8}
-          glow={1}
-          sparks={0.8}
+          glow={0.95}
+          sparks={0.7}
           particleCount={12000}
           motion="drift"
           particleShape="round"
           depth={0.7}
-          sway={0.35}
+          sway={0.3}
           twinkle={0.7}
-          haze={0.9}
-          dustSpeed={1.5}
+          haze={0.85}
+          speed={0.42}
+          dustSpeed={0.55}
         />
       </span>
       <span className="nexus-mark-stage dash-brand-mark" aria-hidden>
