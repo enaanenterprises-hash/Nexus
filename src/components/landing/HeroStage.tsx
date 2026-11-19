@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { ArrowDown, ArrowRight, Check, X } from "lucide-react";
+import GlassSurface from "./GlassSurface";
 import { GoldenNetwork } from "./GoldenNetwork";
 import { NexusMark } from "./NexusLogo";
 
@@ -165,88 +166,123 @@ export function HeroStage() {
 
   return (
     <>
-      {/* Adaptive Floating Apple HIG Liquid Glass Navigation Capsule (Light over Gallery, Dark over Obsidian) */}
+      {/* Adaptive Floating Refractive Liquid Glass Navigation Capsule (<GlassSurface />) */}
       <header className="fixed inset-x-0 top-3.5 z-40 px-4 sm:top-5 sm:px-6">
-        <div
-          className={`mx-auto flex max-w-[1080px] items-center justify-between gap-3 rounded-full py-1.5 pr-1.5 pl-3.5 transition-all duration-300 sm:py-2 sm:pr-2 sm:pl-4 ${
-            darkHeader ? "apple-glass--dark" : "apple-glass"
+        <GlassSurface
+          width="100%"
+          height={56}
+          borderRadius={28}
+          borderWidth={0.075}
+          brightness={50}
+          opacity={0.93}
+          blur={10}
+          displace={0.65}
+          distortionScale={-160}
+          redOffset={0}
+          greenOffset={8}
+          blueOffset={16}
+          backgroundOpacity={darkHeader ? 0.14 : 0.12}
+          saturation={1.25}
+          className={`landing-glass-nav mx-auto max-w-[1080px] ${
+            darkHeader ? "landing-glass-nav--dark" : "landing-glass-nav--light"
           }`}
         >
-          <div className="flex items-center gap-2.5">
-            <Link
-              href="/"
-              aria-label="Nexus home"
-              className={`inline-flex items-center gap-2 focus-visible:outline-2 focus-visible:outline-offset-4 ${
-                darkHeader ? "focus-visible:outline-[#f0b54a]" : "focus-visible:outline-[#9a6910]"
-              }`}
-            >
-              <NexusMark className="h-[20px] w-[20px] sm:h-[22px] sm:w-[22px]" />
-              <span
-                className={`text-[15.5px] font-semibold tracking-[-0.025em] transition-colors duration-300 ${
-                  darkHeader ? "text-[#f5f5f7]" : "text-[#0e0f12]"
+          <div className="flex h-full w-full items-center justify-between gap-3 pr-2 pl-3.5 sm:pr-2 sm:pl-4.5">
+            <div className="flex items-center gap-2.5">
+              <Link
+                href="/"
+                aria-label="Nexus home"
+                className={`inline-flex items-center gap-2 rounded-full py-1 focus-visible:outline-2 focus-visible:outline-offset-4 ${
+                  darkHeader ? "focus-visible:outline-[#f0b54a]" : "focus-visible:outline-[#9a6910]"
                 }`}
               >
-                Nexus
-              </span>
-            </Link>
-            <span
-              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none transition-colors duration-300 ${
-                darkHeader
-                  ? "border-[#f0b54a]/35 bg-[#f0b54a]/12 text-[#ffd99a]"
-                  : "border-[#9a6910]/25 bg-[#c9932c]/10 text-[#86590c]"
-              }`}
-            >
-              Beta
-            </span>
-          </div>
-
-          <nav aria-label="Primary navigation" className="hidden items-center gap-7 md:flex">
-            {NAV_LINKS.map((item) => {
-              const isActive = activeNavId === item.id;
-              return (
-                <a
-                  key={item.href}
-                  href={item.href}
-                  data-active={isActive ? "true" : "false"}
-                  className={`gal-link-underline text-[13.5px] font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-4 ${
-                    darkHeader
-                      ? isActive
-                        ? "text-[#f5f5f7] focus-visible:outline-[#f0b54a]"
-                        : "text-[#a1a1a6] hover:text-[#f5f5f7] focus-visible:outline-[#f0b54a]"
-                      : isActive
-                        ? "text-[#0e0f12] focus-visible:outline-[#9a6910]"
-                        : "text-[#52545d] hover:text-[#0e0f12] focus-visible:outline-[#9a6910]"
+                <span
+                  className={`inline-flex items-center justify-center transition-all duration-300 ${
+                    darkHeader ? "landing-glass-mark--dark" : "landing-glass-mark--light"
                   }`}
                 >
-                  {item.label}
-                </a>
-              );
-            })}
-          </nav>
+                  <NexusMark className="h-[20px] w-[20px] sm:h-[22px] sm:w-[22px]" />
+                </span>
+                <span
+                  className={`text-[15.5px] font-semibold tracking-[-0.028em] transition-colors duration-300 ${
+                    darkHeader
+                      ? "landing-glass-text--dark text-[#ffffff]"
+                      : "landing-glass-text--light text-[#09090b]"
+                  }`}
+                >
+                  Nexus
+                </span>
+              </Link>
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium leading-none transition-colors duration-300 ${
+                  darkHeader
+                    ? "border-[#f0b54a]/40 bg-black/30 text-[#ffe0a3]"
+                    : "border-[#9a6910]/30 bg-white/50 text-[#744c07]"
+                }`}
+              >
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${darkHeader ? "bg-[#f0b54a]" : "bg-[#c88d18]"}`}
+                  aria-hidden="true"
+                />
+                Beta
+              </span>
+            </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <Link
-              href="/signup"
-              className={`hidden rounded-full px-3.5 py-2 text-[13.5px] font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 sm:inline-flex ${
-                darkHeader
-                  ? "text-[#a1a1a6] hover:bg-white/[0.08] hover:text-[#f5f5f7] focus-visible:outline-[#f0b54a]"
-                  : "text-[#52545d] hover:bg-[#0e0f12]/[0.05] hover:text-[#0e0f12] focus-visible:outline-[#9a6910]"
-              }`}
-            >
-              Sign in
-            </Link>
-            <a
-              href="#waitlist"
-              className={`gal-btn-tactile inline-flex min-h-[38px] items-center justify-center rounded-full px-4 py-2 text-[13.5px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2 sm:px-4.5 ${
-                darkHeader
-                  ? "bg-[#f5f5f7] text-[#09090b] hover:bg-white focus-visible:outline-[#f0b54a]"
-                  : "bg-[#0e0f12] text-white hover:bg-[#252730] focus-visible:outline-[#9a6910]"
-              }`}
-            >
-              Join waitlist
-            </a>
+            <nav aria-label="Primary navigation" className="hidden items-center gap-1 md:flex">
+              {NAV_LINKS.map((item) => {
+                const isActive = activeNavId === item.id;
+                return (
+                  <a
+                    key={item.href}
+                    href={item.href}
+                    data-active={isActive ? "true" : "false"}
+                    className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[13.5px] font-medium transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 ${
+                      darkHeader
+                        ? isActive
+                          ? "landing-glass-text--dark bg-white/[0.13] text-[#ffffff] ring-1 ring-inset ring-white/[0.18] focus-visible:outline-[#f0b54a]"
+                          : "landing-glass-text--dark text-white/[0.84] hover:bg-white/[0.09] hover:text-white focus-visible:outline-[#f0b54a]"
+                        : isActive
+                          ? "landing-glass-text--light bg-[#0e0f12]/[0.08] text-[#09090b] ring-1 ring-inset ring-[#0e0f12]/[0.1] focus-visible:outline-[#9a6910]"
+                          : "landing-glass-text--light text-[#16171d] hover:bg-[#0e0f12]/[0.055] hover:text-[#09090b] focus-visible:outline-[#9a6910]"
+                    }`}
+                  >
+                    {isActive ? (
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${darkHeader ? "bg-[#f0b54a]" : "bg-[#b47c10]"}`}
+                        aria-hidden="true"
+                      />
+                    ) : null}
+                    <span>{item.label}</span>
+                  </a>
+                );
+              })}
+            </nav>
+
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <Link
+                href="/signup"
+                className={`hidden h-9 items-center justify-center rounded-full px-3.5 text-[13.5px] font-medium transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 sm:inline-flex ${
+                  darkHeader
+                    ? "landing-glass-text--dark text-white/[0.86] hover:bg-white/[0.1] hover:text-white focus-visible:outline-[#f0b54a]"
+                    : "landing-glass-text--light text-[#16171d] hover:bg-[#0e0f12]/[0.06] hover:text-[#09090b] focus-visible:outline-[#9a6910]"
+                }`}
+              >
+                Sign in
+              </Link>
+              <a
+                href="#waitlist"
+                className={`gal-btn-tactile group inline-flex h-10 items-center justify-center gap-1.5 rounded-full px-4 text-[13.5px] font-medium transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 sm:px-4.5 ${
+                  darkHeader
+                    ? "bg-[#f5f5f7] text-[#09090b] shadow-[0_6px_18px_-6px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,1)] hover:bg-white focus-visible:outline-[#f0b54a]"
+                    : "bg-[#0e0f12] text-white shadow-[0_6px_18px_-6px_rgba(14,15,18,0.45),inset_0_1px_0_rgba(255,255,255,0.16)] hover:bg-[#22242c] focus-visible:outline-[#9a6910]"
+                }`}
+              >
+                <span>Join waitlist</span>
+                <ArrowRight className="gal-arrow-shift h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+              </a>
+            </div>
           </div>
-        </div>
+        </GlassSurface>
       </header>
 
       {/* Full-Bleed Gallery Light Hero Stage with Living Burnished-Gold Neural Network */}
