@@ -183,7 +183,7 @@ export function HeroStage() {
                 }`}
               >
                 <span
-                  className={`h-1.5 w-1.5 rounded-full ${darkHeader ? "bg-white/70" : "bg-[#0e0f12]/55"}`}
+                  className={`h-1.5 w-1.5 rounded-full ${darkHeader ? "bg-[#22c55e]" : "bg-[#16a34a]"}`}
                   aria-hidden="true"
                 />
                 Beta
