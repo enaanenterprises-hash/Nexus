@@ -56,8 +56,49 @@ export function HeroStage() {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [activeTopicId, setActiveTopicId] = useState<PreviewTopicId | null>(null);
   const [activeNavId, setActiveNavId] = useState<string | null>(null);
+  const [darkHeader, setDarkHeader] = useState(false);
 
   const activeTopic = PREVIEW_TOPICS.find((t) => t.id === activeTopicId) ?? null;
+
+  useEffect(() => {
+    let raf = 0;
+    const updateSurface = () => {
+      raf = 0;
+      const probeY = 44;
+      let overDark = false;
+      const transitionEl = document.getElementById("lightfall-transition");
+      if (transitionEl) {
+        const r = transitionEl.getBoundingClientRect();
+        if (r.top + r.height * 0.34 <= probeY && r.bottom >= probeY) {
+          overDark = true;
+        }
+      }
+      if (!overDark) {
+        const bands = document.querySelectorAll<HTMLElement>('[data-obsidian-band="true"]');
+        for (const band of bands) {
+          const r = band.getBoundingClientRect();
+          if (r.top <= probeY && r.bottom >= probeY) {
+            overDark = true;
+            break;
+          }
+        }
+      }
+      setDarkHeader((prev) => (prev === overDark ? prev : overDark));
+    };
+
+    const schedule = () => {
+      if (!raf) raf = requestAnimationFrame(updateSurface);
+    };
+
+    updateSurface();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule, { passive: true });
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+    };
+  }, []);
 
   useEffect(() => {
     const ids = NAV_LINKS.map((l) => l.id);
@@ -124,19 +165,37 @@ export function HeroStage() {
 
   return (
     <>
-      {/* Floating Apple HIG Liquid Glass Navigation Capsule */}
+      {/* Adaptive Floating Apple HIG Liquid Glass Navigation Capsule (Light over Gallery, Dark over Obsidian) */}
       <header className="fixed inset-x-0 top-3.5 z-40 px-4 sm:top-5 sm:px-6">
-        <div className="apple-glass mx-auto flex max-w-[1080px] items-center justify-between gap-3 rounded-full py-1.5 pr-1.5 pl-3.5 sm:py-2 sm:pr-2 sm:pl-4">
+        <div
+          className={`mx-auto flex max-w-[1080px] items-center justify-between gap-3 rounded-full py-1.5 pr-1.5 pl-3.5 transition-all duration-300 sm:py-2 sm:pr-2 sm:pl-4 ${
+            darkHeader ? "apple-glass--dark" : "apple-glass"
+          }`}
+        >
           <div className="flex items-center gap-2.5">
             <Link
               href="/"
               aria-label="Nexus home"
-              className="inline-flex items-center gap-2 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#9a6910]"
+              className={`inline-flex items-center gap-2 focus-visible:outline-2 focus-visible:outline-offset-4 ${
+                darkHeader ? "focus-visible:outline-[#f0b54a]" : "focus-visible:outline-[#9a6910]"
+              }`}
             >
               <NexusMark className="h-[20px] w-[20px] sm:h-[22px] sm:w-[22px]" />
-              <span className="text-[15.5px] font-semibold tracking-[-0.025em] text-[#0e0f12]">Nexus</span>
+              <span
+                className={`text-[15.5px] font-semibold tracking-[-0.025em] transition-colors duration-300 ${
+                  darkHeader ? "text-[#f5f5f7]" : "text-[#0e0f12]"
+                }`}
+              >
+                Nexus
+              </span>
             </Link>
-            <span className="inline-flex items-center rounded-full border border-[#9a6910]/25 bg-[#c9932c]/10 px-2 py-0.5 text-[11px] font-medium leading-none text-[#86590c]">
+            <span
+              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium leading-none transition-colors duration-300 ${
+                darkHeader
+                  ? "border-[#f0b54a]/35 bg-[#f0b54a]/12 text-[#ffd99a]"
+                  : "border-[#9a6910]/25 bg-[#c9932c]/10 text-[#86590c]"
+              }`}
+            >
               Beta
             </span>
           </div>
@@ -149,8 +208,14 @@ export function HeroStage() {
                   key={item.href}
                   href={item.href}
                   data-active={isActive ? "true" : "false"}
-                  className={`gal-link-underline text-[13.5px] font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#9a6910] ${
-                    isActive ? "text-[#0e0f12]" : "text-[#52545d] hover:text-[#0e0f12]"
+                  className={`gal-link-underline text-[13.5px] font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-4 ${
+                    darkHeader
+                      ? isActive
+                        ? "text-[#f5f5f7] focus-visible:outline-[#f0b54a]"
+                        : "text-[#a1a1a6] hover:text-[#f5f5f7] focus-visible:outline-[#f0b54a]"
+                      : isActive
+                        ? "text-[#0e0f12] focus-visible:outline-[#9a6910]"
+                        : "text-[#52545d] hover:text-[#0e0f12] focus-visible:outline-[#9a6910]"
                   }`}
                 >
                   {item.label}
@@ -162,13 +227,21 @@ export function HeroStage() {
           <div className="flex items-center gap-1.5 sm:gap-2">
             <Link
               href="/signup"
-              className="hidden rounded-full px-3.5 py-2 text-[13.5px] font-medium text-[#52545d] transition-colors duration-150 hover:bg-[#0e0f12]/[0.05] hover:text-[#0e0f12] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910] sm:inline-flex"
+              className={`hidden rounded-full px-3.5 py-2 text-[13.5px] font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 sm:inline-flex ${
+                darkHeader
+                  ? "text-[#a1a1a6] hover:bg-white/[0.08] hover:text-[#f5f5f7] focus-visible:outline-[#f0b54a]"
+                  : "text-[#52545d] hover:bg-[#0e0f12]/[0.05] hover:text-[#0e0f12] focus-visible:outline-[#9a6910]"
+              }`}
             >
               Sign in
             </Link>
             <a
               href="#waitlist"
-              className="gal-btn-tactile inline-flex min-h-[38px] items-center justify-center rounded-full bg-[#0e0f12] px-4 py-2 text-[13.5px] font-medium text-white hover:bg-[#252730] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910] sm:px-4.5"
+              className={`gal-btn-tactile inline-flex min-h-[38px] items-center justify-center rounded-full px-4 py-2 text-[13.5px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2 sm:px-4.5 ${
+                darkHeader
+                  ? "bg-[#f5f5f7] text-[#09090b] hover:bg-white focus-visible:outline-[#f0b54a]"
+                  : "bg-[#0e0f12] text-white hover:bg-[#252730] focus-visible:outline-[#9a6910]"
+              }`}
             >
               Join waitlist
             </a>

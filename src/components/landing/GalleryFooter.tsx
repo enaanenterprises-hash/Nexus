@@ -66,104 +66,108 @@ export function GalleryFooter() {
   }, []);
 
   return (
-    <footer
-      id="gallery-footer"
-      className="border-t border-[#0e0f12]/[0.08] bg-white text-[#0e0f12]"
-      aria-label="Site footer"
-    >
-      {/* Band 1: Centered Oversized Vertical Editorial Navigation */}
-      <div className="mx-auto flex max-w-[1360px] flex-col items-center px-6 pt-20 pb-16 sm:px-10 sm:pt-28 sm:pb-24">
-        <nav aria-label="Footer navigation" className="flex flex-col items-center gap-1.5 text-center sm:gap-2">
-          {MONUMENTAL_LINKS.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="gal-link-underline font-editorial px-4 py-1 text-[clamp(2rem,4.3vw,3.35rem)] font-normal leading-[1.15] tracking-[-0.032em] text-[#0e0f12] transition-colors duration-200 hover:text-[#9a6910] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#9a6910]"
-            >
-              {link.label}
-            </Link>
-          ))}
-        </nav>
-      </div>
-
-      {/* Band 2: Full-Width Edge-to-Edge Monumental Wordmark */}
-      <div ref={wordmarkRef} className="mx-auto max-w-[1380px] px-4 pb-8 sm:px-8 sm:pb-12">
-        <div aria-hidden="true" className="w-full select-none overflow-hidden">
-          <div className="gal-wordmark-rise" data-visible={wordmarkVisible ? "true" : "false"}>
-            <svg
-              viewBox="0 0 1200 345"
-              className="block h-auto w-full"
-              preserveAspectRatio="xMidYMid meet"
-              role="presentation"
-            >
-              <text
-                x="600"
-                y="292"
-                textAnchor="middle"
-                fill="#0e0f12"
-                style={{
-                  fontFamily: 'var(--font-editorial), "New York", Georgia, serif',
-                  fontSize: "388px",
-                  fontWeight: 500,
-                  letterSpacing: "-0.048em",
-                }}
+    <footer id="gallery-footer" aria-label="Site footer">
+      {/* Band 1: Obsidian Black Centered Vertical Editorial Navigation */}
+      <div
+        data-obsidian-band="true"
+        className="landing-obsidian border-t border-white/[0.08] bg-black text-[#f5f5f7]"
+      >
+        <div className="mx-auto flex max-w-[1360px] flex-col items-center px-6 pt-20 pb-20 sm:px-10 sm:pt-28 sm:pb-28">
+          <nav aria-label="Footer navigation" className="flex flex-col items-center gap-1.5 text-center sm:gap-2">
+            {MONUMENTAL_LINKS.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="gal-link-underline font-editorial px-4 py-1 text-[clamp(2rem,4.3vw,3.35rem)] font-normal leading-[1.15] tracking-[-0.032em] text-[#f5f5f7] transition-colors duration-200 hover:text-[#f0b54a] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f0b54a]"
               >
-                Nexus
-              </text>
-            </svg>
-          </div>
+                {link.label}
+              </Link>
+            ))}
+          </nav>
         </div>
       </div>
 
-      {/* Band 3: Ceremonial 3-Column Meta Row + Centered Legal & Live Status Bar */}
-      <div className="mx-auto max-w-[1360px] px-6 sm:px-10">
-        <div className="grid grid-cols-1 items-center gap-8 border-t border-[#0e0f12]/[0.09] py-9 md:grid-cols-3">
-          {/* Left: Flat Brand Mark */}
-          <div className="flex items-center justify-center gap-3 md:justify-start">
-            <Link
-              href="/"
-              aria-label="Nexus Atelier home"
-              className="inline-flex items-center gap-2.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#9a6910]"
-            >
-              <NexusMark className="h-8 w-8 shrink-0" />
-              <span className="text-[16px] font-semibold tracking-[-0.025em] text-[#0e0f12]">Nexus Atelier</span>
-            </Link>
-          </div>
-
-          {/* Center: Ceremonial Motto Flanked by Mirrored Burnished-Gold Laurels */}
-          <div className="gal-laurel-group flex items-center justify-center gap-3 text-center">
-            <LaurelSprig />
-            <p className="font-editorial text-[16px] font-medium leading-[1.25] tracking-[-0.015em] text-[#0e0f12] sm:text-[17px]">
-              One room,
-              <br />
-              every workflow
-            </p>
-            <LaurelSprig mirrored />
-          </div>
-
-          {/* Right: Origin Signature */}
-          <div className="text-center text-[13px] leading-[1.55] text-[#52545d] md:text-right">
-            <p>Designed &amp; Engineered in Toronto</p>
-            <p className="text-[#636570]">By Nexus Neural Labs</p>
+      {/* Final Colophon Part (Pure Gallery White): Monumental Nexus Wordmark + Nexus Atelier + Made in Toronto */}
+      <div className="border-t border-[#0e0f12]/[0.08] bg-white text-[#0e0f12]">
+        {/* Band 2: Full-Width Edge-to-Edge Monumental Wordmark */}
+        <div ref={wordmarkRef} className="mx-auto max-w-[1380px] px-4 pt-12 pb-8 sm:px-8 sm:pt-16 sm:pb-12">
+          <div aria-hidden="true" className="w-full select-none overflow-hidden">
+            <div className="gal-wordmark-rise" data-visible={wordmarkVisible ? "true" : "false"}>
+              <svg
+                viewBox="0 0 1200 345"
+                className="block h-auto w-full"
+                preserveAspectRatio="xMidYMid meet"
+                role="presentation"
+              >
+                <text
+                  x="600"
+                  y="292"
+                  textAnchor="middle"
+                  fill="#0e0f12"
+                  style={{
+                    fontFamily: 'var(--font-editorial), "New York", Georgia, serif',
+                    fontSize: "388px",
+                    fontWeight: 500,
+                    letterSpacing: "-0.048em",
+                  }}
+                >
+                  Nexus
+                </text>
+              </svg>
+            </div>
           </div>
         </div>
 
-        {/* Legal & Live Status Strip */}
-        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2.5 border-t border-[#0e0f12]/[0.07] py-6 text-[13px] text-[#636570]">
-          {LEGAL_LINKS.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="gal-link-underline transition-colors duration-150 hover:text-[#0e0f12] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910]"
-            >
-              {link.label}
-            </Link>
-          ))}
-          <span className="inline-flex items-center gap-2 font-medium text-[#14532d]">
-            <span className="h-2 w-2 rounded-full bg-[#15803d]" aria-hidden="true" />
-            <span>Open Beta</span>
-          </span>
-          <span className="text-[#636570]">&copy; 2026 Nexus Neural Labs</span>
+        {/* Band 3: Ceremonial 3-Column Meta Row + Centered Legal & Live Status Bar */}
+        <div className="mx-auto max-w-[1360px] px-6 sm:px-10">
+          <div className="grid grid-cols-1 items-center gap-8 border-t border-[#0e0f12]/[0.09] py-9 md:grid-cols-3">
+            {/* Left: Flat Brand Mark */}
+            <div className="flex items-center justify-center gap-3 md:justify-start">
+              <Link
+                href="/"
+                aria-label="Nexus Atelier home"
+                className="inline-flex items-center gap-2.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#9a6910]"
+              >
+                <NexusMark className="h-8 w-8 shrink-0" />
+                <span className="text-[16px] font-semibold tracking-[-0.025em] text-[#0e0f12]">Nexus Atelier</span>
+              </Link>
+            </div>
+
+            {/* Center: Ceremonial Motto Flanked by Mirrored Burnished-Gold Laurels */}
+            <div className="gal-laurel-group flex items-center justify-center gap-3 text-center">
+              <LaurelSprig />
+              <p className="font-editorial text-[16px] font-medium leading-[1.25] tracking-[-0.015em] text-[#0e0f12] sm:text-[17px]">
+                One room,
+                <br />
+                every workflow
+              </p>
+              <LaurelSprig mirrored />
+            </div>
+
+            {/* Right: Origin Signature */}
+            <div className="text-center text-[13px] leading-[1.55] text-[#52545d] md:text-right">
+              <p>Designed &amp; Engineered in Toronto</p>
+              <p className="text-[#636570]">By Nexus Neural Labs</p>
+            </div>
+          </div>
+
+          {/* Legal & Live Status Strip */}
+          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2.5 border-t border-[#0e0f12]/[0.07] py-6 text-[13px] text-[#636570]">
+            {LEGAL_LINKS.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="gal-link-underline transition-colors duration-150 hover:text-[#0e0f12] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910]"
+              >
+                {link.label}
+              </Link>
+            ))}
+            <span className="inline-flex items-center gap-2 font-medium text-[#14532d]">
+              <span className="h-2 w-2 rounded-full bg-[#15803d]" aria-hidden="true" />
+              <span>Open Beta</span>
+            </span>
+            <span className="text-[#636570]">&copy; 2026 Nexus Neural Labs</span>
+          </div>
         </div>
       </div>
     </footer>

@@ -198,7 +198,7 @@ const LAYER_ITEMS: Array<{ id: StageLayer; label: string; shortLabel: string }> 
 
 export function SingularityStage() {
   const [activeLayer, setActiveLayer] = useState<StageLayer>("command");
-  const [previewTheme, setPreviewTheme] = useState<PreviewTheme>("light");
+  const [previewTheme, setPreviewTheme] = useState<PreviewTheme>("dark");
   const [selectedDay, setSelectedDay] = useState<number>(18);
   const [selectedMailId, setSelectedMailId] = useState<string>("elena");
   const [studioMode, setStudioMode] = useState<"record" | "edit">("edit");
@@ -238,17 +238,17 @@ export function SingularityStage() {
   const activeSlot = SOCKET_RAIL.find((s) => s.id === activeSlotId) ?? SOCKET_RAIL[0];
   const dark = previewTheme === "dark";
 
-  // Concentric surface tokens inside the live preview frame (supports both Nexus Gallery Light & Obsidian Dark)
+  // Concentric surface tokens inside the live preview frame (supports both Obsidian Dark & Nexus Gallery Light)
   const frameClass = dark
-    ? "border-[#0e0f12] bg-[#0f0f12] shadow-[0_28px_64px_-24px_rgba(14,15,18,0.34)]"
-    : "border-[#0e0f12]/[0.1] bg-[#efede8] shadow-[0_24px_60px_-28px_rgba(14,15,18,0.16),0_2px_6px_rgba(14,15,18,0.04)]";
+    ? "border-white/[0.11] bg-[#0c0c0f] shadow-[0_32px_80px_-24px_rgba(0,0,0,0.88),inset_0_1px_0_rgba(255,255,255,0.06)]"
+    : "border-white/[0.18] bg-[#efede8] shadow-[0_32px_80px_-24px_rgba(0,0,0,0.75)]";
   const cardClass = dark
-    ? "border-white/[0.08] bg-[#16161a]"
+    ? "border-white/[0.08] bg-[#131317]"
     : "border-[#0e0f12]/[0.08] bg-white shadow-[0_1px_2px_rgba(14,15,18,0.035)]";
   const inkPrimary = dark ? "text-[#f5f5f7]" : "text-[#0e0f12]";
   const inkSecondary = dark ? "text-[#b4b4bc]" : "text-[#4a4c55]";
   const inkMuted = dark ? "text-[#8e8e95]" : "text-[#636570]";
-  const hairline = dark ? "border-white/[0.07]" : "border-[#0e0f12]/[0.08]";
+  const hairline = dark ? "border-white/[0.08]" : "border-[#0e0f12]/[0.08]";
   const goldText = dark ? "text-[#f0b54a]" : "text-[#9a6910]";
   const goldDot = dark ? "bg-[#f0b54a]" : "bg-[#c9932c]";
   const activeLayerMeta = LAYER_ITEMS.find((l) => l.id === activeLayer) ?? LAYER_ITEMS[0];
@@ -256,25 +256,25 @@ export function SingularityStage() {
   return (
     <section
       id="workspace"
-      className="relative scroll-mt-24 border-y border-[#0e0f12]/[0.07] bg-[#f7f6f2] px-6 py-16 sm:px-10 lg:px-14 lg:py-24"
+      className="relative scroll-mt-24 border-b border-white/[0.08] bg-black px-6 pt-8 pb-20 sm:px-10 lg:px-14 lg:pt-12 lg:pb-28"
       aria-label="Workspace overview"
     >
       <div className="mx-auto max-w-[1280px]">
         {/* Mobile top optical cascade */}
         <div className="h-16 w-full lg:hidden" aria-hidden="true">
-          <CascadeFilament activeLayer={activeLayer} theme="light" />
+          <CascadeFilament activeLayer={activeLayer} theme="dark" />
         </div>
 
         {/* Section header paired with desktop optical filament cascade */}
         <div className="relative pb-8 pt-2 lg:pb-10 lg:pt-8">
           <div className="pointer-events-none absolute inset-0 hidden lg:block" aria-hidden="true">
-            <CascadeFilament activeLayer={activeLayer} theme="light" />
+            <CascadeFilament activeLayer={activeLayer} theme="dark" />
           </div>
           <div className="relative z-10 max-w-[540px]">
-            <h2 className="font-editorial text-[clamp(2.15rem,4vw,3.45rem)] font-normal leading-[1.06] tracking-[-0.035em] text-[#0e0f12] [text-wrap:balance]">
+            <h2 className="font-editorial text-[clamp(2.15rem,4vw,3.45rem)] font-normal leading-[1.06] tracking-[-0.035em] text-[#f5f5f7] [text-wrap:balance]">
               One room for everything you run
             </h2>
-            <p className="mt-3.5 max-w-[46ch] text-[15.5px] leading-[1.6] text-[#52545d]">
+            <p className="mt-3.5 max-w-[46ch] text-[15.5px] leading-[1.65] text-[#a1a1a6]">
               Nexus brings your daily tools, web research, recording studio, and modular workspaces onto one shared
               system.
             </p>
@@ -286,7 +286,7 @@ export function SingularityStage() {
           {/* Layer selector rail */}
           <nav
             aria-label="Nexus workspace layers"
-            className="grid grid-cols-3 gap-1.5 rounded-[14px] border border-[#0e0f12]/[0.09] bg-white/80 p-1 lg:grid-cols-1 lg:gap-5 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:pt-10"
+            className="grid grid-cols-3 gap-1.5 rounded-[14px] border border-white/[0.1] bg-[#0c0c0f] p-1 lg:grid-cols-1 lg:gap-5 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:pt-10"
           >
             {LAYER_ITEMS.map((item) => {
               const isActive = activeLayer === item.id;
@@ -296,15 +296,15 @@ export function SingularityStage() {
                   type="button"
                   onClick={() => setActiveLayer(item.id)}
                   aria-pressed={isActive}
-                  className={`group flex min-h-[40px] cursor-pointer items-center justify-center rounded-[10px] px-2 py-2 text-center transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910] lg:min-h-0 lg:justify-start lg:gap-3.5 lg:rounded-none lg:bg-transparent lg:px-0 lg:py-0.5 lg:text-left ${
+                  className={`group flex min-h-[40px] cursor-pointer items-center justify-center rounded-[10px] px-2 py-2 text-center transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f0b54a] lg:min-h-0 lg:justify-start lg:gap-3.5 lg:rounded-none lg:bg-transparent lg:px-0 lg:py-0.5 lg:text-left ${
                     isActive
-                      ? "bg-[#0e0f12] text-white lg:bg-transparent lg:text-[#0e0f12]"
-                      : "text-[#52545d] hover:text-[#0e0f12]"
+                      ? "bg-[#f5f5f7] text-[#09090b] lg:bg-transparent lg:text-[#f5f5f7]"
+                      : "text-[#8e8e95] hover:text-[#f5f5f7]"
                   }`}
                 >
                   <span
                     className={`hidden h-6 w-[2px] shrink-0 rounded-full transition-colors duration-200 lg:block ${
-                      isActive ? "bg-[#9a6910]" : "bg-[#0e0f12]/[0.14] group-hover:bg-[#0e0f12]/[0.35]"
+                      isActive ? "bg-[#f0b54a]" : "bg-white/[0.15] group-hover:bg-white/[0.38]"
                     }`}
                     aria-hidden="true"
                   />
@@ -866,7 +866,7 @@ export function SingularityStage() {
         <div className="mt-9">
           <div className="relative">
             <div
-              className="pointer-events-none absolute top-1/2 right-0 left-0 hidden h-px -translate-y-1/2 bg-[#0e0f12]/[0.11] md:block"
+              className="pointer-events-none absolute top-1/2 right-0 left-0 hidden h-px -translate-y-1/2 bg-white/[0.12] md:block"
               aria-hidden="true"
             />
             <div
@@ -885,17 +885,17 @@ export function SingularityStage() {
                       setInspectedSocketId((cur) => (cur === socket.id ? null : socket.id));
                       setActiveSlotId(socket.id);
                     }}
-                    className={`gal-btn-tactile min-h-[40px] cursor-pointer rounded-full border px-3 py-2 text-center text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910] ${
+                    className={`gal-btn-tactile min-h-[40px] cursor-pointer rounded-full border px-3 py-2 text-center text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f0b54a] ${
                       selected
-                        ? "border-[#9a6910]/60 bg-white font-medium text-[#0e0f12] shadow-[0_6px_16px_-8px_rgba(154,105,16,0.3)]"
-                        : "border-[#0e0f12]/[0.11] bg-white text-[#4a4c55] hover:border-[#0e0f12]/[0.26] hover:text-[#0e0f12]"
+                        ? "border-[#f0b54a]/55 bg-[#16161a] font-medium text-[#f5f5f7] shadow-[0_6px_18px_-8px_rgba(240,181,74,0.3)]"
+                        : "border-white/[0.12] bg-[#0b0b0e] text-[#c7c7cc] hover:border-white/[0.26] hover:text-[#f5f5f7]"
                     }`}
                   >
                     <span>{socket.name}</span>
                     {socket.status ? (
                       <>
                         {" "}
-                        <span className={socket.live ? "text-[#9a6910]" : "text-[#636570]"}>({socket.status})</span>
+                        <span className={socket.live ? "text-[#f0b54a]" : "text-[#8e8e95]"}>({socket.status})</span>
                       </>
                     ) : null}
                   </button>
@@ -905,10 +905,10 @@ export function SingularityStage() {
           </div>
 
           <div className="mt-4 flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
-            <p className="text-[13px] leading-[1.5] text-[#636570]">
+            <p className="text-[13px] leading-[1.5] text-[#8e8e95]">
               {inspectedSocket ? (
                 <>
-                  <span className="font-medium text-[#0e0f12]">{inspectedSocket.name}</span> —{" "}
+                  <span className="font-medium text-[#f5f5f7]">{inspectedSocket.name}</span> —{" "}
                   {inspectedSocket.summary}
                 </>
               ) : (
@@ -918,14 +918,14 @@ export function SingularityStage() {
             <div className="flex shrink-0 items-center gap-3.5 text-[13.5px]">
               <a
                 href="#waitlist"
-                className="font-medium text-[#0e0f12] transition-colors hover:text-[#9a6910] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910]"
+                className="font-medium text-[#f5f5f7] transition-colors hover:text-[#f0b54a] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f0b54a]"
               >
                 Join waitlist
               </a>
-              <span className="h-3.5 w-px bg-[#0e0f12]/[0.16]" aria-hidden="true" />
+              <span className="h-3.5 w-px bg-white/[0.16]" aria-hidden="true" />
               <Link
                 href="/signup"
-                className="text-[#52545d] transition-colors hover:text-[#0e0f12] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910]"
+                className="text-[#a1a1a6] transition-colors hover:text-[#f5f5f7] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f0b54a]"
               >
                 Sign in
               </Link>

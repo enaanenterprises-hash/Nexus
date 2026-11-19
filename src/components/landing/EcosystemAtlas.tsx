@@ -86,21 +86,21 @@ export function EcosystemAtlas() {
       {/* Band 4: Dense Swiss connector index + optical conduit + Vault geometry security ledger */}
       <section
         id="integrations"
-        className="scroll-mt-24 bg-white px-6 py-20 sm:px-10 lg:px-14 lg:py-28"
+        className="scroll-mt-24 bg-[#050507] px-6 py-20 sm:px-10 lg:px-14 lg:py-28"
         aria-label="Integrations and security"
       >
         <div className="mx-auto max-w-[1280px]">
           <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
-            <h2 className="font-editorial max-w-[20ch] text-[clamp(2.1rem,3.8vw,3.2rem)] font-normal leading-[1.08] tracking-[-0.032em] text-[#0e0f12] [text-wrap:balance]">
+            <h2 className="font-editorial max-w-[20ch] text-[clamp(2.1rem,3.8vw,3.2rem)] font-normal leading-[1.08] tracking-[-0.032em] text-[#f5f5f7] [text-wrap:balance]">
               Connected today, expanding across your stack
             </h2>
-            <div className="flex items-center gap-6 text-[13px] text-[#52545d]">
+            <div className="flex items-center gap-6 text-[13px] text-[#a1a1a6]">
               <span className="inline-flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-[#c9932c]" aria-hidden="true" />
+                <span className="h-2 w-2 rounded-full bg-[#f0b54a]" aria-hidden="true" />
                 <span>Live in beta</span>
               </span>
               <span className="inline-flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full border border-[#0e0f12]/35" aria-hidden="true" />
+                <span className="h-2 w-2 rounded-full border border-white/35" aria-hidden="true" />
                 <span>Planned</span>
               </span>
             </div>
@@ -108,22 +108,22 @@ export function EcosystemAtlas() {
 
           {/* Optical 4-stream convergence conduit feeding into the 4 service columns */}
           <div className="mt-8 h-[72px] w-full sm:h-[96px]" aria-hidden="true">
-            <AtlasConduit theme="light" />
+            <AtlasConduit theme="dark" />
           </div>
 
           {/* 4-column borderless directory */}
           <div className="grid grid-cols-1 gap-x-10 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">
             {SERVICE_ATLAS.map((group) => (
-              <div key={group.heading} className="border-t border-[#0e0f12]/[0.11] pt-5">
-                <h3 className="text-[14px] font-semibold tracking-[-0.01em] text-[#0e0f12]">{group.heading}</h3>
+              <div key={group.heading} className="border-t border-white/[0.11] pt-5">
+                <h3 className="text-[14px] font-semibold tracking-[-0.01em] text-[#f5f5f7]">{group.heading}</h3>
                 <ul className="mt-4 space-y-2.5 text-[14px]">
                   {group.items.map((item) => (
                     <li key={item.name} className="flex items-center justify-between gap-3">
-                      <span className={item.live ? "text-[#2c2e35]" : "text-[#636570]"}>{item.name}</span>
+                      <span className={item.live ? "text-[#e4e4e9]" : "text-[#8e8e95]"}>{item.name}</span>
                       {item.live ? (
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#c9932c]" aria-label="Live" />
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#f0b54a]" aria-label="Live" />
                       ) : (
-                        <span className="text-[12px] text-[#636570]">Planned</span>
+                        <span className="text-[12px] text-[#8e8e95]">Planned</span>
                       )}
                     </li>
                   ))}
@@ -135,19 +135,19 @@ export function EcosystemAtlas() {
           {/* Asymmetric privacy & security specification ledger paired with VaultGeometry */}
           <div
             id="security"
-            className="mt-20 grid scroll-mt-24 grid-cols-1 gap-10 border-t border-[#0e0f12]/[0.09] pt-14 lg:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] lg:gap-16"
+            className="mt-20 grid scroll-mt-24 grid-cols-1 gap-10 border-t border-white/[0.09] pt-14 lg:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] lg:gap-16"
           >
             <div className="flex flex-col justify-between">
               <div>
-                <h3 className="font-editorial text-[clamp(1.75rem,2.7vw,2.3rem)] font-normal leading-[1.12] tracking-[-0.028em] text-[#0e0f12]">
+                <h3 className="font-editorial text-[clamp(1.75rem,2.7vw,2.3rem)] font-normal leading-[1.12] tracking-[-0.028em] text-[#f5f5f7]">
                   Private by architecture
                 </h3>
-                <p className="mt-3 max-w-[36ch] text-[14.5px] leading-[1.65] text-[#52545d]">
+                <p className="mt-3 max-w-[36ch] text-[14.5px] leading-[1.65] text-[#a1a1a6]">
                   Every credential, live conversation, and extension boundary is enforced server-side.
                 </p>
                 <Link
                   href="/security"
-                  className="group mt-5 inline-flex items-center gap-1.5 text-[14px] font-medium text-[#0e0f12] transition-colors hover:text-[#9a6910] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910]"
+                  className="group mt-5 inline-flex items-center gap-1.5 text-[14px] font-medium text-[#f5f5f7] transition-colors hover:text-[#f0b54a] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f0b54a]"
                 >
                   <span className="gal-link-underline">Read full security spec</span>
                   <ArrowUpRight
@@ -159,12 +159,12 @@ export function EcosystemAtlas() {
               </div>
 
               <div className="mt-6 h-[156px] w-full max-w-[340px]">
-                <VaultGeometry activeIndex={hoveredGuarantee} theme="light" />
+                <VaultGeometry activeIndex={hoveredGuarantee} theme="dark" />
               </div>
             </div>
 
             <div
-              className="divide-y divide-[#0e0f12]/[0.09]"
+              className="divide-y divide-white/[0.09]"
               onMouseLeave={() => setHoveredGuarantee(null)}
             >
               {GUARANTEES.map((item, idx) => {
@@ -176,18 +176,18 @@ export function EcosystemAtlas() {
                     onFocus={() => setHoveredGuarantee(idx)}
                     onBlur={() => setHoveredGuarantee(null)}
                     tabIndex={0}
-                    className={`grid cursor-default grid-cols-1 gap-2 outline-none transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#9a6910] sm:grid-cols-[220px_minmax(0,1fr)] sm:gap-8 ${
+                    className={`grid cursor-default grid-cols-1 gap-2 outline-none transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f0b54a] sm:grid-cols-[220px_minmax(0,1fr)] sm:gap-8 ${
                       idx === 0 ? "pb-6" : "py-6"
                     }`}
                   >
                     <h4
                       className={`text-[15.5px] font-medium transition-colors duration-200 ${
-                        active ? "text-[#9a6910]" : "text-[#0e0f12]"
+                        active ? "text-[#f0b54a]" : "text-[#f5f5f7]"
                       }`}
                     >
                       {item.title}
                     </h4>
-                    <p className="text-[14.5px] leading-[1.66] text-[#52545d]">{item.body}</p>
+                    <p className="text-[14.5px] leading-[1.66] text-[#a1a1a6]">{item.body}</p>
                   </div>
                 );
               })}
@@ -199,31 +199,31 @@ export function EcosystemAtlas() {
       {/* Band 5: Panoramic horizon singularity crowning the Open Beta closing band */}
       <section
         id="waitlist"
-        className="scroll-mt-24 border-t border-[#0e0f12]/[0.07] bg-[#f7f6f2] pt-0 pb-24 lg:pb-28"
+        className="scroll-mt-24 border-t border-white/[0.08] bg-black pt-0 pb-24 lg:pb-28"
         aria-label="Open beta access"
       >
         <div className="h-[140px] w-full sm:h-[175px]" aria-hidden="true">
-          <ClosingSingularity theme="light" />
+          <ClosingSingularity theme="dark" />
         </div>
 
         <div className="mx-auto flex max-w-[600px] flex-col items-center px-6 pt-3 text-center sm:px-10">
-          <h2 className="font-editorial text-[clamp(2.35rem,4.5vw,3.65rem)] font-normal leading-[1.06] tracking-[-0.035em] text-[#0e0f12] [text-wrap:balance]">
+          <h2 className="font-editorial text-[clamp(2.35rem,4.5vw,3.65rem)] font-normal leading-[1.06] tracking-[-0.035em] text-[#f5f5f7] [text-wrap:balance]">
             Start in open beta
           </h2>
-          <p className="mt-4 max-w-[46ch] text-[16px] leading-[1.65] text-[#52545d]">
+          <p className="mt-4 max-w-[46ch] text-[16px] leading-[1.65] text-[#a1a1a6]">
             The core environment, Command, and your first two extension sockets are free during open beta. Pro sockets
             are included in early preview with no subscription or card required.
           </p>
 
           <div className="mt-9 w-full max-w-[460px]">
-            <WaitlistForm theme="light" />
+            <WaitlistForm theme="dark" />
           </div>
 
-          <p className="mt-6 text-[14px] text-[#636570]">
+          <p className="mt-6 text-[14px] text-[#8e8e95]">
             Already invited?{" "}
             <Link
               href="/signup"
-              className="font-medium text-[#0e0f12] underline decoration-[#0e0f12]/30 underline-offset-4 transition-colors hover:decoration-[#9a6910] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910]"
+              className="font-medium text-[#f5f5f7] underline decoration-white/30 underline-offset-4 transition-colors hover:decoration-[#f0b54a] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f0b54a]"
             >
               Sign in
             </Link>

@@ -87,28 +87,28 @@ export function SystemArchitecture() {
       {/* Band 2: Asymmetric editorial principles paired with optical Equilibrium Core */}
       <section
         id="philosophy"
-        className="scroll-mt-24 bg-white px-6 py-20 sm:px-10 lg:px-14 lg:py-28"
+        className="scroll-mt-24 border-b border-white/[0.08] bg-[#050507] px-6 py-20 sm:px-10 lg:px-14 lg:py-28"
         aria-label="Design philosophy"
       >
         <div className="mx-auto grid max-w-[1280px] grid-cols-1 gap-12 lg:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] lg:gap-16">
           <div className="flex flex-col justify-between">
             <div className="max-w-[440px]">
-              <h2 className="font-editorial text-[clamp(2.1rem,3.8vw,3.2rem)] font-normal leading-[1.08] tracking-[-0.032em] text-[#0e0f12] [text-wrap:balance]">
+              <h2 className="font-editorial text-[clamp(2.1rem,3.8vw,3.2rem)] font-normal leading-[1.08] tracking-[-0.032em] text-[#f5f5f7] [text-wrap:balance]">
                 Built to stay quiet until you need it
               </h2>
-              <p className="mt-4 text-[15.5px] leading-[1.65] text-[#52545d]">
+              <p className="mt-4 text-[15.5px] leading-[1.65] text-[#a1a1a6]">
                 Software should answer when asked and stay calm the rest of the day. Every layer of Nexus keeps the same
                 restraint.
               </p>
             </div>
 
             <div className="mt-8 h-[210px] w-full max-w-[440px] sm:h-[240px]">
-              <EquilibriumCore activeIndex={hoveredPrinciple} theme="light" />
+              <EquilibriumCore activeIndex={hoveredPrinciple} theme="dark" />
             </div>
           </div>
 
           <div
-            className="divide-y divide-[#0e0f12]/[0.09] border-y border-[#0e0f12]/[0.09]"
+            className="divide-y divide-white/[0.09] border-y border-white/[0.09]"
             onMouseLeave={() => setHoveredPrinciple(null)}
           >
             {PRINCIPLES.map((item, idx) => {
@@ -120,16 +120,16 @@ export function SystemArchitecture() {
                   onFocus={() => setHoveredPrinciple(idx)}
                   onBlur={() => setHoveredPrinciple(null)}
                   tabIndex={0}
-                  className="grid cursor-default grid-cols-1 gap-3 py-6 outline-none transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#9a6910] sm:grid-cols-[210px_minmax(0,1fr)] sm:gap-8 sm:py-8"
+                  className="grid cursor-default grid-cols-1 gap-3 py-6 outline-none transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f0b54a] sm:grid-cols-[210px_minmax(0,1fr)] sm:gap-8 sm:py-8"
                 >
                   <h3
                     className={`text-[16px] font-medium leading-[1.35] tracking-[-0.015em] transition-colors duration-200 ${
-                      active ? "text-[#9a6910]" : "text-[#0e0f12]"
+                      active ? "text-[#f0b54a]" : "text-[#f5f5f7]"
                     }`}
                   >
                     {item.title}
                   </h3>
-                  <p className="max-w-[54ch] text-[15px] leading-[1.68] text-[#52545d]">{item.body}</p>
+                  <p className="max-w-[54ch] text-[15px] leading-[1.68] text-[#a1a1a6]">{item.body}</p>
                 </div>
               );
             })}
@@ -140,20 +140,20 @@ export function SystemArchitecture() {
       {/* Band 3: Full planned vision & interactive roadmap with live morphing Orbital Horizon */}
       <section
         id="roadmap"
-        className="scroll-mt-24 border-y border-[#0e0f12]/[0.07] bg-[#f7f6f2] px-6 py-20 sm:px-10 lg:px-14 lg:py-28"
+        className="scroll-mt-24 border-b border-white/[0.08] bg-black px-6 py-20 sm:px-10 lg:px-14 lg:py-28"
         aria-label="Full platform roadmap"
       >
         <div className="mx-auto grid max-w-[1280px] grid-cols-1 gap-12 lg:grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)] lg:gap-16">
           <div className="flex flex-col justify-between">
             <div>
-              <h2 className="font-editorial text-[clamp(2.1rem,3.8vw,3.2rem)] font-normal leading-[1.08] tracking-[-0.032em] text-[#0e0f12] [text-wrap:balance]">
+              <h2 className="font-editorial text-[clamp(2.1rem,3.8vw,3.2rem)] font-normal leading-[1.08] tracking-[-0.032em] text-[#f5f5f7] [text-wrap:balance]">
                 Where Nexus is going
               </h2>
-              <p className="mt-6 max-w-[46ch] text-[15.5px] leading-[1.7] text-[#52545d]">
+              <p className="mt-6 max-w-[46ch] text-[15.5px] leading-[1.7] text-[#a1a1a6]">
                 Personal computing splintered into dozens of single-purpose tabs that cannot share context without
                 copy-pasting or handing every click to a cloud model.
               </p>
-              <p className="mt-4 max-w-[46ch] text-[15.5px] leading-[1.7] text-[#52545d]">
+              <p className="mt-4 max-w-[46ch] text-[15.5px] leading-[1.7] text-[#a1a1a6]">
                 Nexus starts with a working daily foundation—Command, Recording Studio, Research, and a typed extension
                 runtime—and scales outward into a complete modular environment where your calendar, mail, audio,
                 study materials, calls, and custom tools all inhabit one calm room.
@@ -162,15 +162,15 @@ export function SystemArchitecture() {
 
             <div className="mt-8">
               <div className="h-[195px] w-full max-w-[460px] sm:h-[215px]">
-                <OrbitalHorizon activeStep={activeStepId} theme="light" />
+                <OrbitalHorizon activeStep={activeStepId} theme="dark" />
               </div>
-              <p className="mt-2 text-[13px] text-[#636570]">{activeStep.caption}</p>
+              <p className="mt-2 text-[13px] text-[#8e8e95]">{activeStep.caption}</p>
             </div>
 
-            <div className="mt-8 flex flex-wrap items-center gap-6 border-t border-[#0e0f12]/[0.08] pt-6 text-[14px]">
+            <div className="mt-8 flex flex-wrap items-center gap-6 border-t border-white/[0.09] pt-6 text-[14px]">
               <Link
                 href="/about"
-                className="group inline-flex items-center gap-1.5 font-medium text-[#0e0f12] transition-colors hover:text-[#9a6910] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910]"
+                className="group inline-flex items-center gap-1.5 font-medium text-[#f5f5f7] transition-colors hover:text-[#f0b54a] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f0b54a]"
               >
                 <span className="gal-link-underline">Read the philosophy</span>
                 <ArrowUpRight
@@ -181,7 +181,7 @@ export function SystemArchitecture() {
               </Link>
               <Link
                 href="/security"
-                className="group inline-flex items-center gap-1.5 text-[#52545d] transition-colors hover:text-[#0e0f12] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910]"
+                className="group inline-flex items-center gap-1.5 text-[#a1a1a6] transition-colors hover:text-[#f5f5f7] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f0b54a]"
               >
                 <span className="gal-link-underline">Security architecture</span>
                 <ArrowUpRight
@@ -193,7 +193,7 @@ export function SystemArchitecture() {
             </div>
           </div>
 
-          <div className="divide-y divide-[#0e0f12]/[0.09] border-y border-[#0e0f12]/[0.09]">
+          <div className="divide-y divide-white/[0.09] border-y border-white/[0.09]">
             {ROADMAP_FLOW.map((step) => {
               const isOpen = step.id === activeStepId;
               return (
@@ -202,31 +202,31 @@ export function SystemArchitecture() {
                     type="button"
                     onClick={() => setActiveStepId(step.id)}
                     aria-expanded={isOpen}
-                    className="group flex w-full cursor-pointer flex-col items-start gap-1.5 text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#9a6910]"
+                    className="group flex w-full cursor-pointer flex-col items-start gap-1.5 text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f0b54a]"
                   >
                     <div className="flex w-full flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                      <h3 className="text-[20px] font-medium tracking-[-0.02em] text-[#0e0f12] transition-colors duration-150 group-hover:text-[#9a6910] sm:text-[21px]">
+                      <h3 className="text-[20px] font-medium tracking-[-0.02em] text-[#f5f5f7] transition-colors duration-150 group-hover:text-[#f0b54a] sm:text-[21px]">
                         {step.title}
                       </h3>
                       <span
                         className={`shrink-0 text-[12.5px] font-medium transition-colors ${
-                          isOpen ? "text-[#9a6910]" : "text-[#636570] group-hover:text-[#0e0f12]"
+                          isOpen ? "text-[#f0b54a]" : "text-[#8e8e95] group-hover:text-[#f5f5f7]"
                         }`}
                       >
                         {step.status}
                       </span>
                     </div>
-                    <p className="mt-1 max-w-[60ch] text-[15px] leading-[1.6] text-[#52545d]">{step.summary}</p>
+                    <p className="mt-1 max-w-[60ch] text-[15px] leading-[1.6] text-[#a1a1a6]">{step.summary}</p>
                   </button>
 
                   <div className="gal-accordion-grid" data-open={isOpen ? "true" : "false"}>
                     <div className="gal-accordion-inner">
-                      <div className="mt-4 border-t border-[#0e0f12]/[0.07] pt-3.5">
-                        <p className="max-w-[58ch] text-[14.5px] leading-[1.65] text-[#2c2e35]">{step.detail}</p>
-                        <div className="mt-3.5 flex flex-wrap gap-x-5 gap-y-2 text-[13px] text-[#52545d]">
+                      <div className="mt-4 border-t border-white/[0.08] pt-3.5">
+                        <p className="max-w-[58ch] text-[14.5px] leading-[1.65] text-[#d1d1d6]">{step.detail}</p>
+                        <div className="mt-3.5 flex flex-wrap gap-x-5 gap-y-2 text-[13px] text-[#a1a1a6]">
                           {step.surfaces.map((surface) => (
                             <span key={surface} className="inline-flex items-center gap-2">
-                              <span className="h-1.5 w-1.5 rounded-full bg-[#c9932c]" aria-hidden="true" />
+                              <span className="h-1.5 w-1.5 rounded-full bg-[#f0b54a]" aria-hidden="true" />
                               <span>{surface}</span>
                             </span>
                           ))}
