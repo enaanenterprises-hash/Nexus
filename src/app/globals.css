@@ -1641,18 +1641,14 @@ button.landing-signup {
   position: relative;
   display: inline-grid;
   place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 3.15rem;
+  height: 3.15rem;
   border: 0;
   border-radius: 999px;
   background: transparent;
   overflow: visible;
   cursor: pointer;
-  transition: background 180ms ease;
-}
-
-.nexus-mark-button:hover {
-  background: rgba(240, 181, 74, 0.06);
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .nexus-mark-button:focus-visible {
@@ -1662,10 +1658,10 @@ button.landing-signup {
 
 .nexus-orb-canvas-stage {
   position: absolute;
-  top: -18px;
-  left: -24px;
-  width: 128px;
-  height: 560px;
+  top: -22px;
+  left: -50px;
+  width: 176px;
+  height: 580px;
   pointer-events: none;
   overflow: visible;
   z-index: 2;
@@ -1674,8 +1670,8 @@ button.landing-signup {
 .nexus-mark-stage {
   position: relative;
   display: block;
-  width: 2.15rem;
-  height: 2.15rem;
+  width: 2.35rem;
+  height: 2.35rem;
   overflow: visible;
   pointer-events: none;
   z-index: 3;
@@ -1778,13 +1774,13 @@ button.landing-signup {
   gap: 0.18rem;
   padding: 0.45rem 0.25rem;
   border-radius: 22px;
-  border: 1px solid rgba(240, 181, 74, 0.22);
-  background: rgba(16, 16, 20, 0.8);
-  backdrop-filter: blur(26px) saturate(1.45);
-  -webkit-backdrop-filter: blur(26px) saturate(1.45);
-  box-shadow:
-    0 24px 56px -12px rgba(0, 0, 0, 0.78),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  border: 1px solid transparent;
+  background: radial-gradient(
+    125% 95% at 50% 45%,
+    rgba(7, 6, 9, 0.84) 0%,
+    rgba(6, 5, 8, 0.72) 100%
+  );
+  box-shadow: 0 26px 60px -12px rgba(0, 0, 0, 0.84);
   transform-origin: top center;
 }
 
@@ -1808,13 +1804,13 @@ button.landing-signup {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  clip-path: inset(0 0 92% 0 round 22px);
-  transform: translateY(-8px) scale(0.96);
+  clip-path: inset(0 0 94% 0 round 22px);
+  transform: translateY(-10px) scale(0.96);
   transition:
-    clip-path 580ms cubic-bezier(0.4, 0, 0.2, 1),
-    transform 560ms cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 420ms ease,
-    visibility 0s linear 580ms;
+    clip-path 520ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 520ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 380ms ease,
+    visibility 0s linear 520ms;
 }
 
 .node-menu--open {
@@ -1824,9 +1820,9 @@ button.landing-signup {
   clip-path: inset(0 0 0% 0 round 22px);
   transform: translateY(0) scale(1);
   transition:
-    clip-path 880ms cubic-bezier(0.22, 1, 0.36, 1) 180ms,
-    transform 840ms cubic-bezier(0.22, 1, 0.36, 1) 140ms,
-    opacity 540ms ease 140ms,
+    clip-path 860ms cubic-bezier(0.22, 1, 0.36, 1) 120ms,
+    transform 820ms cubic-bezier(0.22, 1, 0.36, 1) 100ms,
+    opacity 480ms ease 100ms,
     visibility 0s linear 0s;
 }
 
@@ -6059,28 +6055,38 @@ html[data-dash-theme="light"] {
 
 /* Left Node Menu, Right Quick Rail, and Side Panels in Gallery Light Liquid Glass */
 .dash[data-theme="light"] .node-menu--floating {
-  border-color: rgba(14, 15, 18, 0.1);
-  background: rgba(255, 255, 255, 0.8);
-  box-shadow:
-    0 24px 56px -14px rgba(14, 15, 18, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.96);
+  border-color: transparent;
+  background: radial-gradient(
+    125% 95% at 50% 45%,
+    rgba(8, 7, 11, 0.86) 0%,
+    rgba(7, 6, 9, 0.76) 100%
+  );
+  box-shadow: 0 26px 60px -12px rgba(14, 15, 18, 0.55);
 }
 
-.dash[data-theme="light"] .node-menu-item:hover {
-  color: #0e0f12;
-  background: rgba(14, 15, 18, 0.05);
+.dash[data-theme="light"] .node-menu--floating .node-menu-item {
+  color: rgba(245, 245, 247, 0.74);
 }
 
-.dash[data-theme="light"] .node-menu-item--on {
-  color: #855a0b;
-  background: rgba(200, 141, 24, 0.11);
-  box-shadow: inset 0 0 0 1px rgba(186, 128, 18, 0.24);
+.dash[data-theme="light"] .node-menu--floating .node-menu-item:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
 }
 
-.dash[data-theme="light"] .node-menu-plan:hover,
-.dash[data-theme="light"] .node-menu-plan--on {
-  color: #0e0f12;
-  background: rgba(14, 15, 18, 0.05);
+.dash[data-theme="light"] .node-menu--floating .node-menu-item--on {
+  color: #ffd99a;
+  background: rgba(255, 138, 42, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(255, 138, 42, 0.3);
+}
+
+.dash[data-theme="light"] .node-menu--floating .node-menu-plan {
+  color: rgba(245, 245, 247, 0.62);
+}
+
+.dash[data-theme="light"] .node-menu--floating .node-menu-plan:hover,
+.dash[data-theme="light"] .node-menu--floating .node-menu-plan--on {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .dash[data-theme="light"] .node-rail-pill {

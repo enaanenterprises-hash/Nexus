@@ -1,7 +1,6 @@
 "use client";
 
 import { memo, useCallback, useEffect, useRef, useState, type RefObject } from "react";
-import { useTheme } from "@/lib/theme";
 import CrystalizedBall, { type CrystalizedBallMorphBox } from "./CrystalizedBall";
 
 interface OrbStageGeometry {
@@ -11,15 +10,15 @@ interface OrbStageGeometry {
 }
 
 const DEFAULT_GEOMETRY: OrbStageGeometry = {
-  orbCenter: [46, 40],
-  morphBox: { x: 9, y: 70, width: 74, height: 356, radius: 22 },
-  stageHeight: 560,
+  orbCenter: [76, 48],
+  morphBox: { x: 39, y: 76, width: 74, height: 356, radius: 22 },
+  stageHeight: 580,
 };
 
 /**
  * Interactive WebGL <CrystalizedBall /> orb menu trigger.
- * When pressed, the active dashboard surface blurs and darkens while the orb's
- * particles stream downward to form the rounded frame of `#nexus-network-menu`.
+ * When pressed, the active dashboard surface blurs and darkens while the entire
+ * orb melts downward into the glowing particles and crackling rim that form `#nexus-network-menu`.
  */
 export const NexusMenuButton = memo(function NexusMenuButton({
   open,
@@ -34,7 +33,6 @@ export const NexusMenuButton = memo(function NexusMenuButton({
   buttonRef?: RefObject<HTMLButtonElement | null>;
   onClick: () => void;
 }) {
-  const { theme } = useTheme();
   const localBtnRef = useRef<HTMLButtonElement | null>(null);
   const stageRef = useRef<HTMLSpanElement | null>(null);
   const [geometry, setGeometry] = useState<OrbStageGeometry>(DEFAULT_GEOMETRY);
@@ -73,7 +71,7 @@ export const NexusMenuButton = memo(function NexusMenuButton({
     const boxY = parentRect.top + menuEl.offsetTop - stageRect.top;
     const boxWidth = menuEl.offsetWidth || 74;
     const boxHeight = menuEl.offsetHeight || 356;
-    const neededHeight = Math.max(540, Math.ceil(boxY + boxHeight + 36));
+    const neededHeight = Math.max(560, Math.ceil(boxY + boxHeight + 44));
 
     setGeometry((prev) => {
       const sameCenter =
@@ -134,28 +132,28 @@ export const NexusMenuButton = memo(function NexusMenuButton({
         <CrystalizedBall
           preset="ember"
           color="#FF8A2A"
-          theme={theme}
+          theme="dark"
           orbCenter={geometry.orbCenter}
-          orbRadius={18.5}
+          orbRadius={22}
           morphOpen={open}
           morphBox={geometry.morphBox}
           crackle={0.9}
           fill={0.35}
           interactive
-          hoverStrength={0.65}
+          hoverStrength={0.7}
           strands={5}
-          flares={0.8}
-          glow={0.95}
-          sparks={0.7}
+          flares={0.85}
+          glow={1}
+          sparks={0.8}
           particleCount={12000}
           motion="drift"
           particleShape="round"
           depth={0.7}
           sway={0.3}
           twinkle={0.7}
-          haze={0.85}
-          speed={0.42}
-          dustSpeed={0.55}
+          haze={0.9}
+          speed={0.55}
+          dustSpeed={0.9}
         />
       </span>
       <span className="nexus-mark-stage dash-brand-mark" aria-hidden>
