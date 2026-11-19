@@ -3,14 +3,10 @@
 import { useEffect, useRef } from "react";
 import type { Vec } from "@/lib/network/geometry";
 
-const MAX_THREADS = 20;
-const MAX_COLORS = 6;
-const MAX_SURGES = 3;
 const MAX_SOCKETS = 5;
-const SURGE_SECONDS = 1.65;
-const SURGE_STAGGER = 0.045;
-const STROKE_SECONDS = 1.3;
-const TAU = Math.PI * 2;
+const STRANDS_PER_ARM = 9;
+const HORIZON_STRANDS = 7;
+const INTRO_DURATION = 1.85;
 
 const VERTEX = `#version 300 es
 in vec2 aPosition;
@@ -19,45 +15,37 @@ void main() {
 }`;
 
 /**
- * Bespoke Nexus Neural WebGL2 Shader adapted from React Bits <WebThreads />:
- * 1) 18 flowing sinusoidal braided horizon threads pinching through the Nexus Singularity Core
- * 2) 5 sculpted orbital braided neural conduits flowing directly from Core -> Socket pinch -> upper sky
- * 3) Analytical inverse-power luminous glow + white-hot core convergence + 3D twist depth
- * 4) Fluid pointer lens + individual strand hover illumination + click/transfer optical surges
- * 5) Native Dark (molten 24k gold light) and Light (crisp burnished gold ink) dual-mode rendering
+ * Nexus Singularity Canopy — Bespoke WebGL2 Analytical Filament Engine.
+ *
+ * Recreates the silky sinusoidal wave-braiding, nested harmonic taper, 3D depth twist,
+ * travelling optical pulses, and responsive strand hover inspired by <WebThreads />,
+ * sculpted natively around Nexus's radial Singularity Core + 5 curved orbital node sockets:
+ *   1) 5 C1-smooth S-curved braided orbital arms (7 nested filaments each) pinching cleanly
+ *      at the Singularity Core and each Node Socket waist, then fanning softly into the sky.
+ *   2) A whisper-quiet 6-strand basal horizon cradle grounding the Core laterally without
+ *      ever crossing nodes above or the voice stage below.
+ *   3) A compact, pearl-gold Singularity Core nucleus with perceptual filmic tone-mapping
+ *      (zero whiteout blowout, zero muddy fog, razor-crisp pixel-normalized fibers in both
+ *      Obsidian Dark and Gallery Light).
  */
 const FRAGMENT = `#version 300 es
 precision highp float;
+
 uniform vec2 uResolution;
 uniform float uPhase;
 uniform float uClock;
-uniform int uCount;
-uniform float uFrequency;
-uniform float uSpread;
-uniform float uTaper;
+uniform float uEnergy;
 uniform vec2 uCore;
-uniform float uGlow;
-uniform float uFalloff;
-uniform float uThickness;
-uniform float uBrightness;
-uniform float uOpacity;
-uniform float uDepth;
-uniform float uPulses;
-uniform float uFade;
-uniform float uGrain;
-uniform vec3 uColors[${MAX_COLORS}];
-uniform int uColorCount;
-uniform vec3 uCoreColor;
-uniform float uLight;
-uniform vec4 uIntro;
-uniform float uFocus[${MAX_THREADS}];
-uniform vec2 uFocusState;
-uniform vec4 uSurges[${MAX_SURGES}];
-uniform vec4 uPointer;
 uniform vec2 uSockets[${MAX_SOCKETS}];
 uniform float uSocketLevel[${MAX_SOCKETS}];
+uniform float uSocketFocus[${MAX_SOCKETS}];
 uniform float uSocketSurge[${MAX_SOCKETS}];
 uniform int uSocketCount;
+uniform float uLight;
+uniform vec3 uIntro;       // x = elapsed, y = active (0/1), z = corePulse
+uniform vec4 uPointer;     // xy = smooth UV, z = presence (0..1), w = holdStrength (0..1)
+uniform vec3 uCradleSurge; // x = startX, y = age (0..1), z = active (0/1)
+
 out vec4 outColor;
 
 const float PI = 3.14159265;
@@ -69,150 +57,146 @@ float hash(vec2 p) {
   return fract(p.x * p.y);
 }
 
-float easeInOut(float t) {
-  return t < 0.5 ? 4.0 * t * t * t : 1.0 - pow(-2.0 * t + 2.0, 3.0) * 0.5;
+float easeOutCubic(float t) {
+  float k = clamp(t, 0.0, 1.0);
+  return 1.0 - (1.0 - k) * (1.0 - k) * (1.0 - k);
 }
 
-vec3 palette(float t) {
-  if (uColorCount <= 1) return uColors[0];
-  float scaled = clamp(t, 0.0, 1.0) * float(uColorCount - 1);
-  int index = int(min(floor(scaled), float(uColorCount - 2)));
-  return mix(uColors[index], uColors[index + 1], scaled - float(index));
+float easeInOutCubic(float t) {
+  float k = clamp(t, 0.0, 1.0);
+  return k < 0.5 ? 4.0 * k * k * k : 1.0 - pow(-2.0 * k + 2.0, 3.0) * 0.5;
 }
 
-vec3 mainThread(float x, float i, float n) {
-  float dx = x - uCore.x;
-  float side = dx < 0.0 ? -1.0 : 1.0;
-  float envX = uSpread * abs(dx);
-  float envY = uSpread * side;
-  float amp = 1.0 + i * uTaper;
-  float shimmer = sin(uClock * 1.15 + i * 1.37) * 0.28;
-  float angle = x * uFrequency + (uPhase + i * TAU / max(n, 1.0)) * side + shimmer;
-  float wave = sin(angle);
-  float y = uCore.y - envX * amp * wave;
-  float slope = -(envY * amp * wave + envX * amp * cos(angle) * uFrequency);
-  return vec3(y, slope, angle);
+vec3 activePalette(float t, float isLight) {
+  vec3 c0 = isLight > 0.5 ? vec3(0.75, 0.49, 0.04) : vec3(0.92, 0.70, 0.14); // 24k Nexus Gold
+  vec3 c1 = isLight > 0.5 ? vec3(0.88, 0.62, 0.10) : vec3(0.98, 0.82, 0.40); // Sunlit Champagne
+  vec3 c2 = isLight > 0.5 ? vec3(0.66, 0.40, 0.05) : vec3(0.96, 0.61, 0.28); // Warm Amber Silk
+  float s = clamp(t, 0.0, 1.0) * 2.0;
+  return s < 1.0 ? mix(c0, c1, s) : mix(c1, c2, s - 1.0);
 }
 
 void main() {
   vec2 p = gl_FragCoord.xy / uResolution;
-  float aspect = uResolution.x / uResolution.y;
-
-  // Subtle organic viscous optical lens around pointer (gentle parting / breath as mouse glides over filaments)
-  vec2 s = p;
-  if (uPointer.z > 0.001) {
-    vec2 diff = vec2((p.x - uPointer.x) * aspect, p.y - uPointer.y);
-    float distSq = dot(diff, diff);
-    float reach = 0.068;
-    float influence = exp(-distSq / reach) * uPointer.z;
-    // Gentle outward fluid parting at hover, turning into subtle silk harp-draw toward pointer while held
-    float dirSign = mix(-0.022, 0.026, uPointer.w);
-    vec2 shift = diff * dirSign * influence;
-    s += vec2(shift.x / aspect, shift.y);
-  }
-
-  float x = s.x;
-  float y = s.y;
-  float n = float(uCount);
-  float pixel = 1.0 / uResolution.y;
-  float presence = uFocusState.x;
-  float settle = uFocusState.y;
-
-  vec3 color = vec3(0.0);
-  float energy = 0.0;
-  float ink = 0.0;
-  vec3 inkColor = vec3(0.0);
-
-  // ——— 1. Primary 18-Strand Flowing Braided Neural Weave ———
-  for (int idx = 0; idx < ${MAX_THREADS}; idx++) {
-    if (idx >= uCount) break;
-    float i = float(idx);
-    float ci = n > 1.0 ? i / (n - 1.0) : 0.0;
-
-    float head = 2.0;
-    float bead = 0.0;
-    float born = 1.0;
-    if (uIntro.w > 0.5) {
-      float progress = clamp((uIntro.x - i * uIntro.y) / uIntro.z, 0.0, 1.0);
-      head = mix(-0.04, 1.04, easeInOut(progress));
-      bead = sin(PI * progress);
-      born = progress > 0.0 ? smoothstep(-0.04, 0.03, head) : 0.0;
-    }
-    if (born <= 0.0) continue;
-
-    bool tip = x > head;
-    vec3 lead = bead > 0.0 || tip ? mainThread(head, i, n) : vec3(0.0);
-    vec3 t = tip ? lead : mainThread(x, i, n);
-
-    float focus = uFocus[idx];
-    float spot = tip ? head : x;
-    float twist = uDepth * smoothstep(0.0, 0.075, abs(spot - uCore.x));
-    float depth = 0.5 + 0.5 * cos(t.z);
-    float front = mix(1.0, 0.34 + 0.66 * depth, twist);
-    float width = uThickness * mix(1.0, 0.58 + 0.65 * depth, twist) * (1.0 + 0.32 * focus * presence);
-
-    float d;
-    if (tip) {
-      float back = head - 0.02;
-      vec2 a = vec2(back * aspect, mainThread(back, i, n).x);
-      vec2 b = vec2(head * aspect, lead.x);
-      vec2 pa = vec2(x * aspect, y) - a;
-      vec2 ba = b - a;
-      d = length(pa - ba * clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0));
-    } else {
-      float bend = t.y * smoothstep(0.0, 0.04, abs(x - uCore.x));
-      d = abs(y - t.x) / sqrt(1.0 + bend * bend / (aspect * aspect));
-    }
-
-    float g = uGlow / pow(max(d / width, pixel * 0.35), uFalloff) * front * born;
-    float onLine = exp(-d / (width * 0.012));
-
-    if (bead > 0.0) {
-      vec2 near = vec2((x - head) * aspect, y - lead.x);
-      g *= 1.0 + bead * 1.5 * exp(-dot(near, near) / 0.0024);
-    }
-
-    // Travelling click / press optical surges converging into the core pinch and fanning across
-    float surgeLight = 0.0;
-    for (int k = 0; k < ${MAX_SURGES}; k++) {
-      vec4 surge = uSurges[k];
-      if (surge.w <= 0.0) continue;
-      float sp = clamp((surge.y - i * ${SURGE_STAGGER.toFixed(3)}) / ${SURGE_SECONDS.toFixed(2)}, 0.0, 1.0);
-      if (sp <= 0.0 || sp >= 1.0) continue;
-      float sLead = mix(surge.x, surge.z > 0.0 ? 1.12 : -0.12, easeInOut(sp));
-      float along = (x - sLead) * surge.z * aspect;
-      float trail = along < 0.0 ? exp(along / 0.24) : exp(-along * along / 0.0009);
-      surgeLight += trail * sin(PI * sp);
-    }
-    g *= 1.0 + surgeLight * (0.14 + 2.8 * onLine);
-
-    if (uPulses > 0.0) {
-      float travel = abs(x - uCore.x);
-      float pulse = pow(0.5 + 0.5 * sin(travel * 15.0 + uClock * 2.0 + i * 1.85), 24.0);
-      g *= 1.0 + uPulses * 4.6 * pulse * onLine;
-    }
-
-    float sheen = pow(0.5 + 0.5 * sin(abs(x - uCore.x) * 11.0 + uClock * 1.35), 10.0);
-    float lift = focus * presence;
-    g *= (1.0 - settle * (1.0 - focus)) * (1.0 + lift * (0.95 + 1.4 * sheen * onLine));
-
-    vec3 tint = mix(palette(ci), uCoreColor, 0.28 * lift);
-    color += g * tint;
-    energy += g;
-    float stroke = smoothstep(0.45, 1.28, g);
-    inkColor += tint * stroke;
-    ink += stroke;
-  }
-
-  // ——— 2. Five Sculpted Orbital Socket Braids (Core -> Node Pinch -> Upper Canopy) ———
-  float introArm = uIntro.w > 0.5 ? easeInOut(clamp(uIntro.x / (uIntro.z * 0.95), 0.0, 1.0)) : 1.0;
-  vec2 pAspect = vec2(s.x * aspect, s.y);
+  float aspect = uResolution.x / max(uResolution.y, 1.0);
+  float pixel = 1.0 / max(uResolution.y, 1.0);
+  vec2 pAspect = vec2(p.x * aspect, p.y);
   vec2 coreAspect = vec2(uCore.x * aspect, uCore.y);
 
+  // ——— Fluid Silk Pointer Deflection (anchored strictly to 0 at Core and all 5 Socket waists) ———
+  vec2 sAspect = pAspect;
+  if (uPointer.z > 0.001) {
+    vec2 ptrAspect = vec2(uPointer.x * aspect, uPointer.y);
+    vec2 diff = pAspect - ptrAspect;
+    float dPtrSq = dot(diff, diff);
+    float reach = 0.028; // ~150px organic tactile influence radius
+    float influence = exp(-dPtrSq / reach) * uPointer.z;
+
+    // Pin optical waists so threads bow like silk between fixed jewelled anchors
+    float pin = smoothstep(0.012, 0.075, length(pAspect - coreAspect));
+    for (int i = 0; i < ${MAX_SOCKETS}; i++) {
+      if (i >= uSocketCount) break;
+      vec2 sockA = vec2(uSockets[i].x * aspect, uSockets[i].y);
+      pin *= smoothstep(0.012, 0.055, length(pAspect - sockA));
+    }
+
+    // Gentle outward silk parting on hover; delicate tactile draw when pressed & held
+    float pushSign = mix(-0.028, 0.022, uPointer.w);
+    sAspect += diff * pushSign * influence * pin;
+  }
+
+  float isLight = uLight;
+  vec3 darkAccum = vec3(0.0);
+  float inkSum = 0.0;
+  vec3 inkColorSum = vec3(0.0);
+
+  vec3 dormantTint = isLight > 0.5 ? vec3(0.56, 0.54, 0.50) : vec3(0.58, 0.55, 0.49);
+  vec3 specularTint = isLight > 0.5 ? vec3(0.95, 0.72, 0.18) : vec3(1.0, 0.96, 0.86);
+
+  // Measure strongest hovered arm so non-hovered arms step back subtly (focus hierarchy)
+  float maxArmFocus = 0.0;
+  for (int i = 0; i < ${MAX_SOCKETS}; i++) {
+    if (i >= uSocketCount) break;
+    maxArmFocus = max(maxArmFocus, uSocketFocus[i]);
+  }
+
+  // ——— 1. Sweeping Basal Silk Wings (7 gossamer currents cradling the Singularity Core laterally) ———
+  {
+    vec2 relH = sAspect - coreAspect;
+    float adx = abs(relH.x);
+    float maxReach = aspect * 0.52;
+
+    if (adx < maxReach + 0.05 && abs(relH.y) < 0.22) {
+      // Smooth quintic lateral dissolution into deep obsidian / gallery paper
+      float normX = clamp(adx / max(maxReach, 0.001), 0.0, 1.0);
+      float xFade = 1.0 - smoothstep(0.32, 1.0, normX);
+      xFade = xFade * xFade * smoothstep(0.0, 0.02, adx);
+
+      // Graceful liquid-arch lateral sweep: rises softly from Core then glides gently outward
+      float cradleCurve = 0.032 * sin(normX * PI * 0.85) - 0.018 * normX * normX;
+      float cradleSlope = (0.032 * PI * 0.85 * cos(normX * PI * 0.85) - 0.036 * normX) / max(maxReach, 0.001);
+
+      for (int k = 0; k < ${HORIZON_STRANDS}; k++) {
+        float kf = float(k);
+        float tier = (kf + 0.5) / float(${HORIZON_STRANDS});
+        float strandIntro = uIntro.y > 0.5
+          ? easeInOutCubic((uIntro.x - 0.20 - kf * 0.048) / 1.32)
+          : 1.0;
+        float sHead = maxReach * strandIntro;
+        if (adx > sHead + 0.018) continue;
+
+        float tipMask = 1.0 - smoothstep(sHead - 0.03, sHead + 0.008, adx);
+        float amp = (0.24 + 0.82 * tier) * 0.072 * pow(normX, 0.92);
+        float envSlope = (0.24 + 0.82 * tier) * 0.072 * 0.92 * pow(max(normX, 0.001), -0.08) / max(maxReach, 0.001);
+
+        // Long, unhurried liquid wave frequency matching the sweeping silk canopy
+        float freq = 4.6 + 0.42 * mod(kf, 3.0);
+        float shimmer = sin(uClock * 0.52 + kf * 1.63) * 0.20;
+        float ang = adx * freq - uPhase * (0.92 + 0.06 * kf) + kf * (TAU / float(${HORIZON_STRANDS})) + shimmer;
+        float wave = sin(ang);
+
+        float targetY = cradleCurve + amp * wave;
+        float slope = cradleSlope + envSlope * wave + amp * cos(ang) * freq;
+        float d = abs(relH.y - targetY) / sqrt(1.0 + slope * slope);
+
+        float depth = 0.5 + 0.5 * cos(ang);
+        float twist = smoothstep(0.0, 0.06, adx);
+        float front = mix(1.0, 0.40 + 0.60 * depth, 0.55 * twist);
+        float w = (isLight > 0.5 ? 0.98 : 0.86) * mix(1.08, 0.68, tier) * mix(1.0, 0.72 + 0.42 * depth, 0.45 * twist);
+
+        float dp = d / max(pixel * w, 0.0001);
+        float silkCore = exp(-dp * dp * 0.54);
+        float sheath = 0.22 / (1.0 + dp * dp * 0.19);
+
+        // Subtle ripple along horizon wings on canvas press
+        float surgeBoost = 1.0;
+        if (uCradleSurge.z > 0.5) {
+          float wavePos = uCradleSurge.y * maxReach * 1.15;
+          float dWave = adx - wavePos;
+          float pulse = exp(-dWave * dWave / 0.0055) * sin(PI * clamp(uCradleSurge.y, 0.0, 1.0));
+          surgeBoost += pulse * (0.38 + 2.5 * silkCore);
+        }
+
+        // Travelling quiet ambient shimmer
+        float ambientPulse = pow(0.5 + 0.5 * sin(adx * 11.5 - uClock * 1.25 + kf * 1.35), 14.0);
+        float quietDim = 1.0 - 0.24 * maxArmFocus;
+        float tierAlpha = mix(1.0, 0.58, tier);
+        float strength = (silkCore * 0.82 + sheath) * front * xFade * tipMask * quietDim * tierAlpha * (0.28 + 0.08 * uEnergy) * surgeBoost;
+        strength *= 1.0 + 0.7 * ambientPulse * silkCore;
+
+        vec3 tint = activePalette(tier * 0.88 + 0.08, isLight);
+        tint = mix(tint, specularTint, 0.22 * silkCore);
+
+        darkAccum += tint * strength;
+        float inkVal = (silkCore * 0.76 + sheath * 0.34) * front * xFade * tipMask * quietDim * tierAlpha * (0.34 + 0.08 * uEnergy) * surgeBoost;
+        inkColorSum += tint * inkVal;
+        inkSum += inkVal;
+      }
+    }
+  }
+
+  // ——— 2. Five Sculpted Braided Orbital Arms (Core -> Socket Waist -> Expansive Silk Canopy Fan) ———
   for (int sIdx = 0; sIdx < ${MAX_SOCKETS}; sIdx++) {
     if (sIdx >= uSocketCount) break;
-    float level = uSocketLevel[sIdx];
-    if (level <= 0.01) continue;
 
     vec2 sockAspect = vec2(uSockets[sIdx].x * aspect, uSockets[sIdx].y);
     vec2 axis = sockAspect - coreAspect;
@@ -220,107 +204,209 @@ void main() {
     vec2 dir = axis / segLen;
     vec2 perp = vec2(-dir.y, dir.x);
 
-    vec2 rel = pAspect - coreAspect;
-    float u = dot(rel, dir) / segLen; // 0 = Core, 1 = Socket waist, >1 = outer canopy
+    vec2 rel = sAspect - coreAspect;
+    float u = dot(rel, dir) / segLen; // 0 = Core, 1 = Node Socket waist, >1 = outer canopy
     float v = dot(rel, perp);
 
-    float maxU = mix(0.0, 1.95, introArm);
-    if (u < -0.02 || u > maxU) continue;
+    float level = uSocketLevel[sIdx];
+    float focus = uSocketFocus[sIdx];
+    float liveMask = smoothstep(0.28, 0.88, level);
+    float endU = mix(2.08, 2.46, liveMask);
 
-    // Gentle organic S-inflection on the outer arm so branches arch naturally like silk
-    float archOffset = (float(sIdx) - 2.0) * 0.018 * sin(clamp(u, 0.0, 1.0) * PI);
-    float uFade = smoothstep(-0.02, 0.06, u) * (1.0 - smoothstep(1.12, maxU, u));
-    float env = u <= 1.0
-      ? 0.026 * sin(PI * clamp(u, 0.0, 1.0))
-      : 0.018 * (u - 1.0) * (1.0 + 0.55 * (u - 1.0));
+    // Fast spatial rejection outside this arm's sweeping corridor
+    if (u < -0.02 || u > endU + 0.06 || abs(v) > segLen * 0.82) continue;
 
+    // Arm symmetry coordinate: -1.0 (far-left), -0.5, 0.0 (zenith), +0.5, +1.0 (far-right)
+    float side = uSocketCount > 1
+      ? (float(sIdx) / float(uSocketCount - 1) - 0.5) * 2.0
+      : 0.0;
+
+    // C1-smooth S-curved Laniakea spine: rises like a fountain plume (0..1),
+    // lands dead-center on the Node Socket waist (u = 1.0), and sweeps gracefully outward across the sky
+    float archAmp = side * segLen * 0.088;
+    float spineV;
+    float spineSlope;
+    if (u <= 1.0) {
+      float su = clamp(u, 0.0, 1.0);
+      spineV = archAmp * sin(PI * su);
+      spineSlope = archAmp * PI * cos(PI * su);
+    } else {
+      float du = u - 1.0;
+      float decay = exp(-0.56 * du);
+      spineV = archAmp * sin(PI * u) * decay;
+      spineSlope = archAmp * decay * (PI * cos(PI * u) - 0.56 * sin(PI * u));
+    }
+
+    // Lush pinched silk envelope: 0 at Core (u=0), wide sweeping swell mid-arm so neighboring streams
+    // feel like one unified canopy, razor pinch at Socket (u=1), and airy flowing ribbon fan beyond
+    float env;
+    float envSlope;
+    if (u <= 1.0) {
+      float su = clamp(u, 0.0, 1.0);
+      env = segLen * 0.146 * sin(PI * su);
+      envSlope = segLen * 0.146 * PI * cos(PI * su);
+    } else {
+      float du = u - 1.0;
+      env = segLen * (0.142 * du + 0.072 * du * du);
+      envSlope = segLen * (0.142 + 0.144 * du);
+    }
+
+    // Smooth entry from Core & gradual atmospheric dissolution into the upper sky (zero abrupt cut-off)
+    float coreIn = smoothstep(-0.01, 0.04, u);
+    float outerOut = 1.0 - smoothstep(1.02, endU, u);
+    float armFade = coreIn * outerOut * outerOut;
+
+    // Focus hierarchy: hovered arm steps forward while distant arms quiet gently
+    float focusDim = mix(1.0, 0.72, maxArmFocus * (1.0 - focus));
+    float armPresence = mix(0.28, 1.0, clamp(level, 0.0, 1.0)) * focusDim * (1.0 + 0.44 * focus);
+
+    // Warm 24k gold vs refined dormant platinum-champagne palette blend
+    float warmth = clamp(smoothstep(0.18, 0.76, level) + focus * 0.55, 0.0, 1.0);
     float armSurge = uSocketSurge[sIdx];
+    float armDelay = abs(side) * 0.12;
 
-    // 3 braided silk strands pinching through Core (u=0) and Socket waist (u=1)
-    for (int k = 0; k < 3; k++) {
+    // 9 Nested Liquid-Silk Strands per Arm (inner core strands bright & poised, outer gossamer threads sweeping wide)
+    for (int k = 0; k < ${STRANDS_PER_ARM}; k++) {
       float kf = float(k);
-      float phase = u * 7.8 - uPhase * 2.1 + kf * (TAU / 3.0) + float(sIdx) * 0.9;
-      float targetV = archOffset + env * (0.75 + 0.35 * kf) * sin(phase);
-      float d = abs(v - targetV);
+      float tier = (kf + 0.5) / float(${STRANDS_PER_ARM});
 
-      float w = uThickness * (0.62 + 0.24 * level);
-      float g = (uGlow * 0.68) / pow(max(d / w, pixel * 0.45), uFalloff) * uFade * level;
-      float onLine = exp(-d / (w * 0.014));
+      // Choreographed intro unfurl from Core -> Socket -> Canopy with soft glowing lead bead
+      float headU = endU + 0.1;
+      float leadBead = 0.0;
+      if (uIntro.y > 0.5) {
+        float pIntro = clamp((uIntro.x - 0.08 - armDelay - kf * 0.042) / 1.32, 0.0, 1.0);
+        if (pIntro <= 0.001) continue;
+        headU = endU * easeInOutCubic(pIntro);
+        if (u > headU + 0.04) continue;
+        leadBead = sin(PI * pIntro);
+      }
+      float introClip = 1.0 - smoothstep(headU - 0.055, headU + 0.015, u);
 
-      // Rhythmic travelling pulses climbing from Core to occupied sockets
-      float pWave = pow(0.5 + 0.5 * sin(u * 10.0 - uClock * 2.4 + kf * 2.1 + float(sIdx)), 20.0);
-      g *= 1.0 + uPulses * 3.8 * level * pWave * onLine;
+      // Voluptuous, long-wavelength sinusoidal glide (silky ribbon flow instead of tight rope twist)
+      float amp = 0.22 + 1.04 * tier;
+      float freq = 3.55 + 0.28 * mod(kf, 3.0);
+      float shimmer = sin(uClock * 0.58 + kf * 1.41 + float(sIdx) * 1.85) * 0.22;
+      float phaseAngle = u * freq - uPhase * (1.05 + 0.06 * kf) + kf * (TAU / float(${STRANDS_PER_ARM})) + float(sIdx) * 1.18 + shimmer;
+      float wave = sin(phaseAngle);
 
-      // Dedicated bright comet surge when snapped, clicked, or transferring signals
+      float targetV = spineV + env * amp * wave;
+      float dvdu = spineSlope + envSlope * amp * wave + env * amp * cos(phaseAngle) * freq;
+      float slope = dvdu / segLen;
+      float d = abs(v - targetV) / sqrt(1.0 + slope * slope);
+
+      // Subtle 3D braid twist depth (front strands crisp & luminous, rear strands softly receding)
+      float twistMask = smoothstep(0.0, 0.14, u) * smoothstep(0.0, 0.085, abs(u - 1.0));
+      float zDepth = 0.5 + 0.5 * cos(phaseAngle);
+      float front = mix(1.0, 0.36 + 0.64 * zDepth, 0.58 * twistMask);
+
+      // Taper stroke width & opacity delicately from luminous inner filaments to gossamer outer silk hairs
+      float tierFalloff = mix(1.08, 0.56, tier);
+      float baseW = isLight > 0.5 ? 1.12 : 1.0;
+      float w = baseW * mix(1.12, 0.68, tier) * mix(1.0, 0.70 + 0.45 * zDepth, 0.46 * twistMask) * (1.0 + 0.22 * focus);
+
+      // Pixel-normalized fiber-optic profile (razor-sharp silk core + tight warm satin sheath)
+      float dp = d / max(pixel * w, 0.0001);
+      float silkCore = exp(-dp * dp * 0.52);
+      float innerSheath = 0.24 / (1.0 + dp * dp * 0.18);
+      float outerAura = 0.032 / (1.0 + dp * dp * 0.016);
+
+      float g = (silkCore * 0.88 + innerSheath + outerAura * (0.25 + 0.75 * warmth)) * front * tierFalloff * armFade * introClip * armPresence;
+
+      // Soft luminous lead bead during opening unfurl
+      if (leadBead > 0.001) {
+        float duHead = (u - headU) * segLen;
+        float beadGlow = exp(-(duHead * duHead + d * d) / 0.00016) * leadBead * 1.05;
+        g += beadGlow * armPresence * tierFalloff;
+      }
+
+      // Serene rhythmic travelling pulses gliding from Core -> Socket -> Canopy along active arms
+      float pulseFreq = 6.4;
+      float pulseSpeed = 1.38 + uEnergy * 1.65;
+      float pulse = pow(0.5 + 0.5 * sin(u * pulseFreq - uClock * pulseSpeed + kf * 1.15 + float(sIdx) * 0.9), 16.0);
+      g *= 1.0 + (0.28 + 1.95 * warmth) * (0.55 + 0.65 * uEnergy) * pulse * silkCore;
+
+      // Dedicated luminous comet surge on click, snap, or inter-node signal transfer
       if (armSurge > 0.001 && armSurge < 0.999) {
-        float distS = u - armSurge * 1.45;
-        float comet = exp(-distS * distS / 0.018) * sin(PI * armSurge);
-        g *= 1.0 + comet * (0.4 + 4.8 * onLine);
+        float cometU = armSurge * (endU * 0.92);
+        float deltaU = u - cometU;
+        float comet = deltaU < 0.0
+          ? exp(deltaU / 0.24)
+          : exp(-deltaU * deltaU / 0.007);
+        comet *= sin(PI * armSurge);
+        g *= 1.0 + comet * (0.45 + 3.2 * silkCore);
       }
 
-      // Soft warm pin-star right at the socket optical waist
-      if (k == 1) {
-        float sd = length(pAspect - sockAspect);
-        g += exp(-sd * sd / 0.00038) * 0.42 * level * uFade;
-      }
+      vec3 strandGold = activePalette(tier * 0.92 + 0.04, isLight);
+      vec3 tint = mix(dormantTint, strandGold, warmth);
+      tint = mix(tint, specularTint, (0.28 * warmth + 0.22 * focus) * silkCore);
 
-      vec3 tint = mix(palette(0.18 + 0.34 * kf), uCoreColor, 0.22 * clamp(level, 0.0, 1.0));
-      color += g * tint;
-      energy += g;
-      float stroke = smoothstep(0.45, 1.25, g);
-      inkColor += tint * stroke;
-      ink += stroke;
+      darkAccum += tint * g;
+
+      // Crisp sculptural gold ink accumulation for Gallery Light (#ffffff)
+      float inkStrength = (silkCore * 0.84 + innerSheath * 0.40) * front * tierFalloff * armFade * introClip * armPresence;
+      if (armSurge > 0.001 && armSurge < 0.999) {
+        float cometU = armSurge * (endU * 0.92);
+        float deltaU = u - cometU;
+        float comet = (deltaU < 0.0 ? exp(deltaU / 0.24) : exp(-deltaU * deltaU / 0.007)) * sin(PI * armSurge);
+        inkStrength *= 1.0 + comet * 1.6 * silkCore;
+      }
+      inkColorSum += tint * inkStrength;
+      inkSum += inkStrength;
+    }
+
+    // Refined optical jewel shimmer seated right at the Node Socket waist (u = 1)
+    float introNode = uIntro.y > 0.5 ? easeOutCubic((uIntro.x - 0.46 - armDelay) / 0.45) : 1.0;
+    float dSock = length(pAspect - sockAspect);
+    float sockHalo = exp(-dSock * dSock / 0.00032) * (0.30 + 0.48 * warmth + 0.36 * focus) * introNode * focusDim;
+    vec3 sockColor = mix(dormantTint, activePalette(0.45, isLight), warmth);
+    darkAccum += sockColor * sockHalo;
+    inkColorSum += sockColor * sockHalo * 0.45;
+    inkSum += sockHalo * 0.45;
+  }
+
+  // ——— 3. Compact Sculpted Singularity Core Jewel (warm atmospheric cradle, zero murky pillar or whiteout) ———
+  {
+    float coreIntro = uIntro.y > 0.5 ? easeOutCubic(uIntro.x / 0.48) : 1.0;
+    float rCore = length(pAspect - coreAspect);
+    float breathe = 1.0 + 0.055 * sin(uClock * 1.12) + 0.16 * uEnergy + 0.22 * uIntro.z;
+
+    if (isLight < 0.5) {
+      float nucleus = exp(-rCore * rCore / (0.000048 * breathe)) * 2.1;
+      float iris = exp(-rCore * rCore / (0.00062 * breathe)) * 0.72;
+      float veil = exp(-rCore * rCore / (0.019 * breathe)) * (0.16 + 0.07 * uEnergy);
+
+      darkAccum += vec3(1.0, 0.97, 0.90) * nucleus * coreIntro;
+      darkAccum += vec3(0.96, 0.75, 0.24) * iris * coreIntro;
+      darkAccum += vec3(0.88, 0.60, 0.14) * veil * coreIntro;
+    } else {
+      float nucleus = exp(-rCore * rCore / (0.000050 * breathe)) * 0.95;
+      float iris = exp(-rCore * rCore / (0.00072 * breathe)) * 0.38;
+      float veil = exp(-rCore * rCore / (0.020 * breathe)) * 0.11;
+      vec3 sunGold = vec3(0.84, 0.58, 0.08);
+      vec3 brightGold = vec3(0.96, 0.76, 0.22);
+      inkColorSum += brightGold * (nucleus + iris) * coreIntro + sunGold * veil * coreIntro;
+      inkSum += (nucleus * 0.85 + iris * 0.52 + veil * 0.32) * coreIntro;
     }
   }
 
-  float edgeFade = 1.0;
-  if (uFade > 0.0) {
-    float edge = min(x, 1.0 - x);
-    float f = clamp(edge / max(uFade * 0.5, 0.001), 0.0, 1.0);
-    edgeFade = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
-  }
+  // Subtle anti-banding micro-grain
+  float grain = (hash(gl_FragCoord.xy + fract(uClock) * 89.0) - 0.5) * (isLight > 0.5 ? 0.008 : 0.016);
 
-  // Hot white convergence core right where all threads pinch together
-  float coreHeat = smoothstep(0.45, 2.2, energy);
-  color = mix(color, uCoreColor * energy, coreHeat * 0.52);
-  color *= uBrightness * edgeFade;
-  float alpha = clamp(energy * edgeFade, 0.0, 1.0) * uOpacity;
-  float grain = (hash(gl_FragCoord.xy + fract(uClock) * 97.0) - 0.5) * uGrain;
-
-  if (uLight < 0.5) {
-    vec3 rgb = max(color * alpha * (1.0 + grain * 1.6), 0.0);
-    outColor = vec4(rgb, alpha);
+  if (isLight < 0.5) {
+    // Perceptual exponential filmic tone-mapping: preserves rich 24k gold saturation on every strand
+    // and keeps individual braided filaments crisp & unmistakable even where strands converge
+    vec3 mapped = 1.0 - exp(-darkAccum * 0.92);
+    mapped = max(mapped * (1.0 + grain), 0.0);
+    float alpha = clamp(max(mapped.r, max(mapped.g, mapped.b)) * 1.12, 0.0, 1.0);
+    outColor = vec4(mapped, alpha);
   } else {
-    ink *= edgeFade;
-    vec3 hue = ink > 0.0001 ? inkColor / ink : palette(0.5);
-    float body = clamp(ink, 0.0, 1.0);
-    float haze = clamp(1.0 - exp(-energy * edgeFade * 0.32), 0.0, 1.0) * 0.14;
-    float focal = smoothstep(1.8, 8.5, energy * edgeFade) * 0.26;
-    float cover = clamp((body * 0.92 + (haze + focal) * (1.0 - body)) * (1.0 + grain * 1.2), 0.0, 0.95) * uOpacity;
+    vec3 hue = inkSum > 0.0001 ? inkColorSum / inkSum : vec3(0.78, 0.52, 0.06);
+    float cover = clamp((1.0 - exp(-inkSum * 1.05)) * (1.0 + grain), 0.0, 0.94);
     outColor = vec4(hue * cover, cover);
   }
 }`;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-
-let colorProbe: CanvasRenderingContext2D | null = null;
-function parseColor(value: string, fallback: [number, number, number]): [number, number, number] {
-  if (typeof document === "undefined") return fallback;
-  if (!colorProbe) colorProbe = document.createElement("canvas").getContext("2d");
-  if (!colorProbe) return fallback;
-  colorProbe.fillStyle = "#000000";
-  colorProbe.fillStyle = value;
-  const text = colorProbe.fillStyle;
-  if (text.startsWith("#")) {
-    const hex = parseInt(text.slice(1), 16);
-    return [((hex >> 16) & 255) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255];
-  }
-  const match = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)/.exec(text);
-  if (!match) return fallback;
-  return [Number(match[1]) / 255, Number(match[2]) / 255, Number(match[3]) / 255];
-}
-
-const staggerFor = (count: number) => Math.min(0.11, 0.85 / Math.max(count - 1, 1));
 
 const compile = (gl: WebGL2RenderingContext, type: number, source: string) => {
   const shader = gl.createShader(type);
@@ -340,95 +426,56 @@ export interface NeuralThreadsWebGLProps {
   coreUV: Vec;
   /** Up to 5 socket positions in WebGL UV coordinates (0..1, Y bottom-up). */
   socketsUV: Vec[];
-  /** Target intensity for each socket (locked ~0.18, open ~0.38, live ~1.0, active/hover ~1.35). */
+  /** Target intensity for each socket (locked ~0.22, open ~0.48, live ~1.0). */
   socketTargets: number[];
+  /** Currently hovered or active socket index from DOM reticles (-1 if none). */
+  activeOrHoveredSocket: number;
   /** Brain activity energy (0..1). */
   energy: number;
-  /** Trigger surge along a specific socket arm (index 0..4, serial). */
+  /** Trigger surge along specific socket arm(s). */
   armPulse: { indices: number[]; serial: number } | null;
-  /** Notify parent when the user presses directly on the neural lines (so volumetric glow pulses in sync). */
+  /** Notify parent when the user presses directly on the neural lines. */
   onLinePress?: () => void;
   paused?: boolean;
   skipIntro?: boolean;
 }
 
-type ThreadSettings = {
-  palette: [number, number, number][];
-  coreColor: [number, number, number];
+type EngineSettings = {
   lightMode: boolean;
-  count: number;
-  speed: number;
-  frequency: number;
-  spread: number;
-  taper: number;
   coreUV: Vec;
   socketsUV: Vec[];
   socketTargets: number[];
-  glow: number;
-  falloff: number;
-  thickness: number;
-  brightness: number;
-  opacity: number;
-  depth: number;
-  pulses: number;
-  fade: number;
-  grain: number;
+  activeOrHoveredSocket: number;
+  energy: number;
+  speed: number;
   intro: boolean;
-  mouseStrength: number;
   paused: boolean;
 };
 
-function buildSettings(props: NeuralThreadsWebGLProps): ThreadSettings {
-  const isLight = props.theme === "light";
+function buildSettings(props: NeuralThreadsWebGLProps): EngineSettings {
   const e = clamp(props.energy, 0, 1);
   return {
-    palette: isLight
-      ? [
-          parseColor("#d49610", [0.83, 0.59, 0.06]),
-          parseColor("#e67e22", [0.9, 0.49, 0.13]),
-          parseColor("#b87a08", [0.72, 0.48, 0.03]),
-        ]
-      : [
-          parseColor("#eab308", [0.92, 0.7, 0.03]),
-          parseColor("#ff9952", [1.0, 0.6, 0.32]),
-          parseColor("#f7d06b", [0.97, 0.82, 0.42]),
-        ],
-    coreColor: isLight
-      ? parseColor("#f5b82e", [0.96, 0.72, 0.18])
-      : parseColor("#ffffff", [1, 1, 1]),
-    lightMode: isLight,
-    count: 18,
-    speed: 0.15 + e * 0.16,
-    frequency: 4.8,
-    spread: 0.21,
-    taper: 0.15,
+    lightMode: props.theme === "light",
     coreUV: props.coreUV,
     socketsUV: props.socketsUV,
     socketTargets: props.socketTargets,
-    glow: isLight ? 0.014 : 0.0125 + e * 0.003,
-    falloff: 0.7,
-    thickness: isLight ? 1.15 : 1.08,
-    brightness: isLight ? 0.85 : 0.74 + e * 0.22,
-    opacity: 1,
-    depth: 0.38,
-    pulses: 0.88 + e * 0.45,
-    fade: 0.16,
-    grain: isLight ? 0.015 : 0.03,
+    activeOrHoveredSocket: props.activeOrHoveredSocket,
+    energy: e,
+    speed: 0.14 + e * 0.18,
     intro: !props.skipIntro,
-    mouseStrength: 0.55,
     paused: Boolean(props.paused),
   };
 }
 
 /**
- * Flowing WebGL2 braided neural threads engine adapted from React Bits <WebThreads />
- * with 5 unified orbital node conduits, hover strand focus, viscous pointer parting, and click surges.
+ * Bespoke WebGL2 Singularity Canopy engine recreated from <WebThreads /> inspiration
+ * to fit Nexus's 5-node orbital architecture and Obsidian / Gallery Light design system.
  */
 export function NeuralThreadsWebGL(props: NeuralThreadsWebGLProps) {
   const { armPulse, onLinePress } = props;
   const containerRef = useRef<HTMLDivElement>(null);
   const normalized = buildSettings(props);
-  const settingsRef = useRef<ThreadSettings>(normalized);
+  const settingsRef = useRef<EngineSettings>(normalized);
   const onLinePressRef = useRef(onLinePress);
   const armSurgeTriggerRef = useRef<((indices: number[]) => void) | null>(null);
   const lastPulseSerialRef = useRef<number>(armPulse?.serial ?? -1);
@@ -490,33 +537,17 @@ export function NeuralThreadsWebGL(props: NeuralThreadsWebGLProps) {
       "uResolution",
       "uPhase",
       "uClock",
-      "uCount",
-      "uFrequency",
-      "uSpread",
-      "uTaper",
+      "uEnergy",
       "uCore",
-      "uGlow",
-      "uFalloff",
-      "uThickness",
-      "uBrightness",
-      "uOpacity",
-      "uDepth",
-      "uPulses",
-      "uFade",
-      "uGrain",
-      "uColors",
-      "uColorCount",
-      "uCoreColor",
-      "uLight",
-      "uIntro",
-      "uFocus",
-      "uFocusState",
-      "uSurges",
-      "uPointer",
       "uSockets",
       "uSocketLevel",
+      "uSocketFocus",
       "uSocketSurge",
       "uSocketCount",
+      "uLight",
+      "uIntro",
+      "uPointer",
+      "uCradleSurge",
     ] as const;
     const u: Record<string, WebGLUniformLocation | null> = {};
     for (const name of uniformNames) {
@@ -532,11 +563,9 @@ export function NeuralThreadsWebGL(props: NeuralThreadsWebGLProps) {
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
     gl.useProgram(program);
 
-    const colorData = new Float32Array(MAX_COLORS * 3);
-    const surgeData = new Float32Array(MAX_SURGES * 4);
-    const focusData = new Float32Array(MAX_THREADS);
     const socketPosData = new Float32Array(MAX_SOCKETS * 2);
     const socketLevelData = new Float32Array(MAX_SOCKETS);
+    const socketFocusData = new Float32Array(MAX_SOCKETS);
     const socketSurgeData = new Float32Array(MAX_SOCKETS);
     const socketSurgeAges = Array<number>(MAX_SOCKETS).fill(-1);
 
@@ -549,15 +578,15 @@ export function NeuralThreadsWebGL(props: NeuralThreadsWebGLProps) {
       raf: 0,
       visible: true,
       introAt: -1,
+      corePulse: 0,
       pointer: [0.5, 0.5] as [number, number],
       smoothPointer: [0.5, 0.5] as [number, number],
       inside: false,
       held: false,
       holdStrength: 0,
       presence: 0,
-      settle: 0,
-      target: -1,
-      surges: [] as Array<{ x: number; direction: number; at: number }>,
+      cradleSurgeAge: -1,
+      cradleSurgeX: 0.5,
       quiet: 0,
       seenTheme: null as boolean | null,
     };
@@ -577,102 +606,48 @@ export function NeuralThreadsWebGL(props: NeuralThreadsWebGLProps) {
       canvas.height = height;
     };
 
-    const introLength = (s: ThreadSettings) => (s.count - 1) * staggerFor(s.count) + STROKE_SECONDS;
+    /** Finds the arm closest to a pointer position in aspect-corrected UV coordinates. */
+    const nearestArmIndex = (s: EngineSettings, uvX: number, uvY: number, maxPerpDist: number): number => {
+      const aspect = state.width / Math.max(state.height, 1);
+      const px = uvX * aspect;
+      const py = uvY;
+      const cx = s.coreUV.x * aspect;
+      const cy = s.coreUV.y;
+      let bestIdx = -1;
+      let bestDist = maxPerpDist;
 
-    const mainThreadY = (s: ThreadSettings, x: number, index: number, phase: number, clock: number) => {
-      const dx = x - s.coreUV.x;
-      const side = dx < 0 ? -1 : 1;
-      const env = s.spread * Math.abs(dx);
-      const shimmer = Math.sin(clock * 1.15 + index * 1.37) * 0.28;
-      const angle = x * s.frequency + (phase + (index * TAU) / Math.max(s.count, 1)) * side + shimmer;
-      return s.coreUV.y - env * (1 + index * s.taper) * Math.sin(angle);
-    };
-
-    const updateFocus = (s: ThreadSettings, dt: number, reduced: boolean) => {
-      const wanted = state.inside;
-      const ptrFollow = 1 - Math.exp(-dt * 9);
-      state.smoothPointer[0] += (state.pointer[0] - state.smoothPointer[0]) * ptrFollow;
-      state.smoothPointer[1] += (state.pointer[1] - state.smoothPointer[1]) * ptrFollow;
-      state.holdStrength += ((state.held && state.inside ? 1 : 0) - state.holdStrength) * (1 - Math.exp(-dt * 7));
-
-      if (wanted) {
-        const cx = state.pointer[0];
-        const cy = 1 - state.pointer[1];
-        let best = -1;
-        let bestDist = Infinity;
-        for (let idx = 0; idx < s.count; idx++) {
-          const dist = Math.abs(mainThreadY(s, cx, idx, state.phase, reduced ? 0 : state.clock) - cy);
-          const reach = idx === state.target ? 0.105 : 0.08;
-          if (dist < reach && dist < bestDist) {
-            best = idx;
-            bestDist = dist;
-          }
+      for (let i = 0; i < Math.min(s.socketsUV.length, MAX_SOCKETS); i++) {
+        const pt = s.socketsUV[i]!;
+        const ax = pt.x * aspect - cx;
+        const ay = pt.y - cy;
+        const segLen = Math.hypot(ax, ay);
+        if (segLen < 0.001) continue;
+        const dx = ax / segLen;
+        const dy = ay / segLen;
+        const rx = px - cx;
+        const ry = py - cy;
+        const projU = (rx * dx + ry * dy) / segLen;
+        if (projU < 0.04 || projU > 1.85) continue;
+        const perpDist = Math.abs(-rx * dy + ry * dx);
+        if (perpDist < bestDist) {
+          bestDist = perpDist;
+          bestIdx = i;
         }
-        state.target = best;
-      } else {
-        state.target = -1;
       }
-
-      const ease = 1 - Math.exp(-dt / 0.22);
-      let strongest = 0;
-      for (let idx = 0; idx < MAX_THREADS; idx++) {
-        const goal = idx === state.target ? 1 : 0;
-        focusData[idx] += (goal - focusData[idx]!) * ease;
-        strongest = Math.max(strongest, focusData[idx]!);
-      }
-
-      state.presence += ((wanted ? 1 : 0) - state.presence) * (1 - Math.exp(-dt / 0.28));
-      const settleGoal = s.mouseStrength * 0.58 * strongest * state.presence;
-      state.settle += (settleGoal - state.settle) * (1 - Math.exp(-dt / 0.28));
+      return bestIdx;
     };
 
     const render = (reduced: boolean) => {
       const s = settingsRef.current;
       const introClock = state.introAt < 0 ? 0 : state.clock - state.introAt;
-      const introRunning = s.intro && !reduced && introClock < introLength(s);
+      const introRunning = s.intro && !reduced && introClock < INTRO_DURATION;
 
       gl.viewport(0, 0, state.width, state.height);
       gl.uniform2f(u.uResolution, state.width, state.height);
       gl.uniform1f(u.uPhase, state.phase);
       gl.uniform1f(u.uClock, reduced ? 0 : state.clock);
-      gl.uniform1i(u.uCount, s.count);
-      gl.uniform1f(u.uFrequency, s.frequency);
-      gl.uniform1f(u.uSpread, s.spread);
-      gl.uniform1f(u.uTaper, s.taper);
+      gl.uniform1f(u.uEnergy, s.energy);
       gl.uniform2f(u.uCore, s.coreUV.x, s.coreUV.y);
-      gl.uniform1f(u.uGlow, s.glow * Math.sqrt(6 / Math.max(s.count, 6)));
-      gl.uniform1f(u.uFalloff, s.falloff);
-      gl.uniform1f(u.uThickness, s.thickness);
-      gl.uniform1f(u.uBrightness, s.brightness);
-      gl.uniform1f(u.uOpacity, s.opacity);
-      gl.uniform1f(u.uDepth, s.depth);
-      gl.uniform1f(u.uPulses, s.pulses);
-      gl.uniform1f(u.uFade, s.fade);
-      gl.uniform1f(u.uGrain, s.grain);
-
-      colorData.fill(0);
-      s.palette.slice(0, MAX_COLORS).forEach((rgb, idx) => colorData.set(rgb, idx * 3));
-      gl.uniform3fv(u.uColors, colorData);
-      gl.uniform1i(u.uColorCount, Math.min(s.palette.length, MAX_COLORS));
-      gl.uniform3f(u.uCoreColor, s.coreColor[0], s.coreColor[1], s.coreColor[2]);
-      gl.uniform1f(u.uLight, s.lightMode ? 1 : 0);
-      gl.uniform4f(u.uIntro, introClock, staggerFor(s.count), STROKE_SECONDS, introRunning ? 1 : 0);
-      gl.uniform1fv(u.uFocus, focusData);
-      gl.uniform2f(u.uFocusState, state.presence * (0.4 + 0.6 * s.mouseStrength), state.settle);
-
-      surgeData.fill(0);
-      state.surges.slice(-MAX_SURGES).forEach((surge, idx) => {
-        surgeData.set([surge.x, state.clock - surge.at, surge.direction, 1], idx * 4);
-      });
-      gl.uniform4fv(u.uSurges, surgeData);
-
-      gl.uniform4f(
-        u.uPointer,
-        state.smoothPointer[0],
-        1 - state.smoothPointer[1],
-        reduced ? 0 : state.presence,
-        state.holdStrength,
-      );
 
       const sCount = Math.min(s.socketsUV.length, MAX_SOCKETS);
       socketPosData.fill(0);
@@ -683,8 +658,25 @@ export function NeuralThreadsWebGL(props: NeuralThreadsWebGLProps) {
       }
       gl.uniform2fv(u.uSockets, socketPosData);
       gl.uniform1fv(u.uSocketLevel, socketLevelData);
+      gl.uniform1fv(u.uSocketFocus, socketFocusData);
       gl.uniform1fv(u.uSocketSurge, socketSurgeData);
       gl.uniform1i(u.uSocketCount, sCount);
+
+      gl.uniform1f(u.uLight, s.lightMode ? 1 : 0);
+      gl.uniform3f(u.uIntro, introClock, introRunning ? 1 : 0, state.corePulse);
+      gl.uniform4f(
+        u.uPointer,
+        state.smoothPointer[0],
+        1 - state.smoothPointer[1],
+        reduced ? 0 : state.presence,
+        state.holdStrength,
+      );
+      gl.uniform3f(
+        u.uCradleSurge,
+        state.cradleSurgeX,
+        state.cradleSurgeAge >= 0 ? state.cradleSurgeAge : 0,
+        state.cradleSurgeAge >= 0 ? 1 : 0,
+      );
 
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.clearColor(0, 0, 0, 0);
@@ -699,6 +691,7 @@ export function NeuralThreadsWebGL(props: NeuralThreadsWebGLProps) {
         state.last = now;
         return;
       }
+
       const dt = state.last ? Math.min((now - state.last) / 1000, 0.08) : 1 / 60;
       state.last = now;
       const reduced = reduceMotion();
@@ -707,17 +700,42 @@ export function NeuralThreadsWebGL(props: NeuralThreadsWebGLProps) {
       if (state.introAt < 0) state.introAt = state.clock;
       if (!reduced) state.phase += dt * s.speed;
 
-      // Smoothly interpolate socket brightness & advance orbital comet surges
-      const levelLerp = 1 - Math.exp(-dt * 5.2);
+      // Smooth pointer tracking & silk hold tension
+      const ptrFollow = 1 - Math.exp(-dt * 8.5);
+      state.smoothPointer[0] += (state.pointer[0] - state.smoothPointer[0]) * ptrFollow;
+      state.smoothPointer[1] += (state.pointer[1] - state.smoothPointer[1]) * ptrFollow;
+      state.presence += ((state.inside ? 1 : 0) - state.presence) * (1 - Math.exp(-dt * 4.2));
+      state.holdStrength +=
+        ((state.held && state.inside ? 1 : 0) - state.holdStrength) * (1 - Math.exp(-dt * 7.5));
+      state.corePulse *= Math.exp(-dt * 3.4);
+
+      if (state.cradleSurgeAge >= 0) {
+        state.cradleSurgeAge += dt / 1.15;
+        if (state.cradleSurgeAge >= 1) state.cradleSurgeAge = -1;
+      }
+
+      // Resolve hovered/active arm from either DOM reticle hover or direct pointer proximity to an arm
+      let focusedArm = s.activeOrHoveredSocket;
+      if (focusedArm < 0 && state.inside && !reduced) {
+        focusedArm = nearestArmIndex(s, state.pointer[0], 1 - state.pointer[1], 0.115);
+      }
+
+      const levelLerp = 1 - Math.exp(-dt * 5.0);
+      const focusLerp = 1 - Math.exp(-dt * 6.5);
       let armActive = false;
+
       for (let i = 0; i < MAX_SOCKETS; i++) {
-        const goal = s.socketTargets[i] ?? 0;
-        const delta = goal - socketLevelData[i]!;
-        if (Math.abs(delta) > 0.002) armActive = true;
-        socketLevelData[i] += delta * (reduced ? 1 : levelLerp);
+        const goalLevel = s.socketTargets[i] ?? 0;
+        if (Math.abs(goalLevel - socketLevelData[i]!) > 0.002) armActive = true;
+        socketLevelData[i] += (goalLevel - socketLevelData[i]!) * (reduced ? 1 : levelLerp);
+
+        const goalFocus = i === focusedArm ? 1 : 0;
+        if (Math.abs(goalFocus - socketFocusData[i]!) > 0.002) armActive = true;
+        socketFocusData[i] += (goalFocus - socketFocusData[i]!) * (reduced ? 1 : focusLerp);
+
         if (socketSurgeAges[i]! >= 0) {
           armActive = true;
-          socketSurgeAges[i]! += dt / 1.15;
+          socketSurgeAges[i]! += dt / 1.2;
           if (socketSurgeAges[i]! >= 1) {
             socketSurgeAges[i] = -1;
             socketSurgeData[i] = 0;
@@ -726,11 +744,6 @@ export function NeuralThreadsWebGL(props: NeuralThreadsWebGLProps) {
           }
         }
       }
-
-      updateFocus(s, dt, reduced);
-      state.surges = state.surges.filter(
-        (surge) => state.clock - surge.at < SURGE_SECONDS + (s.count - 1) * SURGE_STAGGER,
-      );
 
       if (reduced && !armActive && state.seenTheme === s.lightMode) {
         state.quiet += 1;
@@ -751,10 +764,9 @@ export function NeuralThreadsWebGL(props: NeuralThreadsWebGLProps) {
           socketSurgeAges[idx] = 0;
         }
       }
-      // Also send a balanced outward surge through the primary flowing weave
-      state.surges.push({ x: settingsRef.current.coreUV.x, direction: 1, at: state.clock });
-      state.surges.push({ x: settingsRef.current.coreUV.x, direction: -1, at: state.clock });
-      if (state.surges.length > MAX_SURGES) state.surges.splice(0, state.surges.length - MAX_SURGES);
+      state.corePulse = 1;
+      state.cradleSurgeAge = 0;
+      state.cradleSurgeX = settingsRef.current.coreUV.x;
     };
 
     const localPoint = (event: PointerEvent) => {
@@ -789,27 +801,23 @@ export function NeuralThreadsWebGL(props: NeuralThreadsWebGLProps) {
 
       state.held = true;
       state.pointer = [pt.x, pt.y];
+      state.corePulse = 1;
+      state.cradleSurgeAge = 0;
+      state.cradleSurgeX = pt.x;
 
       const s = settingsRef.current;
-      const direction = pt.x <= s.coreUV.x ? 1 : -1;
-      state.surges.push({ x: pt.x, direction, at: state.clock });
-      if (state.surges.length > MAX_SURGES) state.surges.shift();
-
-      // Trigger subtle surge along the orbital arm closest to the press
-      const uvY = 1 - pt.y;
-      let nearestArm = -1;
-      let nearestDist = 0.26;
-      for (let i = 0; i < s.socketsUV.length; i++) {
-        const sock = s.socketsUV[i]!;
-        const d = Math.hypot(pt.x - sock.x, uvY - sock.y);
-        if (d < nearestDist) {
-          nearestDist = d;
-          nearestArm = i;
+      const hitArm = nearestArmIndex(s, pt.x, 1 - pt.y, 0.28);
+      if (hitArm >= 0) {
+        socketSurgeAges[hitArm] = 0;
+      } else {
+        // Gentle ripple through active arms when pressing near the Singularity Core
+        for (let i = 0; i < Math.min(s.socketsUV.length, MAX_SOCKETS); i++) {
+          if ((s.socketTargets[i] ?? 0) >= 0.45) {
+            socketSurgeAges[i] = 0;
+          }
         }
       }
-      if (nearestArm >= 0) {
-        socketSurgeAges[nearestArm] = 0;
-      }
+
       onLinePressRef.current?.();
     };
 
@@ -822,36 +830,46 @@ export function NeuralThreadsWebGL(props: NeuralThreadsWebGLProps) {
       state.held = false;
     };
 
-    const visibility = new IntersectionObserver((entries) => {
-      state.visible = entries.some((entry) => entry.isIntersecting);
-    });
-    visibility.observe(container);
+    const onContextLost = (event: Event) => {
+      event.preventDefault();
+    };
+
     const resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(container);
+    const intersection = new IntersectionObserver(
+      (entries) => {
+        state.visible = entries[0]?.isIntersecting ?? true;
+      },
+      { threshold: 0.01 },
+    );
+    intersection.observe(container);
 
     window.addEventListener("pointermove", onMove, { passive: true });
-    window.addEventListener("pointerdown", onDown);
+    window.addEventListener("pointerdown", onDown, { passive: true });
     window.addEventListener("pointerup", onUp, { passive: true });
-    window.addEventListener("pointercancel", onUp, { passive: true });
-    document.documentElement.addEventListener("pointerleave", onLeave);
+    document.addEventListener("pointerleave", onLeave);
+    canvas.addEventListener("webglcontextlost", onContextLost);
 
     resize();
+    render(reduceMotion());
     state.raf = requestAnimationFrame(tick);
 
     return () => {
       cancelAnimationFrame(state.raf);
       armSurgeTriggerRef.current = null;
-      visibility.disconnect();
       resizeObserver.disconnect();
+      intersection.disconnect();
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerdown", onDown);
       window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onUp);
-      document.documentElement.removeEventListener("pointerleave", onLeave);
-      gl.deleteProgram(program);
+      document.removeEventListener("pointerleave", onLeave);
+      canvas.removeEventListener("webglcontextlost", onContextLost);
       gl.deleteBuffer(buffer);
       gl.deleteVertexArray(vao);
-      gl.getExtension("WEBGL_lose_context")?.loseContext();
+      gl.deleteProgram(program);
+      if (!gl.isContextLost()) {
+        gl.getExtension("WEBGL_lose_context")?.loseContext();
+      }
       canvas.remove();
     };
   }, []);

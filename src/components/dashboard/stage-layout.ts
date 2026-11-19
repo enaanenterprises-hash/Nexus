@@ -78,8 +78,8 @@ export function computeStageLayout(width: number, height: number, socketCount: n
     ? clamp(Math.min(width * 0.36, maxVertRadius * 0.88), 140, 250)
     : clamp(Math.min(width * 0.27, maxVertRadius * 0.88, maxHorizRadius * 0.78), 205, 330);
 
-  // Balanced 148-degree upper-hemisphere orbital arch (-164 deg to -16 deg) for crisp node legibility & natural S-flow
-  const spread = compact ? 0.84 : 0.82;
+  // Balanced 138-degree upper-hemisphere observatory arch for crisp node legibility, generous basal clearance & natural S-flow
+  const spread = compact ? 0.78 : 0.76;
   const socketAngles: number[] = [];
   const sockets: Vec[] = [];
   const arms: ArmGeometry[] = [];
@@ -94,9 +94,9 @@ export function computeStageLayout(width: number, height: number, socketCount: n
     const coreAngle = baseAngle - inflection * 0.38;
     const cornerAngle = baseAngle + inflection * 0.62;
 
-    // Subtle elliptical stretch so lateral nodes breathe gracefully across wide displays
+    // Subtle elliptical stretch so lateral nodes breathe gracefully across wide displays without dipping into the basal horizon
     const socketDist = clamp(
-      radius * (1 + (compact ? 0.14 : 0.24) * Math.abs(centered)),
+      radius * (1 + (compact ? 0.1 : 0.16) * Math.abs(centered)),
       135,
       Math.hypot(maxHorizRadius, maxVertRadius),
     );
