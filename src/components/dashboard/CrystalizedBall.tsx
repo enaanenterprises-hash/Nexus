@@ -714,35 +714,23 @@ void main() {
     float boxYProg = clamp((uMenuBox.w - boxP.y) / max(2.0 * uMenuBox.w, 1.0), 0.0, 1.0);
     float boxWave = smoothstep(boxYProg * 0.52, boxYProg * 0.52 + 0.36, uMorph);
 
-    // Molten pouring neck bridging the melting orb into the top crown of the menu
-    float bridgeActive = smoothstep(0.03, 0.22, uMorph) * (1.0 - smoothstep(0.45, 0.78, uMorph));
+    // Molten pouring neck bridging the melting orb into the top crown of the menu border
+    float bridgeActive = smoothstep(0.03, 0.22, uMorph) * (1.0 - smoothstep(0.42, 0.72, uMorph));
     if (bridgeActive > 0.002) {
       float yTop = uCenter.y - R * 0.35;
-      float yBot = uMenuBox.y + uMenuBox.w - 6.0;
-      if (screenPos.y <= yTop + 10.0 && screenPos.y >= yBot - 16.0) {
+      float yBot = uMenuBox.y + uMenuBox.w - 2.0;
+      if (screenPos.y <= yTop + 10.0 && screenPos.y >= yBot - 8.0) {
         float yT = clamp((yTop - screenPos.y) / max(yTop - yBot, 1.0), 0.0, 1.0);
-        float funnelW = mix(R * 0.42, uMenuBox.z * 0.55, yT);
+        float funnelW = mix(R * 0.36, uMenuBox.z * 0.48, yT);
         float dxNeck = abs(screenPos.x - mix(uCenter.x, uMenuBox.x, yT));
-        float neckGlow = exp(-(dxNeck * dxNeck) / max(funnelW * funnelW * 0.45, 4.0));
-        float neckFilament = exp(-pow(dxNeck - funnelW * 0.45 * sin(yT * 5.0 - uTime * 3.0), 2.0) / 3.5);
-        col += (uRim * neckGlow * 0.42 + uRimHot * neckFilament * 0.55) * bridgeActive * uPresence;
-        hot += neckFilament * 0.35 * bridgeActive * uPresence;
+        float neckGlow = exp(-(dxNeck * dxNeck) / max(funnelW * funnelW * 0.4, 3.5));
+        float neckFilament = exp(-pow(dxNeck - funnelW * 0.45 * sin(yT * 5.0 - uTime * 3.0), 2.0) / 3.0);
+        col += (uRim * neckGlow * 0.38 + uRimHot * neckFilament * 0.5) * bridgeActive * uPresence;
+        hot += neckFilament * 0.32 * bridgeActive * uPresence;
       }
     }
 
-    // Interior ember haze pooling at the bottom and along the inner glass walls of the menu box
-    if (dBox < 2.0 && boxWave > 0.002) {
-      vec2 qBox = boxP / max(uMenuBox.zw, vec2(1.0));
-      float innerMask = smoothstep(2.0, -3.0, dBox);
-      float bottomPool = pow(clamp((-qBox.y + 1.0) * 0.5, 0.0, 1.0), 1.55);
-      float wallCreep = smoothstep(0.45, 0.98, abs(qBox.x)) * pow(clamp((-qBox.y + 1.15) * 0.5, 0.0, 1.0), 0.9);
-      float boxHaze = (bottomPool * 0.58 + wallCreep * 0.34);
-      col += uHazeColor * boxHaze * uHaze * innerMask * boxWave * 1.25;
-      float boxEdge = pow(smoothstep(-16.0, 0.0, dBox), 1.35);
-      col += uEdgeColor * boxEdge * 0.55 * (0.5 + 0.5 * uHaze) * innerMask * boxWave;
-    }
-
-    // Braided crackling electric strands & flares around the menu perimeter
+    // Braided crackling electric strands & flares strictly along the menu border perimeter
     float boxDispR = 38.0;
     float boxAmp = boxDispR * 0.022 * (0.35 + 1.25 * crackle);
     float boxJitter = boxDispR * 0.006 * (0.35 + 1.25 * uCrackle) * (1.0 + heat * 0.3);
@@ -917,95 +905,50 @@ void main() {
   float visibilityMask = orbDensityMask;
 
   if (uMorph > 0.001 && uMenuBox.z > 4.0) {
-    // 100% of the orb melts into the particles that make up the menu box
+    // 100% of the dissolved orb's particles stream down to form ONLY the borders of the menu box
     float uBase = random(id * 17u + 11u);
     float rightSideFlag = uBase < 0.5 ? 1.0 : 0.0;
-    float sideSign = rightSideFlag > 0.5 ? 1.0 : -1.0;
     float progBase = rightSideFlag > 0.5 ? (uBase * 2.0) : ((uBase - 0.5) * 2.0);
-    float roleHash = random(id * 43u + 7u);
+    float progDrift = clamp(
+      progBase + 0.022 * sin(uDustTime * (0.6 + 0.5 * random(id * 29u + 3u)) + seed.y * 12.566),
+      0.0,
+      1.0
+    );
 
-    vec2 targetScreen;
-    float verticalProg = progBase;
-
-    if (roleHash < 0.54) {
-      // Layer 1 (54%): Dense, living particle walls & rim around the menu perimeter
-      float progDrift = clamp(
-        progBase + 0.024 * sin(uDustTime * (0.65 + 0.55 * random(id * 29u + 3u)) + seed.y * 12.566),
-        0.0,
-        1.0
-      );
-      vec2 boxNormal;
-      vec2 perimLocal = menuPerimeterPoint(rightSideFlag, progDrift, uMenuBox.zw, uMenuCorner, boxNormal);
-      float bottomWeight = smoothstep(-0.1, 1.0, -perimLocal.y / max(uMenuBox.w, 1.0));
-      float inwardDepth = mix(3.2, 7.5, bottomWeight) * pow(random(id * 31u + 9u), 1.25);
-      float outwardFuzz = (random(id * 37u + 2u) - 0.35) * 2.4 + 0.75 * sin(uDustTime * 1.4 + seed.y * 19.0);
-      float radialOffset = outwardFuzz - inwardDepth;
-      vec2 tangDrift = vec2(-boxNormal.y, boxNormal.x) * (1.8 * cos(uDustTime * 0.9 + seed.z * 11.0));
-      targetScreen = uMenuBox.xy + perimLocal + boxNormal * radialOffset + tangDrift;
-      verticalProg = clamp((uMenuBox.w - perimLocal.y) / max(2.0 * uMenuBox.w, 1.0), 0.0, 1.0);
-    } else {
-      // Layer 2 (46%): Swirling interior particle matrix & bottom ember pool inside the menu
-      float rY = random(id * 53u + 13u);
-      float rX = random(id * 61u + 19u);
-      // Pool particles more densely toward the bottom and inner walls of the menu,
-      // while keeping twinkling sparks rising throughout the full menu height.
-      float yNorm;
-      if (roleHash < 0.80) {
-        // Rich lower & mid-column ember pool climbing the inner walls
-        yNorm = -1.0 + 2.0 * pow(rY, 1.55);
-      } else {
-        // Full-height suspended twinkling ember sparks across all menu items
-        yNorm = -0.92 + 1.84 * rY;
-      }
-      float wallCurve = (rX < 0.5 ? -1.0 : 1.0) * (1.0 - pow(random(id * 67u + 23u), 0.68));
-      float xNorm = mix(rX * 2.0 - 1.0, wallCurve, 0.48);
-
-      // Account for rounded corners at top and bottom of the menu box
-      float absY = abs(yNorm) * uMenuBox.w;
-      float cornerStart = max(uMenuBox.w - uMenuCorner, 0.0);
-      float maxHalfX = uMenuBox.z - 3.0;
-      if (absY > cornerStart) {
-        float dyCorner = absY - cornerStart;
-        float cornerChord = sqrt(max(0.0, uMenuCorner * uMenuCorner - dyCorner * dyCorner));
-        maxHalfX = max(4.0, (uMenuBox.z - uMenuCorner) + cornerChord - 3.0);
-      }
-
-      vec2 liveDrift = vec2(
-        p.x * 6.5 + 2.6 * sin(uDustTime * 0.85 + seed.y * 17.0),
-        p.y * 10.5 + 3.4 * cos(uDustTime * 0.72 + seed.z * 13.0)
-      );
-      vec2 innerLocal = vec2(xNorm * maxHalfX, yNorm * (uMenuBox.w - 4.0)) + liveDrift;
-      innerLocal.x = clamp(innerLocal.x, -maxHalfX, maxHalfX);
-      innerLocal.y = clamp(innerLocal.y, -(uMenuBox.w - 3.5), uMenuBox.w - 3.5);
-      targetScreen = uMenuBox.xy + innerLocal;
-      verticalProg = clamp((uMenuBox.w - innerLocal.y) / max(2.0 * uMenuBox.w, 1.0), 0.0, 1.0);
-    }
-
-    // Order the melt cascade so particles pour out of the orb and fill the menu top-to-bottom
+    // Order the melt cascade so particles pour out of the dissolving orb into the top crown
+    // and race down the left and right borders to meet at the bottom border
     float orbBottomFirst = clamp((1.0 - p.y) * 0.5, 0.0, 1.0);
-    float delay = verticalProg * 0.36 + orbBottomFirst * 0.08 + random(id * 19u + 5u) * 0.12;
+    float delay = progBase * 0.36 + orbBottomFirst * 0.07 + random(id * 19u + 5u) * 0.11;
     float localT = smoothstep(delay, min(delay + 0.44, 1.0), uMorph);
     float easedT = localT * localT * (3.0 - 2.0 * localT);
     float inFlight = sin(localT * 3.14159265);
 
-    // Melting orb sags downward before particles funnel into the menu column
-    vec2 meltedOrbOrigin = orbScreen - vec2(0.0, smoothstep(0.0, 0.45, uMorph) * min(uRadius * 1.1, 24.0));
-    vec2 throat = vec2(
-      mix(uCenter.x, uMenuBox.x, 0.72) + sideSign * uMenuBox.z * (0.14 + 0.55 * random(id * 23u + 1u)),
-      min(uCenter.y - uRadius * 0.55, uMenuBox.y + uMenuBox.w + 2.0)
-    );
-    vec2 streamPos = mix(mix(meltedOrbOrigin, throat, easedT), mix(throat, targetScreen, easedT), easedT);
-    streamPos.x += inFlight * sideSign * (4.2 * sin(localT * 6.2831853 + seed.y * 6.2831853));
+    // Slide along the perimeter curve from the top arch (0.0) to the particle's target border spot (progDrift)
+    // so the particles hug the borders even while streaming downward
+    float travelProg = progDrift * smoothstep(0.14, 1.0, easedT);
+    vec2 boxNormal;
+    vec2 perimLocal = menuPerimeterPoint(rightSideFlag, travelProg, uMenuBox.zw, uMenuCorner, boxNormal);
 
-    screen = mix(meltedOrbOrigin, streamPos, localT);
-    // Wake up 100% of particles as they pour out of the melting orb
+    float radialOffset =
+      (random(id * 31u + 9u) - 0.5) * 3.0 +
+      0.65 * sin(uDustTime * 1.4 + seed.y * 19.0) +
+      inFlight * 1.4 * sin(localT * 9.42 + seed.z * 6.2831853);
+    vec2 tangDrift = vec2(-boxNormal.y, boxNormal.x) * (1.5 * cos(uDustTime * 0.9 + seed.z * 11.0));
+    vec2 borderPos = uMenuBox.xy + perimLocal + boxNormal * radialOffset + tangDrift;
+
+    // Melting orb sags downward toward the top crown of the menu border
+    vec2 meltedOrbOrigin = orbScreen - vec2(0.0, smoothstep(0.0, 0.45, uMorph) * min(uRadius * 1.1, 24.0));
+    float attachT = smoothstep(0.0, 0.38, easedT);
+    screen = mix(meltedOrbOrigin, borderPos, attachT);
+
+    // Wake up 100% of particles along the border as they pour out of the melting orb
     visibilityMask = mix(orbDensityMask, 1.0, smoothstep(0.01, 0.16, localT));
-    orbGain = mix(orbGain, 1.22, localT);
+    orbGain = mix(orbGain, 1.18, localT);
     inside = mix(inside, 1.0, smoothstep(0.0, 0.1, localT));
     reveal = mix(reveal, 1.0, smoothstep(0.0, 0.1, localT));
     fade = mix(fade, 0.94, smoothstep(0.0, 0.18, localT));
-    size *= 1.0 + 0.34 * inFlight + 0.16 * localT;
-    morphBoost = 0.45 * inFlight + 0.24 * localT;
+    size *= 1.0 + 0.32 * inFlight + 0.14 * localT;
+    morphBoost = 0.45 * inFlight + 0.22 * localT;
   }
 
   gl_Position = vec4(screen / uViewport * 2.0 - 1.0, 0.0, 1.0);
