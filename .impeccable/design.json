@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-18T23:31:00Z",
+  "generatedAt": "2026-11-19T21:31:00Z",
   "title": "Design System: Nexus",
   "extensions": {
     "colorMeta": {
@@ -115,12 +115,27 @@
         "canonical": "#000000",
         "tonalRamp": [
           "#000000",
-          "#0a0a0c",
-          "#0f0f12",
-          "#16161a",
-          "#1c1c21",
+          "#070709",
+          "#0c0c0f",
+          "#131317",
+          "#17171c",
           "#24242b",
           "#8e8e95",
+          "#f5f5f7"
+        ]
+      },
+      "obsidian-stage": {
+        "role": "neutral",
+        "displayName": "Obsidian Stage",
+        "canonical": "#070709",
+        "tonalRamp": [
+          "#000000",
+          "#070709",
+          "#0a0a0c",
+          "#0c0c0f",
+          "#131317",
+          "#17171c",
+          "#9d9da6",
           "#f5f5f7"
         ]
       },
@@ -131,11 +146,11 @@
         "tonalRamp": [
           "#000000",
           "#0a0a0c",
-          "#0f0f12",
-          "#16161a",
-          "#1c1c21",
+          "#0c0c0f",
+          "#131317",
+          "#17171c",
           "#2e2e36",
-          "#a1a1a6",
+          "#9d9da6",
           "#f5f5f7"
         ]
       },
@@ -146,11 +161,11 @@
         "tonalRamp": [
           "#000000",
           "#0b0b0e",
-          "#111115",
-          "#16161a",
-          "#1c1c21",
+          "#101014",
+          "#131317",
+          "#17171c",
           "#24242b",
-          "#a1a1a6",
+          "#9d9da6",
           "#f5f5f7"
         ]
       },
@@ -187,12 +202,12 @@
       "obsidian-elevated": {
         "role": "neutral",
         "displayName": "Obsidian Elevated",
-        "canonical": "#1c1c21",
+        "canonical": "#17171c",
         "tonalRamp": [
-          "#000000",
-          "#0f0f12",
-          "#16161a",
-          "#1c1c21",
+          "#070709",
+          "#0c0c0f",
+          "#131317",
+          "#17171c",
           "#24242b",
           "#3a3a44",
           "#b4b4bc",
@@ -205,8 +220,8 @@
         "canonical": "#24242b",
         "tonalRamp": [
           "#0a0a0c",
-          "#16161a",
-          "#1c1c21",
+          "#131317",
+          "#17171c",
           "#24242b",
           "#2e2e36",
           "#52525c",
@@ -219,8 +234,8 @@
         "displayName": "Obsidian Active Cell",
         "canonical": "#2e2e36",
         "tonalRamp": [
-          "#0f0f12",
-          "#16161a",
+          "#0c0c0f",
+          "#131317",
           "#24242b",
           "#2e2e36",
           "#44444e",
@@ -238,7 +253,7 @@
           "#24242b",
           "#52525b",
           "#8e8e95",
-          "#a1a1a6",
+          "#9d9da6",
           "#d1d1d6",
           "#f5f5f7",
           "#ffffff"
@@ -250,10 +265,10 @@
         "canonical": "#f5f5f7",
         "tonalRamp": [
           "#09090b",
-          "#1c1c21",
+          "#17171c",
           "#3f3f46",
           "#71717a",
-          "#a1a1a6",
+          "#9d9da6",
           "#d1d1d6",
           "#f5f5f7",
           "#ffffff"
@@ -265,10 +280,10 @@
         "canonical": "#f4f4f6",
         "tonalRamp": [
           "#09090b",
-          "#1c1c21",
+          "#17171c",
           "#3f3f46",
           "#71717a",
-          "#a1a1a6",
+          "#9d9da6",
           "#d1d1d6",
           "#f4f4f6",
           "#ffffff"
@@ -281,7 +296,7 @@
         "tonalRamp": [
           "#000000",
           "#09090b",
-          "#16161a",
+          "#131317",
           "#24242b",
           "#52525b",
           "#8e8e95",
@@ -294,11 +309,11 @@
         "displayName": "Silver Secondary",
         "canonical": "#d1d1d6",
         "tonalRamp": [
-          "#0f0f12",
+          "#0c0c0f",
           "#24242b",
           "#46464f",
           "#71717a",
-          "#a1a1a6",
+          "#9d9da6",
           "#d1d1d6",
           "#e4e4e9",
           "#f5f5f7"
@@ -307,14 +322,14 @@
       "ash-muted": {
         "role": "neutral",
         "displayName": "Ash Muted",
-        "canonical": "#a1a1a6",
+        "canonical": "#9d9da6",
         "tonalRamp": [
-          "#0f0f12",
-          "#1c1c21",
+          "#0c0c0f",
+          "#17171c",
           "#3a3a42",
           "#63636a",
           "#8e8e95",
-          "#a1a1a6",
+          "#9d9da6",
           "#d1d1d6",
           "#f5f5f7"
         ]
@@ -324,12 +339,12 @@
         "displayName": "Pewter Meta",
         "canonical": "#8e8e95",
         "tonalRamp": [
-          "#0f0f12",
-          "#1c1c21",
+          "#0c0c0f",
+          "#17171c",
           "#36363e",
           "#5a5a62",
           "#8e8e95",
-          "#a1a1a6",
+          "#9d9da6",
           "#d1d1d6",
           "#f5f5f7"
         ]
@@ -337,14 +352,14 @@
       "hairline-subtle": {
         "role": "neutral",
         "displayName": "Hairline Subtle",
-        "canonical": "rgba(255, 255, 255, 0.09)",
+        "canonical": "rgba(255, 255, 255, 0.085)",
         "tonalRamp": [
           "rgba(255, 255, 255, 0.04)",
-          "rgba(255, 255, 255, 0.07)",
-          "rgba(255, 255, 255, 0.09)",
-          "rgba(255, 255, 255, 0.12)",
-          "rgba(255, 255, 255, 0.16)",
-          "rgba(255, 255, 255, 0.26)",
+          "rgba(255, 255, 255, 0.065)",
+          "rgba(255, 255, 255, 0.085)",
+          "rgba(255, 255, 255, 0.11)",
+          "rgba(255, 255, 255, 0.15)",
+          "rgba(255, 255, 255, 0.25)",
           "rgba(255, 255, 255, 0.34)",
           "rgba(255, 255, 255, 0.50)"
         ]
@@ -352,12 +367,12 @@
       "border-default": {
         "role": "neutral",
         "displayName": "Border Default",
-        "canonical": "rgba(255, 255, 255, 0.12)",
+        "canonical": "rgba(255, 255, 255, 0.11)",
         "tonalRamp": [
           "rgba(255, 255, 255, 0.04)",
           "rgba(255, 255, 255, 0.08)",
-          "rgba(255, 255, 255, 0.12)",
-          "rgba(255, 255, 255, 0.16)",
+          "rgba(255, 255, 255, 0.11)",
+          "rgba(255, 255, 255, 0.15)",
           "rgba(255, 255, 255, 0.24)",
           "rgba(255, 255, 255, 0.34)",
           "rgba(255, 255, 255, 0.48)",
@@ -367,11 +382,11 @@
       "border-strong": {
         "role": "neutral",
         "displayName": "Border Strong",
-        "canonical": "rgba(255, 255, 255, 0.16)",
+        "canonical": "rgba(255, 255, 255, 0.15)",
         "tonalRamp": [
           "rgba(255, 255, 255, 0.06)",
           "rgba(255, 255, 255, 0.10)",
-          "rgba(255, 255, 255, 0.16)",
+          "rgba(255, 255, 255, 0.15)",
           "rgba(255, 255, 255, 0.24)",
           "rgba(255, 255, 255, 0.34)",
           "rgba(255, 255, 255, 0.48)",
@@ -443,37 +458,121 @@
         "role": "neutral",
         "displayName": "Gallery Paper",
         "canonical": "#f7f6f2",
-        "tonalRamp": ["#0e0f12", "#2c2e35", "#52545d", "#636570", "#d4d1c9", "#efede8", "#f7f6f2", "#ffffff"]
+        "tonalRamp": [
+          "#0e0f12",
+          "#2c2e35",
+          "#52545e",
+          "#686a73",
+          "#d4d1c9",
+          "#efede8",
+          "#f7f6f2",
+          "#ffffff"
+        ]
       },
       "gallery-stone": {
         "role": "neutral",
         "displayName": "Gallery Stone",
         "canonical": "#efede8",
-        "tonalRamp": ["#0e0f12", "#2c2e35", "#52545d", "#636570", "#d4d1c9", "#efede8", "#f7f6f2", "#ffffff"]
+        "tonalRamp": [
+          "#0e0f12",
+          "#2c2e35",
+          "#52545e",
+          "#686a73",
+          "#d4d1c9",
+          "#efede8",
+          "#f7f6f2",
+          "#ffffff"
+        ]
       },
       "gallery-obsidian": {
         "role": "neutral",
         "displayName": "Gallery Obsidian Ink",
         "canonical": "#0e0f12",
-        "tonalRamp": ["#0e0f12", "#252730", "#4a4c55", "#52545d", "#636570", "#c8c5bc", "#f7f6f2", "#ffffff"]
+        "tonalRamp": [
+          "#0e0f12",
+          "#252730",
+          "#4a4c55",
+          "#52545e",
+          "#686a73",
+          "#c8c5bc",
+          "#f7f6f2",
+          "#ffffff"
+        ]
+      },
+      "gallery-secondary": {
+        "role": "neutral",
+        "displayName": "Gallery Secondary Ink",
+        "canonical": "#52545e",
+        "tonalRamp": [
+          "#0e0f12",
+          "#25272e",
+          "#3e4049",
+          "#52545e",
+          "#686a73",
+          "#9c9ea6",
+          "#e2dfd8",
+          "#f7f6f2"
+        ]
+      },
+      "gallery-meta": {
+        "role": "neutral",
+        "displayName": "Gallery Meta Ink",
+        "canonical": "#686a73",
+        "tonalRamp": [
+          "#0e0f12",
+          "#25272e",
+          "#52545e",
+          "#686a73",
+          "#848690",
+          "#b4b6be",
+          "#e2dfd8",
+          "#f7f6f2"
+        ]
       },
       "burnished-gold": {
         "role": "primary",
         "displayName": "Burnished 24k Gold",
         "canonical": "#9a6910",
-        "tonalRamp": ["#5a3b06", "#78500b", "#86590c", "#9a6910", "#c9932c", "#e4bc62", "#f4d27c", "#fffaf0"]
+        "tonalRamp": [
+          "#5a3b06",
+          "#78500b",
+          "#86590c",
+          "#9a6910",
+          "#c88d18",
+          "#e4bc62",
+          "#f4d27c",
+          "#fffaf0"
+        ]
       },
       "sculptural-gold": {
         "role": "primary",
         "displayName": "Sculptural Gold",
-        "canonical": "#c9932c",
-        "tonalRamp": ["#5a3b06", "#78500b", "#9a6910", "#c9932c", "#daa842", "#eac56f", "#f6dfa1", "#fffaf0"]
+        "canonical": "#c88d18",
+        "tonalRamp": [
+          "#5a3b06",
+          "#78500b",
+          "#9a6910",
+          "#c88d18",
+          "#daa842",
+          "#eac56f",
+          "#f6dfa1",
+          "#fffaf0"
+        ]
       },
       "gallery-success": {
         "role": "secondary",
         "displayName": "Gallery Open Beta Green",
         "canonical": "#15803d",
-        "tonalRamp": ["#14532d", "#15803d", "#16a34a", "#22c55e", "#4ade80", "#86efac", "#dcfce7", "#f0fdf4"]
+        "tonalRamp": [
+          "#14532d",
+          "#15803d",
+          "#16a34a",
+          "#22c55e",
+          "#4ade80",
+          "#86efac",
+          "#dcfce7",
+          "#f0fdf4"
+        ]
       }
     },
     "typographyMeta": {
@@ -657,7 +756,7 @@
       "refersTo": "button-glass",
       "description": "Translucent pill button floating over the pitch-black hero canvas.",
       "html": "<a href=\"#waitlist\" class=\"ds-btn-glass\">Join waitlist</a>",
-      "css": ".ds-btn-glass { display: inline-flex; align-items: center; height: 36px; padding: 0 18.4px; border-radius: 999px; border: 1px solid var(--land-line, rgba(255, 255, 255, 0.16)); background: rgba(255, 255, 255, 0.07); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); color: var(--land-ink, #f5f5f7); font-family: var(--font-landing, Manrope, sans-serif); font-size: 14px; font-weight: 500; letter-spacing: -0.005em; text-decoration: none; transition: background 200ms ease, border-color 200ms ease; } .ds-btn-glass:hover { background: rgba(255, 255, 255, 0.14); border-color: rgba(255, 255, 255, 0.3); } .ds-btn-glass:focus-visible { outline: 2px solid var(--land-gold, #f0b54a); outline-offset: 2px; }"
+      "css": ".ds-btn-glass { display: inline-flex; align-items: center; height: 36px; padding: 0 18.4px; border-radius: 999px; border: 1px solid var(--land-line, rgba(255, 255, 255, 0.15)); background: rgba(255, 255, 255, 0.07); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); color: var(--land-ink, #f5f5f7); font-family: var(--font-landing, Manrope, sans-serif); font-size: 14px; font-weight: 500; letter-spacing: -0.005em; text-decoration: none; transition: background 200ms ease, border-color 200ms ease; } .ds-btn-glass:hover { background: rgba(255, 255, 255, 0.14); border-color: rgba(255, 255, 255, 0.3); } .ds-btn-glass:focus-visible { outline: 2px solid var(--land-gold, #f0b54a); outline-offset: 2px; }"
     },
     {
       "name": "Waitlist Pill Capsule",
@@ -665,7 +764,7 @@
       "refersTo": "input-waitlist",
       "description": "Unified pill email capture bar with gold caret and focus-within halo.",
       "html": "<form class=\"ds-waitlist\"><input class=\"ds-waitlist-input\" type=\"email\" placeholder=\"Enter your email for early access\" aria-label=\"Email address\" /><button type=\"submit\" class=\"ds-waitlist-submit\">Join waitlist</button></form>",
-      "css": ".ds-waitlist { display: flex; align-items: center; max-width: 460px; padding: 4px; border-radius: 999px; border: 1px solid var(--border, rgba(255, 255, 255, 0.12)); background: rgba(255, 255, 255, 0.04); transition: border-color 200ms ease, box-shadow 200ms ease; } .ds-waitlist:focus-within { border-color: rgba(240, 181, 74, 0.55); box-shadow: 0 0 0 3px rgba(240, 181, 74, 0.14); } .ds-waitlist-input { flex: 1; min-width: 0; border: none; background: transparent; padding: 12px 19px; font-family: var(--font-landing, Manrope, sans-serif); font-size: 14px; color: var(--land-ink, #f5f5f7); caret-color: var(--land-gold, #f0b54a); outline: none; } .ds-waitlist-input::placeholder { color: #8e8e95; } .ds-waitlist-submit { border: none; border-radius: 999px; background: var(--land-ink, #f5f5f7); color: var(--primary-foreground, #09090b); padding: 11.5px 23px; font-family: var(--font-landing, Manrope, sans-serif); font-size: 14px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: background 180ms ease; } .ds-waitlist-submit:hover { background: #ffffff; } .ds-waitlist-submit:focus-visible { outline: 2px solid var(--land-gold, #f0b54a); outline-offset: 2px; }"
+      "css": ".ds-waitlist { display: flex; align-items: center; max-width: 460px; padding: 4px; border-radius: 999px; border: 1px solid var(--border, rgba(255, 255, 255, 0.11)); background: rgba(255, 255, 255, 0.04); transition: border-color 200ms ease, box-shadow 200ms ease; } .ds-waitlist:focus-within { border-color: rgba(240, 181, 74, 0.55); box-shadow: 0 0 0 3px rgba(240, 181, 74, 0.14); } .ds-waitlist-input { flex: 1; min-width: 0; border: none; background: transparent; padding: 12px 19px; font-family: var(--font-landing, Manrope, sans-serif); font-size: 14px; color: var(--land-ink, #f5f5f7); caret-color: var(--land-gold, #f0b54a); outline: none; } .ds-waitlist-input::placeholder { color: #8e8e95; } .ds-waitlist-submit { border: none; border-radius: 999px; background: var(--land-ink, #f5f5f7); color: var(--primary-foreground, #09090b); padding: 11.5px 23px; font-family: var(--font-landing, Manrope, sans-serif); font-size: 14px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: background 180ms ease; } .ds-waitlist-submit:hover { background: #ffffff; } .ds-waitlist-submit:focus-visible { outline: 2px solid var(--land-gold, #f0b54a); outline-offset: 2px; }"
     },
     {
       "name": "Socket Ecosystem Pill",
@@ -673,7 +772,7 @@
       "refersTo": "socket-pill",
       "description": "Interactive orbital socket pill seated along a shared 1px horizontal connector track.",
       "html": "<div class=\"ds-socket-track\"><button type=\"button\" class=\"ds-socket-pill ds-socket-pill--active\" aria-pressed=\"true\">Studio <span class=\"ds-socket-live\">(Live)</span></button><button type=\"button\" class=\"ds-socket-pill\" aria-pressed=\"false\">Study <span class=\"ds-socket-planned\">(Planned)</span></button></div>",
-      "css": ".ds-socket-track { position: relative; display: flex; gap: 12px; align-items: center; } .ds-socket-track::before { content: \"\"; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(255, 255, 255, 0.12); z-index: 0; } .ds-socket-pill { position: relative; z-index: 1; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.13); background: #0b0b0e; color: #d1d1d6; padding: 8px 14px; font-family: var(--font-landing, Manrope, sans-serif); font-size: 13px; font-weight: 400; cursor: pointer; transition: border-color 200ms ease, color 200ms ease, background 200ms ease; } .ds-socket-pill:hover { border-color: rgba(255, 255, 255, 0.26); color: var(--land-ink, #f5f5f7); } .ds-socket-pill--active { border-color: rgba(240, 181, 74, 0.55); background: var(--card, #16161a); color: var(--land-ink, #f5f5f7); } .ds-socket-pill:focus-visible { outline: 2px solid var(--land-gold, #f0b54a); outline-offset: 2px; } .ds-socket-live { color: var(--land-muted, #a1a1a6); } .ds-socket-planned { color: #8e8e95; }"
+      "css": ".ds-socket-track { position: relative; display: flex; gap: 12px; align-items: center; } .ds-socket-track::before { content: \"\"; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(255, 255, 255, 0.11); z-index: 0; } .ds-socket-pill { position: relative; z-index: 1; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.13); background: #0b0b0e; color: #d1d1d6; padding: 8px 14px; font-family: var(--font-landing, Manrope, sans-serif); font-size: 13px; font-weight: 400; cursor: pointer; transition: border-color 200ms ease, color 200ms ease, background 200ms ease; } .ds-socket-pill:hover { border-color: rgba(255, 255, 255, 0.26); color: var(--land-ink, #f5f5f7); } .ds-socket-pill--active { border-color: rgba(240, 181, 74, 0.55); background: var(--card, #131317); color: var(--land-ink, #f5f5f7); } .ds-socket-pill:focus-visible { outline: 2px solid var(--land-gold, #f0b54a); outline-offset: 2px; } .ds-socket-live { color: var(--land-muted, #9d9da6); } .ds-socket-planned { color: #8e8e95; }"
     },
     {
       "name": "Layer Selector Rail",
@@ -681,7 +780,7 @@
       "refersTo": "stage-frame",
       "description": "Unboxed vertical layer rail with a 1px Singularity Gold active tick beside the obsidian workstation stage.",
       "html": "<nav class=\"ds-layer-rail\" aria-label=\"Nexus workspace layers\"><button type=\"button\" class=\"ds-layer-item ds-layer-item--active\" aria-pressed=\"true\"><span class=\"ds-layer-tick\" aria-hidden=\"true\"></span><span>Command</span></button><button type=\"button\" class=\"ds-layer-item\" aria-pressed=\"false\"><span class=\"ds-layer-tick\" aria-hidden=\"true\"></span><span>Studio &amp; Research</span></button><button type=\"button\" class=\"ds-layer-item\" aria-pressed=\"false\"><span class=\"ds-layer-tick\" aria-hidden=\"true\"></span><span>Modular Sockets</span></button></nav>",
-      "css": ".ds-layer-rail { display: flex; flex-direction: column; gap: 20px; } .ds-layer-item { display: flex; align-items: center; gap: 14px; border: none; background: transparent; padding: 2px 0; font-family: var(--font-landing, Manrope, sans-serif); font-size: 21px; font-weight: 400; letter-spacing: -0.02em; color: #8e8e95; text-align: left; cursor: pointer; transition: color 200ms ease; } .ds-layer-item:hover { color: #d1d1d6; } .ds-layer-item--active { color: var(--land-ink, #f5f5f7); } .ds-layer-item:focus-visible { outline: 2px solid var(--land-gold, #f0b54a); outline-offset: 2px; } .ds-layer-tick { width: 1px; height: 24px; background: rgba(255, 255, 255, 0.16); transition: background 200ms ease; } .ds-layer-item:hover .ds-layer-tick { background: rgba(255, 255, 255, 0.34); } .ds-layer-item--active .ds-layer-tick { background: var(--land-gold, #f0b54a); }"
+      "css": ".ds-layer-rail { display: flex; flex-direction: column; gap: 20px; } .ds-layer-item { display: flex; align-items: center; gap: 14px; border: none; background: transparent; padding: 2px 0; font-family: var(--font-landing, Manrope, sans-serif); font-size: 21px; font-weight: 400; letter-spacing: -0.02em; color: #8e8e95; text-align: left; cursor: pointer; transition: color 200ms ease; } .ds-layer-item:hover { color: #d1d1d6; } .ds-layer-item--active { color: var(--land-ink, #f5f5f7); } .ds-layer-item:focus-visible { outline: 2px solid var(--land-gold, #f0b54a); outline-offset: 2px; } .ds-layer-tick { width: 1px; height: 24px; background: rgba(255, 255, 255, 0.15); transition: background 200ms ease; } .ds-layer-item:hover .ds-layer-tick { background: rgba(255, 255, 255, 0.34); } .ds-layer-item--active .ds-layer-tick { background: var(--land-gold, #f0b54a); }"
     },
     {
       "name": "Command View Switcher",
@@ -689,7 +788,7 @@
       "refersTo": "command-tab-active",
       "description": "Compact pill segmented control used in the authenticated Command header.",
       "html": "<div class=\"ds-cmd-tabs\" role=\"tablist\" aria-label=\"Command views\"><button type=\"button\" role=\"tab\" aria-selected=\"true\" class=\"ds-cmd-tab ds-cmd-tab--active\">Overview</button><button type=\"button\" role=\"tab\" aria-selected=\"false\" class=\"ds-cmd-tab\">Connections <span class=\"ds-cmd-badge\">4</span></button></div>",
-      "css": ".ds-cmd-tabs { display: inline-flex; align-items: center; gap: 2px; height: 28px; padding: 2px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(22, 22, 26, 0.75); } .ds-cmd-tab { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 12px; border: none; border-radius: 999px; background: transparent; color: var(--land-muted, #a1a1a6); font-family: var(--font-landing, Manrope, sans-serif); font-size: 12px; font-weight: 500; cursor: pointer; transition: color 160ms ease, background 160ms ease; } .ds-cmd-tab:hover { color: var(--land-ink, #f5f5f7); } .ds-cmd-tab--active { background: var(--primary, #f4f4f6); color: var(--primary-foreground, #09090b); } .ds-cmd-tab:focus-visible { outline: 2px solid var(--land-gold, #f0b54a); outline-offset: 2px; } .ds-cmd-badge { display: inline-flex; align-items: center; padding: 1px 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.14); font-size: 10px; line-height: 1; font-variant-numeric: tabular-nums; }"
+      "css": ".ds-cmd-tabs { display: inline-flex; align-items: center; gap: 2px; height: 28px; padding: 2px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.085); background: rgba(19, 19, 23, 0.78); } .ds-cmd-tab { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 12px; border: none; border-radius: 999px; background: transparent; color: var(--land-muted, #9d9da6); font-family: var(--font-landing, Manrope, sans-serif); font-size: 12px; font-weight: 500; cursor: pointer; transition: color 160ms ease, background 160ms ease; } .ds-cmd-tab:hover { color: var(--land-ink, #f5f5f7); } .ds-cmd-tab--active { background: var(--primary, #f4f4f6); color: var(--primary-foreground, #09090b); } .ds-cmd-tab:focus-visible { outline: 2px solid var(--land-gold, #f0b54a); outline-offset: 2px; } .ds-cmd-badge { display: inline-flex; align-items: center; padding: 1px 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.14); font-size: 10px; line-height: 1; font-variant-numeric: tabular-nums; }"
     },
     {
       "name": "Obsidian Cockpit Tile",
@@ -697,7 +796,7 @@
       "refersTo": "widget-tile",
       "description": "Flat matte obsidian widget tile with 1px neutral hairline and tabular telemetry layout.",
       "html": "<article class=\"ds-tile\"><div class=\"ds-tile-head\"><span class=\"ds-tile-title\">Weather</span><svg class=\"ds-tile-icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.35\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 2v2\"/><path d=\"m4.93 4.93 1.41 1.41\"/><path d=\"M20 12h2\"/><path d=\"m19.07 4.93-1.41 1.41\"/><path d=\"M15.947 12.65a4 4 0 0 0-5.925-4.128\"/><path d=\"M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z\"/></svg></div><div class=\"ds-tile-stat\"><span class=\"ds-tile-temp\">11°</span><span class=\"ds-tile-loc\">Toronto</span></div></article>",
-      "css": ".ds-tile { display: flex; flex-direction: column; justify-content: space-between; min-width: 220px; padding: 14px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.08); background: var(--card, #16161a); color: var(--land-ink, #f5f5f7); font-family: var(--font-landing, Manrope, sans-serif); transition: border-color 180ms ease; } .ds-tile:hover { border-color: rgba(255, 255, 255, 0.16); } .ds-tile-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; } .ds-tile-title { font-size: 14px; color: #d1d1d6; } .ds-tile-icon { width: 28px; height: 28px; color: #d1d1d6; flex-shrink: 0; } .ds-tile-stat { display: flex; align-items: baseline; gap: 8px; margin-top: 8px; font-variant-numeric: tabular-nums; } .ds-tile-temp { font-size: 36px; font-weight: 300; line-height: 1; letter-spacing: -0.04em; color: var(--land-ink, #f5f5f7); } .ds-tile-loc { font-size: 13px; color: var(--land-muted, #a1a1a6); }"
+      "css": ".ds-tile { display: flex; flex-direction: column; justify-content: space-between; min-width: 220px; padding: 14px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.085); background: var(--card, #131317); color: var(--land-ink, #f5f5f7); font-family: var(--font-landing, Manrope, sans-serif); transition: border-color 180ms ease; } .ds-tile:hover { border-color: rgba(255, 255, 255, 0.15); } .ds-tile-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; } .ds-tile-title { font-size: 14px; color: #d1d1d6; } .ds-tile-icon { width: 28px; height: 28px; color: #d1d1d6; flex-shrink: 0; } .ds-tile-stat { display: flex; align-items: baseline; gap: 8px; margin-top: 8px; font-variant-numeric: tabular-nums; } .ds-tile-temp { font-size: 36px; font-weight: 300; line-height: 1; letter-spacing: -0.04em; color: var(--land-ink, #f5f5f7); } .ds-tile-loc { font-size: 13px; color: var(--land-muted, #9d9da6); }"
     },
     {
       "name": "Singularity Axis Connector",
@@ -705,12 +804,12 @@
       "refersTo": "stage-frame",
       "description": "Centered 1px vertical golden axis terminating in a 6px Singularity Gold focal dot.",
       "html": "<div class=\"ds-spine\" aria-hidden=\"true\"><span class=\"ds-spine-line\"></span><span class=\"ds-spine-dot\"></span></div>",
-      "css": ".ds-spine { display: flex; flex-direction: column; align-items: center; } .ds-spine-line { width: 1px; height: 80px; background: linear-gradient(to bottom, rgba(255, 255, 255, 0.12), rgba(240, 181, 74, 0.55)); } .ds-spine-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--land-gold, #f0b54a); }"
+      "css": ".ds-spine { display: flex; flex-direction: column; align-items: center; } .ds-spine-line { width: 1px; height: 80px; background: linear-gradient(to bottom, rgba(255, 255, 255, 0.11), rgba(240, 181, 74, 0.55)); } .ds-spine-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--land-gold, #f0b54a); }"
     }
   ],
   "narrative": {
-    "northStar": "The Obsidian Observatory",
-    "overview": "Nexus is built like a quiet, precision-calibrated personal observatory rather than a noisy software dashboard. Every surface begins from pure pitch black and steps through a tightly controlled monochrome obsidian ramp separated by crisp 1px white hairlines, leaving all ambient energy to the golden singularity core and a sparse vocabulary of warm gold status cues. The product chrome stays deliberately cool and silent until summoned so live data—schedules, mail, multi-track audio waveforms, clean reading prose, and telemetry—takes full priority.\n\nAcross both the public landing experience and the authenticated operating environment, information density is disciplined rather than decorative. Editorial bands use asymmetric two-column splits, generous pitch-black breathing room, and hairline-divided ledgers; interactive workspaces compress cleanly into nested obsidian containers with tabular alignment and zero gratuitous chrome. Authenticated dashboard and onboarding flows also carry a Gallery Light counterpart built on warm stone surfaces and charcoal ink with muted bronze-gold accents, preserving identical monochrome restraint in daylight.\n\nConfirmed visual rejections shape every surface: Nexus refuses stacked glowing feature-card showcases, uppercase tracked eyebrow kickers, decorative starbursts or radial halos behind copy, and symmetric three-column icon-heading-paragraph grids.",
+    "northStar": "Gallery Light Precision & The Obsidian Observatory",
+    "overview": "Nexus spans two complementary visual polarities built on one architectural grammar:\n- Public Landing Surface (`/` — Dual-Polarity Gallery Light -> Golden Lightfall -> Obsidian Observatory -> Gallery Light Colophon): Opens in luminous Gallery Light (`#ffffff` ground, `#0e0f12` obsidian ink, `Source Serif 4` editorial display, flat 2D Nexus mark, living sunlit gold neural network, and inline-medallion editorial manifesto), transitions seamlessly into pitch black (`#000000`) through a full-bleed WebGL2 golden `<Lightfall />` curtain (`#eab308` falling warp streaks), presents Workspace, Philosophy, Roadmap, Integrations, Security, and Waitlist in deep Obsidian Observatory (`#000000` / `#050507`, `#f5f5f7` chalk ink, molten 24k gold `#f0b54a` optics) with adaptive Light/Dark Apple Liquid Glass floating chrome, and closes by returning to pure Gallery Light (`#ffffff`) for the centered editorial footer navigation, monumental `Nexus` wordmark, and `Nexus Atelier · Designed & Engineered in Toronto` colophon.\n- Authenticated Operating Environment & Auxiliary Routes (`/dashboard`, `/waitlist`, `/signup`, `/about`, `/security` — Dual-Mode Atelier: Obsidian Observatory & Gallery Light): Unified across Network, Command, Studio, and Nodes in both Obsidian Dark (`#070709` neural stage, `#0c0c0f` Command & Nodes canvas, `#131317` surfaces, `#f0b54a` molten 24k gold optics) and Gallery Light (`#ffffff` neural paper, `#f7f6f2` Command & Nodes canvas, `#ffffff` crisp cards, `#0e0f12` obsidian ink, `#c88d18` / `#a67412` radiant 24k gold optics).\n\nAcross both the public landing experience and the authenticated operating environment, information density is disciplined rather than decorative. Editorial bands use asymmetric two-column splits, generous pitch-black breathing room, and hairline-divided ledgers; interactive workspaces compress cleanly into nested obsidian containers with tabular alignment and zero gratuitous chrome. Authenticated dashboard and onboarding flows also carry a Gallery Light counterpart built on warm stone surfaces and charcoal ink with muted bronze-gold accents, preserving identical monochrome restraint in daylight.\n\nConfirmed visual rejections shape every surface: Nexus refuses stacked glowing feature-card showcases, uppercase tracked eyebrow kickers, decorative starbursts or radial halos behind copy, and symmetric three-column icon-heading-paragraph grids.",
     "keyCharacteristics": [
       "Neutral obsidian luminance ladder stepping cleanly from pitch black (`#000000`) through matte obsidian (`#0a0a0c`), canvas (`#0f0f12`), surface (`#16161a`), elevated (`#1c1c21`), and active selection (`#24242b`).",
       "Monochrome chalk-on-obsidian controls paired with strictly rationed Singularity Gold (`#f0b54a`) reserved for the vertical spine hairline, active selection ticks, live status dots, text caret, and focus rings.",
