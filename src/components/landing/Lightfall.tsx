@@ -242,10 +242,10 @@ void main() {
   float peak = max(mapped.r, max(mapped.g, mapped.b));
 
   if (uBackdropTransition > 0.5) {
-    // Single-pass C2-continuous Oklab perceptual white (#ffffff) -> obsidian (#000000) transition
-    // with triangular-PDF dithering (zero CSS seams, zero Mach bands, zero 8-bit stair-stepping).
+    // Single-pass C-infinity raised-cosine Oklab perceptual white (#ffffff) -> obsidian (#000000) transition
+    // with triangular-PDF dithering: zero flat white dead-zone, zero Mach bands, zero 8-bit banding.
     float t = clamp(1.0 - uv.y, 0.0, 1.0);
-    float L = 1.0 - smootherstep01(t);
+    float L = 0.5 + 0.5 * cos(3.14159265 * t);
 
     float w = sin(3.14159265 * t);
     float warmth = w * w;
@@ -268,9 +268,9 @@ void main() {
       step(vec3(0.0031308), linBg)
     );
 
-    // Smooth C2 emergence & dissolution of golden Lightfall streaks inside the unified canvas
-    float streakEnv = smootherstep01(clamp((t - 0.03) / 0.32, 0.0, 1.0)) *
-                      (1.0 - smootherstep01(clamp((t - 0.76) / 0.24, 0.0, 1.0))) *
+    // Smooth immediate emergence of golden Lightfall streaks right below the manifesto & clean dissolve into #000000
+    float streakEnv = smootherstep01(clamp(t / 0.20, 0.0, 1.0)) *
+                      (1.0 - smootherstep01(clamp((t - 0.80) / 0.20, 0.0, 1.0))) *
                       uOpacity;
 
     // Daylight sculptural gold filaments softly painted across the sunlit upper half

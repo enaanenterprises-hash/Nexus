@@ -88,7 +88,7 @@ export function EditorialManifesto() {
     <section
       ref={sectionRef}
       aria-label="What Nexus does"
-      className="bg-white px-6 py-20 sm:px-10 sm:py-24 lg:px-14 lg:py-28"
+      className="bg-white px-6 pt-20 pb-8 sm:px-10 sm:pt-24 sm:pb-10 lg:px-14 lg:pt-28 lg:pb-12"
     >
       <div className="mx-auto flex max-w-[920px] flex-col items-center text-center">
         <p className="font-editorial text-[clamp(2rem,4.7vw,4.05rem)] font-normal leading-[1.11] tracking-[-0.036em] text-[#0e0f12] [text-wrap:balance]">
