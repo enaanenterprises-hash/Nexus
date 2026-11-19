@@ -91,24 +91,24 @@ export function GalleryFooter() {
         <div aria-hidden="true" className="w-full select-none overflow-hidden">
           <div className="gal-wordmark-rise" data-visible={wordmarkVisible ? "true" : "false"}>
             <svg
-              viewBox="0 0 1200 225"
+              viewBox="0 0 1200 345"
               className="block h-auto w-full"
               preserveAspectRatio="xMidYMid meet"
               role="presentation"
             >
               <text
                 x="600"
-                y="186"
+                y="292"
                 textAnchor="middle"
                 fill="#0e0f12"
                 style={{
                   fontFamily: 'var(--font-editorial), "New York", Georgia, serif',
-                  fontSize: "204px",
+                  fontSize: "388px",
                   fontWeight: 500,
-                  letterSpacing: "-0.044em",
+                  letterSpacing: "-0.048em",
                 }}
               >
-                Nexus Atelier
+                Nexus
               </text>
             </svg>
           </div>
