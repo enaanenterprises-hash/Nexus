@@ -438,12 +438,48 @@
           "oklch(88% 0.068 84)",
           "oklch(96% 0.024 84)"
         ]
+      },
+      "gallery-paper": {
+        "role": "neutral",
+        "displayName": "Gallery Paper",
+        "canonical": "#f7f6f2",
+        "tonalRamp": ["#0e0f12", "#2c2e35", "#52545d", "#636570", "#d4d1c9", "#efede8", "#f7f6f2", "#ffffff"]
+      },
+      "gallery-stone": {
+        "role": "neutral",
+        "displayName": "Gallery Stone",
+        "canonical": "#efede8",
+        "tonalRamp": ["#0e0f12", "#2c2e35", "#52545d", "#636570", "#d4d1c9", "#efede8", "#f7f6f2", "#ffffff"]
+      },
+      "gallery-obsidian": {
+        "role": "neutral",
+        "displayName": "Gallery Obsidian Ink",
+        "canonical": "#0e0f12",
+        "tonalRamp": ["#0e0f12", "#252730", "#4a4c55", "#52545d", "#636570", "#c8c5bc", "#f7f6f2", "#ffffff"]
+      },
+      "burnished-gold": {
+        "role": "primary",
+        "displayName": "Burnished 24k Gold",
+        "canonical": "#9a6910",
+        "tonalRamp": ["#5a3b06", "#78500b", "#86590c", "#9a6910", "#c9932c", "#e4bc62", "#f4d27c", "#fffaf0"]
+      },
+      "sculptural-gold": {
+        "role": "primary",
+        "displayName": "Sculptural Gold",
+        "canonical": "#c9932c",
+        "tonalRamp": ["#5a3b06", "#78500b", "#9a6910", "#c9932c", "#daa842", "#eac56f", "#f6dfa1", "#fffaf0"]
+      },
+      "gallery-success": {
+        "role": "secondary",
+        "displayName": "Gallery Open Beta Green",
+        "canonical": "#15803d",
+        "tonalRamp": ["#14532d", "#15803d", "#16a34a", "#22c55e", "#4ade80", "#86efac", "#dcfce7", "#f0fdf4"]
       }
     },
     "typographyMeta": {
       "display": {
         "displayName": "Display",
-        "purpose": "Full-viewport hero thesis statement set in Manrope Light (300) with balanced wrapping."
+        "purpose": "Full-viewport hero thesis statement set in Source Serif 4 (400) with tight -0.04em tracking and balanced wrapping."
       },
       "display-editorial": {
         "displayName": "Editorial Display",
@@ -451,7 +487,7 @@
       },
       "headline": {
         "displayName": "Headline",
-        "purpose": "Primary section headlines across landing bands, set in Manrope Light (300) with tight negative tracking."
+        "purpose": "Primary section headlines and monumental footer navigation across the Gallery Light landing page set in Source Serif 4 (400)."
       },
       "title": {
         "displayName": "Title",

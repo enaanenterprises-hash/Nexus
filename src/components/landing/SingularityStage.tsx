@@ -14,15 +14,18 @@ import {
   Mail,
   MessageSquare,
   Mic,
+  Moon,
   Pause,
   PenSquare,
   Play,
   Reply,
   Search,
   SlidersHorizontal,
+  Sun,
 } from "lucide-react";
 
 type StageLayer = "command" | "studio" | "sockets";
+type PreviewTheme = "light" | "dark";
 
 type MailMessage = {
   id: string;
@@ -87,7 +90,7 @@ const F1_TIMING = [
   { pos: "1", code: "VER", teamColor: "#3671C6", gap: "Leader", sector: "29.814", lap: "1:34.218", fastest: true },
   { pos: "2", code: "LEC", teamColor: "#E8002D", gap: "+1.412", sector: "30.041", lap: "1:34.609", fastest: false },
   { pos: "3", code: "NOR", teamColor: "#FF8000", gap: "+2.845", sector: "30.188", lap: "1:34.912", fastest: false },
-  { pos: "4", code: "HAM", teamColor: "#27F4D2", gap: "+4.190", sector: "30.275", lap: "1:35.104", fastest: false },
+  { pos: "4", code: "HAM", teamColor: "#00A19B", gap: "+4.190", sector: "30.275", lap: "1:35.104", fastest: false },
 ];
 
 const STUDIO_TRACKS = [
@@ -195,6 +198,7 @@ const LAYER_ITEMS: Array<{ id: StageLayer; label: string; shortLabel: string }> 
 
 export function SingularityStage() {
   const [activeLayer, setActiveLayer] = useState<StageLayer>("command");
+  const [previewTheme, setPreviewTheme] = useState<PreviewTheme>("light");
   const [selectedDay, setSelectedDay] = useState<number>(18);
   const [selectedMailId, setSelectedMailId] = useState<string>("elena");
   const [studioMode, setStudioMode] = useState<"record" | "edit">("edit");
@@ -206,40 +210,57 @@ export function SingularityStage() {
   const activeMail = MAIL_MESSAGES.find((m) => m.id === selectedMailId) ?? MAIL_MESSAGES[0];
   const inspectedSocket = inspectedSocketId ? SOCKET_RAIL.find((s) => s.id === inspectedSocketId) ?? null : null;
   const activeSlot = SOCKET_RAIL.find((s) => s.id === activeSlotId) ?? SOCKET_RAIL[0];
+  const dark = previewTheme === "dark";
+
+  // Concentric surface tokens inside the live preview frame (supports both Nexus Gallery Light & Obsidian Dark)
+  const frameClass = dark
+    ? "border-[#0e0f12] bg-[#0f0f12] shadow-[0_28px_64px_-24px_rgba(14,15,18,0.34)]"
+    : "border-[#0e0f12]/[0.1] bg-[#efede8] shadow-[0_24px_60px_-28px_rgba(14,15,18,0.16),0_2px_6px_rgba(14,15,18,0.04)]";
+  const cardClass = dark
+    ? "border-white/[0.08] bg-[#16161a]"
+    : "border-[#0e0f12]/[0.08] bg-white shadow-[0_1px_2px_rgba(14,15,18,0.035)]";
+  const inkPrimary = dark ? "text-[#f5f5f7]" : "text-[#0e0f12]";
+  const inkSecondary = dark ? "text-[#b4b4bc]" : "text-[#4a4c55]";
+  const inkMuted = dark ? "text-[#8e8e95]" : "text-[#636570]";
+  const hairline = dark ? "border-white/[0.07]" : "border-[#0e0f12]/[0.08]";
+  const goldText = dark ? "text-[#f0b54a]" : "text-[#9a6910]";
+  const goldDot = dark ? "bg-[#f0b54a]" : "bg-[#c9932c]";
+  const activeLayerMeta = LAYER_ITEMS.find((l) => l.id === activeLayer) ?? LAYER_ITEMS[0];
 
   return (
     <section
-      className="relative bg-black px-6 pb-14 sm:px-10 lg:px-14 lg:pb-16"
+      id="workspace"
+      className="relative scroll-mt-24 border-y border-[#0e0f12]/[0.07] bg-[#f7f6f2] px-6 py-16 sm:px-10 lg:px-14 lg:py-24"
       aria-label="Workspace overview"
     >
       <div className="mx-auto max-w-[1280px]">
         {/* Mobile top optical cascade */}
-        <div className="h-20 w-full lg:hidden" aria-hidden="true">
-          <CascadeFilament activeLayer={activeLayer} />
+        <div className="h-16 w-full lg:hidden" aria-hidden="true">
+          <CascadeFilament activeLayer={activeLayer} theme="light" />
         </div>
 
-        {/* Threshold statement with desktop optical filament cascade connecting hero edge into workspace border */}
-        <div className="relative pb-7 pt-3 lg:pb-8 lg:pt-12">
+        {/* Section header paired with desktop optical filament cascade */}
+        <div className="relative pb-8 pt-2 lg:pb-10 lg:pt-8">
           <div className="pointer-events-none absolute inset-0 hidden lg:block" aria-hidden="true">
-            <CascadeFilament activeLayer={activeLayer} />
+            <CascadeFilament activeLayer={activeLayer} theme="light" />
           </div>
-          <div className="relative z-10 max-w-[520px]">
-            <h2 className="text-[clamp(2.1rem,3.9vw,3.4rem)] font-light leading-[1.06] tracking-[-0.035em] text-[#f5f5f7] [text-wrap:balance]">
+          <div className="relative z-10 max-w-[540px]">
+            <h2 className="font-editorial text-[clamp(2.15rem,4vw,3.45rem)] font-normal leading-[1.06] tracking-[-0.035em] text-[#0e0f12] [text-wrap:balance]">
               One room for everything you run
             </h2>
-            <p className="mt-3 max-w-[46ch] text-[15px] leading-[1.58] text-[#a1a1a6]">
+            <p className="mt-3.5 max-w-[46ch] text-[15.5px] leading-[1.6] text-[#52545d]">
               Nexus brings your daily tools, web research, recording studio, and modular workspaces onto one shared
               system.
             </p>
           </div>
         </div>
 
-        {/* Asymmetric workstation row: minimal left layer rail + obsidian workspace stage */}
+        {/* Asymmetric workstation row: minimal left layer rail + Apple-concentric workspace window */}
         <div className="relative grid grid-cols-1 gap-6 lg:grid-cols-[232px_minmax(0,1fr)] lg:items-start lg:gap-10">
-          {/* Layer selector rail: 3-column segmented bar on mobile, quiet single-line ticks on desktop */}
+          {/* Layer selector rail */}
           <nav
             aria-label="Nexus workspace layers"
-            className="grid grid-cols-3 gap-1.5 rounded-[10px] border border-white/[0.09] bg-[#0f0f12] p-1 lg:grid-cols-1 lg:gap-5 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:pt-9"
+            className="grid grid-cols-3 gap-1.5 rounded-[14px] border border-[#0e0f12]/[0.09] bg-white/80 p-1 lg:grid-cols-1 lg:gap-5 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:pt-10"
           >
             {LAYER_ITEMS.map((item) => {
               const isActive = activeLayer === item.id;
@@ -249,19 +270,19 @@ export function SingularityStage() {
                   type="button"
                   onClick={() => setActiveLayer(item.id)}
                   aria-pressed={isActive}
-                  className={`group flex cursor-pointer items-center justify-center rounded-[7px] px-2 py-2 text-center transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f0b54a] lg:justify-start lg:gap-3.5 lg:rounded-none lg:bg-transparent lg:px-0 lg:py-0.5 lg:text-left ${
+                  className={`group flex min-h-[40px] cursor-pointer items-center justify-center rounded-[10px] px-2 py-2 text-center transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910] lg:min-h-0 lg:justify-start lg:gap-3.5 lg:rounded-none lg:bg-transparent lg:px-0 lg:py-0.5 lg:text-left ${
                     isActive
-                      ? "bg-[#1d1d23] text-[#f5f5f7]"
-                      : "text-[#8e8e95] hover:text-[#d1d1d6]"
+                      ? "bg-[#0e0f12] text-white lg:bg-transparent lg:text-[#0e0f12]"
+                      : "text-[#52545d] hover:text-[#0e0f12]"
                   }`}
                 >
                   <span
-                    className={`hidden h-6 w-px shrink-0 transition-colors duration-200 lg:block ${
-                      isActive ? "bg-[#f0b54a]" : "bg-white/[0.16] group-hover:bg-white/[0.34]"
+                    className={`hidden h-6 w-[2px] shrink-0 rounded-full transition-colors duration-200 lg:block ${
+                      isActive ? "bg-[#9a6910]" : "bg-[#0e0f12]/[0.14] group-hover:bg-[#0e0f12]/[0.35]"
                     }`}
                     aria-hidden="true"
                   />
-                  <span className="text-[13px] font-medium tracking-[-0.01em] lg:text-[21px] lg:font-normal lg:tracking-[-0.02em]">
+                  <span className="text-[13px] font-medium tracking-[-0.01em] lg:text-[20px] lg:font-medium lg:tracking-[-0.02em]">
                     <span className="lg:hidden">{item.shortLabel}</span>
                     <span className="hidden lg:inline">{item.label}</span>
                   </span>
@@ -270,24 +291,69 @@ export function SingularityStage() {
             })}
           </nav>
 
-          {/* Main obsidian workspace frame */}
-          <div className="rounded-[16px] border border-white/[0.12] bg-[#0f0f12] p-3 sm:p-4">
+          {/* Concentric Apple HIG workspace frame (outer 22px -> cards 14px -> controls 8px) */}
+          <div className={`rounded-[22px] border p-3 transition-colors duration-300 sm:p-4 ${frameClass}`}>
+            {/* Minimal window bar with live Gallery Light / Obsidian Dark preview toggle */}
+            <div className={`mb-3 flex items-center justify-between gap-3 border-b pb-2.5 ${hairline}`}>
+              <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-1.5" aria-hidden="true">
+                  <span className={`h-2.5 w-2.5 rounded-full ${dark ? "bg-white/15" : "bg-[#0e0f12]/12"}`} />
+                  <span className={`h-2.5 w-2.5 rounded-full ${dark ? "bg-white/15" : "bg-[#0e0f12]/12"}`} />
+                  <span className={`h-2.5 w-2.5 rounded-full ${dark ? "bg-white/15" : "bg-[#0e0f12]/12"}`} />
+                </div>
+                <span className={`text-[12.5px] font-medium ${inkSecondary}`}>
+                  Nexus · {activeLayerMeta.label}
+                </span>
+              </div>
+
+              <div
+                className={`inline-flex rounded-full border p-0.5 text-[12px] ${
+                  dark ? "border-white/[0.1] bg-[#16161a]" : "border-[#0e0f12]/[0.1] bg-[#f7f6f2]"
+                }`}
+                role="group"
+                aria-label="Preview workspace appearance"
+              >
+                <button
+                  type="button"
+                  onClick={() => setPreviewTheme("light")}
+                  aria-pressed={!dark}
+                  className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#9a6910] ${
+                    !dark ? "bg-white font-medium text-[#0e0f12] shadow-xs" : "text-[#a1a1a6] hover:text-white"
+                  }`}
+                >
+                  <Sun className="h-3 w-3" strokeWidth={1.8} aria-hidden="true" />
+                  <span>Light</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewTheme("dark")}
+                  aria-pressed={dark}
+                  className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#f0b54a] ${
+                    dark ? "bg-[#24242b] font-medium text-[#f5f5f7]" : "text-[#636570] hover:text-[#0e0f12]"
+                  }`}
+                >
+                  <Moon className="h-3 w-3" strokeWidth={1.8} aria-hidden="true" />
+                  <span>Dark</span>
+                </button>
+              </div>
+            </div>
+
             <div key={activeLayer} className="lp-stage-panel">
               {activeLayer === "command" && (
                 <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,0.88fr)_minmax(0,1.52fr)]">
                   {/* Left: 30-day November Calendar */}
-                  <div className="flex flex-col justify-between rounded-[10px] border border-white/[0.08] bg-[#16161a] p-4">
+                  <div className={`flex flex-col justify-between rounded-[14px] border p-4 ${cardClass}`}>
                     <div>
                       <div className="flex items-baseline justify-between gap-2">
-                        <span className="text-[16px] font-normal tracking-[-0.015em] text-[#f5f5f7]">November</span>
+                        <span className={`text-[16px] font-medium tracking-[-0.015em] ${inkPrimary}`}>November</span>
                         {CALENDAR_EVENTS[selectedDay] ? (
-                          <span className="truncate text-[12px] text-[#a1a1a6] tabular-nums">
+                          <span className={`truncate text-[12px] tabular-nums ${inkMuted}`}>
                             {CALENDAR_EVENTS[selectedDay]}
                           </span>
                         ) : null}
                       </div>
 
-                      <div className="mt-4 grid grid-cols-7 gap-y-1.5 text-center text-[11px] text-[#8e8e95]">
+                      <div className={`mt-4 grid grid-cols-7 gap-y-1.5 text-center text-[11px] ${inkMuted}`}>
                         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
                           <span key={d}>{d}</span>
                         ))}
@@ -304,15 +370,27 @@ export function SingularityStage() {
                               onClick={() => setSelectedDay(day)}
                               aria-label={`November ${day}${hasEvent ? `, ${CALENDAR_EVENTS[day]}` : ""}`}
                               aria-pressed={isSelected}
-                              className={`flex h-8 cursor-pointer items-center justify-center rounded-[7px] text-[13px] transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#f0b54a] ${
+                              className={`relative flex h-8 cursor-pointer items-center justify-center rounded-[8px] text-[13px] transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#9a6910] ${
                                 isSelected
-                                  ? "bg-[#2e2e36] font-medium text-[#f5f5f7]"
+                                  ? dark
+                                    ? "bg-[#2e2e36] font-medium text-[#f5f5f7]"
+                                    : "bg-[#0e0f12] font-medium text-white"
                                   : hasEvent
-                                    ? "text-[#f5f5f7] hover:bg-white/[0.06]"
-                                    : "text-[#b8b8c0] hover:bg-white/[0.05]"
+                                    ? dark
+                                      ? "font-medium text-[#f5f5f7] hover:bg-white/[0.06]"
+                                      : "font-medium text-[#0e0f12] hover:bg-[#0e0f12]/[0.05]"
+                                    : dark
+                                      ? "text-[#b8b8c0] hover:bg-white/[0.05]"
+                                      : "text-[#52545d] hover:bg-[#0e0f12]/[0.04]"
                               }`}
                             >
-                              {day}
+                              <span>{day}</span>
+                              {hasEvent && !isSelected ? (
+                                <span
+                                  className={`absolute bottom-1 h-1 w-1 rounded-full ${goldDot}`}
+                                  aria-hidden="true"
+                                />
+                              ) : null}
                             </button>
                           );
                         })}
@@ -322,26 +400,23 @@ export function SingularityStage() {
 
                   {/* Right column: Top split Gmail cards + Bottom Weather & Formula 1 */}
                   <div className="flex flex-col gap-3">
-                    {/* Top row: Gmail inbox card (with slim left rail) + separate elevated reader card */}
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.02fr)]">
                       {/* Gmail Inbox card */}
-                      <div className="grid grid-cols-[44px_minmax(0,1fr)] overflow-hidden rounded-[10px] border border-white/[0.08] bg-[#16161a]">
-                        {/* Slim left Gmail compose/nav rail */}
+                      <div className={`grid grid-cols-[44px_minmax(0,1fr)] overflow-hidden rounded-[14px] border ${cardClass}`}>
                         <div
-                          className="flex flex-col items-center gap-3 border-r border-white/[0.07] py-3.5 text-[#8e8e95]"
+                          className={`flex flex-col items-center gap-3 border-r py-3.5 ${hairline} ${inkMuted}`}
                           aria-hidden="true"
                         >
-                          <Mail className="h-4 w-4 text-[#d1d1d6]" strokeWidth={1.5} />
-                          <Inbox className="h-3.5 w-3.5 text-[#a1a1a6]" strokeWidth={1.5} />
-                          <MessageSquare className="h-3.5 w-3.5" strokeWidth={1.5} />
-                          <PenSquare className="h-3.5 w-3.5" strokeWidth={1.5} />
+                          <Mail className={`h-4 w-4 ${inkPrimary}`} strokeWidth={1.6} />
+                          <Inbox className="h-3.5 w-3.5" strokeWidth={1.6} />
+                          <MessageSquare className="h-3.5 w-3.5" strokeWidth={1.6} />
+                          <PenSquare className="h-3.5 w-3.5" strokeWidth={1.6} />
                         </div>
 
-                        {/* Message list */}
                         <div className="min-w-0 p-3">
                           <div className="mb-2 flex items-center justify-between px-1">
-                            <span className="text-[15px] font-medium tracking-[-0.01em] text-[#f5f5f7]">Gmail</span>
-                            <span className="text-[11px] text-[#8e8e95]">Inbox</span>
+                            <span className={`text-[15px] font-medium tracking-[-0.01em] ${inkPrimary}`}>Gmail</span>
+                            <span className={`text-[11px] ${inkMuted}`}>Inbox</span>
                           </div>
 
                           <div className="flex flex-col gap-1" role="listbox" aria-label="Sample inbox messages">
@@ -354,20 +429,26 @@ export function SingularityStage() {
                                   role="option"
                                   aria-selected={selected}
                                   onClick={() => setSelectedMailId(msg.id)}
-                                  className={`cursor-pointer rounded-[6px] px-2 py-1.5 text-left transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#f0b54a] ${
-                                    selected ? "bg-[#24242b] text-[#f5f5f7]" : "text-[#c7c7cc] hover:bg-white/[0.04]"
+                                  className={`cursor-pointer rounded-[8px] px-2 py-1.5 text-left transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#9a6910] ${
+                                    selected
+                                      ? dark
+                                        ? "bg-[#24242b] text-[#f5f5f7]"
+                                        : "bg-[#f3f1ec] text-[#0e0f12]"
+                                      : dark
+                                        ? "text-[#c7c7cc] hover:bg-white/[0.04]"
+                                        : "text-[#4a4c55] hover:bg-[#0e0f12]/[0.035]"
                                   }`}
                                 >
                                   <div className="flex items-center justify-between gap-2">
-                                    <span className="flex items-center gap-1.5 truncate text-[12.5px] font-medium text-[#f5f5f7]">
+                                    <span className={`flex items-center gap-1.5 truncate text-[12.5px] font-medium ${inkPrimary}`}>
                                       {msg.unread ? (
-                                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#f0b54a]" aria-hidden="true" />
+                                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${goldDot}`} aria-hidden="true" />
                                       ) : null}
                                       <span className="truncate">{msg.sender}</span>
                                     </span>
-                                    <span className="shrink-0 text-[11px] text-[#8e8e95] tabular-nums">{msg.time}</span>
+                                    <span className={`shrink-0 text-[11px] tabular-nums ${inkMuted}`}>{msg.time}</span>
                                   </div>
-                                  <p className="mt-0.5 truncate text-[11.5px] text-[#a1a1a6]">{msg.subject}</p>
+                                  <p className={`mt-0.5 truncate text-[11.5px] ${inkSecondary}`}>{msg.subject}</p>
                                 </button>
                               );
                             })}
@@ -375,19 +456,19 @@ export function SingularityStage() {
                         </div>
                       </div>
 
-                      {/* Separate elevated Gmail reader card */}
-                      <div className="flex flex-col rounded-[10px] border border-white/[0.08] bg-[#16161a] p-3.5">
-                        <div className="flex items-center justify-between gap-2 text-[11.5px] text-[#8e8e95]">
+                      {/* Elevated Gmail reader card */}
+                      <div className={`flex flex-col rounded-[14px] border p-3.5 ${cardClass}`}>
+                        <div className={`flex items-center justify-between gap-2 text-[11.5px] ${inkMuted}`}>
                           <span className="truncate">
                             {activeMail.sender} · <span className="tabular-nums">{activeMail.time}</span>
                           </span>
                           <div className="flex items-center gap-2" aria-hidden="true">
-                            <Reply className="h-3.5 w-3.5" strokeWidth={1.5} />
-                            <Forward className="h-3.5 w-3.5" strokeWidth={1.5} />
+                            <Reply className="h-3.5 w-3.5" strokeWidth={1.6} />
+                            <Forward className="h-3.5 w-3.5" strokeWidth={1.6} />
                           </div>
                         </div>
-                        <p className="mt-2 text-[13.5px] font-medium text-[#f5f5f7]">{activeMail.subject}</p>
-                        <div className="mt-2 space-y-2 text-[12.5px] leading-[1.52] text-[#b4b4bc]">
+                        <p className={`mt-2 text-[13.5px] font-medium ${inkPrimary}`}>{activeMail.subject}</p>
+                        <div className={`mt-2 space-y-2 text-[12.5px] leading-[1.54] ${inkSecondary}`}>
                           {activeMail.body.map((para, idx) => (
                             <p key={idx} className="whitespace-pre-line">
                               {para}
@@ -399,45 +480,43 @@ export function SingularityStage() {
 
                     {/* Bottom row: Weather Observatory + Formula 1 Pit Wall */}
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      {/* Weather */}
-                      <div className="flex flex-col justify-between rounded-[10px] border border-white/[0.08] bg-[#16161a] p-3.5">
+                      <div className={`flex flex-col justify-between rounded-[14px] border p-3.5 ${cardClass}`}>
                         <div className="flex items-start justify-between">
                           <div>
-                            <span className="text-[14px] text-[#d1d1d6]">Weather</span>
+                            <span className={`text-[14px] font-medium ${inkPrimary}`}>Weather</span>
                             <div className="mt-1.5 flex items-baseline gap-2">
-                              <span className="text-[36px] font-light leading-none tracking-[-0.04em] text-[#f5f5f7] tabular-nums">
+                              <span className={`text-[36px] font-light leading-none tracking-[-0.04em] tabular-nums ${inkPrimary}`}>
                                 11°
                               </span>
-                              <span className="text-[13px] text-[#a1a1a6]">Toronto</span>
+                              <span className={`text-[13px] ${inkMuted}`}>Toronto</span>
                             </div>
                           </div>
-                          <CloudSun className="h-7 w-7 text-[#d1d1d6]" strokeWidth={1.35} aria-hidden="true" />
+                          <CloudSun className={`h-7 w-7 ${inkSecondary}`} strokeWidth={1.4} aria-hidden="true" />
                         </div>
 
                         <div className="mt-4 grid grid-cols-5 gap-1 text-center tabular-nums">
                           {HOURLY_WEATHER.map((slot) => (
                             <div key={slot.label} className="flex flex-col items-center gap-1">
-                              <span className="text-[11px] text-[#8e8e95]">{slot.label}</span>
+                              <span className={`text-[11px] ${inkMuted}`}>{slot.label}</span>
                               {slot.icon === "partly" ? (
-                                <CloudSun className="h-3.5 w-3.5 text-[#a1a1a6]" strokeWidth={1.45} aria-hidden="true" />
+                                <CloudSun className={`h-3.5 w-3.5 ${inkSecondary}`} strokeWidth={1.5} aria-hidden="true" />
                               ) : (
-                                <Cloud className="h-3.5 w-3.5 text-[#a1a1a6]" strokeWidth={1.45} aria-hidden="true" />
+                                <Cloud className={`h-3.5 w-3.5 ${inkSecondary}`} strokeWidth={1.5} aria-hidden="true" />
                               )}
-                              <span className="text-[12px] text-[#f5f5f7]">{slot.temp}</span>
+                              <span className={`text-[12px] font-medium ${inkPrimary}`}>{slot.temp}</span>
                             </div>
                           ))}
                         </div>
                       </div>
 
-                      {/* Formula 1 */}
-                      <div className="flex flex-col justify-between rounded-[10px] border border-white/[0.08] bg-[#16161a] p-3.5">
+                      <div className={`flex flex-col justify-between rounded-[14px] border p-3.5 ${cardClass}`}>
                         <div className="flex items-baseline justify-between">
-                          <span className="text-[14px] text-[#f5f5f7]">Formula 1</span>
-                          <span className="text-[12px] text-[#8e8e95]">Las Vegas</span>
+                          <span className={`text-[14px] font-medium ${inkPrimary}`}>Formula 1</span>
+                          <span className={`text-[12px] ${inkMuted}`}>Las Vegas</span>
                         </div>
 
                         <div className="mt-3">
-                          <div className="grid grid-cols-[14px_42px_1fr_1fr_1fr] gap-1.5 border-b border-white/[0.07] pb-1.5 text-[11px] text-[#8e8e95]">
+                          <div className={`grid grid-cols-[14px_42px_1fr_1fr_1fr] gap-1.5 border-b pb-1.5 text-[11px] ${hairline} ${inkMuted}`}>
                             <span />
                             <span>Driver</span>
                             <span className="text-right">Gap</span>
@@ -450,20 +529,20 @@ export function SingularityStage() {
                                 key={row.code}
                                 className="grid grid-cols-[14px_42px_1fr_1fr_1fr] items-center gap-1.5 text-[12px]"
                               >
-                                <span className="text-[#8e8e95]">{row.pos}</span>
-                                <span className="flex items-center gap-1.5 font-medium text-[#f5f5f7]">
+                                <span className={inkMuted}>{row.pos}</span>
+                                <span className={`flex items-center gap-1.5 font-medium ${inkPrimary}`}>
                                   <span
-                                    className="h-2.5 w-[2px] rounded-full"
+                                    className="h-2.5 w-[2.5px] rounded-full"
                                     style={{ backgroundColor: row.teamColor }}
                                     aria-hidden="true"
                                   />
                                   {row.code}
                                 </span>
-                                <span className="text-right text-[#b4b4bc]">{row.gap}</span>
-                                <span className={`text-right ${row.fastest ? "text-[#f0b54a]" : "text-[#b4b4bc]"}`}>
+                                <span className={`text-right ${inkSecondary}`}>{row.gap}</span>
+                                <span className={`text-right font-medium ${row.fastest ? goldText : inkSecondary}`}>
                                   {row.sector}
                                 </span>
-                                <span className="text-right text-[#d1d1d6]">{row.lap}</span>
+                                <span className={`text-right ${inkPrimary}`}>{row.lap}</span>
                               </div>
                             ))}
                           </div>
@@ -477,12 +556,14 @@ export function SingularityStage() {
               {activeLayer === "studio" && (
                 <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)]">
                   {/* Recording Studio DAW */}
-                  <div className="flex flex-col justify-between rounded-[10px] border border-white/[0.08] bg-[#16161a] p-4">
+                  <div className={`flex flex-col justify-between rounded-[14px] border p-4 ${cardClass}`}>
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
-                        <span className="text-[15px] font-medium text-[#f5f5f7]">Studio</span>
+                        <span className={`text-[15px] font-medium ${inkPrimary}`}>Studio</span>
                         <div
-                          className="inline-flex rounded-[7px] border border-white/[0.1] bg-[#0f0f12] p-0.5 text-[12px]"
+                          className={`inline-flex rounded-[9px] border p-0.5 text-[12px] ${
+                            dark ? "border-white/[0.1] bg-[#0f0f12]" : "border-[#0e0f12]/[0.1] bg-[#f7f6f2]"
+                          }`}
                           role="tablist"
                           aria-label="Studio workspace view"
                         >
@@ -491,10 +572,12 @@ export function SingularityStage() {
                             role="tab"
                             aria-selected={studioMode === "record"}
                             onClick={() => setStudioMode("record")}
-                            className={`cursor-pointer rounded-[5px] px-2.5 py-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#f0b54a] ${
+                            className={`cursor-pointer rounded-[7px] px-2.5 py-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#9a6910] ${
                               studioMode === "record"
-                                ? "bg-[#24242b] text-[#f5f5f7]"
-                                : "text-[#8e8e95] hover:text-[#d1d1d6]"
+                                ? dark
+                                  ? "bg-[#24242b] text-[#f5f5f7]"
+                                  : "bg-white font-medium text-[#0e0f12] shadow-xs"
+                                : inkMuted
                             }`}
                           >
                             Record
@@ -504,10 +587,12 @@ export function SingularityStage() {
                             role="tab"
                             aria-selected={studioMode === "edit"}
                             onClick={() => setStudioMode("edit")}
-                            className={`cursor-pointer rounded-[5px] px-2.5 py-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#f0b54a] ${
+                            className={`cursor-pointer rounded-[7px] px-2.5 py-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#9a6910] ${
                               studioMode === "edit"
-                                ? "bg-[#24242b] text-[#f5f5f7]"
-                                : "text-[#8e8e95] hover:text-[#d1d1d6]"
+                                ? dark
+                                  ? "bg-[#24242b] text-[#f5f5f7]"
+                                  : "bg-white font-medium text-[#0e0f12] shadow-xs"
+                                : inkMuted
                             }`}
                           >
                             Edit
@@ -516,27 +601,30 @@ export function SingularityStage() {
                       </div>
 
                       <div className="flex items-center gap-3 tabular-nums">
-                        <span className="text-[13px] text-[#a1a1a6]">
+                        <span className={`text-[13px] ${inkMuted}`}>
                           {studioMode === "record" ? "Input ready · 48 kHz" : "00:14:22.4"}
                         </span>
                         <button
                           type="button"
                           onClick={() => setStudioPlaying((p) => !p)}
                           aria-label={studioPlaying ? "Pause preview" : "Play preview"}
-                          className="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-white/[0.14] bg-white/[0.04] text-[#f5f5f7] transition-colors hover:border-white/[0.28] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f0b54a]"
+                          className={`inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910] ${
+                            dark
+                              ? "border-white/[0.14] bg-white/[0.04] text-[#f5f5f7] hover:border-white/[0.28]"
+                              : "border-[#0e0f12]/[0.14] bg-[#f7f6f2] text-[#0e0f12] hover:border-[#0e0f12]/[0.28]"
+                          }`}
                         >
                           {studioMode === "record" ? (
-                            <Mic className="h-3.5 w-3.5 text-[#f0b54a]" strokeWidth={1.6} />
+                            <Mic className={`h-3.5 w-3.5 ${goldText}`} strokeWidth={1.7} />
                           ) : studioPlaying ? (
-                            <Pause className="h-3.5 w-3.5" strokeWidth={1.6} />
+                            <Pause className="h-3.5 w-3.5" strokeWidth={1.7} />
                           ) : (
-                            <Play className="h-3.5 w-3.5" strokeWidth={1.6} />
+                            <Play className="h-3.5 w-3.5" strokeWidth={1.7} />
                           )}
                         </button>
                       </div>
                     </div>
 
-                    {/* Multi-track waveforms with interactive scrub playhead */}
                     <div
                       className="relative mt-4 space-y-2"
                       onClick={(e) => {
@@ -546,18 +634,20 @@ export function SingularityStage() {
                       }}
                     >
                       <div
-                        className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-[#f0b54a] transition-[left] duration-200"
+                        className={`pointer-events-none absolute top-0 bottom-0 z-10 w-[1.5px] transition-[left] duration-200 ${goldDot}`}
                         style={{ left: `${playheadPct}%` }}
                         aria-hidden="true"
                       />
                       {STUDIO_TRACKS.map((track) => (
                         <div
                           key={track.id}
-                          className="grid cursor-pointer grid-cols-[108px_minmax(0,1fr)] items-center gap-3 rounded-[8px] border border-white/[0.06] bg-[#111115] px-3 py-2"
+                          className={`grid cursor-pointer grid-cols-[108px_minmax(0,1fr)] items-center gap-3 rounded-[9px] border px-3 py-2 ${
+                            dark ? "border-white/[0.06] bg-[#111115]" : "border-[#0e0f12]/[0.07] bg-[#faf9f6]"
+                          }`}
                         >
                           <div className="min-w-0">
-                            <p className="truncate text-[13px] font-medium text-[#f5f5f7]">{track.name}</p>
-                            <p className="truncate text-[11px] text-[#8e8e95]">{track.role}</p>
+                            <p className={`truncate text-[13px] font-medium ${inkPrimary}`}>{track.name}</p>
+                            <p className={`truncate text-[11px] ${inkMuted}`}>{track.role}</p>
                           </div>
                           <svg
                             viewBox="0 0 240 44"
@@ -579,7 +669,15 @@ export function SingularityStage() {
                                   width="2.2"
                                   height={h}
                                   rx="1"
-                                  fill={passed ? "#e4e4e9" : "rgba(255,255,255,0.28)"}
+                                  fill={
+                                    dark
+                                      ? passed
+                                        ? "#e4e4e9"
+                                        : "rgba(255,255,255,0.28)"
+                                      : passed
+                                        ? "#0e0f12"
+                                        : "rgba(14,15,18,0.22)"
+                                  }
                                 />
                               );
                             })}
@@ -588,33 +686,43 @@ export function SingularityStage() {
                       ))}
                     </div>
 
-                    <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2 text-[12px] text-[#8e8e95]">
+                    <div className={`mt-3.5 flex flex-wrap items-center justify-between gap-2 text-[12px] ${inkMuted}`}>
                       <span>Click timeline to move playhead</span>
                       <span>Synced via Supabase Storage</span>
                     </div>
                   </div>
 
                   {/* Research clean reader */}
-                  <div className="flex flex-col justify-between rounded-[10px] border border-white/[0.08] bg-[#16161a] p-4">
+                  <div className={`flex flex-col justify-between rounded-[14px] border p-4 ${cardClass}`}>
                     <div>
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-[15px] font-medium text-[#f5f5f7]">Research</span>
-                        <Bookmark className="h-4 w-4 text-[#a1a1a6]" strokeWidth={1.5} aria-hidden="true" />
+                        <span className={`text-[15px] font-medium ${inkPrimary}`}>Research</span>
+                        <Bookmark className={`h-4 w-4 ${inkMuted}`} strokeWidth={1.6} aria-hidden="true" />
                       </div>
 
-                      <div className="mt-3 flex items-center gap-2 rounded-[7px] border border-white/[0.08] bg-[#0f0f12] px-3 py-1.5 text-[12px] text-[#a1a1a6]">
-                        <Search className="h-3.5 w-3.5 shrink-0 text-[#8e8e95]" strokeWidth={1.5} aria-hidden="true" />
+                      <div
+                        className={`mt-3 flex items-center gap-2 rounded-[8px] border px-3 py-1.5 text-[12px] ${
+                          dark
+                            ? "border-white/[0.08] bg-[#0f0f12] text-[#a1a1a6]"
+                            : "border-[#0e0f12]/[0.08] bg-[#f7f6f2] text-[#52545d]"
+                        }`}
+                      >
+                        <Search className={`h-3.5 w-3.5 shrink-0 ${inkMuted}`} strokeWidth={1.6} aria-hidden="true" />
                         <span className="truncate">Brave Search · Capability-gated personal systems</span>
                       </div>
 
                       <article className="mt-4 space-y-2.5">
-                        <h3 className="text-[15px] font-medium leading-[1.3] tracking-[-0.015em] text-[#f5f5f7]">
+                        <h3 className={`text-[15px] font-medium leading-[1.3] tracking-[-0.015em] ${inkPrimary}`}>
                           Why personal software breaks into tabs
                         </h3>
-                        <p className="text-[13px] leading-[1.6] text-[#b4b4bc]">
+                        <p className={`text-[13px] leading-[1.6] ${inkSecondary}`}>
                           Every standalone web app keeps its own search bar, login, and private silo. Reading in one
                           clean view lets you{" "}
-                          <mark className="rounded-[3px] bg-[#f0b54a]/22 px-1 py-0.5 text-[#f5f5f7]">
+                          <mark
+                            className={`rounded-[3px] px-1 py-0.5 ${
+                              dark ? "bg-[#f0b54a]/22 text-[#f5f5f7]" : "bg-[#c9932c]/18 text-[#0e0f12]"
+                            }`}
+                          >
                             highlight once and pass typed sources to any permitted socket
                           </mark>{" "}
                           without trackers or manual copy-pasting.
@@ -622,9 +730,9 @@ export function SingularityStage() {
                       </article>
                     </div>
 
-                    <div className="mt-4 flex items-center justify-between text-[12px] text-[#8e8e95]">
+                    <div className={`mt-4 flex items-center justify-between text-[12px] ${inkMuted}`}>
                       <span>SSRF-guarded reader</span>
-                      <span className="text-[#c7c7cc]">Saved to Systems collection</span>
+                      <span className={inkPrimary}>Saved to Systems collection</span>
                     </div>
                   </div>
                 </div>
@@ -632,13 +740,13 @@ export function SingularityStage() {
 
               {activeLayer === "sockets" && (
                 <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-                  <div className="rounded-[10px] border border-white/[0.08] bg-[#16161a] p-4">
+                  <div className={`rounded-[14px] border p-4 ${cardClass}`}>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[15px] font-medium text-[#f5f5f7]">Orbital extension slots</span>
-                      <span className="text-[12px] text-[#a1a1a6]">2 free · 3 Pro preview</span>
+                      <span className={`text-[15px] font-medium ${inkPrimary}`}>Orbital extension slots</span>
+                      <span className={`text-[12px] ${inkMuted}`}>2 free · 3 Pro preview</span>
                     </div>
 
-                    <div className="mt-3 divide-y divide-white/[0.07]">
+                    <div className={`mt-3 divide-y ${dark ? "divide-white/[0.07]" : "divide-[#0e0f12]/[0.07]"}`}>
                       {SOCKET_RAIL.slice(0, 5).map((slot, idx) => {
                         const active = slot.id === activeSlot.id;
                         return (
@@ -647,26 +755,30 @@ export function SingularityStage() {
                             type="button"
                             onClick={() => setActiveSlotId(slot.id)}
                             aria-pressed={active}
-                            className={`flex w-full cursor-pointer items-center justify-between gap-3 py-2.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f0b54a] ${
-                              active ? "text-[#f5f5f7]" : "text-[#b4b4bc] hover:text-[#f5f5f7]"
+                            className={`flex w-full cursor-pointer items-center justify-between gap-3 py-2.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910] ${
+                              active ? inkPrimary : `${inkSecondary} hover:${inkPrimary}`
                             }`}
                           >
                             <div className="flex min-w-0 items-center gap-3">
                               <span
                                 className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] tabular-nums ${
                                   active
-                                    ? "border-[#f0b54a]/60 bg-[#f0b54a]/12 text-[#f0b54a]"
-                                    : "border-white/[0.12] text-[#8e8e95]"
+                                    ? dark
+                                      ? "border-[#f0b54a]/60 bg-[#f0b54a]/12 text-[#f0b54a]"
+                                      : "border-[#9a6910]/55 bg-[#c9932c]/12 font-medium text-[#9a6910]"
+                                    : dark
+                                      ? "border-white/[0.12] text-[#8e8e95]"
+                                      : "border-[#0e0f12]/[0.14] text-[#636570]"
                                 }`}
                               >
                                 {idx + 1}
                               </span>
                               <div className="min-w-0">
-                                <p className="text-[14px] font-medium">{slot.name}</p>
-                                <p className="truncate text-[12px] text-[#8e8e95]">{slot.scope}</p>
+                                <p className={`text-[14px] font-medium ${inkPrimary}`}>{slot.name}</p>
+                                <p className={`truncate text-[12px] ${inkMuted}`}>{slot.scope}</p>
                               </div>
                             </div>
-                            <span className="shrink-0 text-[12px] text-[#a1a1a6]">
+                            <span className={`shrink-0 text-[12px] ${inkMuted}`}>
                               {slot.tier} · {slot.status}
                             </span>
                           </button>
@@ -675,25 +787,25 @@ export function SingularityStage() {
                     </div>
                   </div>
 
-                  <div className="flex flex-col justify-between rounded-[10px] border border-white/[0.08] bg-[#16161a] p-4">
+                  <div className={`flex flex-col justify-between rounded-[14px] border p-4 ${cardClass}`}>
                     <div>
-                      <div className="flex items-center gap-2 text-[#f5f5f7]">
-                        <SlidersHorizontal className="h-4 w-4 text-[#f0b54a]" strokeWidth={1.5} aria-hidden="true" />
+                      <div className={`flex items-center gap-2 ${inkPrimary}`}>
+                        <SlidersHorizontal className={`h-4 w-4 ${goldText}`} strokeWidth={1.6} aria-hidden="true" />
                         <span className="text-[15px] font-medium">{activeSlot.name} contract</span>
                       </div>
-                      <p className="mt-2.5 text-[13.5px] leading-[1.6] text-[#b4b4bc]">{activeSlot.summary}</p>
-                      <div className="mt-3.5 space-y-2 border-t border-white/[0.07] pt-3 text-[12px] text-[#a1a1a6]">
+                      <p className={`mt-2.5 text-[13.5px] leading-[1.6] ${inkSecondary}`}>{activeSlot.summary}</p>
+                      <div className={`mt-3.5 space-y-2 border-t pt-3 text-[12px] ${hairline} ${inkSecondary}`}>
                         <div className="flex items-center gap-2">
-                          <Check className="h-3.5 w-3.5 text-[#f0b54a]" strokeWidth={1.75} aria-hidden="true" />
+                          <Check className={`h-3.5 w-3.5 ${goldText}`} strokeWidth={1.8} aria-hidden="true" />
                           <span>Manifest validated on register (apiVersion 1)</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Lock className="h-3.5 w-3.5 text-[#a1a1a6]" strokeWidth={1.6} aria-hidden="true" />
+                          <Lock className={`h-3.5 w-3.5 ${inkMuted}`} strokeWidth={1.6} aria-hidden="true" />
                           <span>Scoped to {activeSlot.scope}</span>
                         </div>
                       </div>
                     </div>
-                    <p className="mt-4 text-[12px] text-[#8e8e95]">
+                    <p className={`mt-4 text-[12px] ${inkMuted}`}>
                       Unrequested streams never reach the extension runtime.
                     </p>
                   </div>
@@ -703,11 +815,11 @@ export function SingularityStage() {
           </div>
         </div>
 
-        {/* Connected horizontal socket rail inside the same viewport frame */}
-        <div className="mt-8">
+        {/* Connected horizontal socket rail */}
+        <div className="mt-9">
           <div className="relative">
             <div
-              className="pointer-events-none absolute top-1/2 right-0 left-0 hidden h-px -translate-y-1/2 bg-white/[0.12] md:block"
+              className="pointer-events-none absolute top-1/2 right-0 left-0 hidden h-px -translate-y-1/2 bg-[#0e0f12]/[0.11] md:block"
               aria-hidden="true"
             />
             <div
@@ -726,19 +838,17 @@ export function SingularityStage() {
                       setInspectedSocketId((cur) => (cur === socket.id ? null : socket.id));
                       setActiveSlotId(socket.id);
                     }}
-                    className={`cursor-pointer rounded-full border px-3 py-2 text-center text-[13px] transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f0b54a] ${
+                    className={`min-h-[40px] cursor-pointer rounded-full border px-3 py-2 text-center text-[13px] transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910] ${
                       selected
-                        ? "border-[#f0b54a]/55 bg-[#16161a] text-[#f5f5f7]"
-                        : "border-white/[0.13] bg-[#0b0b0e] text-[#d1d1d6] hover:border-white/[0.26] hover:text-[#f5f5f7]"
+                        ? "border-[#9a6910]/60 bg-white font-medium text-[#0e0f12] shadow-[0_6px_16px_-8px_rgba(154,105,16,0.3)]"
+                        : "border-[#0e0f12]/[0.11] bg-white text-[#4a4c55] hover:border-[#0e0f12]/[0.26] hover:text-[#0e0f12]"
                     }`}
                   >
-                    <span className="font-normal">{socket.name}</span>
+                    <span>{socket.name}</span>
                     {socket.status ? (
                       <>
                         {" "}
-                        <span className={socket.live ? "text-[#a1a1a6]" : "text-[#8e8e95]"}>
-                          ({socket.status})
-                        </span>
+                        <span className={socket.live ? "text-[#9a6910]" : "text-[#636570]"}>({socket.status})</span>
                       </>
                     ) : null}
                   </button>
@@ -747,11 +857,11 @@ export function SingularityStage() {
             </div>
           </div>
 
-          <div className="mt-3.5 flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
-            <p className="text-[12.5px] leading-[1.5] text-[#8e8e95]">
+          <div className="mt-4 flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
+            <p className="text-[13px] leading-[1.5] text-[#636570]">
               {inspectedSocket ? (
                 <>
-                  <span className="font-medium text-[#d1d1d6]">{inspectedSocket.name}</span> —{" "}
+                  <span className="font-medium text-[#0e0f12]">{inspectedSocket.name}</span> —{" "}
                   {inspectedSocket.summary}
                 </>
               ) : (
@@ -761,14 +871,14 @@ export function SingularityStage() {
             <div className="flex shrink-0 items-center gap-3.5 text-[13.5px]">
               <a
                 href="#waitlist"
-                className="text-[#d1d1d6] transition-colors hover:text-[#f5f5f7] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f0b54a]"
+                className="font-medium text-[#0e0f12] transition-colors hover:text-[#9a6910] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910]"
               >
                 Join waitlist
               </a>
-              <span className="h-3.5 w-px bg-white/[0.18]" aria-hidden="true" />
+              <span className="h-3.5 w-px bg-[#0e0f12]/[0.16]" aria-hidden="true" />
               <Link
                 href="/signup"
-                className="text-[#a1a1a6] transition-colors hover:text-[#f5f5f7] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f0b54a]"
+                className="text-[#52545d] transition-colors hover:text-[#0e0f12] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910]"
               >
                 Sign in
               </Link>

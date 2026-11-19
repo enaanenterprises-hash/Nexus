@@ -42,8 +42,8 @@ type Particle = { filament: number; u: number; speed: number; size: number; alph
 type Dust = { filament: number; t: number; offset: Vec; size: number; alpha: number; phase: number };
 type Layout = { width: number; height: number; core: Vec; node: Vec; scale: number };
 
-/** Faint wide haze strands through fine bright hairs; additive blending builds the glow. */
-const BUCKETS = [
+/** Faint wide haze strands through fine bright hairs; additive blending builds the glow on dark grounds. */
+const DARK_BUCKETS = [
   { count: 110, width: 0.5, color: "255, 206, 120", alpha: 0.3 },
   { count: 80, width: 0.8, color: "246, 176, 68", alpha: 0.2 },
   { count: 46, width: 1.2, color: "232, 150, 48", alpha: 0.12 },
@@ -52,15 +52,25 @@ const BUCKETS = [
   { count: 12, width: 3.4, color: "204, 116, 28", alpha: 0.03 },
 ] as const;
 
+/** Spun 24k burnished gold & sunlit champagne filaments calibrated for source-over rendering on Gallery Light (#ffffff). */
+const LIGHT_BUCKETS = [
+  { count: 110, width: 0.62, color: "186, 134, 28", alpha: 0.34 },
+  { count: 80, width: 0.96, color: "206, 154, 44", alpha: 0.24 },
+  { count: 46, width: 1.4, color: "166, 114, 20", alpha: 0.17 },
+  { count: 24, width: 2.3, color: "222, 176, 68", alpha: 0.11 },
+  { count: 46, width: 0.45, color: "138, 90, 12", alpha: 0.4 },
+  { count: 12, width: 3.6, color: "236, 198, 100", alpha: 0.08 },
+] as const;
+
 const PARTICLE_COUNT = 460;
-const DUST_COUNT = 2600;
-const INTRO_SECONDS = 2.6;
+const DUST_COUNT = 2400;
+const INTRO_SECONDS = 2.4;
 
 function createField() {
   const { rnd, gauss, between } = seededHelpers(20261113);
 
   const filaments: Filament[] = [];
-  BUCKETS.forEach((bucket, bucketIndex) => {
+  DARK_BUCKETS.forEach((bucket, bucketIndex) => {
     for (let i = 0; i < bucket.count; i++) {
       // Incoming: a bright bundle dropping steeply from above, and long faint sweeps from the lower left.
       const fromAbove = rnd() < 0.5;
@@ -135,14 +145,23 @@ function createField() {
   return { filaments, particles, dust };
 }
 
-function computeLayout(width: number, height: number): Layout {
+function computeLayout(width: number, height: number, theme: "dark" | "light"): Layout {
   if (width < 760) {
     return {
       width,
       height,
-      core: { x: width * 0.5, y: height * 0.3 },
-      node: { x: width * 0.9, y: height * 0.35 },
-      scale: Math.max(width * 0.9, height * 0.42),
+      core: { x: width * 0.5, y: height * (theme === "light" ? 0.34 : 0.3) },
+      node: { x: width * (theme === "light" ? 0.85 : 0.9), y: height * (theme === "light" ? 0.4 : 0.35) },
+      scale: Math.max(width * 0.9, height * 0.44),
+    };
+  }
+  if (theme === "light") {
+    return {
+      width,
+      height,
+      core: { x: width * 0.495, y: height * 0.45 },
+      node: { x: width * 0.785, y: height * 0.515 },
+      scale: Math.max(width * 0.45, height * 0.8),
     };
   }
   return {
@@ -188,7 +207,13 @@ function segmentsFor(f: Filament, layout: Layout, time: number): Vec[][] {
   return [incoming, [pinch, d1, d2, hub], [hub, e1, e2, p4]];
 }
 
-export function GoldenNetwork({ className = "" }: { className?: string }) {
+export function GoldenNetwork({
+  className = "",
+  theme = "dark",
+}: {
+  className?: string;
+  theme?: "dark" | "light";
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -196,9 +221,11 @@ export function GoldenNetwork({ className = "" }: { className?: string }) {
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
 
+    const isLight = theme === "light";
+    const buckets = isLight ? LIGHT_BUCKETS : DARK_BUCKETS;
     const field = createField();
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    let layout = computeLayout(1, 1);
+    let layout = computeLayout(1, 1, theme);
     let frame = 0;
     let last = 0;
     let elapsed = 0;
@@ -208,44 +235,78 @@ export function GoldenNetwork({ className = "" }: { className?: string }) {
       const { width, height, core, node, scale: S } = layout;
       const intro = reduceMotion ? 1 : Math.min(1, time / INTRO_SECONDS);
       const ease = 1 - Math.pow(1 - intro, 3);
-      const breathe = 1 + 0.05 * Math.sin(time * 0.55);
-      const lightCenter = { x: core.x + S * 0.25, y: core.y + S * 0.03 };
-      const lightRadius = S * 1.4 * (0.55 + 0.45 * ease);
+      const breathe = 1 + 0.045 * Math.sin(time * 0.55);
+      const lightCenter = isLight
+        ? { x: core.x + S * 0.14, y: core.y + S * 0.02 }
+        : { x: core.x + S * 0.25, y: core.y + S * 0.03 };
+      const lightRadius = S * (isLight ? 1.55 : 1.4) * (0.55 + 0.45 * ease);
 
       ctx.globalCompositeOperation = "source-over";
       ctx.globalAlpha = 1;
-      ctx.fillStyle = "#000";
+      ctx.fillStyle = isLight ? "#ffffff" : "#000000";
       ctx.fillRect(0, 0, width, height);
-      ctx.globalCompositeOperation = "lighter";
-      ctx.globalAlpha = ease;
 
-      radialGlow(ctx, lightCenter, S * 0.75 * breathe, [
-        [0, "rgba(255, 186, 84, 0.14)"],
-        [0.35, "rgba(200, 116, 36, 0.06)"],
-        [1, "rgba(0, 0, 0, 0)"],
-      ]);
-      radialGlow(ctx, core, S * 0.28 * breathe, [
-        [0, "rgba(255, 210, 130, 0.3)"],
-        [1, "rgba(0, 0, 0, 0)"],
-      ]);
-      radialGlow(ctx, node, S * 0.22, [
-        [0, "rgba(255, 206, 120, 0.2)"],
-        [1, "rgba(0, 0, 0, 0)"],
-      ]);
+      if (isLight) {
+        // Warm sunlit gallery atmosphere radiating cleanly into pure #ffffff at the viewport perimeter
+        ctx.globalAlpha = ease;
+        radialGlow(ctx, lightCenter, S * 0.92 * breathe, [
+          [0, "rgba(246, 224, 158, 0.22)"],
+          [0.4, "rgba(242, 214, 142, 0.09)"],
+          [0.75, "rgba(248, 236, 204, 0.03)"],
+          [1, "rgba(255, 255, 255, 0)"],
+        ]);
+        radialGlow(ctx, core, S * 0.34 * breathe, [
+          [0, "rgba(234, 190, 82, 0.22)"],
+          [0.55, "rgba(232, 194, 96, 0.06)"],
+          [1, "rgba(255, 255, 255, 0)"],
+        ]);
+        radialGlow(ctx, node, S * 0.24, [
+          [0, "rgba(226, 178, 66, 0.18)"],
+          [1, "rgba(255, 255, 255, 0)"],
+        ]);
+      } else {
+        ctx.globalCompositeOperation = "lighter";
+        ctx.globalAlpha = ease;
+
+        radialGlow(ctx, lightCenter, S * 0.75 * breathe, [
+          [0, "rgba(255, 186, 84, 0.14)"],
+          [0.35, "rgba(200, 116, 36, 0.06)"],
+          [1, "rgba(0, 0, 0, 0)"],
+        ]);
+        radialGlow(ctx, core, S * 0.28 * breathe, [
+          [0, "rgba(255, 210, 130, 0.3)"],
+          [1, "rgba(0, 0, 0, 0)"],
+        ]);
+        radialGlow(ctx, node, S * 0.22, [
+          [0, "rgba(255, 206, 120, 0.2)"],
+          [1, "rgba(0, 0, 0, 0)"],
+        ]);
+      }
 
       const paths = field.filaments.map((f) => segmentsFor(f, layout, time));
 
       const strokeBucket = (bucketIndex: number, part: "above" | "below" | "outgoing", strength: number) => {
-        const bucket = BUCKETS[bucketIndex]!;
+        const bucket = buckets[bucketIndex]!;
         const a = bucket.alpha * strength;
         const gradient = ctx.createRadialGradient(
-          lightCenter.x, lightCenter.y, 0,
-          lightCenter.x, lightCenter.y, lightRadius,
+          lightCenter.x,
+          lightCenter.y,
+          0,
+          lightCenter.x,
+          lightCenter.y,
+          lightRadius,
         );
-        gradient.addColorStop(0, `rgba(${bucket.color}, ${Math.min(1, a * 2.4)})`);
-        gradient.addColorStop(0.2, `rgba(${bucket.color}, ${a * 1.3})`);
-        gradient.addColorStop(0.55, `rgba(${bucket.color}, ${a * 0.55})`);
-        gradient.addColorStop(1, `rgba(${bucket.color}, 0)`);
+        if (isLight) {
+          gradient.addColorStop(0, `rgba(${bucket.color}, ${Math.min(0.82, a * 1.9)})`);
+          gradient.addColorStop(0.26, `rgba(${bucket.color}, ${Math.min(0.7, a * 1.25)})`);
+          gradient.addColorStop(0.64, `rgba(${bucket.color}, ${a * 0.6})`);
+          gradient.addColorStop(1, `rgba(${bucket.color}, 0)`);
+        } else {
+          gradient.addColorStop(0, `rgba(${bucket.color}, ${Math.min(1, a * 2.4)})`);
+          gradient.addColorStop(0.2, `rgba(${bucket.color}, ${a * 1.3})`);
+          gradient.addColorStop(0.55, `rgba(${bucket.color}, ${a * 0.55})`);
+          gradient.addColorStop(1, `rgba(${bucket.color}, 0)`);
+        }
 
         ctx.beginPath();
         field.filaments.forEach((f, i) => {
@@ -262,51 +323,66 @@ export function GoldenNetwork({ className = "" }: { className?: string }) {
         ctx.stroke();
       };
 
-      BUCKETS.forEach((_, bucketIndex) => {
-        strokeBucket(bucketIndex, "above", 0.95);
-        strokeBucket(bucketIndex, "below", 0.5);
-        strokeBucket(bucketIndex, "outgoing", 1.3);
+      buckets.forEach((_, bucketIndex) => {
+        strokeBucket(bucketIndex, "above", isLight ? 1.05 : 0.95);
+        strokeBucket(bucketIndex, "below", isLight ? 0.68 : 0.5);
+        strokeBucket(bucketIndex, "outgoing", isLight ? 1.25 : 1.3);
       });
 
-      radialGlow(ctx, core, S * 0.09 * breathe, [
-        [0, "rgba(255, 252, 240, 1)"],
-        [0.18, "rgba(255, 228, 165, 0.7)"],
-        [0.5, "rgba(250, 176, 70, 0.18)"],
-        [1, "rgba(0, 0, 0, 0)"],
-      ]);
-      radialGlow(ctx, node, S * 0.05, [
-        [0, "rgba(255, 248, 225, 0.9)"],
-        [0.3, "rgba(255, 206, 120, 0.35)"],
-        [1, "rgba(0, 0, 0, 0)"],
-      ]);
+      if (isLight) {
+        radialGlow(ctx, core, S * 0.11 * breathe, [
+          [0, "rgba(255, 253, 246, 0.96)"],
+          [0.24, "rgba(244, 210, 118, 0.55)"],
+          [0.58, "rgba(212, 158, 44, 0.16)"],
+          [1, "rgba(255, 255, 255, 0)"],
+        ]);
+        radialGlow(ctx, node, S * 0.065, [
+          [0, "rgba(255, 252, 242, 0.92)"],
+          [0.32, "rgba(222, 174, 62, 0.42)"],
+          [1, "rgba(255, 255, 255, 0)"],
+        ]);
+      } else {
+        radialGlow(ctx, core, S * 0.09 * breathe, [
+          [0, "rgba(255, 252, 240, 1)"],
+          [0.18, "rgba(255, 228, 165, 0.7)"],
+          [0.5, "rgba(250, 176, 70, 0.18)"],
+          [1, "rgba(0, 0, 0, 0)"],
+        ]);
+        radialGlow(ctx, node, S * 0.05, [
+          [0, "rgba(255, 248, 225, 0.9)"],
+          [0.3, "rgba(255, 206, 120, 0.35)"],
+          [1, "rgba(0, 0, 0, 0)"],
+        ]);
+      }
 
       const falloff = (p: Vec) =>
         Math.max(0, 1 - Math.hypot(p.x - lightCenter.x, p.y - lightCenter.y) / lightRadius);
 
-      ctx.fillStyle = "rgb(255, 214, 140)";
+      ctx.fillStyle = isLight ? "rgb(186, 134, 28)" : "rgb(255, 214, 140)";
       for (const d of field.dust) {
         const outgoing = paths[d.filament]!.slice(1);
         const base = pointOnPath(outgoing, d.t);
         const p = { x: base.x + d.offset.x * S, y: base.y + d.offset.y * S };
         const twinkle = 0.5 + 0.5 * Math.sin(time * 1.4 + d.phase);
-        ctx.globalAlpha = ease * d.alpha * twinkle * Math.min(1, falloff(p) * 1.5);
+        ctx.globalAlpha = ease * d.alpha * twinkle * Math.min(1, falloff(p) * (isLight ? 1.15 : 1.5)) * (isLight ? 0.55 : 1);
         ctx.fillRect(p.x, p.y, d.size, d.size);
       }
 
-      ctx.fillStyle = "rgb(255, 240, 205)";
+      ctx.fillStyle = isLight ? "rgb(154, 102, 16)" : "rgb(255, 240, 205)";
       for (const p of field.particles) {
         if (!reduceMotion) p.u = (p.u + p.speed * dt) % 1;
         const pos = pointOnPath(paths[p.filament]!, p.u);
-        ctx.globalAlpha = ease * p.alpha * Math.min(1, falloff(pos) * 1.6);
+        ctx.globalAlpha = ease * p.alpha * Math.min(1, falloff(pos) * 1.55) * (isLight ? 0.72 : 1);
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, p.size, 0, Math.PI * 2);
         ctx.fill();
       }
+      ctx.globalAlpha = 1;
     };
 
     const resize = () => {
       const { width, height } = fitCanvas(canvas, ctx);
-      layout = computeLayout(width, height);
+      layout = computeLayout(width, height, theme);
       if (reduceMotion) draw(0, 0);
     };
 
@@ -346,7 +422,7 @@ export function GoldenNetwork({ className = "" }: { className?: string }) {
       stopVisibility();
       observer.disconnect();
     };
-  }, []);
+  }, [theme]);
 
   return <canvas ref={canvasRef} className={`block h-full w-full ${className}`} aria-hidden />;
 }

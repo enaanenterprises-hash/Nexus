@@ -31,13 +31,21 @@ colors:
   gallery-surface: "#f5f4f0"
   gallery-ink: "#1a1917"
   gallery-gold: "#9a761c"
+  gallery-paper: "#f7f6f2"
+  gallery-stone: "#efede8"
+  gallery-obsidian: "#0e0f12"
+  gallery-secondary: "#52545d"
+  gallery-meta: "#636570"
+  burnished-gold: "#9a6910"
+  sculptural-gold: "#c9932c"
+  gallery-success: "#15803d"
 typography:
   display:
-    fontFamily: "Manrope, -apple-system, 'SF Pro Display', 'Helvetica Neue', sans-serif"
-    fontSize: "clamp(2.25rem, 4.4vw, 4.5rem)"
-    fontWeight: 300
-    lineHeight: 1.06
-    letterSpacing: "-0.035em"
+    fontFamily: "Source Serif 4, 'New York', Georgia, serif"
+    fontSize: "clamp(2.75rem, 5.9vw, 5rem)"
+    fontWeight: 400
+    lineHeight: 1.03
+    letterSpacing: "-0.04em"
   display-editorial:
     fontFamily: "Cormorant Garamond, Georgia, serif"
     fontSize: "clamp(1.9rem, 3.2vw, 2.3rem)"
@@ -45,11 +53,11 @@ typography:
     lineHeight: 1.08
     letterSpacing: "-0.02em"
   headline:
-    fontFamily: "Manrope, -apple-system, 'SF Pro Display', 'Helvetica Neue', sans-serif"
-    fontSize: "clamp(2rem, 3.6vw, 3rem)"
-    fontWeight: 300
+    fontFamily: "Source Serif 4, 'New York', Georgia, serif"
+    fontSize: "clamp(2.1rem, 3.8vw, 3.45rem)"
+    fontWeight: 400
     lineHeight: 1.08
-    letterSpacing: "-0.03em"
+    letterSpacing: "-0.032em"
   title:
     fontFamily: "Manrope, -apple-system, 'SF Pro Display', 'Helvetica Neue', sans-serif"
     fontSize: "1.375rem"
@@ -82,11 +90,11 @@ typography:
     lineHeight: 1.6
 rounded:
   xs: "6px"
-  sm: "7px"
+  sm: "8px"
   md: "10px"
   lg: "14px"
   xl: "16px"
-  2xl: "18px"
+  2xl: "22px"
   pill: "999px"
 spacing:
   2xs: "4px"
@@ -162,9 +170,11 @@ components:
 
 ## Overview
 
-**Creative North Star: "The Obsidian Observatory"**
+**Creative North Star: "Gallery Light Precision & The Obsidian Observatory"**
 
-Nexus is built like a quiet, precision-calibrated personal observatory rather than a noisy software dashboard. Every surface begins from pure pitch black and steps through a tightly controlled monochrome obsidian ramp separated by crisp 1px white hairlines, leaving all ambient energy to the golden singularity core and a sparse vocabulary of warm gold status cues. The product chrome stays deliberately cool and silent until summoned so live data—schedules, mail, multi-track audio waveforms, clean reading prose, and telemetry—takes full priority.
+Nexus spans two complementary visual polarities built on one architectural grammar:
+- **Public Landing Surface (`/` — Gallery Light + Burnished Gold):** Crisp luminous white (`#ffffff`) and warm sunlit stone (`#f7f6f2` / `#efede8`) grounds paired with deep obsidian ink (`#0e0f12`, `#52545d`, `#636570`), sculptural `Source Serif 4` editorial display typography, living 24k burnished-gold neural networks (`#9a6910` / `#c9932c` rendered via `source-over` optics), Apple HIG concentric radii (`22px -> 14px -> 8px`), Apple Liquid Glass (`rgba(255,255,255,0.86)` + `blur(26px)`) reserved strictly for floating chrome, an inline-medallion editorial manifesto, and a monumental 3-band footer.
+- **Authenticated Operating Environment & Auxiliary Routes (`/dashboard`, `/waitlist`, `/signup`, `/about`, `/security` — Obsidian Observatory + Gallery Light Alternate):** Pure pitch black (`#000000`) stepping through a controlled monochrome obsidian ramp separated by crisp `1px` white hairlines and Singularity Gold (`#f0b54a`), with an optional in-app Gallery Light mode (`#eceae5` / `#f5f4f0`).
 
 Across both the public landing experience and the authenticated operating environment, information density is disciplined rather than decorative. Editorial bands use asymmetric two-column splits, generous pitch-black breathing room, and hairline-divided ledgers; interactive workspaces compress cleanly into nested obsidian containers with tabular alignment and zero gratuitous chrome. Authenticated dashboard and onboarding flows also carry a Gallery Light counterpart built on warm stone surfaces and charcoal ink with muted bronze-gold accents, preserving identical monochrome restraint in daylight.
 

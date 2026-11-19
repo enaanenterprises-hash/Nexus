@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, Manrope } from "next/font/google";
+import { Cormorant_Garamond, Manrope, Source_Serif_4 } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import "./globals.css";
@@ -12,6 +12,12 @@ const manrope = Manrope({
 
 const displaySerif = Cormorant_Garamond({
   variable: "--font-display",
+  subsets: ["latin"],
+  weight: ["400", "500"],
+});
+
+const editorialSerif = Source_Serif_4({
+  variable: "--font-editorial",
   subsets: ["latin"],
   weight: ["400", "500"],
 });
@@ -31,7 +37,13 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn("dark h-full antialiased", manrope.variable, displaySerif.variable, "font-sans")}
+      className={cn(
+        "dark h-full antialiased",
+        manrope.variable,
+        displaySerif.variable,
+        editorialSerif.variable,
+        "font-sans",
+      )}
     >
       <body className="flex min-h-full flex-col">
         <TooltipProvider delay={240}>{children}</TooltipProvider>

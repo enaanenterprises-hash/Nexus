@@ -12,10 +12,61 @@ import {
   type Vec,
 } from "@/lib/network/geometry";
 
-const HAIR_GOLD = "255, 236, 190";
-const MID_GOLD = "255, 206, 120";
-const WARM_GOLD = "246, 176, 68";
-const DEEP_AMBER = "224, 138, 42";
+export type OpticalTheme = "dark" | "light";
+
+type OpticalPalette = {
+  isLight: boolean;
+  composite: GlobalCompositeOperation;
+  hair: string;
+  mid: string;
+  warm: string;
+  deep: string;
+  neutral: string;
+  particle: string;
+  dust: string;
+  coreCenter: string;
+  coreMid: string;
+  coreOuter: string;
+  fadeZero: string;
+  alphaBoost: number;
+};
+
+function getPalette(theme: OpticalTheme): OpticalPalette {
+  if (theme === "light") {
+    return {
+      isLight: true,
+      composite: "source-over",
+      hair: "146, 98, 14",
+      mid: "184, 132, 28",
+      warm: "208, 158, 48",
+      deep: "168, 118, 22",
+      neutral: "14, 15, 18",
+      particle: "140, 90, 12",
+      dust: "rgb(184, 134, 30)",
+      coreCenter: "255, 252, 244",
+      coreMid: "230, 186, 82",
+      coreOuter: "204, 150, 38",
+      fadeZero: "rgba(255, 255, 255, 0)",
+      alphaBoost: 1.4,
+    };
+  }
+  return {
+    isLight: false,
+    composite: "lighter",
+    hair: "255, 236, 190",
+    mid: "255, 206, 120",
+    warm: "246, 176, 68",
+    deep: "224, 138, 42",
+    neutral: "255, 255, 255",
+    particle: "255, 240, 205",
+    dust: "rgb(255, 224, 160)",
+    coreCenter: "255, 252, 240",
+    coreMid: "255, 224, 158",
+    coreOuter: "240, 181, 74",
+    fadeZero: "rgba(0, 0, 0, 0)",
+    alphaBoost: 1,
+  };
+}
 
 function useOpticalCanvas(
   drawFrame: (ctx: CanvasRenderingContext2D, width: number, height: number, time: number, dt: number) => void,
@@ -89,22 +140,29 @@ function useOpticalCanvas(
 }
 
 /**
- * Band 1: Descending optical filament cascade connecting the hero boundary
- * smoothly into the top border of the obsidian workspace stage.
+ * Band 1: Descending optical filament cascade connecting smoothly
+ * into the top border of the workspace stage.
  */
 export function CascadeFilament({
   activeLayer,
+  theme = "dark",
   className = "",
 }: {
   activeLayer: "command" | "studio" | "sockets";
+  theme?: OpticalTheme;
   className?: string;
 }) {
   const layerRef = useRef(activeLayer);
   const focusXRef = useRef(0.62);
+  const themeRef = useRef(theme);
 
   useEffect(() => {
     layerRef.current = activeLayer;
   }, [activeLayer]);
+
+  useEffect(() => {
+    themeRef.current = theme;
+  }, [theme]);
 
   const strandsRef = useRef(
     (() => {
@@ -113,9 +171,9 @@ export function CascadeFilament({
         spreadTop: gauss() * 14,
         spreadBottom: gauss() * 175,
         pull: between(0.28, 0.72),
-        width: i % 5 === 0 ? 0.45 : i % 3 === 0 ? 0.75 : 1.05,
+        width: i % 5 === 0 ? 0.5 : i % 3 === 0 ? 0.8 : 1.1,
         alpha: i % 5 === 0 ? 0.44 : i % 3 === 0 ? 0.24 : 0.13,
-        color: i % 5 === 0 ? HAIR_GOLD : i % 3 === 0 ? MID_GOLD : WARM_GOLD,
+        tier: i % 5 === 0 ? ("hair" as const) : i % 3 === 0 ? ("mid" as const) : ("warm" as const),
         phase: rnd() * Math.PI * 2,
         speed: between(0.14, 0.34),
         particleOffset: rnd(),
@@ -124,31 +182,32 @@ export function CascadeFilament({
   );
 
   const canvasRef = useOpticalCanvas((ctx, w, h, time, dt) => {
+    const pal = getPalette(themeRef.current);
     const targetFrac =
-      layerRef.current === "command" ? 0.52 : layerRef.current === "studio" ? 0.64 : 0.74;
+      layerRef.current === "command" ? 0.56 : layerRef.current === "studio" ? 0.68 : 0.78;
     focusXRef.current = lerp(focusXRef.current, targetFrac, dt > 0 ? clamp(dt * 4.5, 0, 1) : 1);
 
     ctx.globalCompositeOperation = "source-over";
     ctx.clearRect(0, 0, w, h);
-    ctx.globalCompositeOperation = "lighter";
+    ctx.globalCompositeOperation = pal.composite;
 
-    const originX = w * 0.5;
+    const originX = w * 0.56;
     const pinchY = h * 0.4;
     const focusX = w * focusXRef.current;
 
     // Quiet pinpoint refraction star at the pinch — bounded strictly inside canvas height
-    radialGlow(ctx, { x: originX, y: pinchY }, Math.min(w * 0.18, pinchY * 0.92), [
-      [0, "rgba(255, 246, 222, 0.48)"],
-      [0.18, "rgba(240, 181, 74, 0.16)"],
-      [0.55, "rgba(224, 138, 42, 0.04)"],
-      [1, "rgba(0, 0, 0, 0)"],
+    radialGlow(ctx, { x: originX, y: pinchY }, Math.min(w * 0.16, pinchY * 0.9), [
+      [0, `rgba(${pal.coreCenter}, ${pal.isLight ? 0.88 : 0.48})`],
+      [0.24, `rgba(${pal.coreMid}, ${pal.isLight ? 0.36 : 0.16})`],
+      [0.6, `rgba(${pal.coreOuter}, ${pal.isLight ? 0.1 : 0.04})`],
+      [1, pal.fadeZero],
     ]);
 
-    // Central spine hair fading organically out of hero floor into pinch and down to stage border
+    // Central spine hair fading organically into pinch and down to stage border
     const spineGrad = ctx.createLinearGradient(originX, 0, originX, h);
-    spineGrad.addColorStop(0, "rgba(240, 181, 74, 0.12)");
-    spineGrad.addColorStop(0.38, "rgba(255, 226, 156, 0.65)");
-    spineGrad.addColorStop(1, "rgba(255, 255, 255, 0.16)");
+    spineGrad.addColorStop(0, `rgba(${pal.warm}, 0)`);
+    spineGrad.addColorStop(0.38, `rgba(${pal.hair}, ${pal.isLight ? 0.58 : 0.65})`);
+    spineGrad.addColorStop(1, `rgba(${pal.neutral}, ${pal.isLight ? 0.12 : 0.16})`);
     ctx.beginPath();
     ctx.moveTo(originX, 0);
     ctx.lineTo(originX, h);
@@ -159,20 +218,22 @@ export function CascadeFilament({
     const strands = strandsRef.current;
     for (let i = 0; i < strands.length; i++) {
       const s = strands[i]!;
+      const color = pal[s.tier];
+      const alpha = Math.min(0.85, s.alpha * pal.alphaBoost);
       const sway = Math.sin(time * 0.45 + s.phase) * 7;
       const p0: Vec = { x: originX + s.spreadTop * 0.25, y: 0 };
       const p1: Vec = { x: originX + s.spreadTop * 0.14, y: pinchY };
-      const endX = clamp(focusX + s.spreadBottom + sway, w * 0.4, w * 0.96);
+      const endX = clamp(focusX + s.spreadBottom + sway, w * 0.42, w * 0.96);
       const c1: Vec = { x: originX + (endX - originX) * 0.18, y: pinchY + (h - pinchY) * s.pull };
       const c2: Vec = { x: endX - (endX - originX) * 0.14, y: h * 0.76 };
       const p3: Vec = { x: endX, y: h };
 
       const grad = ctx.createLinearGradient(originX, 0, endX, h);
-      grad.addColorStop(0, `rgba(${s.color}, 0)`);
-      grad.addColorStop(0.24, `rgba(${s.color}, ${s.alpha * 0.55})`);
-      grad.addColorStop(0.42, `rgba(${s.color}, ${s.alpha * 1.15})`);
-      grad.addColorStop(0.84, `rgba(${s.color}, ${s.alpha * 0.4})`);
-      grad.addColorStop(1, `rgba(${s.color}, 0)`);
+      grad.addColorStop(0, `rgba(${color}, 0)`);
+      grad.addColorStop(0.24, `rgba(${color}, ${alpha * 0.52})`);
+      grad.addColorStop(0.42, `rgba(${color}, ${Math.min(0.9, alpha * 1.1)})`);
+      grad.addColorStop(0.84, `rgba(${color}, ${alpha * 0.4})`);
+      grad.addColorStop(1, `rgba(${color}, 0)`);
 
       ctx.beginPath();
       ctx.moveTo(p0.x, p0.y);
@@ -186,18 +247,18 @@ export function CascadeFilament({
         const u = (s.particleOffset + time * s.speed) % 1;
         const pos = bezier(p1, c1, c2, p3, u);
         const fade = Math.sin(u * Math.PI);
-        ctx.fillStyle = `rgba(255, 240, 205, ${fade * 0.72})`;
+        ctx.fillStyle = `rgba(${pal.particle}, ${fade * (pal.isLight ? 0.65 : 0.72)})`;
         ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 0.95, 0, Math.PI * 2);
+        ctx.arc(pos.x, pos.y, 1.05, 0, Math.PI * 2);
         ctx.fill();
       }
     }
 
-    // Delicate starlight kiss along the active target on the workspace border
-    radialGlow(ctx, { x: focusX, y: h - 2 }, 24, [
-      [0, "rgba(255, 236, 186, 0.42)"],
-      [0.35, "rgba(240, 181, 74, 0.12)"],
-      [1, "rgba(0, 0, 0, 0)"],
+    // Delicate kiss along the active target on the workspace border
+    radialGlow(ctx, { x: focusX, y: h - 3 }, 22, [
+      [0, `rgba(${pal.coreMid}, ${pal.isLight ? 0.48 : 0.42})`],
+      [0.45, `rgba(${pal.coreOuter}, ${pal.isLight ? 0.16 : 0.12})`],
+      [1, pal.fadeZero],
     ]);
   });
 
@@ -211,40 +272,47 @@ export function CascadeFilament({
  */
 export function EquilibriumCore({
   activeIndex,
+  theme = "dark",
   className = "",
 }: {
   activeIndex: number | null;
+  theme?: OpticalTheme;
   className?: string;
 }) {
   const activeRef = useRef(activeIndex);
+  const themeRef = useRef(theme);
   const weightsRef = useRef<[number, number, number]>([0.65, 0.55, 0.55]);
 
   useEffect(() => {
     activeRef.current = activeIndex;
   }, [activeIndex]);
 
+  useEffect(() => {
+    themeRef.current = theme;
+  }, [theme]);
+
   const geometryRef = useRef(
     (() => {
       const { rnd, gauss, between } = seededHelpers(44201);
       const coreThreads = Array.from({ length: 42 }, (_, i) => ({
         angle: (i / 42) * Math.PI * 2 + gauss() * 0.14,
-        radius: between(0.42, 0.95),
+        radius: between(0.42, 0.94),
         bend: gauss() * 0.55,
-        width: i % 4 === 0 ? 0.45 : 0.75,
-        alpha: i % 4 === 0 ? 0.36 : 0.18,
+        width: i % 4 === 0 ? 0.55 : 0.8,
+        alpha: i % 4 === 0 ? 0.36 : 0.19,
         phase: rnd() * Math.PI * 2,
       }));
       const ruleArcs = Array.from({ length: 18 }, (_, i) => ({
         lift: (i - 8.5) * 4.2 + gauss() * 2.5,
-        width: i % 3 === 0 ? 0.5 : 0.8,
-        alpha: i % 3 === 0 ? 0.4 : 0.16,
+        width: i % 3 === 0 ? 0.55 : 0.85,
+        alpha: i % 3 === 0 ? 0.4 : 0.17,
         offset: rnd(),
         speed: between(0.16, 0.32),
       }));
-      const dust = Array.from({ length: 90 }, () => ({
+      const dust = Array.from({ length: 85 }, () => ({
         angle: rnd() * Math.PI * 2,
-        r: between(0.12, 0.92),
-        size: between(0.5, 1.3),
+        r: between(0.12, 0.9),
+        size: between(0.55, 1.3),
         phase: rnd() * Math.PI * 2,
       }));
       return { coreThreads, ruleArcs, dust };
@@ -252,9 +320,10 @@ export function EquilibriumCore({
   );
 
   const canvasRef = useOpticalCanvas((ctx, w, h, time, dt) => {
+    const pal = getPalette(themeRef.current);
     const idx = activeRef.current;
     const targets: [number, number, number] =
-      idx === null ? [0.72, 0.55, 0.55] : [idx === 0 ? 1 : 0.28, idx === 1 ? 1 : 0.28, idx === 2 ? 1 : 0.28];
+      idx === null ? [0.76, 0.6, 0.6] : [idx === 0 ? 1 : 0.3, idx === 1 ? 1 : 0.3, idx === 2 ? 1 : 0.3];
     const step = dt > 0 ? clamp(dt * 5.5, 0, 1) : 1;
     for (let k = 0; k < 3; k++) {
       weightsRef.current[k] = lerp(weightsRef.current[k]!, targets[k]!, step);
@@ -263,15 +332,15 @@ export function EquilibriumCore({
 
     ctx.globalCompositeOperation = "source-over";
     ctx.clearRect(0, 0, w, h);
-    ctx.globalCompositeOperation = "lighter";
+    ctx.globalCompositeOperation = pal.composite;
 
     const cx = w * 0.44;
-    const cy = h * 0.52;
-    const R = Math.min(w * 0.4, h * 0.44);
+    const cy = h * 0.5;
+    const R = Math.min(w * 0.38, h * 0.42);
     const { coreThreads, ruleArcs, dust } = geometryRef.current;
 
     // 1. Modular orbital rings (Principle 3)
-    const radii = [R * 0.52, R * 0.78, R * 1.02];
+    const radii = [R * 0.52, R * 0.78, R * 1.0];
     radii.forEach((rad, ri) => {
       const tilt = 0.42 + ri * 0.08;
       const rot = -0.22 + ri * 0.18 + Math.sin(time * 0.22 + ri) * 0.03;
@@ -280,35 +349,34 @@ export function EquilibriumCore({
       ctx.rotate(rot);
       ctx.beginPath();
       ctx.ellipse(0, 0, rad, rad * tilt, 0, 0, Math.PI * 2);
-      ctx.lineWidth = ri === 1 ? 0.85 : 0.55;
-      ctx.strokeStyle = `rgba(${ri === 1 ? MID_GOLD : WARM_GOLD}, ${(0.12 + ri * 0.04) * wOrbit})`;
+      ctx.lineWidth = ri === 1 ? 0.95 : 0.65;
+      ctx.strokeStyle = `rgba(${ri === 1 ? pal.hair : pal.mid}, ${(0.16 + ri * 0.05) * pal.alphaBoost * wOrbit})`;
       ctx.stroke();
 
-      // Orbiting socket pinpoint
       const orbitA = time * (0.34 - ri * 0.07) + ri * 2.1;
       const ox = Math.cos(orbitA) * rad;
       const oy = Math.sin(orbitA) * rad * tilt;
-      ctx.fillStyle = `rgba(255, 240, 200, ${0.72 * wOrbit})`;
+      ctx.fillStyle = `rgba(${pal.particle}, ${0.78 * wOrbit})`;
       ctx.beginPath();
-      ctx.arc(ox, oy, 1.5, 0, Math.PI * 2);
+      ctx.arc(ox, oy, 1.75, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     });
 
     // 2. Deterministic rule bridge between two satellite nodes (Principle 2)
-    const leftNode: Vec = { x: cx - R * 0.94, y: cy + R * 0.14 };
-    const rightNode: Vec = { x: cx + R * 1.12, y: cy - R * 0.16 };
+    const leftNode: Vec = { x: cx - R * 0.92, y: cy + R * 0.14 };
+    const rightNode: Vec = { x: cx + R * 1.1, y: cy - R * 0.16 };
     for (let i = 0; i < ruleArcs.length; i++) {
       const a = ruleArcs[i]!;
       const sway = Math.sin(time * 0.35 + i) * 3;
       const c1: Vec = { x: lerp(leftNode.x, cx, 0.65), y: cy + a.lift + sway };
       const c2: Vec = { x: lerp(cx, rightNode.x, 0.35), y: cy - a.lift * 0.7 - sway };
       const g = ctx.createLinearGradient(leftNode.x, leftNode.y, rightNode.x, rightNode.y);
-      g.addColorStop(0, `rgba(${WARM_GOLD}, 0)`);
-      g.addColorStop(0.25, `rgba(${MID_GOLD}, ${a.alpha * wRule})`);
-      g.addColorStop(0.5, `rgba(${HAIR_GOLD}, ${a.alpha * 1.35 * wRule})`);
-      g.addColorStop(0.75, `rgba(${MID_GOLD}, ${a.alpha * wRule})`);
-      g.addColorStop(1, `rgba(${WARM_GOLD}, 0)`);
+      g.addColorStop(0, `rgba(${pal.warm}, 0)`);
+      g.addColorStop(0.25, `rgba(${pal.mid}, ${a.alpha * pal.alphaBoost * wRule})`);
+      g.addColorStop(0.5, `rgba(${pal.hair}, ${Math.min(0.9, a.alpha * 1.35 * pal.alphaBoost * wRule)})`);
+      g.addColorStop(0.75, `rgba(${pal.mid}, ${a.alpha * pal.alphaBoost * wRule})`);
+      g.addColorStop(1, `rgba(${pal.warm}, 0)`);
       ctx.beginPath();
       ctx.moveTo(leftNode.x, leftNode.y);
       ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, rightNode.x, rightNode.y);
@@ -320,9 +388,9 @@ export function EquilibriumCore({
         const u = (a.offset + time * a.speed) % 1;
         const p = bezier(leftNode, c1, c2, rightNode, u);
         const fade = Math.sin(u * Math.PI);
-        ctx.fillStyle = `rgba(255, 244, 212, ${fade * 0.85 * wRule})`;
+        ctx.fillStyle = `rgba(${pal.particle}, ${fade * 0.82 * wRule})`;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, 1.15, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, 1.3, 0, Math.PI * 2);
         ctx.fill();
       }
     }
@@ -340,9 +408,9 @@ export function EquilibriumCore({
         y: cy + Math.sin(a - t.bend * 0.3) * R * t.radius * 0.56,
       };
       const g = ctx.createLinearGradient(cx, cy, end.x, end.y);
-      g.addColorStop(0, `rgba(${HAIR_GOLD}, ${t.alpha * 1.45 * wCore})`);
-      g.addColorStop(0.55, `rgba(${WARM_GOLD}, ${t.alpha * 0.65 * wCore})`);
-      g.addColorStop(1, "rgba(240, 181, 74, 0)");
+      g.addColorStop(0, `rgba(${pal.hair}, ${Math.min(0.88, t.alpha * 1.45 * pal.alphaBoost * wCore)})`);
+      g.addColorStop(0.55, `rgba(${pal.warm}, ${t.alpha * 0.72 * pal.alphaBoost * wCore})`);
+      g.addColorStop(1, `rgba(${pal.warm}, 0)`);
       ctx.beginPath();
       ctx.moveTo(cx, cy);
       ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, end.x, end.y);
@@ -351,22 +419,22 @@ export function EquilibriumCore({
       ctx.stroke();
     }
 
-    // Center Moffat-like starlight pinch
-    const breathe = 1 + 0.06 * Math.sin(time * 0.7);
-    radialGlow(ctx, { x: cx, y: cy }, R * 0.52 * breathe, [
-      [0, `rgba(255, 250, 236, ${0.85 * wCore})`],
-      [0.16, `rgba(255, 218, 148, ${0.42 * wCore})`],
-      [0.48, `rgba(240, 181, 74, ${0.12 * wCore})`],
-      [1, "rgba(0, 0, 0, 0)"],
+    // Center starlight pinch
+    const breathe = 1 + 0.05 * Math.sin(time * 0.7);
+    radialGlow(ctx, { x: cx, y: cy }, R * 0.5 * breathe, [
+      [0, `rgba(${pal.coreCenter}, ${(pal.isLight ? 0.94 : 0.85) * wCore})`],
+      [0.2, `rgba(${pal.coreMid}, ${(pal.isLight ? 0.52 : 0.42) * wCore})`],
+      [0.54, `rgba(${pal.coreOuter}, ${(pal.isLight ? 0.16 : 0.12) * wCore})`],
+      [1, pal.fadeZero],
     ]);
 
     // Fine drifting dust
-    ctx.fillStyle = "rgb(255, 224, 160)";
+    ctx.fillStyle = pal.dust;
     for (const d of dust) {
       const twinkle = 0.35 + 0.65 * Math.sin(time * 1.2 + d.phase);
-      const px = cx + Math.cos(d.angle + time * 0.03) * R * d.r * 1.1;
-      const py = cy + Math.sin(d.angle + time * 0.03) * R * d.r * 0.75;
-      ctx.globalAlpha = twinkle * 0.36;
+      const px = cx + Math.cos(d.angle + time * 0.03) * R * d.r * 1.05;
+      const py = cy + Math.sin(d.angle + time * 0.03) * R * d.r * 0.74;
+      ctx.globalAlpha = twinkle * (pal.isLight ? 0.45 : 0.36);
       ctx.fillRect(px, py, d.size, d.size);
     }
     ctx.globalAlpha = 1;
@@ -381,32 +449,39 @@ export function EquilibriumCore({
  */
 export function OrbitalHorizon({
   activeStep,
+  theme = "dark",
   className = "",
 }: {
   activeStep: "cockpit" | "automations" | "workspaces" | "sdk";
+  theme?: OpticalTheme;
   className?: string;
 }) {
   const stepRef = useRef(activeStep);
+  const themeRef = useRef(theme);
   const morphRef = useRef({ cockpit: 1, automations: 0, workspaces: 0, sdk: 0 });
 
   useEffect(() => {
     stepRef.current = activeStep;
   }, [activeStep]);
 
+  useEffect(() => {
+    themeRef.current = theme;
+  }, [theme]);
+
   const fieldRef = useRef(
     (() => {
       const { rnd, gauss, between } = seededHelpers(77109);
       const incoming = Array.from({ length: 28 }, (_, i) => ({
         yFrac: 0.14 + (i / 27) * 0.72 + gauss() * 0.025,
-        width: i % 4 === 0 ? 0.5 : 0.85,
-        alpha: i % 4 === 0 ? 0.4 : 0.17,
+        width: i % 4 === 0 ? 0.55 : 0.85,
+        alpha: i % 4 === 0 ? 0.4 : 0.18,
         phase: rnd() * Math.PI * 2,
         speed: between(0.16, 0.34),
         offset: rnd(),
       }));
       const sdkRays = Array.from({ length: 24 }, (_, i) => ({
         angle: (i / 24) * Math.PI * 2,
-        len: between(0.75, 1.15),
+        len: between(0.75, 1.12),
         phase: rnd() * Math.PI * 2,
         offset: rnd(),
       }));
@@ -415,6 +490,7 @@ export function OrbitalHorizon({
   );
 
   const canvasRef = useOpticalCanvas((ctx, w, h, time, dt) => {
+    const pal = getPalette(themeRef.current);
     const s = stepRef.current;
     const rate = dt > 0 ? clamp(dt * 5, 0, 1) : 1;
     const m = morphRef.current;
@@ -425,11 +501,11 @@ export function OrbitalHorizon({
 
     ctx.globalCompositeOperation = "source-over";
     ctx.clearRect(0, 0, w, h);
-    ctx.globalCompositeOperation = "lighter";
+    ctx.globalCompositeOperation = pal.composite;
 
     const cx = w * 0.5;
     const cy = h * 0.5;
-    const R = Math.min(w * 0.36, h * 0.4);
+    const R = Math.min(w * 0.35, h * 0.39);
     const { incoming, sdkRays } = fieldRef.current;
 
     // Mode 1: Cockpit — horizontal streams converging from left into central board focus
@@ -442,9 +518,9 @@ export function OrbitalHorizon({
         const c1: Vec = { x: w * 0.28, y: h * line.yFrac + sway };
         const c2: Vec = { x: w * 0.44, y: cy + (p0.y - cy) * 0.22 };
         const g = ctx.createLinearGradient(p0.x, p0.y, core.x, core.y);
-        g.addColorStop(0, "rgba(240, 181, 74, 0)");
-        g.addColorStop(0.55, `rgba(${MID_GOLD}, ${line.alpha * m.cockpit})`);
-        g.addColorStop(1, `rgba(${HAIR_GOLD}, ${line.alpha * 1.45 * m.cockpit})`);
+        g.addColorStop(0, `rgba(${pal.warm}, 0)`);
+        g.addColorStop(0.55, `rgba(${pal.mid}, ${line.alpha * pal.alphaBoost * m.cockpit})`);
+        g.addColorStop(1, `rgba(${pal.hair}, ${Math.min(0.88, line.alpha * 1.4 * pal.alphaBoost * m.cockpit)})`);
         ctx.beginPath();
         ctx.moveTo(p0.x, p0.y);
         ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, core.x, core.y);
@@ -452,15 +528,14 @@ export function OrbitalHorizon({
         ctx.strokeStyle = g;
         ctx.stroke();
 
-        // Outgoing crisp rays fanning right from core
         if (i % 2 === 0) {
           const outY = cy + (line.yFrac - 0.5) * h * 0.72;
           const pOut: Vec = { x: w * 0.96, y: outY };
           const oc1: Vec = { x: core.x + w * 0.12, y: cy + (outY - cy) * 0.25 };
           const oc2: Vec = { x: w * 0.84, y: outY };
           const og = ctx.createLinearGradient(core.x, core.y, pOut.x, pOut.y);
-          og.addColorStop(0, `rgba(${HAIR_GOLD}, ${line.alpha * 1.2 * m.cockpit})`);
-          og.addColorStop(1, "rgba(240, 181, 74, 0)");
+          og.addColorStop(0, `rgba(${pal.hair}, ${Math.min(0.82, line.alpha * 1.2 * pal.alphaBoost * m.cockpit)})`);
+          og.addColorStop(1, `rgba(${pal.warm}, 0)`);
           ctx.beginPath();
           ctx.moveTo(core.x, core.y);
           ctx.bezierCurveTo(oc1.x, oc1.y, oc2.x, oc2.y, pOut.x, pOut.y);
@@ -470,16 +545,16 @@ export function OrbitalHorizon({
 
           const u = (line.offset + time * line.speed) % 1;
           const pos = bezier(p0, c1, c2, core, u);
-          ctx.fillStyle = `rgba(255, 240, 204, ${Math.sin(u * Math.PI) * 0.82 * m.cockpit})`;
+          ctx.fillStyle = `rgba(${pal.particle}, ${Math.sin(u * Math.PI) * 0.78 * m.cockpit})`;
           ctx.beginPath();
-          ctx.arc(pos.x, pos.y, 1.1, 0, Math.PI * 2);
+          ctx.arc(pos.x, pos.y, 1.2, 0, Math.PI * 2);
           ctx.fill();
         }
       }
-      radialGlow(ctx, core, R * 0.55, [
-        [0, `rgba(255, 250, 236, ${0.88 * m.cockpit})`],
-        [0.2, `rgba(255, 214, 140, ${0.38 * m.cockpit})`],
-        [1, "rgba(0, 0, 0, 0)"],
+      radialGlow(ctx, core, R * 0.54, [
+        [0, `rgba(${pal.coreCenter}, ${(pal.isLight ? 0.96 : 0.88) * m.cockpit})`],
+        [0.24, `rgba(${pal.coreMid}, ${(pal.isLight ? 0.48 : 0.38) * m.cockpit})`],
+        [1, pal.fadeZero],
       ]);
     }
 
@@ -501,31 +576,36 @@ export function OrbitalHorizon({
           ctx.beginPath();
           ctx.moveTo(a.x, a.y);
           ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, b.x, b.y);
-          ctx.lineWidth = strand === 0 ? 0.9 : 0.45;
-          ctx.strokeStyle = `rgba(${strand === 0 ? HAIR_GOLD : WARM_GOLD}, ${(strand === 0 ? 0.48 : 0.16) * m.automations})`;
+          ctx.lineWidth = strand === 0 ? 1 : 0.5;
+          ctx.strokeStyle = `rgba(${strand === 0 ? pal.hair : pal.mid}, ${(strand === 0 ? 0.52 : 0.19) * pal.alphaBoost * m.automations})`;
           ctx.stroke();
         }
-        // Synchronized packet relay
         const u = (time * 0.42 - seg * 0.28 + 4) % 1;
         const c1: Vec = { x: lerp(a.x, b.x, 0.35), y: a.y };
         const c2: Vec = { x: lerp(a.x, b.x, 0.65), y: b.y };
         const pos = bezier(a, c1, c2, b, u);
         radialGlow(ctx, pos, 14, [
-          [0, `rgba(255, 248, 224, ${0.9 * m.automations})`],
-          [0.5, `rgba(240, 181, 74, ${0.28 * m.automations})`],
-          [1, "rgba(0, 0, 0, 0)"],
+          [0, `rgba(${pal.particle}, ${0.86 * m.automations})`],
+          [0.5, `rgba(${pal.coreMid}, ${0.35 * m.automations})`],
+          [1, pal.fadeZero],
         ]);
       }
       nodes.forEach((n, ni) => {
-        radialGlow(ctx, n, ni === 3 ? 22 : 28, [
-          [0, `rgba(255, 248, 228, ${(ni < 3 ? 0.9 : 0.65) * m.automations})`],
-          [0.35, `rgba(240, 181, 74, ${0.24 * m.automations})`],
-          [1, "rgba(0, 0, 0, 0)"],
+        radialGlow(ctx, n, ni === 3 ? 20 : 26, [
+          [0, `rgba(${pal.coreCenter}, ${(ni < 3 ? 0.94 : 0.72) * m.automations})`],
+          [0.36, `rgba(${pal.coreMid}, ${0.36 * m.automations})`],
+          [1, pal.fadeZero],
         ]);
+        if (pal.isLight) {
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, ni === 3 ? 3.2 : 4, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${pal.hair}, ${0.85 * m.automations})`;
+          ctx.fill();
+        }
       });
     }
 
-    // Mode 3: First-party sockets — core + 4 orbital stations (2 bright live, 2 gossamer planned)
+    // Mode 3: First-party sockets — core + 4 orbital stations (2 live, 2 planned)
     if (m.workspaces > 0.02) {
       const stations = [
         { angle: -2.4, r: R * 1.05, live: true },
@@ -535,8 +615,8 @@ export function OrbitalHorizon({
       ];
       ctx.beginPath();
       ctx.ellipse(cx, cy, R * 1.08, R * 0.72, 0, 0, Math.PI * 2);
-      ctx.lineWidth = 0.65;
-      ctx.strokeStyle = `rgba(${MID_GOLD}, ${0.18 * m.workspaces})`;
+      ctx.lineWidth = 0.75;
+      ctx.strokeStyle = `rgba(${pal.mid}, ${0.22 * pal.alphaBoost * m.workspaces})`;
       ctx.stroke();
 
       stations.forEach((st, idx) => {
@@ -551,30 +631,36 @@ export function OrbitalHorizon({
           ctx.beginPath();
           ctx.moveTo(cx, cy);
           ctx.quadraticCurveTo(mid.x, mid.y, pos.x, pos.y);
-          ctx.lineWidth = k === 0 ? 0.85 : 0.42;
+          ctx.lineWidth = k === 0 ? 0.9 : 0.45;
           const mult = st.live ? 1 : 0.45;
-          ctx.strokeStyle = `rgba(${st.live ? HAIR_GOLD : WARM_GOLD}, ${(k === 0 ? 0.45 : 0.16) * mult * m.workspaces})`;
+          ctx.strokeStyle = `rgba(${st.live ? pal.hair : pal.warm}, ${(k === 0 ? 0.48 : 0.18) * mult * pal.alphaBoost * m.workspaces})`;
           ctx.stroke();
         }
         if (st.live) {
-          radialGlow(ctx, pos, 24, [
-            [0, `rgba(255, 248, 224, ${0.88 * m.workspaces})`],
-            [0.35, `rgba(240, 181, 74, ${0.26 * m.workspaces})`],
-            [1, "rgba(0, 0, 0, 0)"],
+          radialGlow(ctx, pos, 22, [
+            [0, `rgba(${pal.coreCenter}, ${0.92 * m.workspaces})`],
+            [0.36, `rgba(${pal.coreMid}, ${0.38 * m.workspaces})`],
+            [1, pal.fadeZero],
           ]);
+          if (pal.isLight) {
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, 3.8, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(${pal.hair}, ${0.9 * m.workspaces})`;
+            ctx.fill();
+          }
         } else {
           ctx.beginPath();
           ctx.arc(pos.x, pos.y, 4.5, 0, Math.PI * 2);
-          ctx.lineWidth = 1;
-          ctx.strokeStyle = `rgba(255, 224, 154, ${0.55 * m.workspaces})`;
+          ctx.lineWidth = 1.1;
+          ctx.strokeStyle = `rgba(${pal.mid}, ${0.65 * m.workspaces})`;
           ctx.stroke();
         }
       });
 
-      radialGlow(ctx, { x: cx, y: cy }, R * 0.48, [
-        [0, `rgba(255, 252, 240, ${0.9 * m.workspaces})`],
-        [0.24, `rgba(240, 181, 74, ${0.32 * m.workspaces})`],
-        [1, "rgba(0, 0, 0, 0)"],
+      radialGlow(ctx, { x: cx, y: cy }, R * 0.46, [
+        [0, `rgba(${pal.coreCenter}, ${0.95 * m.workspaces})`],
+        [0.26, `rgba(${pal.coreMid}, ${0.42 * m.workspaces})`],
+        [1, pal.fadeZero],
       ]);
     }
 
@@ -583,45 +669,45 @@ export function OrbitalHorizon({
       const innerR = R * 0.42;
       ctx.beginPath();
       ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
-      ctx.lineWidth = 0.8;
-      ctx.strokeStyle = `rgba(${HAIR_GOLD}, ${0.36 * m.sdk})`;
+      ctx.lineWidth = 0.9;
+      ctx.strokeStyle = `rgba(${pal.hair}, ${0.42 * pal.alphaBoost * m.sdk})`;
       ctx.stroke();
 
       for (const ray of sdkRays) {
         const a = ray.angle + time * 0.04;
         const p0: Vec = { x: cx + Math.cos(a) * innerR, y: cy + Math.sin(a) * innerR };
-        const p3: Vec = { x: cx + Math.cos(a) * R * 1.28 * ray.len, y: cy + Math.sin(a) * R * 0.92 * ray.len };
+        const p3: Vec = { x: cx + Math.cos(a) * R * 1.24 * ray.len, y: cy + Math.sin(a) * R * 0.9 * ray.len };
         const c1: Vec = {
           x: cx + Math.cos(a + 0.14) * R * 0.72,
           y: cy + Math.sin(a + 0.14) * R * 0.56,
         };
         const c2: Vec = {
-          x: cx + Math.cos(a - 0.12) * R * 1.02,
+          x: cx + Math.cos(a - 0.12) * R * 1.0,
           y: cy + Math.sin(a - 0.12) * R * 0.78,
         };
         const g = ctx.createLinearGradient(p0.x, p0.y, p3.x, p3.y);
-        g.addColorStop(0, `rgba(${HAIR_GOLD}, ${0.38 * m.sdk})`);
-        g.addColorStop(0.55, `rgba(${WARM_GOLD}, ${0.18 * m.sdk})`);
-        g.addColorStop(1, "rgba(240, 181, 74, 0)");
+        g.addColorStop(0, `rgba(${pal.hair}, ${0.42 * pal.alphaBoost * m.sdk})`);
+        g.addColorStop(0.55, `rgba(${pal.warm}, ${0.22 * pal.alphaBoost * m.sdk})`);
+        g.addColorStop(1, `rgba(${pal.warm}, 0)`);
         ctx.beginPath();
         ctx.moveTo(p0.x, p0.y);
         ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, p3.x, p3.y);
-        ctx.lineWidth = 0.65;
+        ctx.lineWidth = 0.72;
         ctx.strokeStyle = g;
         ctx.stroke();
 
         const u = (ray.offset + time * 0.22) % 1;
         const pos = bezier(p0, c1, c2, p3, u);
-        ctx.fillStyle = `rgba(255, 240, 200, ${(1 - u) * 0.78 * m.sdk})`;
+        ctx.fillStyle = `rgba(${pal.particle}, ${(1 - u) * 0.76 * m.sdk})`;
         ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 1.05, 0, Math.PI * 2);
+        ctx.arc(pos.x, pos.y, 1.15, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      radialGlow(ctx, { x: cx, y: cy }, R * 0.44, [
-        [0, `rgba(255, 252, 240, ${0.86 * m.sdk})`],
-        [0.26, `rgba(240, 181, 74, ${0.28 * m.sdk})`],
-        [1, "rgba(0, 0, 0, 0)"],
+      radialGlow(ctx, { x: cx, y: cy }, R * 0.42, [
+        [0, `rgba(${pal.coreCenter}, ${0.94 * m.sdk})`],
+        [0.28, `rgba(${pal.coreMid}, ${0.38 * m.sdk})`],
+        [1, pal.fadeZero],
       ]);
     }
   });
@@ -633,7 +719,18 @@ export function OrbitalHorizon({
  * Band 4 top: Four-column convergence conduit bridging the central golden axis
  * down cleanly into the four Connector Atlas columns.
  */
-export function AtlasConduit({ className = "" }: { className?: string }) {
+export function AtlasConduit({
+  theme = "dark",
+  className = "",
+}: {
+  theme?: OpticalTheme;
+  className?: string;
+}) {
+  const themeRef = useRef(theme);
+  useEffect(() => {
+    themeRef.current = theme;
+  }, [theme]);
+
   const strandsRef = useRef(
     (() => {
       const { rnd, between } = seededHelpers(51923);
@@ -643,8 +740,8 @@ export function AtlasConduit({ className = "" }: { className?: string }) {
           colIdx,
           spread: (j - 3) * 8,
           live: j < 4,
-          width: j === 3 ? 0.8 : 0.48,
-          alpha: j < 4 ? 0.32 : 0.13,
+          width: j === 3 ? 0.9 : 0.52,
+          alpha: j < 4 ? 0.32 : 0.14,
           speed: between(0.14, 0.28),
           offset: rnd(),
           phase: rnd() * Math.PI * 2,
@@ -654,17 +751,17 @@ export function AtlasConduit({ className = "" }: { className?: string }) {
   );
 
   const canvasRef = useOpticalCanvas((ctx, w, h, time) => {
+    const pal = getPalette(themeRef.current);
     ctx.globalCompositeOperation = "source-over";
     ctx.clearRect(0, 0, w, h);
-    ctx.globalCompositeOperation = "lighter";
+    ctx.globalCompositeOperation = pal.composite;
 
-    const origin: Vec = { x: w * 0.5, y: h * 0.3 };
+    const origin: Vec = { x: w * 0.5, y: h * 0.32 };
     const strands = strandsRef.current;
 
-    // Quiet top stem entering the convergence star cleanly
     const stemGrad = ctx.createLinearGradient(origin.x, 0, origin.x, origin.y);
-    stemGrad.addColorStop(0, "rgba(240, 181, 74, 0)");
-    stemGrad.addColorStop(1, "rgba(255, 226, 156, 0.55)");
+    stemGrad.addColorStop(0, `rgba(${pal.warm}, 0)`);
+    stemGrad.addColorStop(1, `rgba(${pal.hair}, ${pal.isLight ? 0.62 : 0.55})`);
     ctx.beginPath();
     ctx.moveTo(origin.x, 0);
     ctx.lineTo(origin.x, origin.y);
@@ -679,9 +776,9 @@ export function AtlasConduit({ className = "" }: { className?: string }) {
       const c2: Vec = { x: endX - (endX - origin.x) * 0.14, y: origin.y + (h - origin.y) * 0.48 };
 
       const g = ctx.createLinearGradient(origin.x, origin.y, endX, h);
-      g.addColorStop(0, `rgba(${s.live ? HAIR_GOLD : WARM_GOLD}, ${s.alpha * 1.2})`);
-      g.addColorStop(0.55, `rgba(${s.live ? MID_GOLD : DEEP_AMBER}, ${s.alpha * 0.72})`);
-      g.addColorStop(1, "rgba(255, 255, 255, 0.08)");
+      g.addColorStop(0, `rgba(${s.live ? pal.hair : pal.warm}, ${Math.min(0.85, s.alpha * 1.2 * pal.alphaBoost)})`);
+      g.addColorStop(0.55, `rgba(${s.live ? pal.mid : pal.deep}, ${s.alpha * 0.78 * pal.alphaBoost})`);
+      g.addColorStop(1, `rgba(${pal.neutral}, ${pal.isLight ? 0.12 : 0.08})`);
 
       ctx.beginPath();
       ctx.moveTo(origin.x, origin.y);
@@ -693,18 +790,24 @@ export function AtlasConduit({ className = "" }: { className?: string }) {
       if (s.live && Math.abs(s.spread) <= 8) {
         const u = (s.offset + time * s.speed) % 1;
         const pos = bezier(origin, c1, c2, p3, u);
-        ctx.fillStyle = `rgba(255, 240, 200, ${Math.sin(u * Math.PI) * 0.72})`;
+        ctx.fillStyle = `rgba(${pal.particle}, ${Math.sin(u * Math.PI) * 0.75})`;
         ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 1, 0, Math.PI * 2);
+        ctx.arc(pos.x, pos.y, 1.15, 0, Math.PI * 2);
         ctx.fill();
       }
     }
 
-    radialGlow(ctx, origin, Math.min(28, origin.y * 0.92), [
-      [0, "rgba(255, 250, 232, 0.85)"],
-      [0.26, "rgba(240, 181, 74, 0.28)"],
-      [1, "rgba(0, 0, 0, 0)"],
+    radialGlow(ctx, origin, Math.min(26, origin.y * 0.92), [
+      [0, `rgba(${pal.coreCenter}, ${pal.isLight ? 0.96 : 0.85})`],
+      [0.28, `rgba(${pal.coreMid}, ${pal.isLight ? 0.42 : 0.28})`],
+      [1, pal.fadeZero],
     ]);
+    if (pal.isLight) {
+      ctx.beginPath();
+      ctx.arc(origin.x, origin.y, 2.6, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${pal.hair}, 0.85)`;
+      ctx.fill();
+    }
   });
 
   return <canvas ref={canvasRef} className={`block h-full w-full ${className}`} aria-hidden="true" />;
@@ -716,22 +819,30 @@ export function AtlasConduit({ className = "" }: { className?: string }) {
  */
 export function VaultGeometry({
   activeIndex,
+  theme = "dark",
   className = "",
 }: {
   activeIndex: number | null;
+  theme?: OpticalTheme;
   className?: string;
 }) {
   const activeRef = useRef(activeIndex);
+  const themeRef = useRef(theme);
   const weightsRef = useRef<[number, number, number]>([0.65, 0.65, 0.65]);
 
   useEffect(() => {
     activeRef.current = activeIndex;
   }, [activeIndex]);
 
+  useEffect(() => {
+    themeRef.current = theme;
+  }, [theme]);
+
   const canvasRef = useOpticalCanvas((ctx, w, h, time, dt) => {
+    const pal = getPalette(themeRef.current);
     const idx = activeRef.current;
     const targets: [number, number, number] =
-      idx === null ? [0.65, 0.65, 0.65] : [idx === 0 ? 1 : 0.3, idx === 1 ? 1 : 0.3, idx === 2 ? 1 : 0.3];
+      idx === null ? [0.7, 0.7, 0.7] : [idx === 0 ? 1 : 0.32, idx === 1 ? 1 : 0.32, idx === 2 ? 1 : 0.32];
     const step = dt > 0 ? clamp(dt * 5.5, 0, 1) : 1;
     for (let k = 0; k < 3; k++) {
       weightsRef.current[k] = lerp(weightsRef.current[k]!, targets[k]!, step);
@@ -740,7 +851,7 @@ export function VaultGeometry({
 
     ctx.globalCompositeOperation = "source-over";
     ctx.clearRect(0, 0, w, h);
-    ctx.globalCompositeOperation = "lighter";
+    ctx.globalCompositeOperation = pal.composite;
 
     const cx = w * 0.42;
     const cy = h * 0.5;
@@ -754,14 +865,14 @@ export function VaultGeometry({
       const a1 = rot + ((i + 1) / segments) * Math.PI * 2 - 0.09;
       ctx.beginPath();
       ctx.arc(cx, cy, R, a0, a1);
-      ctx.lineWidth = 1;
-      ctx.strokeStyle = `rgba(${MID_GOLD}, ${0.38 * wVault})`;
+      ctx.lineWidth = 1.1;
+      ctx.strokeStyle = `rgba(${pal.hair}, ${0.44 * pal.alphaBoost * wVault})`;
       ctx.stroke();
 
       ctx.beginPath();
       ctx.arc(cx, cy, R * 0.78, -rot * 0.7 + a0, -rot * 0.7 + a1);
-      ctx.lineWidth = 0.65;
-      ctx.strokeStyle = `rgba(255, 255, 255, ${0.18 * wVault})`;
+      ctx.lineWidth = 0.75;
+      ctx.strokeStyle = `rgba(${pal.neutral}, ${(pal.isLight ? 0.24 : 0.18) * wVault})`;
       ctx.stroke();
     }
 
@@ -769,17 +880,17 @@ export function VaultGeometry({
     for (let g = 0; g < 8; g++) {
       const a = (g / 8) * Math.PI * 2 + 0.25;
       const allowed = g % 2 === 0;
-      const outer: Vec = { x: cx + Math.cos(a) * R * 1.36, y: cy + Math.sin(a) * R * 1.18 };
+      const outer: Vec = { x: cx + Math.cos(a) * R * 1.34, y: cy + Math.sin(a) * R * 1.16 };
       const rim: Vec = { x: cx + Math.cos(a) * R, y: cy + Math.sin(a) * R };
       const inner: Vec = { x: cx + Math.cos(a) * R * 0.32, y: cy + Math.sin(a) * R * 0.32 };
 
       const grad = ctx.createLinearGradient(outer.x, outer.y, rim.x, rim.y);
-      grad.addColorStop(0, "rgba(240, 181, 74, 0)");
-      grad.addColorStop(1, `rgba(${allowed ? HAIR_GOLD : WARM_GOLD}, ${(allowed ? 0.34 : 0.14) * wGates})`);
+      grad.addColorStop(0, `rgba(${pal.warm}, 0)`);
+      grad.addColorStop(1, `rgba(${allowed ? pal.hair : pal.warm}, ${(allowed ? 0.4 : 0.16) * pal.alphaBoost * wGates})`);
       ctx.beginPath();
       ctx.moveTo(outer.x, outer.y);
       ctx.lineTo(rim.x, rim.y);
-      ctx.lineWidth = allowed ? 0.75 : 0.45;
+      ctx.lineWidth = allowed ? 0.85 : 0.5;
       ctx.strokeStyle = grad;
       ctx.stroke();
 
@@ -787,27 +898,33 @@ export function VaultGeometry({
         ctx.beginPath();
         ctx.moveTo(rim.x, rim.y);
         ctx.lineTo(inner.x, inner.y);
-        ctx.lineWidth = 0.6;
-        ctx.strokeStyle = `rgba(${MID_GOLD}, ${0.28 * wGates})`;
+        ctx.lineWidth = 0.65;
+        ctx.strokeStyle = `rgba(${pal.mid}, ${0.34 * pal.alphaBoost * wGates})`;
         ctx.stroke();
 
         const u = (time * 0.28 + g * 0.23) % 1;
         const px = lerp(outer.x, inner.x, u);
         const py = lerp(outer.y, inner.y, u);
-        ctx.fillStyle = `rgba(255, 240, 204, ${Math.sin(u * Math.PI) * 0.75 * wGates})`;
+        ctx.fillStyle = `rgba(${pal.particle}, ${Math.sin(u * Math.PI) * 0.78 * wGates})`;
         ctx.beginPath();
-        ctx.arc(px, py, 1, 0, Math.PI * 2);
+        ctx.arc(px, py, 1.15, 0, Math.PI * 2);
         ctx.fill();
       }
     }
 
     // Ephemeral pulsing core (softly rises and dissolves, never permanent)
     const ephem = 0.55 + 0.45 * Math.sin(time * 0.9);
-    radialGlow(ctx, { x: cx, y: cy }, R * 0.56, [
-      [0, `rgba(255, 250, 236, ${0.78 * ephem * wCore})`],
-      [0.24, `rgba(240, 181, 74, ${0.28 * ephem * wCore})`],
-      [1, "rgba(0, 0, 0, 0)"],
+    radialGlow(ctx, { x: cx, y: cy }, R * 0.54, [
+      [0, `rgba(${pal.coreCenter}, ${(pal.isLight ? 0.92 : 0.78) * ephem * wCore})`],
+      [0.26, `rgba(${pal.coreMid}, ${(pal.isLight ? 0.42 : 0.28) * ephem * wCore})`],
+      [1, pal.fadeZero],
     ]);
+    if (pal.isLight) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, 3.2, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${pal.hair}, ${0.8 * ephem * wCore})`;
+      ctx.fill();
+    }
   });
 
   return <canvas ref={canvasRef} className={`block h-full w-full ${className}`} aria-hidden="true" />;
@@ -818,7 +935,18 @@ export function VaultGeometry({
  * bookends the hero's golden filament physics strictly ABOVE the text band so
  * contrast on the headline and waitlist form stays completely unobstructed.
  */
-export function ClosingSingularity({ className = "" }: { className?: string }) {
+export function ClosingSingularity({
+  theme = "dark",
+  className = "",
+}: {
+  theme?: OpticalTheme;
+  className?: string;
+}) {
+  const themeRef = useRef(theme);
+  useEffect(() => {
+    themeRef.current = theme;
+  }, [theme]);
+
   const strandsRef = useRef(
     (() => {
       const { rnd, gauss, between } = seededHelpers(20261118);
@@ -829,9 +957,9 @@ export function ClosingSingularity({ className = "" }: { className?: string }) {
           yStartFrac: clamp(0.12 + rnd() * 0.74, 0.08, 0.88),
           waistOffset: gauss() * 7,
           bend: gauss() * 34,
-          width: i % 6 === 0 ? 0.4 : i % 3 === 0 ? 0.7 : 1.05,
-          alpha: i % 6 === 0 ? 0.42 : i % 3 === 0 ? 0.22 : 0.11,
-          color: i % 6 === 0 ? HAIR_GOLD : i % 3 === 0 ? MID_GOLD : WARM_GOLD,
+          width: i % 6 === 0 ? 0.48 : i % 3 === 0 ? 0.78 : 1.1,
+          alpha: i % 6 === 0 ? 0.42 : i % 3 === 0 ? 0.22 : 0.12,
+          tier: i % 6 === 0 ? ("hair" as const) : i % 3 === 0 ? ("mid" as const) : ("warm" as const),
           phase: rnd() * Math.PI * 2,
           speed: between(0.08, 0.22),
           offset: rnd(),
@@ -841,17 +969,17 @@ export function ClosingSingularity({ className = "" }: { className?: string }) {
   );
 
   const canvasRef = useOpticalCanvas((ctx, w, h, time) => {
+    const pal = getPalette(themeRef.current);
     ctx.globalCompositeOperation = "source-over";
     ctx.clearRect(0, 0, w, h);
-    ctx.globalCompositeOperation = "lighter";
+    ctx.globalCompositeOperation = pal.composite;
 
     const core: Vec = { x: w * 0.5, y: h * 0.52 };
     const breathe = 1 + 0.04 * Math.sin(time * 0.6);
 
-    // Subtle vertical incoming spine thread from top center
     const topGrad = ctx.createLinearGradient(core.x, 0, core.x, core.y);
-    topGrad.addColorStop(0, "rgba(255, 255, 255, 0.12)");
-    topGrad.addColorStop(1, "rgba(240, 181, 74, 0.65)");
+    topGrad.addColorStop(0, `rgba(${pal.neutral}, ${pal.isLight ? 0.08 : 0.12})`);
+    topGrad.addColorStop(1, `rgba(${pal.hair}, ${pal.isLight ? 0.62 : 0.65})`);
     ctx.beginPath();
     ctx.moveTo(core.x, 0);
     ctx.lineTo(core.x, core.y);
@@ -862,6 +990,8 @@ export function ClosingSingularity({ className = "" }: { className?: string }) {
     const strands = strandsRef.current;
     for (let i = 0; i < strands.length; i++) {
       const s = strands[i]!;
+      const color = pal[s.tier];
+      const alpha = Math.min(0.85, s.alpha * pal.alphaBoost);
       const sway = Math.sin(time * 0.3 + s.phase) * 4;
       const p0: Vec = { x: s.fromLeft ? 0 : w, y: h * (0.18 + s.yStartFrac * 0.66) };
       const pinch: Vec = { x: core.x, y: core.y + s.waistOffset * 0.75 };
@@ -870,10 +1000,10 @@ export function ClosingSingularity({ className = "" }: { className?: string }) {
       const c2: Vec = { x: core.x - dir * w * 0.14, y: pinch.y + s.bend * 0.18 - sway * 0.5 };
 
       const grad = ctx.createLinearGradient(p0.x, p0.y, pinch.x, pinch.y);
-      grad.addColorStop(0, `rgba(${s.color}, 0)`);
-      grad.addColorStop(0.45, `rgba(${s.color}, ${s.alpha * 0.55})`);
-      grad.addColorStop(0.85, `rgba(${s.color}, ${s.alpha * 1.25})`);
-      grad.addColorStop(1, `rgba(${HAIR_GOLD}, ${s.alpha * 1.5})`);
+      grad.addColorStop(0, `rgba(${color}, 0)`);
+      grad.addColorStop(0.45, `rgba(${color}, ${alpha * 0.52})`);
+      grad.addColorStop(0.85, `rgba(${color}, ${Math.min(0.9, alpha * 1.15)})`);
+      grad.addColorStop(1, `rgba(${pal.hair}, ${Math.min(0.92, alpha * 1.3)})`);
 
       ctx.beginPath();
       ctx.moveTo(p0.x, p0.y);
@@ -886,20 +1016,20 @@ export function ClosingSingularity({ className = "" }: { className?: string }) {
         const u = (s.offset + time * s.speed) % 1;
         const pos = bezier(p0, c1, c2, pinch, u);
         const fade = Math.sin(u * Math.PI);
-        ctx.fillStyle = `rgba(255, 240, 206, ${fade * 0.75})`;
+        ctx.fillStyle = `rgba(${pal.particle}, ${fade * 0.72})`;
         ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 1.05, 0, Math.PI * 2);
+        ctx.arc(pos.x, pos.y, 1.15, 0, Math.PI * 2);
         ctx.fill();
       }
     }
 
     // Crisp focal starlight pinch bounded strictly inside canvas vertical margins (zero edge clip)
     radialGlow(ctx, core, Math.min(w * 0.14, h * 0.44) * breathe, [
-      [0, "rgba(255, 252, 240, 0.96)"],
-      [0.12, "rgba(255, 224, 158, 0.54)"],
-      [0.36, "rgba(240, 181, 74, 0.14)"],
-      [0.72, "rgba(224, 138, 42, 0.03)"],
-      [1, "rgba(0, 0, 0, 0)"],
+      [0, `rgba(${pal.coreCenter}, ${pal.isLight ? 0.98 : 0.96})`],
+      [0.18, `rgba(${pal.coreMid}, ${pal.isLight ? 0.58 : 0.54})`],
+      [0.44, `rgba(${pal.coreOuter}, ${pal.isLight ? 0.2 : 0.14})`],
+      [0.76, `rgba(${pal.deep}, ${pal.isLight ? 0.05 : 0.03})`],
+      [1, pal.fadeZero],
     ]);
   });
 

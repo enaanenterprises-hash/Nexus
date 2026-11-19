@@ -6,7 +6,13 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-export function WaitlistForm({ compact = false }: { compact?: boolean }) {
+export function WaitlistForm({
+  compact = false,
+  theme = "dark",
+}: {
+  compact?: boolean;
+  theme?: "dark" | "light";
+}) {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
@@ -40,9 +46,14 @@ export function WaitlistForm({ compact = false }: { compact?: boolean }) {
     }
   }
 
+  const isLight = theme === "light";
+
   if (status === "success") {
     return (
-      <div className="waitlist-success-box" role="status">
+      <div
+        className={`waitlist-success-box ${isLight ? "waitlist-success-box--light" : ""}`}
+        role="status"
+      >
         <span className="waitlist-success-icon">
           <Check className="size-3.5" strokeWidth={2.5} />
         </span>
@@ -55,13 +66,16 @@ export function WaitlistForm({ compact = false }: { compact?: boolean }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className={`waitlist-form ${compact ? "waitlist-form--compact" : ""}`}>
+    <form
+      onSubmit={handleSubmit}
+      className={`waitlist-form ${compact ? "waitlist-form--compact" : ""} ${isLight ? "waitlist-form--light" : ""}`}
+    >
       <div className="waitlist-input-group">
-        <label htmlFor="waitlist-email" className="sr-only">
+        <label htmlFor={`waitlist-email-${theme}`} className="sr-only">
           Email address
         </label>
         <Input
-          id="waitlist-email"
+          id={`waitlist-email-${theme}`}
           type="email"
           required
           autoComplete="email"
@@ -70,21 +84,38 @@ export function WaitlistForm({ compact = false }: { compact?: boolean }) {
           onChange={(e) => setEmail(e.target.value)}
           placeholder="Enter your email for early access"
           disabled={status === "loading"}
-          className="waitlist-input h-auto border-white/12 bg-transparent shadow-none focus-visible:ring-0 sm:border-0"
+          className={
+            isLight
+              ? "waitlist-input h-auto border-black/12 bg-transparent shadow-none focus-visible:ring-0 sm:border-0"
+              : "waitlist-input h-auto border-white/12 bg-transparent shadow-none focus-visible:ring-0 sm:border-0"
+          }
         />
         <Button
           type="submit"
           disabled={status === "loading"}
-          className="waitlist-submit-btn h-auto rounded-full bg-[#f5f5f7] font-medium text-[#09090b] transition-colors hover:bg-white"
+          className={
+            isLight
+              ? "waitlist-submit-btn waitlist-submit-btn--light h-auto rounded-full bg-[#0e0f12] font-medium text-white transition-colors hover:bg-[#23252c]"
+              : "waitlist-submit-btn h-auto rounded-full bg-[#f5f5f7] font-medium text-[#09090b] transition-colors hover:bg-white"
+          }
         >
           {status === "loading" ? "Joining…" : "Join waitlist"}
         </Button>
       </div>
 
       {status === "error" && message ? (
-        <Alert variant="destructive" className="mt-2.5 rounded-xl border-red-500/30 bg-red-500/10 py-2">
+        <Alert
+          variant="destructive"
+          className={
+            isLight
+              ? "mt-2.5 rounded-xl border-red-600/25 bg-red-50 py-2 text-left"
+              : "mt-2.5 rounded-xl border-red-500/30 bg-red-500/10 py-2"
+          }
+        >
           <AlertTitle className="sr-only">Waitlist error</AlertTitle>
-          <AlertDescription className="text-xs text-[#fca5a5]">{message}</AlertDescription>
+          <AlertDescription className={isLight ? "text-xs text-[#b91c1c]" : "text-xs text-[#fca5a5]"}>
+            {message}
+          </AlertDescription>
         </Alert>
       ) : null}
     </form>
