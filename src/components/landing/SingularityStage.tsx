@@ -316,8 +316,8 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
 
   const cardSurface = isLight
     ? "border-[#0e0f12]/[0.09] bg-white shadow-[0_1px_2px_rgba(14,15,18,0.04)]"
-    : "border-white/[0.08] bg-[#101015]";
-  const innerSurface = isLight ? "bg-[#f5f6f8] border-[#0e0f12]/[0.07]" : "bg-[#15151c] border-white/[0.07]";
+    : "border-white/[0.08] bg-[#181920]";
+  const innerSurface = isLight ? "bg-[#f5f6f8] border-[#0e0f12]/[0.07]" : "bg-[#1f2028] border-white/[0.07]";
   const textPrimary = isLight ? "text-[#0e0f12]" : "text-[#f5f5f7]";
   const textSecondary = isLight ? "text-[#2c2e36]" : "text-[#d1d1d6]";
   const textMuted = isLight ? "text-[#575b66]" : "text-[#9d9da6]";
@@ -326,7 +326,7 @@ function CommandPreview({ theme }: { theme: PreviewTheme }) {
   return (
     <div
       className="min-h-[540px] w-full p-4 sm:min-h-[590px] sm:p-5 lg:p-6"
-      style={{ background: isLight ? "#f6f7f9" : "#08080b" }}
+      style={{ background: isLight ? "#f6f7f9" : "#121318" }}
     >
       {/* Command Header Bar */}
       <div
@@ -1129,8 +1129,8 @@ function NodesPreview({ theme }: { theme: PreviewTheme }) {
 
   const cardSurface = isLight
     ? "border-[#0e0f12]/[0.09] bg-white shadow-[0_1px_2px_rgba(14,15,18,0.04)]"
-    : "border-white/[0.08] bg-[#101015]";
-  const innerSurface = isLight ? "bg-[#f5f6f8] border-[#0e0f12]/[0.07]" : "bg-[#15151c] border-white/[0.07]";
+    : "border-white/[0.08] bg-[#181920]";
+  const innerSurface = isLight ? "bg-[#f5f6f8] border-[#0e0f12]/[0.07]" : "bg-[#1f2028] border-white/[0.07]";
   const textPrimary = isLight ? "text-[#0e0f12]" : "text-[#f5f5f7]";
   const textSecondary = isLight ? "text-[#2c2e36]" : "text-[#d1d1d6]";
   const textMuted = isLight ? "text-[#575b66]" : "text-[#9d9da6]";
@@ -1139,7 +1139,7 @@ function NodesPreview({ theme }: { theme: PreviewTheme }) {
   return (
     <div
       className="min-h-[540px] w-full p-4 sm:min-h-[590px] sm:p-5 lg:p-6"
-      style={{ background: isLight ? "#f6f7f9" : "#08080b" }}
+      style={{ background: isLight ? "#f6f7f9" : "#121318" }}
     >
       {/* Top Studio Header Bar */}
       <div
@@ -1655,7 +1655,7 @@ export function SingularityStage() {
   return (
     <section
       id="workspace"
-      className="relative scroll-mt-24 overflow-hidden bg-[#000000] pt-14 pb-20 text-[#f5f5f7] sm:pt-18 sm:pb-24"
+      className="relative scroll-mt-24 overflow-hidden bg-[#111216] pt-14 pb-20 text-[#f5f5f7] sm:pt-18 sm:pb-24"
     >
       <div className="relative z-10 mx-auto max-w-[1400px] px-5 sm:px-8 lg:px-10">
         {/* Clean Editorial Header + Braided Golden Signal Sculpture */}
@@ -1679,7 +1679,7 @@ export function SingularityStage() {
           <div
             role="tablist"
             aria-label="Explore Nexus surfaces"
-            className="inline-flex max-w-full items-center gap-1 rounded-full border border-white/[0.11] bg-[#0b0b10]/95 p-1.5 backdrop-blur-md"
+            className="inline-flex max-w-full items-center gap-1 rounded-full border border-white/[0.11] bg-[#181920]/95 p-1.5 backdrop-blur-md"
           >
             {LAYER_TABS.map((tab) => {
               const active = activeLayer === tab.id;
@@ -1709,14 +1709,14 @@ export function SingularityStage() {
           id={`workspace-panel-${activeLayer}`}
           role="tabpanel"
           aria-label={`${activeMeta.title} interactive preview`}
-          className="relative overflow-hidden rounded-[22px] border border-white/[0.11] bg-[#0a0a0e] shadow-[0_32px_90px_-34px_rgba(0,0,0,0.92)]"
+          className="relative overflow-hidden rounded-[22px] border border-white/[0.11] bg-[#14151b] shadow-[0_32px_90px_-34px_rgba(0,0,0,0.68)]"
         >
           {/* Minimal Stage Top Bar: Active Description + Light/Dark Switcher Only */}
           <div
             className={`flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-5 ${
               isLightPreview
                 ? "border-[#0e0f12]/[0.09] bg-[#ffffff] text-[#0e0f12]"
-                : "border-white/[0.08] bg-[#0c0c10] text-[#f5f5f7]"
+                : "border-white/[0.08] bg-[#16171e] text-[#f5f5f7]"
             }`}
           >
             <p

@@ -76,7 +76,7 @@ export function EditorialManifesto() {
     <section
       ref={sectionRef}
       aria-label="What Nexus does"
-      className="relative z-10 bg-white px-6 pt-20 pb-2 sm:px-10 sm:pt-24 sm:pb-3 lg:px-14 lg:pt-28 lg:pb-4"
+      className="relative z-10 bg-[#faf8f2] px-6 pt-20 pb-2 sm:px-10 sm:pt-24 sm:pb-3 lg:px-14 lg:pt-28 lg:pb-4"
     >
       <div className="mx-auto flex max-w-[860px] flex-col items-center text-center">
         <p className="font-editorial text-[clamp(2rem,4.7vw,3.95rem)] font-normal leading-[1.12] tracking-[-0.036em] text-[#0e0f12] [text-wrap:balance]">
@@ -106,7 +106,7 @@ export function EditorialManifesto() {
               className="group mx-[0.16em] inline-flex -translate-y-[0.06em] cursor-pointer items-center align-middle focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0e0f12]"
             >
               <span
-                className={`relative flex h-[0.94em] w-[0.94em] items-center justify-center rounded-full border-[2px] border-white bg-[#14151a] text-white shadow-[0_4px_12px_-4px_rgba(14,15,18,0.28)] transition-transform duration-200 ease-out group-hover:-translate-x-1 ${
+                className={`relative flex h-[0.94em] w-[0.94em] items-center justify-center rounded-full border-[2px] border-[#faf8f2] bg-[#14151a] text-white shadow-[0_4px_12px_-4px_rgba(14,15,18,0.28)] transition-transform duration-200 ease-out group-hover:-translate-x-1 ${
                   leadCrestIndex === 0 ? "z-30 scale-105" : "z-10"
                 }`}
               >
@@ -118,7 +118,7 @@ export function EditorialManifesto() {
               </span>
 
               <span
-                className={`relative -ml-[0.26em] flex h-[0.94em] w-[0.94em] items-center justify-center rounded-full border-[2px] border-white bg-[#2c2e36] text-white shadow-[0_4px_12px_-4px_rgba(14,15,18,0.24)] transition-transform duration-200 ease-out group-hover:scale-105 ${
+                className={`relative -ml-[0.26em] flex h-[0.94em] w-[0.94em] items-center justify-center rounded-full border-[2px] border-[#faf8f2] bg-[#2c2e36] text-white shadow-[0_4px_12px_-4px_rgba(14,15,18,0.24)] transition-transform duration-200 ease-out group-hover:scale-105 ${
                   leadCrestIndex === 1 ? "z-30 scale-105" : "z-20"
                 }`}
               >
@@ -133,7 +133,7 @@ export function EditorialManifesto() {
               </span>
 
               <span
-                className={`relative -ml-[0.26em] flex h-[0.94em] w-[0.94em] items-center justify-center rounded-full border-[2px] border-white bg-[#f1f2f5] text-[#1c1e24] shadow-[0_4px_12px_-4px_rgba(14,15,18,0.16)] ring-1 ring-inset ring-[#0e0f12]/12 transition-transform duration-200 ease-out group-hover:translate-x-1 ${
+                className={`relative -ml-[0.26em] flex h-[0.94em] w-[0.94em] items-center justify-center rounded-full border-[2px] border-[#faf8f2] bg-[#efece4] text-[#1c1e24] shadow-[0_4px_12px_-4px_rgba(14,15,18,0.16)] ring-1 ring-inset ring-[#0e0f12]/12 transition-transform duration-200 ease-out group-hover:translate-x-1 ${
                   leadCrestIndex === 2 ? "z-30 scale-105" : "z-10"
                 }`}
               >

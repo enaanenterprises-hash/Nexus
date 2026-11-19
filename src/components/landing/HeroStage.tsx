@@ -247,11 +247,11 @@ export function HeroStage() {
         </GlassSurface>
       </header>
 
-      {/* Full-Bleed Gallery Light Hero Stage with Living Burnished-Gold Neural Network */}
+      {/* Full-Bleed Soft Cream-Gold Hero Stage with Living Burnished-Gold Neural Network */}
       <section
         id="hero-top"
         aria-label="Nexus"
-        className="relative flex min-h-[min(100svh,920px)] flex-col items-center justify-center overflow-hidden bg-white px-6 pb-16 pt-28 sm:px-10 sm:pt-32"
+        className="relative flex min-h-[min(100svh,920px)] flex-col items-center justify-center overflow-hidden bg-[#faf8f2] px-6 pb-16 pt-28 sm:px-10 sm:pt-32"
       >
         <div className="pointer-events-none absolute inset-0">
           <GoldenNetwork theme="light" />
@@ -262,14 +262,14 @@ export function HeroStage() {
           className="pointer-events-none absolute inset-0"
           style={{
             background:
-              "radial-gradient(ellipse 46% 40% at 50% 47%, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0.36) 48%, rgba(255, 255, 255, 0) 76%)",
+              "radial-gradient(ellipse 46% 40% at 50% 47%, rgba(250, 248, 242, 0.74) 0%, rgba(250, 248, 242, 0.38) 48%, rgba(250, 248, 242, 0) 76%)",
           }}
           aria-hidden="true"
         />
 
-        {/* Bottom floor blend into pure white */}
+        {/* Bottom floor blend into subtle warm cream */}
         <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-white via-white/80 to-transparent"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-[#faf8f2] via-[#faf8f2]/80 to-transparent"
           aria-hidden="true"
         />
 

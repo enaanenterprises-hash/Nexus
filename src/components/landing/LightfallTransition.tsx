@@ -3,7 +3,7 @@
 import Lightfall from "./Lightfall";
 
 /**
- * Seamless Gallery Light (#ffffff) -> Obsidian Dark (#000000) transition.
+ * Seamless Soft Cream (#faf8f2) -> Deep Charcoal-Grey (#111216) transition.
  *
  * Uses a single-pass WebGL2 C2-continuous Oklab perceptual lightness ramp with
  * triangular-PDF sub-pixel dithering and integrated golden <Lightfall /> streaks —
@@ -14,17 +14,17 @@ export function LightfallTransition() {
     <div
       id="lightfall-transition"
       aria-hidden="true"
-      className="relative -mt-8 h-[480px] w-full select-none overflow-hidden sm:-mt-10 sm:h-[580px] lg:-mt-12 lg:h-[660px]"
+      className="relative h-[460px] w-full select-none overflow-hidden sm:h-[550px] lg:h-[620px]"
       style={{
         // Matching C2-continuous composed quintic Oklab fallback for SSR / non-WebGL frames
         background:
-          "linear-gradient(180deg, #ffffff 0%, #f9f9f8 10%, #dbd9d5 20%, #a3a19c 30%, #62605d 40%, #2c2b29 50%, #0e0e0e 60%, #020202 70%, #000000 80%, #000000 100%)",
+          "linear-gradient(180deg, #faf8f2 0%, #f6f4ee 10%, #dfdcd6 20%, #b2afaa 30%, #7b7975 40%, #494848 50%, #28282a 60%, #17181c 70%, #121317 80%, #111216 100%)",
       }}
     >
       <div className="absolute inset-0">
         <Lightfall
           colors={["#eab308"]}
-          backgroundColor="#ffffff"
+          backgroundColor="#faf8f2"
           speed={0.3}
           streakCount={3}
           streakWidth={0.8}

@@ -94,7 +94,8 @@ export function EcosystemBridgeVisual({
       }
 
       ctx.globalCompositeOperation = "source-over";
-      ctx.clearRect(0, 0, width, height);
+      ctx.fillStyle = "#111216";
+      ctx.fillRect(0, 0, width, height);
 
       const cx = width * 0.5;
       const cy = height * 0.87;
@@ -223,30 +224,30 @@ export function EcosystemBridgeVisual({
 
       ctx.restore();
 
-      // Clean horizon mask below core & subtle edge feathering into pure #000000
+      // Clean horizon mask below core & subtle edge feathering into deep charcoal #111216
       ctx.save();
       ctx.globalCompositeOperation = "source-over";
       const baseMask = ctx.createLinearGradient(0, cy + 1, 0, height);
-      baseMask.addColorStop(0, "rgba(0, 0, 0, 0.78)");
-      baseMask.addColorStop(0.35, "rgba(0, 0, 0, 1)");
+      baseMask.addColorStop(0, "rgba(17, 18, 22, 0.78)");
+      baseMask.addColorStop(0.35, "rgba(17, 18, 22, 1)");
       ctx.fillStyle = baseMask;
       ctx.fillRect(0, cy + 1, width, height - cy);
 
       const leftFade = ctx.createLinearGradient(0, 0, width * 0.12, 0);
-      leftFade.addColorStop(0, "rgba(0, 0, 0, 1)");
-      leftFade.addColorStop(1, "rgba(0, 0, 0, 0)");
+      leftFade.addColorStop(0, "rgba(17, 18, 22, 1)");
+      leftFade.addColorStop(1, "rgba(17, 18, 22, 0)");
       ctx.fillStyle = leftFade;
       ctx.fillRect(0, 0, width * 0.12, height);
 
       const rightFade = ctx.createLinearGradient(width * 0.88, 0, width, 0);
-      rightFade.addColorStop(0, "rgba(0, 0, 0, 0)");
-      rightFade.addColorStop(1, "rgba(0, 0, 0, 1)");
+      rightFade.addColorStop(0, "rgba(17, 18, 22, 0)");
+      rightFade.addColorStop(1, "rgba(17, 18, 22, 1)");
       ctx.fillStyle = rightFade;
       ctx.fillRect(width * 0.88, 0, width * 0.12, height);
 
       const topFade = ctx.createLinearGradient(0, 0, 0, height * 0.16);
-      topFade.addColorStop(0, "rgba(0, 0, 0, 0.92)");
-      topFade.addColorStop(1, "rgba(0, 0, 0, 0)");
+      topFade.addColorStop(0, "rgba(17, 18, 22, 0.92)");
+      topFade.addColorStop(1, "rgba(17, 18, 22, 0)");
       ctx.fillStyle = topFade;
       ctx.fillRect(0, 0, width, height * 0.16);
       ctx.restore();
@@ -306,7 +307,7 @@ export function EcosystemBridgeVisual({
   return (
     <div
       onClick={handleCanvasClick}
-      className="relative h-[210px] w-full cursor-pointer overflow-hidden bg-black sm:h-[246px]"
+      className="relative h-[210px] w-full cursor-pointer overflow-hidden bg-[#111216] sm:h-[246px]"
       aria-hidden="true"
     >
       <canvas ref={canvasRef} className="block h-full w-full" />
@@ -509,7 +510,7 @@ export function NeuralNetworkPreview({ theme }: { theme: "dark" | "light" }) {
     <div
       ref={stageRef}
       className="relative h-[585px] w-full overflow-hidden sm:h-[590px]"
-      style={{ background: isLight ? "#ffffff" : "#070709" }}
+      style={{ background: isLight ? "#ffffff" : "#121318" }}
     >
       {/* Live WebGL2 Singularity Canopy — exact same engine as the real /dashboard Network view */}
       <NeuralThreadsWebGL
@@ -529,7 +530,7 @@ export function NeuralNetworkPreview({ theme }: { theme: "dark" | "light" }) {
         style={{
           background: isLight
             ? "linear-gradient(0deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.55) 18%, rgba(255,255,255,0) 40%)"
-            : "linear-gradient(0deg, rgba(7,7,9,0.94) 0%, rgba(7,7,9,0.58) 18%, rgba(7,7,9,0) 40%)",
+            : "linear-gradient(0deg, rgba(18,19,24,0.94) 0%, rgba(18,19,24,0.56) 18%, rgba(18,19,24,0) 40%)",
         }}
       />
 

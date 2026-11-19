@@ -243,26 +243,26 @@ export function GoldenNetwork({
 
       ctx.globalCompositeOperation = "source-over";
       ctx.globalAlpha = 1;
-      ctx.fillStyle = isLight ? "#ffffff" : "#000000";
+      ctx.fillStyle = isLight ? "#faf8f2" : "#111216";
       ctx.fillRect(0, 0, width, height);
 
       if (isLight) {
-        // Radiant sunlit gold atmosphere radiating cleanly into pure #ffffff at the viewport perimeter
+        // Radiant sunlit gold atmosphere radiating cleanly into subtle warm cream (#faf8f2)
         ctx.globalAlpha = ease;
         radialGlow(ctx, lightCenter, S * 0.95 * breathe, [
           [0, "rgba(255, 218, 98, 0.32)"],
           [0.38, "rgba(255, 206, 78, 0.15)"],
           [0.72, "rgba(255, 224, 132, 0.05)"],
-          [1, "rgba(255, 255, 255, 0)"],
+          [1, "rgba(250, 248, 242, 0)"],
         ]);
         radialGlow(ctx, core, S * 0.36 * breathe, [
           [0, "rgba(255, 204, 58, 0.34)"],
           [0.52, "rgba(248, 192, 48, 0.11)"],
-          [1, "rgba(255, 255, 255, 0)"],
+          [1, "rgba(250, 248, 242, 0)"],
         ]);
         radialGlow(ctx, node, S * 0.26, [
           [0, "rgba(250, 194, 44, 0.28)"],
-          [1, "rgba(255, 255, 255, 0)"],
+          [1, "rgba(250, 248, 242, 0)"],
         ]);
       } else {
         ctx.globalCompositeOperation = "lighter";

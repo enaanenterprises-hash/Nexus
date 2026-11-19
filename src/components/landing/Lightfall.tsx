@@ -246,17 +246,19 @@ void main() {
   float peak = max(mapped.r, max(mapped.g, mapped.b));
 
   if (uBackdropTransition > 0.5) {
-    // Single-pass C2-continuous Oklab white (#ffffff) -> obsidian (#000000) transition:
+    // Single-pass C2-continuous Oklab soft cream (#faf8f2) -> deep charcoal (#111216) transition:
     // L'(0) = L''(0) = 0 and L'(1) = L''(1) = 0 (mathematically zero Mach bands at either seam),
-    // with triangular-PDF dithering and depth-linked star opacity (translucent near white,
-    // blooming to full luminous brilliance as comets fall into obsidian darkness).
+    // with triangular-PDF dithering and depth-linked star opacity (translucent near cream,
+    // blooming to full luminous brilliance as comets fall into charcoal darkness).
     float t = clamp(1.0 - uv.y, 0.0, 1.0);
     float s = smootherstep01(t);
-    float L = pow(1.0 - s, 1.85);
+    float u = pow(1.0 - s, 1.85);
 
-    float warmth = 4.0 * L * (1.0 - L);
-    float a = 0.0014 * warmth;
-    float b = 0.0060 * warmth;
+    // Exact Oklab endpoints: #faf8f2 (top) -> #111216 (bottom)
+    float warmth = 4.0 * u * (1.0 - u);
+    float L = mix(0.182920, 0.979009, u);
+    float a = mix(0.000643, -0.000212, u) + 0.0012 * warmth;
+    float b = mix(-0.008295, 0.008210, u) + 0.0055 * warmth;
     float l_ = L + 0.3963377774 * a + 0.2158037573 * b;
     float m_ = L - 0.1055613458 * a - 0.0638541728 * b;
     float s_ = L - 0.0894841775 * a - 1.2914855480 * b;
@@ -273,20 +275,25 @@ void main() {
       1.055 * pow(linBg, vec3(1.0 / 2.4)) - 0.055,
       step(vec3(0.0031308), linBg)
     );
+    // Pin exact CSS endpoints at the outer 2% edges so GPU float rounding matches #faf8f2 and #111216 bit-for-bit
+    vec3 exactTop = vec3(250.0, 248.0, 242.0) / 255.0;
+    vec3 exactBot = vec3(17.0, 18.0, 22.0) / 255.0;
+    srgbBg = mix(exactTop, srgbBg, smootherstep01(t / 0.03));
+    srgbBg = mix(srgbBg, exactBot, smootherstep01((t - 0.96) / 0.04));
 
-    // Stars start whisper-translucent near the white top and become progressively more visible
-    // as they fall into the deepening obsidian dark lower zone
-    float darkness = 1.0 - L;
+    // Stars start whisper-translucent near the cream top and become progressively more visible
+    // as they fall into the deepening charcoal-slate lower zone
+    float darkness = 1.0 - u;
     float starReveal = pow(smootherstep01(clamp(darkness / 0.86, 0.0, 1.0)), 1.35);
     float bottomDissolve = 1.0 - smootherstep01(clamp((t - 0.80) / 0.20, 0.0, 1.0));
     float streakEnv = starReveal * bottomDissolve * uOpacity;
 
-    // Subtle translucent gold tint in the upper twilight so stars materialize gently out of white
-    float twilightInk = smoothstep(0.06, 0.62, peak) * streakEnv * L * 0.34;
+    // Subtle translucent gold tint in the upper twilight so stars materialize gently out of cream
+    float twilightInk = smoothstep(0.06, 0.62, peak) * streakEnv * u * 0.34;
     vec3 dayGold = vec3(0.86, 0.62, 0.08);
     vec3 composed = mix(srgbBg, dayGold, clamp(twilightInk, 0.0, 0.45));
 
-    // Luminous 24k gold comets blooming to full intensity as the sky deepens into pure pitch black
+    // Luminous 24k gold comets blooming to full intensity as the sky deepens into charcoal
     float nightVisibility = smoothstep(0.06, 0.72, darkness);
     vec3 nightGlow = mapped * streakEnv * (0.20 + 0.80 * nightVisibility);
     composed = 1.0 - (1.0 - composed) * (1.0 - clamp(nightGlow, 0.0, 1.0));
