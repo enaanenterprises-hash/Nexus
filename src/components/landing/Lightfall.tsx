@@ -242,12 +242,13 @@ void main() {
   float peak = max(mapped.r, max(mapped.g, mapped.b));
 
   if (uBackdropTransition > 0.5) {
-    // Single-pass C-infinity front-loaded Oklab perceptual white (#ffffff) -> obsidian (#000000) transition
-    // with triangular-PDF dithering: white resolves smoothly across the upper portion so most of the
-    // golden Lightfall comets fall through deep obsidian darkness, with zero harsh lines or banding.
+    // Single-pass C-infinity Gaussian Oklab fade pinned right at the very top of the Lightfall band:
+    // L(0) = 1.0, L'(0) = 0 — resolves smoothly into pure #000000 within the top ~25% (zero harsh line,
+    // zero Mach banding, triangular-PDF dithered) so the Lightfall comets pour straight out of the top
+    // light into deep obsidian darkness.
     float t = clamp(1.0 - uv.y, 0.0, 1.0);
-    float c = 0.5 + 0.5 * cos(3.14159265 * t);
-    float L = pow(c, 2.8);
+    float u = t / 0.165;
+    float L = exp(-u * u) * (1.0 - smoothstep(0.45, 0.62, t));
 
     float warmth = 4.0 * L * (1.0 - L);
     float a = 0.0014 * warmth;
@@ -269,8 +270,8 @@ void main() {
       step(vec3(0.0031308), linBg)
     );
 
-    // Golden Lightfall streaks emerge gently as the white begins to twilight and dissolve cleanly into #000000
-    float streakEnv = smootherstep01(clamp((t - 0.04) / 0.22, 0.0, 1.0)) *
+    // Golden Lightfall streaks pour smoothly out of the top white fade and dissolve cleanly into #000000
+    float streakEnv = smootherstep01(clamp((t - 0.05) / 0.18, 0.0, 1.0)) *
                       (1.0 - smootherstep01(clamp((t - 0.80) / 0.20, 0.0, 1.0))) *
                       uOpacity;
 
