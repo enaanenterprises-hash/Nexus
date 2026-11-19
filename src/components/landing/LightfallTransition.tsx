@@ -14,7 +14,7 @@ export function LightfallTransition() {
     <div
       id="lightfall-transition"
       aria-hidden="true"
-      className="relative h-[480px] w-full select-none overflow-hidden sm:h-[580px] lg:h-[660px]"
+      className="relative -mt-8 h-[480px] w-full select-none overflow-hidden sm:-mt-10 sm:h-[580px] lg:-mt-12 lg:h-[660px]"
       style={{
         // Matching C2-continuous composed quintic Oklab fallback for SSR / non-WebGL frames
         background:

@@ -88,7 +88,7 @@ export function EditorialManifesto() {
     <section
       ref={sectionRef}
       aria-label="What Nexus does"
-      className="bg-white px-6 pt-20 pb-8 sm:px-10 sm:pt-24 sm:pb-10 lg:px-14 lg:pt-28 lg:pb-12"
+      className="relative z-10 bg-white px-6 pt-20 pb-2 sm:px-10 sm:pt-24 sm:pb-3 lg:px-14 lg:pt-28 lg:pb-4"
     >
       <div className="mx-auto flex max-w-[920px] flex-col items-center text-center">
         <p className="font-editorial text-[clamp(2rem,4.7vw,4.05rem)] font-normal leading-[1.11] tracking-[-0.036em] text-[#0e0f12] [text-wrap:balance]">
@@ -230,7 +230,7 @@ export function EditorialManifesto() {
         {/* Live footnote responding to whichever medallion the visitor inspects */}
         <div
           key={`${selectedMedallion ?? "idle"}-${leadCrestIndex}`}
-          className="lp-stage-panel mt-8 flex min-h-[28px] flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[13.5px] leading-[1.5] text-[#636570]"
+          className="lp-stage-panel mt-5 flex min-h-[28px] flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[13.5px] leading-[1.5] text-[#636570] sm:mt-6"
           aria-live="polite"
         >
           <span>{caption}</span>

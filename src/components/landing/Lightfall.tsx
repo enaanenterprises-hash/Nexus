@@ -15,6 +15,7 @@ void main() {
 
 const STREAKS = `#version 300 es
 precision highp float;
+precision highp int;
 uniform vec2 uView;
 uniform float uZoom;
 uniform float uPhase;
@@ -195,6 +196,7 @@ void main() {
 
 const COMPOSITE = `#version 300 es
 precision highp float;
+precision highp int;
 uniform sampler2D uScene;
 uniform sampler2D uBloom0;
 uniform sampler2D uBloom1;
@@ -516,22 +518,202 @@ export default function Lightfall(props: LightfallProps) {
   useEffect(() => {
     const container = containerRef.current;
     const canvas = canvasRef.current;
-    const gl = canvas?.getContext("webgl2", {
+    if (!container || !canvas) return undefined;
+
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    const isNearViewport = () => {
+      const rect = container.getBoundingClientRect();
+      const vh = window.innerHeight || 900;
+      return rect.bottom >= -360 && rect.top <= vh + 360;
+    };
+
+    /** Lightweight Canvas2D fallback when WebGL2 or shaders are unavailable on restricted mobile GPUs. */
+    const startCanvas2DFallback = () => {
+      const fallbackCanvas = document.createElement("canvas");
+      fallbackCanvas.className = "lightfall-canvas";
+      fallbackCanvas.setAttribute("aria-hidden", "true");
+      canvas.style.display = "none";
+      container.appendChild(fallbackCanvas);
+      const ctx = fallbackCanvas.getContext("2d");
+      if (!ctx) {
+        fallbackCanvas.remove();
+        canvas.style.display = "";
+        return undefined;
+      }
+
+      const STREAK_COUNT = 54;
+      const streaks = Array.from({ length: STREAK_COUNT }, (_, i) => {
+        const s1 = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+        const s2 = Math.sin(i * 269.5 + 183.3) * 43758.5453;
+        const s3 = Math.sin(i * 419.2 + 73.1) * 43758.5453;
+        const r1 = s1 - Math.floor(s1);
+        const r2 = s2 - Math.floor(s2);
+        const r3 = s3 - Math.floor(s3);
+        return {
+          lane: (r1 - 0.5) * 1.92,
+          phase: r2,
+          speed: 0.22 + r3 * 0.28,
+          len: 0.14 + (1 - r3) * 0.18,
+          width: 0.85 + r3 * 0.85,
+        };
+      });
+
+      let width = 1;
+      let height = 1;
+      let raf2d = 0;
+      let last2d = 0;
+      let clock = 0;
+      let visible2d = isNearViewport();
+
+      const draw2d = () => {
+        const s = settingsRef.current;
+        ctx.clearRect(0, 0, width, height);
+        const cx = width * 0.5;
+        const spread = Math.max(width, height * 0.85) * 0.54;
+
+        for (const st of streaks) {
+          const p = (st.phase + clock * st.speed * s.speed) % 1;
+          const tHead = p;
+          const tTail = Math.max(0, p - st.len);
+
+          // Mirror the shader's C2 Oklab darkness curve so stars stay ghostly near white and blaze in black
+          const smooth = (x: number) => {
+            const k = clamp(x, 0, 1);
+            return k * k * k * (k * (k * 6 - 15) + 10);
+          };
+          const darkness = 1 - Math.pow(1 - smooth(tHead), 1.85);
+          const reveal = Math.pow(smooth(clamp(darkness / 0.86, 0, 1)), 1.35);
+          const bottomOut = 1 - smooth(clamp((tHead - 0.8) / 0.2, 0, 1));
+          const alpha = reveal * bottomOut * s.opacity;
+          if (alpha < 0.01) continue;
+
+          const xTail = cx + st.lane * spread * (0.48 + 0.65 * tTail * tTail);
+          const yTail = tTail * height;
+          const xHead = cx + st.lane * spread * (0.48 + 0.65 * tHead * tHead);
+          const yHead = tHead * height;
+
+          const grad = ctx.createLinearGradient(xTail, yTail, xHead, yHead);
+          grad.addColorStop(0, "rgba(234, 179, 8, 0)");
+          grad.addColorStop(0.68, `rgba(234, 179, 8, ${(alpha * 0.68).toFixed(3)})`);
+          grad.addColorStop(1, `rgba(255, 245, 210, ${(alpha * 0.96).toFixed(3)})`);
+
+          ctx.strokeStyle = grad;
+          ctx.lineWidth = st.width;
+          ctx.lineCap = "round";
+          ctx.beginPath();
+          ctx.moveTo(xTail, yTail);
+          ctx.lineTo(xHead, yHead);
+          ctx.stroke();
+
+          ctx.fillStyle = `rgba(255, 250, 232, ${(alpha * 0.95).toFixed(3)})`;
+          ctx.beginPath();
+          ctx.arc(xHead, yHead, st.width * 1.15, 0, TAU);
+          ctx.fill();
+        }
+      };
+
+      const resize2d = () => {
+        width = Math.max(1, container.clientWidth);
+        height = Math.max(1, container.clientHeight);
+        const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
+        fallbackCanvas.width = Math.round(width * ratio);
+        fallbackCanvas.height = Math.round(height * ratio);
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        draw2d();
+      };
+
+      const tick2d = (now: number) => {
+        raf2d = 0;
+        if (!visible2d || document.hidden || settingsRef.current.paused || reduce) return;
+        const dt = last2d ? Math.min(0.05, (now - last2d) / 1000) : 1 / 60;
+        last2d = now;
+        clock += dt;
+        draw2d();
+        raf2d = requestAnimationFrame(tick2d);
+      };
+
+      const wake2d = () => {
+        if (!raf2d && visible2d && !document.hidden && !reduce) {
+          last2d = 0;
+          raf2d = requestAnimationFrame(tick2d);
+        }
+      };
+
+      const onScroll2d = () => {
+        const near = isNearViewport();
+        if (near && !visible2d) {
+          visible2d = true;
+          wake2d();
+        }
+      };
+
+      const ro2d = new ResizeObserver(resize2d);
+      ro2d.observe(container);
+      const io2d = new IntersectionObserver(
+        (entries) => {
+          visible2d = entries.some((e) => e.isIntersecting) || isNearViewport();
+          if (visible2d) wake2d();
+        },
+        { rootMargin: "360px 0px 360px 0px", threshold: 0 },
+      );
+      io2d.observe(container);
+      window.addEventListener("scroll", onScroll2d, { passive: true });
+      resize2d();
+      wake2d();
+
+      return () => {
+        cancelAnimationFrame(raf2d);
+        ro2d.disconnect();
+        io2d.disconnect();
+        window.removeEventListener("scroll", onScroll2d);
+        fallbackCanvas.remove();
+        canvas.style.display = "";
+      };
+    };
+
+    const gl = canvas.getContext("webgl2", {
       alpha: true,
       premultipliedAlpha: true,
       antialias: false,
       depth: false,
       stencil: false,
-      powerPreference: "high-performance",
+      powerPreference: "default",
     });
-    if (!container || !canvas || !gl) return undefined;
+    if (!gl) return startCanvas2DFallback();
 
-    const floatTargets = Boolean(gl.getExtension("EXT_color_buffer_float"));
+    const isCompactViewport = window.innerWidth < 820 || (window.matchMedia?.("(pointer: coarse)").matches ?? false);
+
+    // Probe real RGBA16F FBO completeness + linear filtering; on mobile always prefer universal RGBA8
+    // so iOS Safari / Android GPUs never silently fail float FBO sampling.
+    const probeFloatTargets = () => {
+      if (isCompactViewport) return false;
+      const extFloat = gl.getExtension("EXT_color_buffer_float");
+      if (!extFloat) return false;
+      gl.getExtension("OES_texture_float_linear");
+      const testTex = gl.createTexture();
+      const testFb = gl.createFramebuffer();
+      if (!testTex || !testFb) return false;
+      gl.bindTexture(gl.TEXTURE_2D, testTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, 4, 4, 0, gl.RGBA, gl.HALF_FLOAT, null);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, testFb);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, testTex, 0);
+      const complete = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.deleteFramebuffer(testFb);
+      gl.deleteTexture(testTex);
+      return complete && gl.getError() === gl.NO_ERROR;
+    };
+
+    const floatTargets = probeFloatTargets();
     const streakProgram = link(gl, STREAKS);
     const downProgram = link(gl, DOWNSAMPLE);
     const blurProgram = link(gl, BLUR);
     const compositeProgram = link(gl, COMPOSITE);
-    if (!streakProgram || !downProgram || !blurProgram || !compositeProgram) return undefined;
+    if (!streakProgram || !downProgram || !blurProgram || !compositeProgram) {
+      return startCanvas2DFallback();
+    }
 
     const onContextLost = (event: Event) => {
       event.preventDefault();
@@ -548,7 +730,8 @@ export default function Lightfall(props: LightfallProps) {
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
-    const format = floatTargets ? gl.RGBA16F : gl.RGBA8;
+    const internalFormat = floatTargets ? gl.RGBA16F : gl.RGBA8;
+    const pixelType = floatTargets ? gl.HALF_FLOAT : gl.UNSIGNED_BYTE;
     const encode = floatTargets ? 1 : 0.25;
     const createTarget = (): RenderTarget => ({
       texture: null,
@@ -569,7 +752,7 @@ export default function Lightfall(props: LightfallProps) {
       target.width = width;
       target.height = height;
       gl.bindTexture(gl.TEXTURE_2D, target.texture);
-      gl.texStorage2D(gl.TEXTURE_2D, 1, format, width, height);
+      gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, width, height, 0, gl.RGBA, pixelType, null);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -612,7 +795,6 @@ export default function Lightfall(props: LightfallProps) {
       return [r * r, g * g, b * b];
     };
 
-    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
     const palette = new Float32Array(MAX_COLORS * 3);
     const pointer = { x: 0, y: 0, inside: false, held: false };
     const state = {
@@ -627,8 +809,7 @@ export default function Lightfall(props: LightfallProps) {
     };
     let raf = 0;
     let last = 0;
-    // Start false so IntersectionObserver triggers the intro warp cleanly right as the user scrolls here
-    let visible = false;
+    let visible = isNearViewport();
 
     const render = () => {
       const s = settingsRef.current;
@@ -646,7 +827,7 @@ export default function Lightfall(props: LightfallProps) {
       });
 
       const introVal = state.intro;
-      const presence = Math.min(1, introVal * 2.2);
+      const presence = Math.max(0.55, Math.min(1, introVal * 2.4));
       const stretch = 1 + 5 * Math.pow(1 - introVal, 2) + 2.5 * state.warp;
       const rings = Math.max(1, Math.floor(TAU * Math.max(s.density, 0.05) + 0.5));
       const period = TAU / rings;
@@ -794,7 +975,8 @@ export default function Lightfall(props: LightfallProps) {
       const s = settingsRef.current;
       const width = Math.max(1, container.clientWidth);
       const height = Math.max(1, container.clientHeight);
-      const ratio = Math.min(s.dpr || window.devicePixelRatio || 1, 2);
+      const maxRatio = isCompactViewport ? 1.5 : 2;
+      const ratio = Math.min(s.dpr || window.devicePixelRatio || 1, maxRatio);
       canvas.width = Math.max(1, Math.round(width * ratio));
       canvas.height = Math.max(1, Math.round(height * ratio));
       render();
@@ -842,16 +1024,29 @@ export default function Lightfall(props: LightfallProps) {
       wake();
     };
 
-    const resizeObserver = new ResizeObserver(resize);
-    resizeObserver.observe(container);
-    const intersection = new IntersectionObserver((entries) => {
-      visible = entries.some((entry) => entry.isIntersecting);
-      if (visible) {
+    const onScrollWake = () => {
+      const near = isNearViewport();
+      if (near && !visible) {
+        visible = true;
         last = 0;
         wake();
       }
-    });
+    };
+
+    const resizeObserver = new ResizeObserver(resize);
+    resizeObserver.observe(container);
+    const intersection = new IntersectionObserver(
+      (entries) => {
+        visible = entries.some((entry) => entry.isIntersecting) || isNearViewport();
+        if (visible) {
+          last = 0;
+          wake();
+        }
+      },
+      { rootMargin: "360px 0px 360px 0px", threshold: 0 },
+    );
     intersection.observe(container);
+    window.addEventListener("scroll", onScrollWake, { passive: true });
     window.addEventListener("pointermove", onPointerMove, { passive: true });
     window.addEventListener("pointerdown", onPointerDown, { passive: true });
     window.addEventListener("pointerup", onPointerUp, { passive: true });
@@ -879,6 +1074,7 @@ export default function Lightfall(props: LightfallProps) {
       canvas.removeEventListener("webglcontextrestored", onContextRestored);
       resizeObserver.disconnect();
       intersection.disconnect();
+      window.removeEventListener("scroll", onScrollWake);
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("pointerup", onPointerUp);
