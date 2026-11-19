@@ -115,10 +115,10 @@ export function FloatingWaitlistPill() {
             <button
               type="submit"
               disabled={status === "loading"}
-              className="inline-flex min-h-[38px] shrink-0 cursor-pointer items-center gap-1 rounded-full bg-[#0e0f12] px-4 text-[13.5px] font-medium text-white transition-colors hover:bg-[#252730] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910] disabled:opacity-60"
+              className="gal-btn-tactile inline-flex min-h-[38px] shrink-0 cursor-pointer items-center gap-1 rounded-full bg-[#0e0f12] px-4 text-[13.5px] font-medium text-white hover:bg-[#252730] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910] disabled:opacity-60"
             >
               <span>{status === "loading" ? "…" : "Join beta"}</span>
-              <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden="true" />
+              <ArrowRight className="gal-arrow-shift h-3.5 w-3.5" strokeWidth={1.8} aria-hidden="true" />
             </button>
             <button
               type="button"

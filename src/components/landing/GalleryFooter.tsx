@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { NexusMark } from "./NexusLogo";
 
@@ -20,7 +23,7 @@ function LaurelSprig({ mirrored = false }: { mirrored?: boolean }) {
   return (
     <svg
       viewBox="0 0 28 46"
-      className={`h-8 w-5 shrink-0 text-[#9a6910] ${mirrored ? "-scale-x-100" : ""}`}
+      className={`h-8 w-5 shrink-0 text-[#9a6910] ${mirrored ? "gal-laurel-right -scale-x-100" : "gal-laurel-left"}`}
       fill="none"
       aria-hidden="true"
     >
@@ -41,6 +44,27 @@ function LaurelSprig({ mirrored = false }: { mirrored?: boolean }) {
 }
 
 export function GalleryFooter() {
+  const wordmarkRef = useRef<HTMLDivElement>(null);
+  const [wordmarkVisible, setWordmarkVisible] = useState(false);
+
+  useEffect(() => {
+    const el = wordmarkRef.current;
+    if (!el) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setWordmarkVisible(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.12 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <footer
       id="gallery-footer"
@@ -54,7 +78,7 @@ export function GalleryFooter() {
             <Link
               key={link.href}
               href={link.href}
-              className="font-editorial px-4 py-1 text-[clamp(2rem,4.3vw,3.35rem)] font-normal leading-[1.15] tracking-[-0.032em] text-[#0e0f12] transition-colors duration-200 hover:text-[#9a6910] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#9a6910]"
+              className="gal-link-underline font-editorial px-4 py-1 text-[clamp(2rem,4.3vw,3.35rem)] font-normal leading-[1.15] tracking-[-0.032em] text-[#0e0f12] transition-colors duration-200 hover:text-[#9a6910] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#9a6910]"
             >
               {link.label}
             </Link>
@@ -63,52 +87,51 @@ export function GalleryFooter() {
       </div>
 
       {/* Band 2: Full-Width Edge-to-Edge Monumental Wordmark */}
-      <div className="mx-auto max-w-[1380px] px-4 pb-8 sm:px-8 sm:pb-12">
+      <div ref={wordmarkRef} className="mx-auto max-w-[1380px] px-4 pb-8 sm:px-8 sm:pb-12">
         <div aria-hidden="true" className="w-full select-none overflow-hidden">
-          <svg
-            viewBox="0 0 1200 345"
-            className="block h-auto w-full"
-            preserveAspectRatio="xMidYMid meet"
-            role="presentation"
-          >
-            <text
-              x="600"
-              y="292"
-              textAnchor="middle"
-              fill="#0e0f12"
-              style={{
-                fontFamily: 'var(--font-editorial), "New York", Georgia, serif',
-                fontSize: "388px",
-                fontWeight: 500,
-                letterSpacing: "-0.048em",
-              }}
+          <div className="gal-wordmark-rise" data-visible={wordmarkVisible ? "true" : "false"}>
+            <svg
+              viewBox="0 0 1200 345"
+              className="block h-auto w-full"
+              preserveAspectRatio="xMidYMid meet"
+              role="presentation"
             >
-              Nexus
-            </text>
-          </svg>
+              <text
+                x="600"
+                y="292"
+                textAnchor="middle"
+                fill="#0e0f12"
+                style={{
+                  fontFamily: 'var(--font-editorial), "New York", Georgia, serif',
+                  fontSize: "388px",
+                  fontWeight: 500,
+                  letterSpacing: "-0.048em",
+                }}
+              >
+                Nexus
+              </text>
+            </svg>
+          </div>
         </div>
       </div>
 
       {/* Band 3: Ceremonial 3-Column Meta Row + Centered Legal & Live Status Bar */}
       <div className="mx-auto max-w-[1360px] px-6 sm:px-10">
         <div className="grid grid-cols-1 items-center gap-8 border-t border-[#0e0f12]/[0.09] py-9 md:grid-cols-3">
-          {/* Left: Brand Seal */}
+          {/* Left: Flat Brand Mark */}
           <div className="flex items-center justify-center gap-3 md:justify-start">
             <Link
               href="/"
               aria-label="Nexus home"
-              className="inline-flex items-center gap-3 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#9a6910]"
+              className="inline-flex items-center gap-2.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#9a6910]"
             >
-              <NexusMark className="h-9 w-auto shrink-0" />
-              <div className="text-left leading-tight">
-                <p className="text-[14px] font-semibold tracking-[-0.02em] text-[#0e0f12]">Nexus</p>
-                <p className="mt-0.5 text-[12.5px] text-[#636570]">Personal AI Network</p>
-              </div>
+              <NexusMark className="h-8 w-8 shrink-0" />
+              <span className="text-[16px] font-semibold tracking-[-0.025em] text-[#0e0f12]">Nexus</span>
             </Link>
           </div>
 
           {/* Center: Ceremonial Motto Flanked by Mirrored Burnished-Gold Laurels */}
-          <div className="flex items-center justify-center gap-3 text-center">
+          <div className="gal-laurel-group flex items-center justify-center gap-3 text-center">
             <LaurelSprig />
             <p className="font-editorial text-[16px] font-medium leading-[1.25] tracking-[-0.015em] text-[#0e0f12] sm:text-[17px]">
               One room,
@@ -131,7 +154,7 @@ export function GalleryFooter() {
             <Link
               key={link.href}
               href={link.href}
-              className="transition-colors duration-150 hover:text-[#0e0f12] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910]"
+              className="gal-link-underline transition-colors duration-150 hover:text-[#0e0f12] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910]"
             >
               {link.label}
             </Link>

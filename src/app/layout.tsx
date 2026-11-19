@@ -23,9 +23,9 @@ const editorialSerif = Source_Serif_4({
 });
 
 export const metadata: Metadata = {
-  title: "Nexus — Personal AI Network",
+  title: "Nexus",
   description:
-    "A personal AI operating environment with a modular extension network. One living brain — extensions share context instead of silos.",
+    "One intelligence, connecting everything you do. Daily feeds, recording studio, web research, and modular workspaces in one private room.",
 };
 
 export default function RootLayout({

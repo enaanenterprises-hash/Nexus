@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CascadeFilament } from "./FilamentVisuals";
 import {
@@ -49,8 +49,8 @@ const MAIL_MESSAGES: MailMessage[] = [
     ],
   },
   {
-    id: "marcus",
-    sender: "Marcus Chen",
+    id: "devon",
+    sender: "Devon Patel",
     subject: "Studio Audio Routing",
     time: "Yesterday",
     body: [
@@ -207,6 +207,32 @@ export function SingularityStage() {
   const [inspectedSocketId, setInspectedSocketId] = useState<string | null>(null);
   const [activeSlotId, setActiveSlotId] = useState<string>("studio");
 
+  // Live Studio DAW playhead sweep when Play is active in Edit mode
+  useEffect(() => {
+    if (!studioPlaying || studioMode !== "edit") return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    let frame = 0;
+    let last = 0;
+    const tick = (now: number) => {
+      if (!last) last = now;
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      setPlayheadPct((cur) => {
+        const next = cur + dt * 9.5;
+        return next >= 96 ? 24 : next;
+      });
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [studioPlaying, studioMode]);
+
+  const studioElapsedSec = 860 + ((playheadPct - 24) / 72) * 28.4;
+  const studioMinutes = String(Math.floor(studioElapsedSec / 60)).padStart(2, "0");
+  const studioSeconds = (studioElapsedSec % 60).toFixed(1).padStart(4, "0");
+  const studioTimecode = `00:${studioMinutes}:${studioSeconds}`;
+
   const activeMail = MAIL_MESSAGES.find((m) => m.id === selectedMailId) ?? MAIL_MESSAGES[0];
   const inspectedSocket = inspectedSocketId ? SOCKET_RAIL.find((s) => s.id === inspectedSocketId) ?? null : null;
   const activeSlot = SOCKET_RAIL.find((s) => s.id === activeSlotId) ?? SOCKET_RAIL[0];
@@ -307,18 +333,26 @@ export function SingularityStage() {
               </div>
 
               <div
-                className={`inline-flex rounded-full border p-0.5 text-[12px] ${
+                className={`relative grid grid-cols-2 rounded-full border p-0.5 text-[12px] ${
                   dark ? "border-white/[0.1] bg-[#16161a]" : "border-[#0e0f12]/[0.1] bg-[#f7f6f2]"
                 }`}
                 role="group"
                 aria-label="Preview workspace appearance"
               >
+                <span
+                  aria-hidden="true"
+                  className={`pointer-events-none absolute top-0.5 bottom-0.5 left-0.5 w-[calc(50%-2px)] rounded-full transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                    dark
+                      ? "translate-x-full bg-[#24242b]"
+                      : "translate-x-0 bg-white shadow-xs"
+                  }`}
+                />
                 <button
                   type="button"
                   onClick={() => setPreviewTheme("light")}
                   aria-pressed={!dark}
-                  className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#9a6910] ${
-                    !dark ? "bg-white font-medium text-[#0e0f12] shadow-xs" : "text-[#a1a1a6] hover:text-white"
+                  className={`relative z-10 inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-full px-2.5 py-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#9a6910] ${
+                    !dark ? "font-medium text-[#0e0f12]" : "text-[#a1a1a6] hover:text-white"
                   }`}
                 >
                   <Sun className="h-3 w-3" strokeWidth={1.8} aria-hidden="true" />
@@ -328,8 +362,8 @@ export function SingularityStage() {
                   type="button"
                   onClick={() => setPreviewTheme("dark")}
                   aria-pressed={dark}
-                  className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#f0b54a] ${
-                    dark ? "bg-[#24242b] font-medium text-[#f5f5f7]" : "text-[#636570] hover:text-[#0e0f12]"
+                  className={`relative z-10 inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-full px-2.5 py-1 transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#f0b54a] ${
+                    dark ? "font-medium text-[#f5f5f7]" : "text-[#636570] hover:text-[#0e0f12]"
                   }`}
                 >
                   <Moon className="h-3 w-3" strokeWidth={1.8} aria-hidden="true" />
@@ -456,7 +490,7 @@ export function SingularityStage() {
                         </div>
                       </div>
 
-                      {/* Elevated Gmail reader card */}
+                      {/* Gmail message reader */}
                       <div className={`flex flex-col rounded-[14px] border p-3.5 ${cardClass}`}>
                         <div className={`flex items-center justify-between gap-2 text-[11.5px] ${inkMuted}`}>
                           <span className="truncate">
@@ -601,14 +635,27 @@ export function SingularityStage() {
                       </div>
 
                       <div className="flex items-center gap-3 tabular-nums">
-                        <span className={`text-[13px] ${inkMuted}`}>
-                          {studioMode === "record" ? "Input ready · 48 kHz" : "00:14:22.4"}
-                        </span>
+                        {studioMode === "record" ? (
+                          <div className="flex items-center gap-2">
+                            <span className="flex h-3 items-end gap-[2px]" aria-hidden="true">
+                              {[0, 140, 280, 90].map((delay, idx) => (
+                                <span
+                                  key={idx}
+                                  className={`gal-meter-bar h-full w-[2px] rounded-full ${goldDot}`}
+                                  style={{ animationDelay: `${delay}ms` }}
+                                />
+                              ))}
+                            </span>
+                            <span className={`text-[13px] ${inkMuted}`}>Input ready · 48 kHz</span>
+                          </div>
+                        ) : (
+                          <span className={`text-[13px] ${inkMuted}`}>{studioTimecode}</span>
+                        )}
                         <button
                           type="button"
                           onClick={() => setStudioPlaying((p) => !p)}
                           aria-label={studioPlaying ? "Pause preview" : "Play preview"}
-                          className={`inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910] ${
+                          className={`gal-btn-tactile inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910] ${
                             dark
                               ? "border-white/[0.14] bg-white/[0.04] text-[#f5f5f7] hover:border-white/[0.28]"
                               : "border-[#0e0f12]/[0.14] bg-[#f7f6f2] text-[#0e0f12] hover:border-[#0e0f12]/[0.28]"
@@ -838,7 +885,7 @@ export function SingularityStage() {
                       setInspectedSocketId((cur) => (cur === socket.id ? null : socket.id));
                       setActiveSlotId(socket.id);
                     }}
-                    className={`min-h-[40px] cursor-pointer rounded-full border px-3 py-2 text-center text-[13px] transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910] ${
+                    className={`gal-btn-tactile min-h-[40px] cursor-pointer rounded-full border px-3 py-2 text-center text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910] ${
                       selected
                         ? "border-[#9a6910]/60 bg-white font-medium text-[#0e0f12] shadow-[0_6px_16px_-8px_rgba(154,105,16,0.3)]"
                         : "border-[#0e0f12]/[0.11] bg-white text-[#4a4c55] hover:border-[#0e0f12]/[0.26] hover:text-[#0e0f12]"

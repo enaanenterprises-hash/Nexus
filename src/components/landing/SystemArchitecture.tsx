@@ -170,17 +170,25 @@ export function SystemArchitecture() {
             <div className="mt-8 flex flex-wrap items-center gap-6 border-t border-[#0e0f12]/[0.08] pt-6 text-[14px]">
               <Link
                 href="/about"
-                className="inline-flex items-center gap-1.5 font-medium text-[#0e0f12] transition-colors hover:text-[#9a6910] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910]"
+                className="group inline-flex items-center gap-1.5 font-medium text-[#0e0f12] transition-colors hover:text-[#9a6910] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910]"
               >
-                <span>Read the philosophy</span>
-                <ArrowUpRight className="h-3.5 w-3.5" strokeWidth={1.7} aria-hidden="true" />
+                <span className="gal-link-underline">Read the philosophy</span>
+                <ArrowUpRight
+                  className="h-3.5 w-3.5 transition-transform duration-150 group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+                  strokeWidth={1.7}
+                  aria-hidden="true"
+                />
               </Link>
               <Link
                 href="/security"
-                className="inline-flex items-center gap-1.5 text-[#52545d] transition-colors hover:text-[#0e0f12] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910]"
+                className="group inline-flex items-center gap-1.5 text-[#52545d] transition-colors hover:text-[#0e0f12] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#9a6910]"
               >
-                <span>Security architecture</span>
-                <ArrowUpRight className="h-3.5 w-3.5" strokeWidth={1.7} aria-hidden="true" />
+                <span className="gal-link-underline">Security architecture</span>
+                <ArrowUpRight
+                  className="h-3.5 w-3.5 transition-transform duration-150 group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+                  strokeWidth={1.7}
+                  aria-hidden="true"
+                />
               </Link>
             </div>
           </div>
@@ -197,7 +205,7 @@ export function SystemArchitecture() {
                     className="group flex w-full cursor-pointer flex-col items-start gap-1.5 text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#9a6910]"
                   >
                     <div className="flex w-full flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                      <h3 className="text-[20px] font-medium tracking-[-0.02em] text-[#0e0f12] sm:text-[21px]">
+                      <h3 className="text-[20px] font-medium tracking-[-0.02em] text-[#0e0f12] transition-colors duration-150 group-hover:text-[#9a6910] sm:text-[21px]">
                         {step.title}
                       </h3>
                       <span
@@ -211,19 +219,21 @@ export function SystemArchitecture() {
                     <p className="mt-1 max-w-[60ch] text-[15px] leading-[1.6] text-[#52545d]">{step.summary}</p>
                   </button>
 
-                  {isOpen ? (
-                    <div className="mt-4 border-t border-[#0e0f12]/[0.07] pt-3.5">
-                      <p className="max-w-[58ch] text-[14.5px] leading-[1.65] text-[#2c2e35]">{step.detail}</p>
-                      <div className="mt-3.5 flex flex-wrap gap-x-5 gap-y-2 text-[13px] text-[#52545d]">
-                        {step.surfaces.map((surface) => (
-                          <span key={surface} className="inline-flex items-center gap-2">
-                            <span className="h-1.5 w-1.5 rounded-full bg-[#c9932c]" aria-hidden="true" />
-                            <span>{surface}</span>
-                          </span>
-                        ))}
+                  <div className="gal-accordion-grid" data-open={isOpen ? "true" : "false"}>
+                    <div className="gal-accordion-inner">
+                      <div className="mt-4 border-t border-[#0e0f12]/[0.07] pt-3.5">
+                        <p className="max-w-[58ch] text-[14.5px] leading-[1.65] text-[#2c2e35]">{step.detail}</p>
+                        <div className="mt-3.5 flex flex-wrap gap-x-5 gap-y-2 text-[13px] text-[#52545d]">
+                          {step.surfaces.map((surface) => (
+                            <span key={surface} className="inline-flex items-center gap-2">
+                              <span className="h-1.5 w-1.5 rounded-full bg-[#c9932c]" aria-hidden="true" />
+                              <span>{surface}</span>
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     </div>
-                  ) : null}
+                  </div>
                 </div>
               );
             })}

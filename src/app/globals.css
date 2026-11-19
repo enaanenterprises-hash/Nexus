@@ -12,6 +12,7 @@
   --land-hair: rgba(255, 255, 255, 0.09);
   --land-gold: #f0b54a;
   --land-gold-soft: #ffd99a;
+  --nexus-mark-fill: #e8b048;
   --cmd-alert: #f0957a;
 
   --font-landing: var(--font-manrope), -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif;
@@ -102,23 +103,55 @@ html {
   scroll-behavior: smooth;
   background: #000;
   scrollbar-width: thin;
-  scrollbar-color: rgba(240, 181, 74, 0.45) #000;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+html:has(.landing-gallery),
+html:has(.landing-gallery) body {
+  background: #ffffff;
+  scrollbar-color: rgba(14, 15, 18, 0.18) #ffffff;
 }
 
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-  background: #000;
+  width: 8px;
+  height: 8px;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-track {
-  background: #000;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(240, 181, 74, 0.4);
-  border: 2px solid #000;
+  background: rgba(255, 255, 255, 0.2);
+  border: 2px solid transparent;
+  background-clip: content-box;
   border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.34);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+html:has(.landing-gallery)::-webkit-scrollbar,
+html:has(.landing-gallery)::-webkit-scrollbar-track {
+  background: #ffffff;
+}
+
+html:has(.landing-gallery)::-webkit-scrollbar-thumb,
+html:has(.landing-gallery) ::-webkit-scrollbar-thumb {
+  background: rgba(14, 15, 18, 0.16);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+html:has(.landing-gallery)::-webkit-scrollbar-thumb:hover,
+html:has(.landing-gallery) ::-webkit-scrollbar-thumb:hover {
+  background: rgba(14, 15, 18, 0.32);
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
 
 body {
@@ -157,6 +190,7 @@ textarea {
   --land-hair: rgba(255, 255, 255, 0.09);
   --land-gold: #f0b54a;
   --land-gold-soft: #ffd99a;
+  --nexus-mark-fill: #e8b048;
   --cmd-alert: #f0957a;
   --background: #000000;
   --foreground: var(--land-ink);
@@ -201,6 +235,7 @@ textarea {
   --gal-border-strong: rgba(14, 15, 18, 0.16);
   --gal-gold: #9a6910;
   --gal-gold-bright: #c9932c;
+  --nexus-mark-fill: #b88218;
 
   --land-ink: #0e0f12;
   --land-muted: #52545d;
@@ -271,22 +306,228 @@ textarea {
 }
 
 .gal-enter {
-  animation: gal-fade-up 760ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: gal-fade-up 680ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .gal-enter-delay-1 {
-  animation-delay: 120ms;
+  animation-delay: 220ms;
 }
 
 .gal-enter-delay-2 {
-  animation-delay: 240ms;
+  animation-delay: 340ms;
+}
+
+/* Masked editorial line-by-line hero arrival (taste-skill / Apple HIG ease-out) */
+.gal-line-mask {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.08em;
+  margin-bottom: -0.08em;
+}
+
+.gal-line-inner {
+  display: block;
+  animation: gal-line-rise 720ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.gal-line-inner--1 {
+  animation-delay: 40ms;
+}
+
+.gal-line-inner--2 {
+  animation-delay: 130ms;
+}
+
+.gal-line-inner--3 {
+  animation-delay: 220ms;
+}
+
+@keyframes gal-line-rise {
+  from {
+    opacity: 0;
+    transform: translateY(102%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Precision flat logo aperture micro-rotation */
+.nexus-flat-mark .nexus-mark-rotor {
+  transform-origin: 50px 52px;
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+a:hover .nexus-flat-mark .nexus-mark-rotor,
+button:hover .nexus-flat-mark .nexus-mark-rotor {
+  transform: rotate(15deg) scale(1.03);
+}
+
+/* Tactile fine-pointer primary button lift & crisp press */
+.gal-btn-tactile {
+  transition:
+    background-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .gal-btn-tactile:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+}
+
+.gal-btn-tactile:active:not(:disabled) {
+  transform: translateY(1px) scale(0.985);
+  transition-duration: 90ms;
+}
+
+.gal-btn-tactile .gal-arrow-shift {
+  transition: transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .gal-btn-tactile:hover .gal-arrow-shift {
+    transform: translateX(3px);
+  }
+}
+
+/* Editorial nav & footer drawn underline */
+.gal-link-underline {
+  position: relative;
+}
+
+.gal-link-underline::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 1.5px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: right center;
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.gal-link-underline:hover::after,
+.gal-link-underline[data-active="true"]::after {
+  transform: scaleX(1);
+  transform-origin: left center;
+}
+
+/* Fingerprint biometric stroke-draw pulse on hover / inspect */
+.gal-fingerprint path {
+  stroke-dasharray: 40;
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 480ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.gal-fingerprint-trigger:hover .gal-fingerprint path,
+.gal-fingerprint-trigger[data-active="true"] .gal-fingerprint path {
+  animation: gal-fp-trace 780ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes gal-fp-trace {
+  0% {
+    stroke-dashoffset: 38;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Smooth CSS Grid row accordion (GPU-friendly height interpolation without JS measurement) */
+.gal-accordion-grid {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 220ms ease;
+}
+
+.gal-accordion-grid[data-open="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.gal-accordion-inner {
+  overflow: hidden;
+}
+
+/* Studio Record mode live input meter bars */
+@keyframes gal-meter-bar {
+  0%,
+  100% {
+    transform: scaleY(0.32);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.gal-meter-bar {
+  transform-origin: bottom center;
+  animation: gal-meter-bar 640ms ease-in-out infinite;
+}
+
+/* Monumental footer wordmark reveal */
+.gal-wordmark-rise {
+  transform: translateY(16%);
+  opacity: 0.25;
+  transition:
+    transform 760ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 620ms ease-out;
+}
+
+.gal-wordmark-rise[data-visible="true"] {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+/* Ceremonial footer laurels subtle bloom on hover */
+.gal-laurel-left,
+.gal-laurel-right {
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.gal-laurel-group:hover .gal-laurel-left {
+  transform: rotate(-5deg) translateX(-2px);
+}
+
+.gal-laurel-group:hover .gal-laurel-right {
+  transform: scaleX(-1) rotate(-5deg) translateX(-2px);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .gal-enter,
   .gal-enter-delay-1,
-  .gal-enter-delay-2 {
+  .gal-enter-delay-2,
+  .gal-line-inner,
+  .gal-meter-bar,
+  .gal-fingerprint-trigger:hover .gal-fingerprint path,
+  .gal-fingerprint-trigger[data-active="true"] .gal-fingerprint path {
     animation: none;
+  }
+
+  .nexus-flat-mark .nexus-mark-rotor,
+  .gal-btn-tactile,
+  .gal-btn-tactile .gal-arrow-shift,
+  .gal-link-underline::after,
+  .gal-accordion-grid,
+  .gal-wordmark-rise,
+  .gal-laurel-left,
+  .gal-laurel-right {
+    transition: none;
+  }
+
+  .gal-wordmark-rise {
+    transform: none;
+    opacity: 1;
   }
 }
 
@@ -7391,6 +7632,7 @@ html[data-dash-theme="light"] .setup-card {
   --land-hair: rgba(255, 255, 255, 0.1);
   --land-gold: #f0b54a;
   --land-gold-soft: #ffd99a;
+  --nexus-mark-fill: #e8b048;
   --background: #0f0f12;
   --foreground: #f5f5f7;
   --muted: rgba(255, 255, 255, 0.065);
