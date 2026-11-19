@@ -206,6 +206,7 @@ uniform float uPresence;
 uniform float uOpacity;
 uniform float uFade;
 uniform float uLightMode;
+uniform float uBackdropTransition;
 uniform vec3 uTopColor;
 uniform float uTopGlow;
 out vec4 outColor;
@@ -227,7 +228,7 @@ void main() {
   }
   light *= uDecode * uGlow * uPresence;
 
-  if (uLightMode < 0.5 && uTopGlow > 0.0) {
+  if (uBackdropTransition < 0.5 && uLightMode < 0.5 && uTopGlow > 0.0) {
     float aspect = uView.x / uView.y;
     vec2 q = vec2((uv.x - 0.5) * aspect, 1.04 - uv.y);
     float spread = 0.34 * max(aspect, 0.75);
@@ -239,6 +240,57 @@ void main() {
   vec3 lit = max(light, 0.0);
   vec3 mapped = sqrt(1.0 - exp(-1.3 * lit * lit / (lit + 0.025)));
   float peak = max(mapped.r, max(mapped.g, mapped.b));
+
+  if (uBackdropTransition > 0.5) {
+    // Single-pass C2-continuous Oklab perceptual white (#ffffff) -> obsidian (#000000) transition
+    // with triangular-PDF dithering (zero CSS seams, zero Mach bands, zero 8-bit stair-stepping).
+    float t = clamp(1.0 - uv.y, 0.0, 1.0);
+    float L = 1.0 - smootherstep01(t);
+
+    float w = sin(3.14159265 * t);
+    float warmth = w * w;
+    float a = 0.0014 * warmth;
+    float b = 0.0060 * warmth;
+    float l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+    float m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+    float s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+    float l3 = l_ * l_ * l_;
+    float m3 = m_ * m_ * m_;
+    float s3 = s_ * s_ * s_;
+    vec3 linBg = max(vec3(
+      +4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3,
+      -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3,
+      -0.0041960863 * l3 - 0.7034186147 * m3 + 1.7076147010 * s3
+    ), 0.0);
+    vec3 srgbBg = mix(
+      12.92 * linBg,
+      1.055 * pow(linBg, vec3(1.0 / 2.4)) - 0.055,
+      step(vec3(0.0031308), linBg)
+    );
+
+    // Smooth C2 emergence & dissolution of golden Lightfall streaks inside the unified canvas
+    float streakEnv = smootherstep01(clamp((t - 0.03) / 0.32, 0.0, 1.0)) *
+                      (1.0 - smootherstep01(clamp((t - 0.76) / 0.24, 0.0, 1.0))) *
+                      uOpacity;
+
+    // Daylight sculptural gold filaments softly painted across the sunlit upper half
+    float dayInk = smoothstep(0.0, 0.56, peak) * streakEnv * L * 0.68;
+    vec3 dayGold = vec3(0.84, 0.58, 0.05);
+    vec3 composed = mix(srgbBg, dayGold, clamp(dayInk, 0.0, 0.84));
+
+    // Luminous 24k gold comets crossfading seamlessly as the surface deepens into pitch black
+    vec3 nightGlow = mapped * streakEnv * (1.0 - 0.62 * L * L);
+    composed = 1.0 - (1.0 - composed) * (1.0 - clamp(nightGlow, 0.0, 1.0));
+
+    // Triangular-PDF sub-pixel dithering kills 8-bit gradient banding completely
+    float r1 = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+    float r2 = fract(52.9829189 * fract(dot(gl_FragCoord.xy + vec2(17.0, 31.0), vec2(0.06711056, 0.00583715))));
+    float triDither = (r1 + r2 - 1.0) / 255.0;
+    float endPin = smoothstep(0.0, 0.015, t) * smoothstep(0.0, 0.015, 1.0 - t);
+
+    outColor = vec4(clamp(composed + triDither * endPin, 0.0, 1.0), 1.0);
+    return;
+  }
 
   float mask = uOpacity;
   float edge = uFade * 0.5;
@@ -339,6 +391,8 @@ export interface LightfallProps {
   intro?: boolean;
   fade?: number;
   lightMode?: boolean;
+  /** Renders a single-pass C2-continuous Oklab #ffffff -> #000000 backdrop with triangular-PDF dithering inside the WebGL2 composite shader. */
+  backdropTransition?: boolean;
   mixBlendMode?: CSSProperties["mixBlendMode"];
   paused?: boolean;
   dpr?: number;
@@ -371,6 +425,7 @@ type NormalizedSettings = {
   intro: boolean;
   fade: number;
   lightMode: boolean;
+  backdropTransition: boolean;
   paused: boolean;
   dpr?: number;
 };
@@ -401,6 +456,7 @@ function normalizeSettings(props: LightfallProps): NormalizedSettings {
     intro = true,
     fade = 0,
     lightMode = false,
+    backdropTransition = false,
     paused = false,
     dpr,
   } = props;
@@ -430,6 +486,7 @@ function normalizeSettings(props: LightfallProps): NormalizedSettings {
     intro,
     fade: clamp(fade, 0, 1),
     lightMode,
+    backdropTransition,
     paused,
     dpr,
   };
@@ -673,6 +730,7 @@ export default function Lightfall(props: LightfallProps) {
       gl.uniform1f(c.uOpacity, s.opacity);
       gl.uniform1f(c.uFade, s.fade);
       gl.uniform1f(c.uLightMode, s.lightMode ? 1 : 0);
+      gl.uniform1f(c.uBackdropTransition, s.backdropTransition ? 1 : 0);
       gl.uniform3fv(c.uTopColor, toLinear(s.backgroundColor));
       gl.uniform1f(c.uTopGlow, s.backgroundGlow);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
