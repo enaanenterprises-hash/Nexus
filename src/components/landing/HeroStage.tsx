@@ -203,20 +203,16 @@ export function HeroStage() {
         />
 
         <div className="relative z-10 mx-auto flex w-full max-w-[920px] flex-col items-center text-center">
-          <h1 className="font-editorial max-w-[18ch] text-[clamp(2.75rem,5.9vw,5rem)] font-normal leading-[1.03] tracking-[-0.04em] text-[#0e0f12] [text-wrap:balance]">
+          <h1 className="font-editorial text-[clamp(3.75rem,8.4vw,7.1rem)] font-normal leading-[0.98] tracking-[-0.045em] text-[#0e0f12]">
             <span className="gal-line-mask">
-              <span className="gal-line-inner gal-line-inner--1">Every tool,</span>
-            </span>
-            <span className="gal-line-mask">
-              <span className="gal-line-inner gal-line-inner--2">every thought,</span>
-            </span>
-            <span className="gal-line-mask">
-              <span className="gal-line-inner gal-line-inner--3">woven into one.</span>
+              <span className="gal-line-inner gal-line-inner--1">Welcome</span>
             </span>
           </h1>
 
-          <p className="gal-enter gal-enter-delay-1 mt-5 max-w-[48ch] text-[16px] leading-[1.58] text-[#52545d] sm:text-[18px]">
-            Daily feeds, multi-track audio, tracker-free research, and modular sockets in one private room.
+          <p className="gal-enter gal-enter-delay-1 mt-6 max-w-[54ch] text-[16px] leading-[1.65] text-[#4a4c55] [text-wrap:pretty] sm:text-[18px]">
+            Nexus is an architectural design built to connect your workflows into one continuous, unbroken flow, with
+            modular components that let you curate your workspace to you.{" "}
+            <span className="font-medium text-[#0e0f12]">Nexus is yours.</span>
           </p>
 
           {/* Interactive Apple Liquid Glass Hero Waitlist & Preview Pill */}

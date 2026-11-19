@@ -25,7 +25,7 @@ const editorialSerif = Source_Serif_4({
 export const metadata: Metadata = {
   title: "Nexus",
   description:
-    "Every tool, every thought, woven into one. Daily feeds, recording studio, web research, and modular workspaces in one private room.",
+    "Nexus is an architectural design built to connect your workflows into one continuous, unbroken flow, with modular components curated around you. Nexus is yours.",
 };
 
 export default function RootLayout({
