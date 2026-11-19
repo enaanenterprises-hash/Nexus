@@ -1099,6 +1099,8 @@ uniform float uMenuCorner;
 in vec2 vUv;
 out vec4 fragColor;
 
+const float PI = 3.14159265;
+
 float sdRoundedBox(vec2 p, vec2 b, float r) {
   vec2 q = abs(p) - b + r;
   return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
@@ -1299,8 +1301,8 @@ const CrystalizedBall = ({
       type: halfFloat ? (gl as WebGL2RenderingContext).HALF_FLOAT : gl.UNSIGNED_BYTE,
       format: gl.RGBA,
       internalFormat: halfFloat ? (gl as WebGL2RenderingContext).RGBA16F : gl.RGBA,
-      minFilter: gl.LINEAR,
-      magFilter: gl.LINEAR
+      minFilter: gl.NEAREST,
+      magFilter: gl.NEAREST
     });
 
     const arcData = new Array<number>(MAX_ARCS * 4).fill(0);
