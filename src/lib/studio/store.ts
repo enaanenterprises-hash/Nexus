@@ -11,6 +11,7 @@ import type {
   StudioRecording,
   StudioRecordingSummary,
   StudioSummaryV1,
+  StudioTrackColor,
   StudioTrackRole,
   StudioTrackV1,
   StudioTranscriptV1,
@@ -29,6 +30,13 @@ const TRACK_ROLES: ReadonlySet<StudioTrackRole> = new Set([
   "instrumental",
   "scratch",
   "overdub",
+]);
+const TRACK_COLORS: ReadonlySet<StudioTrackColor> = new Set([
+  "gold",
+  "sky",
+  "emerald",
+  "coral",
+  "slate",
 ]);
 const MARKER_KINDS: ReadonlySet<StudioMarkerKind> = new Set([
   "cue",
@@ -103,6 +111,21 @@ export function sanitizeTracks(raw: unknown): StudioTrackV1[] {
         : undefined;
     const layerIndex =
       t.layerIndex !== undefined ? Math.round(clamp(Number(t.layerIndex) || 0, 0, 15)) : undefined;
+    const fadeInMs =
+      t.fadeInMs !== undefined ? Math.round(clamp(Number(t.fadeInMs) || 0, 0, Math.min(10_000, durationMs))) : undefined;
+    const fadeOutMs =
+      t.fadeOutMs !== undefined
+        ? Math.round(clamp(Number(t.fadeOutMs) || 0, 0, Math.min(10_000, durationMs)))
+        : undefined;
+    const inputSource =
+      typeof t.inputSource === "string" && t.inputSource.trim() ? t.inputSource.trim().slice(0, 80) : undefined;
+    const colorTag = TRACK_COLORS.has(t.colorTag as StudioTrackColor) ? (t.colorTag as StudioTrackColor) : undefined;
+    const eqLowDb =
+      t.eqLowDb !== undefined ? Math.round(clamp(Number(t.eqLowDb) || 0, -6, 6) * 10) / 10 : undefined;
+    const eqMidDb =
+      t.eqMidDb !== undefined ? Math.round(clamp(Number(t.eqMidDb) || 0, -6, 6) * 10) / 10 : undefined;
+    const eqHighDb =
+      t.eqHighDb !== undefined ? Math.round(clamp(Number(t.eqHighDb) || 0, -6, 6) * 10) / 10 : undefined;
     out.push({
       id,
       name:
@@ -113,6 +136,15 @@ export function sanitizeTracks(raw: unknown): StudioTrackV1[] {
       ...(trimStartMs !== undefined ? { trimStartMs } : {}),
       durationMs,
       ...(sourceDurationMs !== undefined ? { sourceDurationMs } : {}),
+      ...(fadeInMs !== undefined && fadeInMs > 0 ? { fadeInMs } : {}),
+      ...(fadeOutMs !== undefined && fadeOutMs > 0 ? { fadeOutMs } : {}),
+      ...(inputSource ? { inputSource } : {}),
+      ...(colorTag ? { colorTag } : {}),
+      ...(t.hpfEnabled ? { hpfEnabled: true } : {}),
+      ...(t.compressorEnabled ? { compressorEnabled: true } : {}),
+      ...(eqLowDb !== undefined && eqLowDb !== 0 ? { eqLowDb } : {}),
+      ...(eqMidDb !== undefined && eqMidDb !== 0 ? { eqMidDb } : {}),
+      ...(eqHighDb !== undefined && eqHighDb !== 0 ? { eqHighDb } : {}),
       gain: Math.round(clamp(Number(t.gain ?? 1), 0, 2) * 100) / 100,
       pan: Math.round(clamp(Number(t.pan ?? 0), -1, 1) * 100) / 100,
       muted: Boolean(t.muted),

@@ -91,7 +91,7 @@ export function StudioRoutingSheet({
         className="setup-card max-h-[86svh] max-w-[600px] overflow-y-auto p-6 sm:max-w-[600px]"
       >
         <DialogHeader className="text-left">
-          <DialogTitle className="font-[family-name:var(--font-display)] text-[1.65rem] font-normal">
+          <DialogTitle className="text-[1.15rem] font-medium tracking-[-0.015em]">
             Route recording across Nexus
           </DialogTitle>
           <DialogDescription className="text-[13px] text-muted-foreground">
@@ -108,7 +108,7 @@ export function StudioRoutingSheet({
           <div className="mt-2 space-y-5">
             {connectedTargets.length > 0 ? (
               <div className="space-y-2.5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                <p className="text-[12px] font-medium text-muted-foreground">
                   Wired in right now
                 </p>
                 <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
@@ -138,7 +138,7 @@ export function StudioRoutingSheet({
             ) : null}
 
             <div className="space-y-2.5">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              <p className="text-[12px] font-medium text-muted-foreground">
                 Target workspaces &amp; downstream nodes
               </p>
               <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">

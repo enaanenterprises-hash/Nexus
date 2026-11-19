@@ -1,15 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
-import { Plus, Trash2, Volume2, VolumeX } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent } from "react";
+import { Plus, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { StudioMarkerV1, StudioTrackV1 } from "@/lib/studio/types";
+import { formatGainDb } from "@/lib/studio/capture-engine";
+import type { StudioMarkerV1, StudioTrackColor, StudioTrackV1 } from "@/lib/studio/types";
 
 export type StudioTimelineTool = "select" | "cut";
 
 export type LayerMixerState = {
   name?: string;
+  inputHint?: string;
+  colorTag?: StudioTrackColor;
   gain: number;
   pan: number;
   muted: boolean;
@@ -42,10 +45,29 @@ type DragSession =
       previewDurationMs: number;
     };
 
-const LANE_HEIGHT = 76;
-const RULER_HEIGHT = 28;
+const LANE_HEIGHT = 86;
+const RULER_HEIGHT = 30;
 const EDGE_HANDLE_PX = 9;
-const MIN_CLIP_MS = 180;
+const MIN_CLIP_MS = 160;
+
+const COLOR_PALETTE: Record<
+  StudioTrackColor,
+  { darkRgb: readonly [number, number, number]; lightRgb: readonly [number, number, number]; stripeClass: string }
+> = {
+  gold: { darkRgb: [240, 181, 74], lightRgb: [184, 120, 16], stripeClass: "bg-[#f0b54a]" },
+  sky: { darkRgb: [56, 189, 248], lightRgb: [2, 132, 199], stripeClass: "bg-[#38bdf8]" },
+  emerald: { darkRgb: [52, 211, 153], lightRgb: [5, 150, 105], stripeClass: "bg-[#34d399]" },
+  coral: { darkRgb: [251, 113, 133], lightRgb: [225, 29, 72], stripeClass: "bg-[#fb7185]" },
+  slate: { darkRgb: [161, 161, 170], lightRgb: [82, 82, 91], stripeClass: "bg-[#a1a1aa]" },
+};
+
+function defaultColorForLayer(layerIdx: number): StudioTrackColor {
+  if (layerIdx === 0) return "gold";
+  if (layerIdx === 1) return "sky";
+  if (layerIdx === 2) return "emerald";
+  if (layerIdx === 3) return "coral";
+  return "slate";
+}
 
 function formatRulerSec(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -61,6 +83,12 @@ function formatClipDuration(ms: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+function formatPanLabel(pan: number): string {
+  if (Math.abs(pan) < 0.04) return "C";
+  const pct = Math.round(Math.abs(pan) * 100);
+  return pan < 0 ? `L${pct}` : `R${pct}`;
+}
+
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
 }
@@ -70,8 +98,9 @@ function clampX(val: number, max: number): number {
 }
 
 /**
- * Interactive multi-layer DAW timeline with integrated layer controls, pointer scrubbing,
- * horizontal/vertical clip dragging, non-destructive edge trimming, and razor splitting.
+ * Interactive multi-track DAW timeline with color-coded speaker stems, fade ramps,
+ * magnetic snap-to-grid/edges, inline track mixer strips, non-destructive trim/split,
+ * and drag-and-drop external audio stem import.
  */
 export function TimelineWaveform({
   tracks,
@@ -83,6 +112,8 @@ export function TimelineWaveform({
   totalTimelineMs,
   bpm,
   zoom,
+  snapEnabled,
+  loopEnabled,
   toolMode,
   selectedTrackId,
   theme,
@@ -90,6 +121,7 @@ export function TimelineWaveform({
   onSelectLayer,
   onAddLayer,
   onRemoveLayer,
+  onRenameLayer,
   onMoveClip,
   onTrimClip,
   onSplitClipAt,
@@ -98,6 +130,8 @@ export function TimelineWaveform({
   onToggleLayerMute,
   onToggleLayerSolo,
   onChangeLayerGain,
+  onChangeLayerPan,
+  onDropFiles,
 }: {
   tracks: StudioTrackV1[];
   markers: StudioMarkerV1[];
@@ -108,6 +142,8 @@ export function TimelineWaveform({
   totalTimelineMs: number;
   bpm: number;
   zoom: number;
+  snapEnabled: boolean;
+  loopEnabled: boolean;
   toolMode: StudioTimelineTool;
   selectedTrackId: string | null;
   theme: "dark" | "light";
@@ -115,6 +151,7 @@ export function TimelineWaveform({
   onSelectLayer: (layerIndex: number) => void;
   onAddLayer: () => void;
   onRemoveLayer: (layerIndex: number) => void;
+  onRenameLayer: (layerIndex: number, name: string) => void;
   onMoveClip: (trackId: string, offsetMs: number, layerIndex: number) => void;
   onTrimClip: (trackId: string, patch: { offsetMs: number; trimStartMs: number; durationMs: number }) => void;
   onSplitClipAt: (trackId: string, atTimelineMs: number) => void;
@@ -123,9 +160,12 @@ export function TimelineWaveform({
   onToggleLayerMute: (layerIndex: number) => void;
   onToggleLayerSolo: (layerIndex: number) => void;
   onChangeLayerGain: (layerIndex: number, gain: number) => void;
+  onChangeLayerPan: (layerIndex: number, pan: number) => void;
+  onDropFiles?: (files: FileList, layerIndex: number, offsetMs: number) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [drag, setDrag] = useState<DragSession | null>(null);
+  const [isFileDragOver, setIsFileDragOver] = useState(false);
   const [hoverInfo, setHoverInfo] = useState<{
     cursor: string;
     cutTrackId: string | null;
@@ -140,10 +180,9 @@ export function TimelineWaveform({
     return Math.max(2, layerCount, highestClipLayer + 1) + dragExtra;
   }, [drag, layerCount, tracks]);
 
-  const minWidthMs = Math.max(12_000, totalTimelineMs + 3000, playheadMs + 1500);
+  const minWidthMs = Math.max(15_000, totalTimelineMs + 4000, playheadMs + 2000);
   const canvasHeight = RULER_HEIGHT + effectiveLayers * LANE_HEIGHT;
 
-  // Observe canvas container size changes so waveforms re-paint crisply at 2x DPR.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || typeof ResizeObserver === "undefined") return;
@@ -152,7 +191,6 @@ export function TimelineWaveform({
     return () => obs.disconnect();
   }, []);
 
-  // Derive live visual clip snapshot applying active drag/trim preview cleanly.
   const displayTracks = useMemo(() => {
     if (!drag || drag.kind === "scrub") return tracks;
     return tracks.map((tr) => {
@@ -195,41 +233,53 @@ export function TimelineWaveform({
 
     ctx.clearRect(0, 0, width, height);
 
-    // 1. Top time ruler + grid ticks
-    ctx.fillStyle = isLight ? "rgba(9, 9, 11, 0.035)" : "rgba(255, 255, 255, 0.03)";
+    // 1. Top time ruler + subtle loop range indicator
+    ctx.fillStyle = isLight ? "rgba(14, 15, 18, 0.032)" : "rgba(255, 255, 255, 0.025)";
     ctx.fillRect(0, 0, width, RULER_HEIGHT);
+
+    if (loopEnabled && totalTimelineMs > 0) {
+      const loopW = Math.min(width, totalTimelineMs * pxPerMs);
+      ctx.fillStyle = isLight ? "rgba(184, 120, 16, 0.14)" : "rgba(240, 181, 74, 0.15)";
+      ctx.fillRect(0, 0, loopW, 3);
+    }
 
     const beatMs = 60_000 / Math.max(40, bpm);
     const totalBeats = Math.floor(minWidthMs / beatMs);
-    const beatStep = totalBeats > 140 ? 4 : totalBeats > 70 ? 2 : 1;
+    const beatStep = totalBeats > 160 ? 4 : totalBeats > 80 ? 2 : 1;
 
-    ctx.strokeStyle = isLight ? "rgba(9, 9, 11, 0.075)" : "rgba(255, 255, 255, 0.06)";
     ctx.lineWidth = 1;
-    ctx.beginPath();
     for (let b = 0; b <= totalBeats; b += beatStep) {
       const x = b * beatMs * pxPerMs;
       const isBar = b % 4 === 0;
+      ctx.strokeStyle = isBar
+        ? isLight
+          ? "rgba(14, 15, 18, 0.085)"
+          : "rgba(255, 255, 255, 0.068)"
+        : isLight
+          ? "rgba(14, 15, 18, 0.04)"
+          : "rgba(255, 255, 255, 0.03)";
+      ctx.beginPath();
       ctx.moveTo(x, isBar ? RULER_HEIGHT - 10 : RULER_HEIGHT - 5);
       ctx.lineTo(x, height);
+      ctx.stroke();
     }
-    ctx.stroke();
 
-    const stepSec = minWidthMs > 120_000 ? 15 : minWidthMs > 45_000 ? 10 : 5;
+    const stepSec = minWidthMs > 180_000 ? 30 : minWidthMs > 90_000 ? 15 : minWidthMs > 40_000 ? 10 : 5;
     ctx.font = "500 10px ui-monospace, SFMono-Regular, Menlo, monospace";
-    ctx.fillStyle = isLight ? "rgba(17, 17, 19, 0.58)" : "rgba(244, 244, 246, 0.56)";
+    ctx.fillStyle = isLight ? "rgba(14, 15, 18, 0.56)" : "rgba(232, 232, 236, 0.52)";
     for (let sec = 0; sec * 1000 <= minWidthMs; sec += stepSec) {
       const x = sec * 1000 * pxPerMs;
       if (x > width - 28) break;
-      ctx.fillText(formatRulerSec(sec), x + 5, 16);
+      ctx.fillText(formatRulerSec(sec), x + 5, 18);
     }
 
-    ctx.strokeStyle = isLight ? "rgba(9, 9, 11, 0.1)" : "rgba(255, 255, 255, 0.09)";
+    ctx.strokeStyle = isLight ? "rgba(14, 15, 18, 0.1)" : "rgba(255, 255, 255, 0.09)";
     ctx.beginPath();
     ctx.moveTo(0, RULER_HEIGHT);
     ctx.lineTo(width, RULER_HEIGHT);
     ctx.stroke();
 
-    // 2. Layer row bands & horizontal hairlines
+    // 2. Lane row surfaces & horizontal hairlines
     const dropTargetLayer = drag?.kind === "move" ? drag.previewLayerIndex : null;
     for (let layerIdx = 0; layerIdx < effectiveLayers; layerIdx++) {
       const yTop = RULER_HEIGHT + layerIdx * LANE_HEIGHT;
@@ -237,101 +287,165 @@ export function TimelineWaveform({
       const isActiveRow = layerIdx === activeLayerIndex;
 
       if (isDropTarget) {
-        ctx.fillStyle = isLight ? "rgba(184, 120, 16, 0.1)" : "rgba(240, 181, 74, 0.1)";
+        ctx.fillStyle = isLight ? "rgba(184, 120, 16, 0.09)" : "rgba(240, 181, 74, 0.09)";
         ctx.fillRect(0, yTop, width, LANE_HEIGHT);
       } else if (isActiveRow) {
-        ctx.fillStyle = isLight ? "rgba(9, 9, 11, 0.018)" : "rgba(255, 255, 255, 0.018)";
+        ctx.fillStyle = isLight ? "rgba(14, 15, 18, 0.018)" : "rgba(255, 255, 255, 0.018)";
         ctx.fillRect(0, yTop, width, LANE_HEIGHT);
       }
 
-      ctx.strokeStyle = isLight ? "rgba(9, 9, 11, 0.075)" : "rgba(255, 255, 255, 0.07)";
+      ctx.strokeStyle = isLight ? "rgba(14, 15, 18, 0.08)" : "rgba(255, 255, 255, 0.07)";
       ctx.beginPath();
       ctx.moveTo(0, yTop + LANE_HEIGHT);
       ctx.lineTo(width, yTop + LANE_HEIGHT);
       ctx.stroke();
     }
 
-    // 3. Draw every clip in its assigned vertical layer lane (monochrome silver waveforms in frosted glass clip frames)
+    // 3. Color-coded clips, fade ramps & mirrored precision waveforms
     const anySolo =
       Object.values(layerMixers).some((m) => m.solo) || displayTracks.some((t) => t.solo);
 
     for (const tr of displayTracks) {
       const layerIdx = Math.max(0, tr.layerIndex ?? 0);
       const yTop = RULER_HEIGHT + layerIdx * LANE_HEIGHT;
-      const midY = yTop + LANE_HEIGHT * 0.5;
       const layerMix = layerMixers[layerIdx];
       const muted = layerMix ? layerMix.muted : tr.muted;
       const solo = layerMix ? layerMix.solo : tr.solo;
       const audible = anySolo ? solo : !muted;
       const isSelected = tr.id === selectedTrackId;
 
+      const colorKey = tr.colorTag ?? layerMix?.colorTag ?? defaultColorForLayer(layerIdx);
+      const rgb = isLight ? COLOR_PALETTE[colorKey].lightRgb : COLOR_PALETTE[colorKey].darkRgb;
+      const [cr, cg, cb] = rgb;
+
       const x0 = tr.offsetMs * pxPerMs;
       const clipW = Math.max(14, tr.durationMs * pxPerMs);
       const clipH = LANE_HEIGHT - 14;
       const clipTop = yTop + 7;
 
-      // Translucent clip block matching Image 2
-      ctx.fillStyle = isLight
-        ? `rgba(18, 20, 26, ${audible ? (isSelected ? 0.08 : 0.04) : 0.015})`
-        : `rgba(255, 255, 255, ${audible ? (isSelected ? 0.065 : 0.032) : 0.014})`;
+      // Clip card fill & crisp accent border
+      ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${audible ? (isSelected ? (isLight ? 0.14 : 0.16) : isLight ? 0.08 : 0.085) : 0.03})`;
       ctx.strokeStyle = isSelected
-        ? isLight
-          ? "rgba(18, 20, 26, 0.72)"
-          : "rgba(255, 255, 255, 0.62)"
-        : isLight
-          ? `rgba(18, 20, 26, ${audible ? 0.24 : 0.12})`
-          : `rgba(255, 255, 255, ${audible ? 0.22 : 0.1})`;
+        ? `rgba(${cr}, ${cg}, ${cb}, ${isLight ? 0.92 : 0.9})`
+        : `rgba(${cr}, ${cg}, ${cb}, ${audible ? (isLight ? 0.38 : 0.36) : 0.16})`;
       ctx.lineWidth = isSelected ? 1.5 : 1;
       ctx.beginPath();
       ctx.roundRect(x0, clipTop, clipW, clipH, 10);
       ctx.fill();
       ctx.stroke();
 
-      // Subtle corner trim handle bars when selected
+      // Top accent header hairline inside clip
+      ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${audible ? 0.85 : 0.25})`;
+      ctx.beginPath();
+      ctx.roundRect(x0 + 1, clipTop + 1, Math.min(clipW - 2, clipW - 2), 2.5, [10, 10, 0, 0]);
+      ctx.fill();
+
+      // Trim edge handles when selected
       if (isSelected && clipW > 28) {
-        ctx.fillStyle = isLight ? "rgba(18, 20, 26, 0.68)" : "rgba(255, 255, 255, 0.72)";
-        ctx.fillRect(x0 + 3.5, clipTop + clipH * 0.3, 2, clipH * 0.4);
-        ctx.fillRect(x0 + clipW - 5.5, clipTop + clipH * 0.3, 2, clipH * 0.4);
+        ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, 0.85)`;
+        ctx.fillRect(x0 + 3.5, clipTop + clipH * 0.32, 2, clipH * 0.36);
+        ctx.fillRect(x0 + clipW - 5.5, clipTop + clipH * 0.32, 2, clipH * 0.36);
       }
 
-      // Subtle clip caption tucked softly at top-left
-      if (clipW > 56) {
+      // Clip title + duration caption
+      if (clipW > 64) {
         ctx.save();
         ctx.beginPath();
-        ctx.rect(x0 + 6, clipTop, clipW - 12, clipH);
+        ctx.rect(x0 + 6, clipTop + 3, clipW - 12, 16);
         ctx.clip();
-        ctx.font = "500 9.5px ui-sans-serif, system-ui, sans-serif";
-        ctx.fillStyle = isLight ? "rgba(18, 20, 26, 0.52)" : "rgba(220, 224, 232, 0.48)";
-        ctx.fillText(`${tr.name} · ${formatClipDuration(tr.durationMs)}`, x0 + 9, clipTop + 12);
+        ctx.font = "500 10px ui-sans-serif, system-ui, sans-serif";
+        ctx.fillStyle = isLight
+          ? `rgba(14, 15, 18, ${audible ? 0.78 : 0.35})`
+          : `rgba(244, 244, 246, ${audible ? 0.82 : 0.36})`;
+        ctx.fillText(`${tr.name} · ${formatClipDuration(tr.durationMs)}`, x0 + 9, clipTop + 14);
         ctx.restore();
       }
 
-      // Dense mirrored vertical bar waveform matching Image 2
+      const fadeInMs = Math.min(tr.durationMs * 0.5, tr.fadeInMs ?? 0);
+      const fadeOutMs = Math.min(tr.durationMs * 0.5, tr.fadeOutMs ?? 0);
+
+      // Dense mirrored precision bar waveform honoring fade envelope visually
       const peaks = tr.peaks;
+      const waveMid = clipTop + clipH * 0.58;
       if (peaks.length > 0 && clipW > 12) {
-        const innerMaxH = Math.max(8, (clipH - 18) * 0.48);
-        const waveMid = clipTop + clipH * 0.54;
-        const barStep = 4.2;
+        const innerMaxH = Math.max(8, (clipH - 22) * 0.48);
+        const barStep = 3.8;
         const bars = Math.max(8, Math.floor((clipW - 10) / barStep));
-        const barW = 1.9;
+        const barW = 1.8;
         ctx.fillStyle = isLight
-          ? `rgba(28, 30, 38, ${audible ? 0.82 : 0.25})`
-          : `rgba(218, 222, 232, ${audible ? 0.84 : 0.26})`;
+          ? `rgba(${cr}, ${cg}, ${cb}, ${audible ? 0.82 : 0.25})`
+          : `rgba(${Math.min(255, cr + 26)}, ${Math.min(255, cg + 24)}, ${Math.min(255, cb + 24)}, ${audible ? 0.82 : 0.24})`;
+
         for (let b = 0; b < bars; b++) {
-          const pIdx = Math.min(peaks.length - 1, Math.floor((b / bars) * peaks.length));
-          const p = Math.max(0.05, Math.min(1, peaks[pIdx]! * Math.min(1.4, tr.gain)));
-          const barH = Math.max(2.2, p * innerMaxH * 2);
+          const frac = (b + 0.5) / bars;
+          const timeInClipMs = frac * tr.durationMs;
+          let fadeMul = 1;
+          if (fadeInMs > 10 && timeInClipMs < fadeInMs) {
+            fadeMul *= timeInClipMs / fadeInMs;
+          }
+          if (fadeOutMs > 10 && timeInClipMs > tr.durationMs - fadeOutMs) {
+            fadeMul *= (tr.durationMs - timeInClipMs) / fadeOutMs;
+          }
+
+          const pIdx = Math.min(peaks.length - 1, Math.floor(frac * peaks.length));
+          const p = Math.max(0.04, Math.min(1, peaks[pIdx]! * Math.min(1.4, tr.gain) * Math.max(0.08, fadeMul)));
+          const barH = Math.max(2, p * innerMaxH * 2);
           const bx = x0 + 5 + b * barStep;
           ctx.beginPath();
           ctx.roundRect(bx, waveMid - barH * 0.5, barW, barH, barW * 0.5);
           ctx.fill();
         }
       } else {
-        ctx.strokeStyle = isLight ? "rgba(28, 30, 38, 0.35)" : "rgba(218, 222, 232, 0.35)";
+        ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, 0.38)`;
         ctx.beginPath();
-        ctx.moveTo(x0 + 5, midY);
-        ctx.lineTo(x0 + clipW - 5, midY);
+        ctx.moveTo(x0 + 5, waveMid);
+        ctx.lineTo(x0 + clipW - 5, waveMid);
         ctx.stroke();
+      }
+
+      // Visual Fade-In & Fade-Out ramp overlays
+      if (fadeInMs > 20) {
+        const fiW = Math.min(clipW * 0.5, fadeInMs * pxPerMs);
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(x0, clipTop, clipW, clipH, 10);
+        ctx.clip();
+        ctx.fillStyle = isLight ? "rgba(14, 15, 18, 0.08)" : "rgba(0, 0, 0, 0.28)";
+        ctx.beginPath();
+        ctx.moveTo(x0, clipTop);
+        ctx.lineTo(x0 + fiW, clipTop);
+        ctx.lineTo(x0, clipTop + clipH);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, 0.72)`;
+        ctx.lineWidth = 1.25;
+        ctx.beginPath();
+        ctx.moveTo(x0, clipTop + clipH);
+        ctx.lineTo(x0 + fiW, clipTop + 3);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      if (fadeOutMs > 20) {
+        const foW = Math.min(clipW * 0.5, fadeOutMs * pxPerMs);
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(x0, clipTop, clipW, clipH, 10);
+        ctx.clip();
+        ctx.fillStyle = isLight ? "rgba(14, 15, 18, 0.08)" : "rgba(0, 0, 0, 0.28)";
+        ctx.beginPath();
+        ctx.moveTo(x0 + clipW, clipTop);
+        ctx.lineTo(x0 + clipW - foW, clipTop);
+        ctx.lineTo(x0 + clipW, clipTop + clipH);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = `rgba(${cr}, ${cg}, ${cb}, 0.72)`;
+        ctx.lineWidth = 1.25;
+        ctx.beginPath();
+        ctx.moveTo(x0 + clipW - foW, clipTop + 3);
+        ctx.lineTo(x0 + clipW, clipTop + clipH);
+        ctx.stroke();
+        ctx.restore();
       }
     }
 
@@ -342,7 +456,7 @@ export function TimelineWaveform({
         const yTop = RULER_HEIGHT + (targetClip.layerIndex ?? 0) * LANE_HEIGHT + 4;
         const cx = clampX(hoverInfo.cutMs * pxPerMs, width);
         ctx.strokeStyle = isLight ? "#c4161c" : "#fc3a34";
-        ctx.lineWidth = 1.6;
+        ctx.lineWidth = 1.5;
         ctx.setLineDash([4, 3]);
         ctx.beginPath();
         ctx.moveTo(cx, yTop);
@@ -352,10 +466,10 @@ export function TimelineWaveform({
       }
     }
 
-    // 5. Markers along ruler
+    // 5. Golden chapter & cue markers along ruler
     for (const m of markers) {
       const mx = clampX(m.atMs * pxPerMs, width);
-      ctx.strokeStyle = isLight ? "rgba(184, 120, 16, 0.72)" : "rgba(240, 181, 74, 0.72)";
+      ctx.strokeStyle = isLight ? "rgba(184, 120, 16, 0.62)" : "rgba(240, 181, 74, 0.62)";
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(mx, RULER_HEIGHT);
@@ -371,10 +485,10 @@ export function TimelineWaveform({
       ctx.fill();
     }
 
-    // 6. Crimson master playhead line
+    // 6. Precision crimson master playhead line
     const playX = clampX(playheadMs * pxPerMs, width);
     ctx.strokeStyle = isLight ? "#c4161c" : "#fc3a34";
-    ctx.lineWidth = 1.6;
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(playX, 0);
     ctx.lineTo(playX, height);
@@ -382,7 +496,10 @@ export function TimelineWaveform({
 
     ctx.fillStyle = isLight ? "#c4161c" : "#fc3a34";
     ctx.beginPath();
-    ctx.arc(playX, RULER_HEIGHT - 3, 4, 0, Math.PI * 2);
+    ctx.moveTo(playX - 4.5, RULER_HEIGHT - 8);
+    ctx.lineTo(playX + 4.5, RULER_HEIGHT - 8);
+    ctx.lineTo(playX, RULER_HEIGHT);
+    ctx.closePath();
     ctx.fill();
   }, [
     activeLayerIndex,
@@ -393,12 +510,14 @@ export function TimelineWaveform({
     effectiveLayers,
     hoverInfo,
     layerMixers,
+    loopEnabled,
     markers,
     minWidthMs,
     playheadMs,
     selectedTrackId,
     theme,
     toolMode,
+    totalTimelineMs,
   ]);
 
   function getHitContext(clientX: number, clientY: number) {
@@ -430,6 +549,34 @@ export function TimelineWaveform({
     }
 
     return { rect, x, y, pxPerMs, ms, layerIdx, hitTrack, region };
+  }
+
+  function snapCandidateMs(rawMs: number, pxPerMs: number, ignoreTrackId: string): number {
+    const snapPx = 7;
+    const candidates: number[] = [0, Math.round(playheadMs)];
+    for (const m of markers) candidates.push(m.atMs);
+    for (const tr of tracks) {
+      if (tr.id === ignoreTrackId) continue;
+      candidates.push(tr.offsetMs, tr.offsetMs + tr.durationMs);
+    }
+    let best = rawMs;
+    let bestDistPx = snapPx;
+    for (const c of candidates) {
+      const distPx = Math.abs(rawMs - c) * pxPerMs;
+      if (distPx < bestDistPx) {
+        bestDistPx = distPx;
+        best = c;
+      }
+    }
+    if (best !== rawMs) return Math.max(0, Math.round(best));
+
+    // Also snap lightly to nearest beat grid line
+    const beatMs = 60_000 / Math.max(40, bpm);
+    const nearestBeat = Math.round(rawMs / beatMs) * beatMs;
+    if (Math.abs(rawMs - nearestBeat) * pxPerMs < 5.5) {
+      return Math.max(0, Math.round(nearestBeat));
+    }
+    return rawMs;
   }
 
   function handlePointerDown(e: PointerEvent<HTMLCanvasElement>) {
@@ -535,13 +682,12 @@ export function TimelineWaveform({
     }
 
     const dxMs = (e.clientX - drag.startX) / Math.max(1e-6, hit.pxPerMs);
+    const shouldSnap = snapEnabled && !e.shiftKey;
 
     if (drag.kind === "move") {
       let nextOffsetMs = Math.max(0, Math.round(drag.origOffsetMs + dxMs));
-      // Gentle magnetic snap to playhead & 0ms unless Shift is held
-      if (!e.shiftKey) {
-        if (Math.abs(nextOffsetMs) * hit.pxPerMs < 7) nextOffsetMs = 0;
-        else if (Math.abs(nextOffsetMs - playheadMs) * hit.pxPerMs < 7) nextOffsetMs = Math.round(playheadMs);
+      if (shouldSnap) {
+        nextOffsetMs = snapCandidateMs(nextOffsetMs, hit.pxPerMs, drag.trackId);
       }
       const nextLayer = clamp(Math.floor((hit.y - RULER_HEIGHT) / LANE_HEIGHT), 0, Math.max(layerCount, 1));
       setDrag({
@@ -555,7 +701,11 @@ export function TimelineWaveform({
     if (drag.kind === "trim-left") {
       const minDelta = Math.max(-drag.origTrimStartMs, -drag.origOffsetMs);
       const maxDelta = drag.origDurationMs - MIN_CLIP_MS;
-      const delta = clamp(Math.round(dxMs), minDelta, maxDelta);
+      let targetEdge = drag.origOffsetMs + Math.round(dxMs);
+      if (shouldSnap) {
+        targetEdge = snapCandidateMs(targetEdge, hit.pxPerMs, drag.trackId);
+      }
+      const delta = clamp(targetEdge - drag.origOffsetMs, minDelta, maxDelta);
       setDrag({
         ...drag,
         previewOffsetMs: drag.origOffsetMs + delta,
@@ -567,7 +717,11 @@ export function TimelineWaveform({
 
     if (drag.kind === "trim-right") {
       const maxDur = Math.max(MIN_CLIP_MS, drag.sourceDurationMs - drag.origTrimStartMs);
-      const nextDur = clamp(Math.round(drag.origDurationMs + dxMs), MIN_CLIP_MS, maxDur);
+      let targetEnd = drag.origOffsetMs + Math.round(drag.origDurationMs + dxMs);
+      if (shouldSnap) {
+        targetEnd = snapCandidateMs(targetEnd, hit.pxPerMs, drag.trackId);
+      }
+      const nextDur = clamp(targetEnd - drag.origOffsetMs, MIN_CLIP_MS, maxDur);
       setDrag({
         ...drag,
         previewDurationMs: nextDur,
@@ -598,18 +752,45 @@ export function TimelineWaveform({
     setDrag(null);
   }
 
+  function handleDragOver(e: DragEvent<HTMLDivElement>) {
+    if (!onDropFiles || !e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    if (!isFileDragOver) setIsFileDragOver(true);
+  }
+
+  function handleDrop(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setIsFileDragOver(false);
+    if (!onDropFiles || !e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
+    const hit = getHitContext(e.clientX, e.clientY);
+    const targetLayer = hit ? clamp(hit.layerIdx, 0, effectiveLayers - 1) : activeLayerIndex;
+    const targetMs = hit ? Math.max(0, hit.ms) : Math.round(playheadMs);
+    onDropFiles(e.dataTransfer.files, targetLayer, targetMs);
+  }
+
   const timelineMinWidthPct = Math.max(100, Math.round(zoom * 100));
 
   return (
-    <div className="studio-daw-shell flex min-h-0 flex-1 flex-col overflow-y-auto rounded-2xl border border-border/80">
+    <div
+      onDragOver={handleDragOver}
+      onDragLeave={(e) => {
+        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+        setIsFileDragOver(false);
+      }}
+      onDrop={handleDrop}
+      className={`studio-daw-shell relative flex min-h-0 flex-1 flex-col overflow-y-auto rounded-[18px] border transition-colors ${
+        isFileDragOver ? "border-[color:var(--land-gold)]" : "border-border/80"
+      }`}
+    >
       <div className="flex min-h-full items-stretch">
-        {/* Left Unified Layer Controls Gutter */}
-        <div className="sticky left-0 z-10 flex w-[148px] shrink-0 flex-col border-r border-border/75 bg-card/95 sm:w-[192px]">
+        {/* Left Unified Track Headers & Inline Mixer Gutter */}
+        <div className="studio-gutter sticky left-0 z-10 flex w-[170px] shrink-0 flex-col border-r border-border/75 sm:w-[224px]">
           <div
             style={{ height: `${RULER_HEIGHT}px` }}
-            className="flex items-center justify-between border-b border-border/75 px-3 text-[11px] font-medium text-muted-foreground"
+            className="flex items-center justify-between border-b border-border/75 px-3 text-[11.5px] font-medium text-muted-foreground"
           >
-            <span>Layers ({effectiveLayers})</span>
+            <span>Tracks ({effectiveLayers})</span>
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -618,14 +799,14 @@ export function TimelineWaveform({
                     size="icon-sm"
                     variant="ghost"
                     onClick={onAddLayer}
-                    aria-label="Add audio layer"
-                    className="h-5 w-5 rounded-md"
+                    aria-label="Add audio track lane"
+                    className="h-6 w-6 rounded-md"
                   >
                     <Plus className="size-3.5" />
                   </Button>
                 }
               />
-              <TooltipContent side="right">Add layer track</TooltipContent>
+              <TooltipContent side="right">Add track lane</TooltipContent>
             </Tooltip>
           </div>
 
@@ -638,6 +819,8 @@ export function TimelineWaveform({
                 solo: false,
               };
               const layerClips = displayTracks.filter((t) => (t.layerIndex ?? 0) === idx);
+              const colorKey = mixer.colorTag ?? layerClips[0]?.colorTag ?? defaultColorForLayer(idx);
+              const inputHint = mixer.inputHint ?? layerClips[0]?.inputSource;
               const isTarget = idx === activeLayerIndex;
               const isExtraGhost = drag?.kind === "move" && idx >= layerCount && drag.previewLayerIndex === idx;
               const canDeleteLayer = idx >= 2 && layerClips.length === 0 && !isExtraGhost;
@@ -647,75 +830,88 @@ export function TimelineWaveform({
                   key={`layer-${idx}`}
                   style={{ height: `${LANE_HEIGHT}px` }}
                   onClick={() => onSelectLayer(idx)}
-                  className={`flex flex-col justify-between border-b border-border/70 px-2.5 py-2 transition-colors ${
+                  className={`relative flex flex-col justify-between border-b border-border/70 py-2 pl-3 pr-2.5 transition-colors ${
                     isExtraGhost
                       ? "bg-[color:var(--land-gold)]/12"
                       : isTarget
-                        ? "bg-muted/50"
-                        : "hover:bg-muted/25"
+                        ? "bg-foreground/[0.04]"
+                        : "hover:bg-foreground/[0.02]"
                   }`}
                 >
-                  <div className="flex items-center justify-between gap-1">
-                    <div className="flex min-w-0 items-center gap-1.5">
-                      <span
-                        className={`h-2 w-2 shrink-0 rounded-full ${
-                          isTarget
-                            ? "bg-[#e55336]"
-                            : layerClips.length > 0
-                              ? "bg-foreground/45"
-                              : "bg-foreground/15"
-                        }`}
+                  {/* Color Accent Spine */}
+                  <span
+                    className={`absolute bottom-1.5 left-0 top-1.5 w-[3px] rounded-r-full ${COLOR_PALETTE[colorKey].stripeClass} ${
+                      isTarget ? "opacity-100" : "opacity-55"
+                    }`}
+                    aria-hidden
+                  />
+
+                  {/* Top Row: Editable Track Name + M / S / Delete */}
+                  <div className="flex items-start justify-between gap-1.5">
+                    <div className="min-w-0 flex-1">
+                      <input
+                        type="text"
+                        value={mixer.name ?? `Track ${idx + 1}`}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => onRenameLayer(idx, e.target.value)}
+                        aria-label={`Track ${idx + 1} name`}
+                        className="w-full truncate rounded bg-transparent px-1 py-0.5 text-[12px] font-medium text-foreground transition-colors hover:bg-foreground/[0.05] focus:bg-foreground/[0.08] focus:outline-none"
                       />
-                      <span className="truncate text-[12px] font-medium text-foreground">
-                        {mixer.name ?? `Layer ${idx + 1}`}
-                      </span>
+                      <div className="truncate px-1 font-mono text-[10px] text-muted-foreground">
+                        {inputHint || (layerClips.length > 0 ? `${layerClips.length} ${layerClips.length === 1 ? "clip" : "clips"}` : "Empty lane")}
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-0.5">
-                      <Button
+                    <div className="flex shrink-0 items-center gap-0.5 pt-0.5">
+                      <button
                         type="button"
-                        size="icon-sm"
-                        variant={mixer.muted ? "destructive" : "ghost"}
                         onClick={(e) => {
                           e.stopPropagation();
                           onToggleLayerMute(idx);
                         }}
-                        aria-label={`Mute Layer ${idx + 1}`}
-                        className="h-6 w-6 rounded-md p-0"
+                        aria-pressed={mixer.muted}
+                        aria-label={`Mute ${mixer.name ?? `Track ${idx + 1}`}`}
+                        className={`h-6 w-6 rounded-md font-mono text-[10.5px] font-semibold transition-colors ${
+                          mixer.muted
+                            ? "bg-destructive text-white"
+                            : "bg-foreground/[0.05] text-muted-foreground hover:text-foreground"
+                        }`}
                       >
-                        {mixer.muted ? <VolumeX className="size-3" /> : <Volume2 className="size-3" />}
-                      </Button>
-                      <Button
+                        M
+                      </button>
+                      <button
                         type="button"
-                        size="sm"
-                        variant={mixer.solo ? "secondary" : "ghost"}
                         onClick={(e) => {
                           e.stopPropagation();
                           onToggleLayerSolo(idx);
                         }}
-                        aria-label={`Solo Layer ${idx + 1}`}
-                        className="h-6 w-6 rounded-md p-0 font-mono text-[10.5px] font-semibold"
+                        aria-pressed={mixer.solo}
+                        aria-label={`Solo ${mixer.name ?? `Track ${idx + 1}`}`}
+                        className={`h-6 w-6 rounded-md font-mono text-[10.5px] font-semibold transition-colors ${
+                          mixer.solo
+                            ? "bg-[color:var(--land-gold)] text-[#09090b]"
+                            : "bg-foreground/[0.05] text-muted-foreground hover:text-foreground"
+                        }`}
                       >
                         S
-                      </Button>
+                      </button>
                       {canDeleteLayer ? (
-                        <Button
+                        <button
                           type="button"
-                          size="icon-sm"
-                          variant="ghost"
                           onClick={(e) => {
                             e.stopPropagation();
                             onRemoveLayer(idx);
                           }}
-                          aria-label={`Remove empty Layer ${idx + 1}`}
-                          className="h-6 w-6 rounded-md p-0 text-muted-foreground hover:text-destructive"
+                          aria-label={`Remove empty Track ${idx + 1}`}
+                          className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-destructive"
                         >
                           <Trash2 className="size-3" />
-                        </Button>
+                        </button>
                       ) : null}
                     </div>
                   </div>
 
+                  {/* Bottom Row: Volume Fader (dB) + Pan Slider (L/C/R) */}
                   <div className="flex items-center gap-2">
                     <input
                       type="range"
@@ -724,13 +920,38 @@ export function TimelineWaveform({
                       step={0.05}
                       value={mixer.gain}
                       onClick={(e) => e.stopPropagation()}
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        onChangeLayerGain(idx, 1);
+                      }}
                       onChange={(e) => onChangeLayerGain(idx, Number(e.target.value))}
-                      aria-label={`Layer ${idx + 1} volume`}
+                      aria-label={`${mixer.name ?? `Track ${idx + 1}`} volume`}
                       className="studio-range min-w-0 flex-1"
                     />
-                    <span className="w-8 shrink-0 text-right font-mono text-[10px] text-muted-foreground tabular-nums">
-                      {Math.round(mixer.gain * 100)}%
+                    <span className="w-[42px] shrink-0 text-right font-mono text-[10px] text-muted-foreground tabular-nums">
+                      {formatGainDb(mixer.gain)}
                     </span>
+                    <div className="hidden items-center gap-1 sm:flex">
+                      <input
+                        type="range"
+                        min={-1}
+                        max={1}
+                        step={0.05}
+                        value={mixer.pan}
+                        onClick={(e) => e.stopPropagation()}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          onChangeLayerPan(idx, 0);
+                        }}
+                        onChange={(e) => onChangeLayerPan(idx, Number(e.target.value))}
+                        aria-label={`${mixer.name ?? `Track ${idx + 1}`} stereo pan`}
+                        title="Stereo Pan (double-click to center)"
+                        className="studio-range w-11"
+                      />
+                      <span className="w-6 shrink-0 text-right font-mono text-[9.5px] text-muted-foreground tabular-nums">
+                        {formatPanLabel(mixer.pan)}
+                      </span>
+                    </div>
                   </div>
                 </div>
               );
@@ -738,7 +959,7 @@ export function TimelineWaveform({
           </div>
         </div>
 
-        {/* Right Interactive Multi-Layer Waveform & Arrange Canvas */}
+        {/* Right Interactive Multi-Track Waveform Canvas */}
         <div className="relative min-w-0 flex-1 overflow-x-auto">
           <div style={{ width: `${timelineMinWidthPct}%`, minWidth: "100%" }} className="relative">
             <canvas
@@ -755,20 +976,30 @@ export function TimelineWaveform({
                 if (!drag) setHoverInfo({ cursor: "default", cutTrackId: null, cutMs: null });
               }}
               className="block w-full touch-none select-none"
-              aria-label="Multi-layer audio arrangement timeline"
+              aria-label="Multi-track audio arrangement timeline"
             />
 
             {tracks.length === 0 ? (
-              <div className="pointer-events-none absolute inset-x-0 top-[28px] bottom-0 flex items-center justify-center px-6 text-center">
-                <p className="text-[12.5px] text-muted-foreground">
-                  Press Record (R) or Import an audio stem to start layering. Drag clips horizontally across time or
-                  vertically between layers.
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 top-[30px] flex items-center justify-center px-6 text-center">
+                <p className="max-w-md text-[12.5px] leading-relaxed text-muted-foreground">
+                  Record a 2-mic RØDECaster session on the Capture tab, or drag and drop WAV, MP3, or M4A stems directly
+                  onto this timeline.
                 </p>
               </div>
             ) : null}
           </div>
         </div>
       </div>
+
+      {/* Drag-and-drop file overlay */}
+      {isFileDragOver ? (
+        <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-[14px] border-2 border-dashed border-[color:var(--land-gold)] bg-background/80 backdrop-blur-sm">
+          <div className="flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-[13px] font-medium text-foreground">
+            <Upload className="size-4 text-[color:var(--land-gold)]" />
+            <span>Drop audio files to import stems</span>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

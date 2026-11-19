@@ -2,28 +2,33 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
-  Bookmark,
   ChevronDown,
-  Copy,
   Download,
   FolderPlus,
-  Headphones,
   Layers,
   Loader2,
+  Magnet,
   Metronome,
   MousePointer,
+  PanelRight,
+  Pause,
+  Play,
   Plus,
-  Radio,
+  Redo2,
+  Repeat,
   Save,
   Scissors,
+  SkipBack,
   SlidersHorizontal,
+  SplitSquareHorizontal,
+  Square,
   Trash2,
+  Undo2,
   Upload,
   Zap,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -31,7 +36,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { STUDIO_NODE_ID } from "@/extensions/studio/node";
 import type { ExtensionHubSnapshot, ExtensionId } from "@/lib/extensions";
@@ -51,13 +55,14 @@ import type {
   StudioMarkerV1,
   StudioRecording,
   StudioRecordingSummary,
-  StudioTrackRole,
+  StudioTrackColor,
   StudioTrackV1,
 } from "@/lib/studio/types";
 import { slicePeaksForRange } from "@/lib/studio/wav";
 import { useTheme } from "@/lib/theme";
-import { ReactiveRecordBar } from "./ReactiveRecordBar";
+import { RodeCasterPatchbay } from "./RodeCasterPatchbay";
 import { StudioCaptureStage } from "./StudioCaptureStage";
+import { StudioInspectorContent, type StudioInspectorTab } from "./StudioInspector";
 import { StudioRoutingSheet } from "./StudioRoutingSheet";
 import {
   TimelineWaveform,
@@ -66,19 +71,6 @@ import {
 } from "./TimelineWaveform";
 import { useStudioAudio } from "./use-studio-audio";
 
-const COUNT_IN_LABELS: Record<string, string> = {
-  "0": "Count: Off",
-  "1": "Count: 1 bar",
-  "2": "Count: 2 bars",
-};
-
-const MARKER_KIND_LABELS: Record<StudioMarkerKind, string> = {
-  chapter: "Chapter",
-  cue: "Cue",
-  note: "Note",
-  edit: "Edit point",
-};
-
 const DEFAULT_LAYER_MIXER: LayerMixerState = {
   gain: 1,
   pan: 0,
@@ -86,11 +78,34 @@ const DEFAULT_LAYER_MIXER: LayerMixerState = {
   solo: false,
 };
 
+type HistorySnapshot = {
+  tracks: StudioTrackV1[];
+  markers: StudioMarkerV1[];
+};
+
+const MAX_HISTORY = 30;
+
+function defaultLayerColor(idx: number): StudioTrackColor {
+  if (idx === 0) return "gold";
+  if (idx === 1) return "sky";
+  if (idx === 2) return "emerald";
+  if (idx === 3) return "coral";
+  return "slate";
+}
+
 function fmtDuration(ms: number): string {
   const safe = Math.max(0, Math.round(ms));
   const mins = Math.floor(safe / 60_000);
   const secs = Math.floor((safe % 60_000) / 1000);
   return `${mins}:${String(secs).padStart(2, "0")}`;
+}
+
+function fmtTimecode(ms: number): string {
+  const safe = Math.max(0, ms);
+  const mins = Math.floor(safe / 60_000);
+  const secs = Math.floor((safe % 60_000) / 1000);
+  const tenths = Math.floor((safe % 1000) / 100);
+  return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}.${tenths}`;
 }
 
 function fmtExactSec(ms: number): string {
@@ -118,13 +133,17 @@ function triggerDownload(blob: Blob, filename: string) {
 
 function deriveLayerMixers(list: StudioTrackV1[]): Record<number, LayerMixerState> {
   const map: Record<number, LayerMixerState> = {
-    0: { ...DEFAULT_LAYER_MIXER },
-    1: { ...DEFAULT_LAYER_MIXER },
+    0: { ...DEFAULT_LAYER_MIXER, name: "Mic 1 · Host", colorTag: "gold" },
+    1: { ...DEFAULT_LAYER_MIXER, name: "Mic 2 · Guest", colorTag: "sky" },
   };
   for (const tr of list) {
     const idx = Math.max(0, tr.layerIndex ?? 0);
-    if (!map[idx]) {
+    const existing = map[idx];
+    if (!existing || (idx < 2 && existing.inputHint === undefined && tr.inputSource)) {
       map[idx] = {
+        name: tr.name.replace(/\s+\(cut(?:\s+\d+)?\)$/i, ""),
+        inputHint: tr.inputSource,
+        colorTag: tr.colorTag ?? defaultLayerColor(idx),
         gain: tr.gain,
         pan: tr.pan,
         muted: tr.muted,
@@ -158,6 +177,8 @@ export function StudioView({
   const [bpm, setBpm] = useState(120);
   const [countInBars, setCountInBars] = useState(1);
   const [metronomeEnabled, setMetronomeEnabled] = useState(false);
+  const [loopEnabled, setLoopEnabled] = useState(false);
+  const [snapEnabled, setSnapEnabled] = useState(true);
   const [masterGain, setMasterGain] = useState(1);
   const [tracks, setTracks] = useState<StudioTrackV1[]>([]);
   const [markers, setMarkers] = useState<StudioMarkerV1[]>([]);
@@ -166,63 +187,68 @@ export function StudioView({
   const [layerCount, setLayerCount] = useState(2);
   const [activeLayerIndex, setActiveLayerIndex] = useState(0);
   const [layerMixers, setLayerMixers] = useState<Record<number, LayerMixerState>>({
-    0: { ...DEFAULT_LAYER_MIXER },
-    1: { ...DEFAULT_LAYER_MIXER },
+    0: { ...DEFAULT_LAYER_MIXER, name: "Mic 1 · Host", colorTag: "gold" },
+    1: { ...DEFAULT_LAYER_MIXER, name: "Mic 2 · Guest", colorTag: "sky" },
   });
 
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
-  const [captureRole, setCaptureRole] = useState<StudioTrackRole>("voice");
   const [markerKind, setMarkerKind] = useState<StudioMarkerKind>("chapter");
   const [toolMode, setToolMode] = useState<StudioTimelineTool>("select");
   const [timelineZoom, setTimelineZoom] = useState(1);
   const [studioPage, setStudioPage] = useState<"record" | "edit">("record");
 
+  // Drawers, Inspector & Patchbay
   const [takesDrawerOpen, setTakesDrawerOpen] = useState(false);
-  const [notesDrawerOpen, setNotesDrawerOpen] = useState(false);
+  const [patchbayOpen, setPatchbayOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
+  const [inspectorTab, setInspectorTab] = useState<StudioInspectorTab>("clip");
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [routingOpen, setRoutingOpen] = useState(false);
   const [savedProjectSnapshot, setSavedProjectSnapshot] = useState<StudioRecording | null>(null);
+
   const [saving, setSaving] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState<"mix" | "stems" | null>(null);
+  const [normalizing, setNormalizing] = useState(false);
   const [statusBanner, setStatusBanner] = useState<string | null>(null);
+
+  // Undo / Redo Stacks
+  const [undoStack, setUndoStack] = useState<HistorySnapshot[]>([]);
+  const [redoStack, setRedoStack] = useState<HistorySnapshot[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bannerTimerRef = useRef<number | undefined>(undefined);
   const sourcePeaksCacheRef = useRef<Map<string, { peaks: number[]; durationMs: number }>>(new Map());
+  const tracksRef = useRef(tracks);
+  const markersRef = useRef(markers);
+
+  useEffect(() => {
+    tracksRef.current = tracks;
+    markersRef.current = markers;
+  }, [markers, tracks]);
 
   const showNotice = useCallback((msg: string) => {
     setStatusBanner(msg);
     window.clearTimeout(bannerTimerRef.current);
-    bannerTimerRef.current = window.setTimeout(() => setStatusBanner(null), 4500);
+    bannerTimerRef.current = window.setTimeout(() => setStatusBanner(null), 4800);
   }, []);
 
   useEffect(() => () => window.clearTimeout(bannerTimerRef.current), []);
+
+  const pushHistory = useCallback(() => {
+    const snap: HistorySnapshot = {
+      tracks: tracksRef.current,
+      markers: markersRef.current,
+    };
+    setUndoStack((prev) => [...prev.slice(-(MAX_HISTORY - 1)), snap]);
+    setRedoStack([]);
+  }, []);
 
   const totalTimelineMs = useMemo(
     () => tracks.reduce((max, t) => Math.max(max, t.offsetMs + t.durationMs), 0),
     [tracks],
   );
-
-  const summaryPeaks = useMemo(() => {
-    const active = tracks.filter((t) => !t.muted && t.peaks.length > 0);
-    const pool = active.length > 0 ? active : tracks.filter((t) => t.peaks.length > 0);
-    if (pool.length === 0 || totalTimelineMs <= 0) return [];
-    const buckets = 110;
-    const out = new Array<number>(buckets).fill(0);
-    for (const tr of pool) {
-      const startBucket = Math.floor((tr.offsetMs / totalTimelineMs) * buckets);
-      const endBucket = Math.min(buckets - 1, Math.ceil(((tr.offsetMs + tr.durationMs) / totalTimelineMs) * buckets));
-      const span = Math.max(1, endBucket - startBucket);
-      for (let b = startBucket; b <= endBucket; b++) {
-        const u = (b - startBucket) / span;
-        const pIdx = Math.min(tr.peaks.length - 1, Math.floor(u * tr.peaks.length));
-        const amp = Math.min(1, (tr.peaks[pIdx] ?? 0) * tr.gain);
-        if (amp > out[b]!) out[b] = amp;
-      }
-    }
-    return out;
-  }, [totalTimelineMs, tracks]);
 
   const persistDraft = useCallback(
     async (
@@ -281,33 +307,85 @@ export function StudioView({
     ],
   );
 
-  const handleTrackCaptured = useCallback(
-    (track: StudioTrackV1) => {
-      const key = track.audioRef.idbKey || track.id;
-      sourcePeaksCacheRef.current.set(key, {
-        peaks: track.peaks,
-        durationMs: track.sourceDurationMs ?? track.durationMs,
+  const handleUndo = useCallback(() => {
+    setUndoStack((prev) => {
+      if (prev.length === 0) return prev;
+      const last = prev[prev.length - 1]!;
+      setRedoStack((r) => [...r.slice(-(MAX_HISTORY - 1)), { tracks: tracksRef.current, markers: markersRef.current }]);
+      setTracks(last.tracks);
+      setMarkers(last.markers);
+      if (activeId) void persistDraft(last.tracks, last.markers);
+      showNotice("Undid last edit.");
+      return prev.slice(0, -1);
+    });
+  }, [activeId, persistDraft, showNotice]);
+
+  const handleRedo = useCallback(() => {
+    setRedoStack((prev) => {
+      if (prev.length === 0) return prev;
+      const next = prev[prev.length - 1]!;
+      setUndoStack((u) => [...u.slice(-(MAX_HISTORY - 1)), { tracks: tracksRef.current, markers: markersRef.current }]);
+      setTracks(next.tracks);
+      setMarkers(next.markers);
+      if (activeId) void persistDraft(next.tracks, next.markers);
+      showNotice("Redid edit.");
+      return prev.slice(0, -1);
+    });
+  }, [activeId, persistDraft, showNotice]);
+
+  const handleTracksCaptured = useCallback(
+    (captured: StudioTrackV1[]) => {
+      if (captured.length === 0) return;
+      pushHistory();
+
+      let highestLayer = layerCount - 1;
+      const mixerPatches: Record<number, LayerMixerState> = {};
+
+      const stamped = captured.map((tr) => {
+        const key = tr.audioRef.idbKey || tr.id;
+        sourcePeaksCacheRef.current.set(key, {
+          peaks: tr.peaks,
+          durationMs: tr.sourceDurationMs ?? tr.durationMs,
+        });
+        const layerIdx = Math.max(0, tr.layerIndex ?? activeLayerIndex);
+        if (layerIdx > highestLayer) highestLayer = layerIdx;
+        const existingMix = layerMixers[layerIdx] ?? {
+          ...DEFAULT_LAYER_MIXER,
+          colorTag: tr.colorTag ?? defaultLayerColor(layerIdx),
+        };
+        mixerPatches[layerIdx] = {
+          ...existingMix,
+          name: tr.name,
+          inputHint: tr.inputSource ?? existingMix.inputHint,
+          colorTag: tr.colorTag ?? existingMix.colorTag ?? defaultLayerColor(layerIdx),
+        };
+        return {
+          ...tr,
+          layerIndex: layerIdx,
+          gain: existingMix.gain,
+          pan: existingMix.pan,
+          muted: existingMix.muted,
+          solo: existingMix.solo,
+        };
       });
-      const layerIdx = Math.max(0, track.layerIndex ?? activeLayerIndex);
-      const layerMix = layerMixers[layerIdx] ?? DEFAULT_LAYER_MIXER;
-      const stamped: StudioTrackV1 = {
-        ...track,
-        layerIndex: layerIdx,
-        gain: layerMix.gain,
-        pan: layerMix.pan,
-        muted: layerMix.muted,
-        solo: layerMix.solo,
-      };
+
+      setLayerMixers((prev) => ({ ...prev, ...mixerPatches }));
+      setLayerCount((prev) => Math.max(prev, highestLayer + 1));
       setTracks((prev) => {
-        const next = [...prev, stamped];
-        void persistDraft(next, markers);
+        const next = [...prev, ...stamped];
+        void persistDraft(next, markersRef.current);
         return next;
       });
-      setLayerCount((prev) => Math.max(prev, layerIdx + 1));
-      setSelectedTrackId(stamped.id);
-      showNotice(`Captured ${stamped.name} (${fmtDuration(stamped.durationMs)}) — ready in Edit.`);
+      setSelectedTrackId(stamped[0]!.id);
+
+      const durLabel = fmtDuration(stamped[0]!.durationMs);
+      showNotice(
+        stamped.length > 1
+          ? `Captured ${stamped.length} sample-locked WAV stems (${durLabel}) — ready in Arrange.`
+          : `Captured ${stamped[0]!.name} (${durLabel}) — ready in Arrange.`,
+      );
     },
-    [activeLayerIndex, layerMixers, markers, persistDraft, showNotice],
+    [activeLayerIndex, layerCount, layerMixers, persistDraft, pushHistory, showNotice],
   );
 
   const audio = useStudioAudio({
@@ -316,7 +394,8 @@ export function StudioView({
     bpm,
     countInBars,
     metronomeEnabled,
-    onTrackCaptured: handleTrackCaptured,
+    loopEnabled,
+    onTracksCaptured: handleTracksCaptured,
     onNotice: showNotice,
   });
 
@@ -344,6 +423,8 @@ export function StudioView({
     setLayerMixers(deriveLayerMixers(full.tracks));
     setSelectedTrackId(full.tracks[0]?.id ?? null);
     setSavedProjectSnapshot(full);
+    setUndoStack([]);
+    setRedoStack([]);
   }
 
   useEffect(() => {
@@ -399,9 +480,14 @@ export function StudioView({
     setTags([]);
     setLayerCount(2);
     setActiveLayerIndex(0);
-    setLayerMixers({ 0: { ...DEFAULT_LAYER_MIXER }, 1: { ...DEFAULT_LAYER_MIXER } });
+    setLayerMixers({
+      0: { ...DEFAULT_LAYER_MIXER, name: audio.mic1.label || "Mic 1 · Host", colorTag: "gold" },
+      1: { ...DEFAULT_LAYER_MIXER, name: audio.mic2.label || "Mic 2 · Guest", colorTag: "sky" },
+    });
     setSelectedTrackId(null);
     setSavedProjectSnapshot(null);
+    setUndoStack([]);
+    setRedoStack([]);
     setStudioPage("record");
     audio.seek(0);
   }
@@ -439,10 +525,15 @@ export function StudioView({
 
   const handleMoveClip = useCallback(
     (trackId: string, offsetMs: number, nextLayerIndex: number) => {
+      pushHistory();
       const clampedLayer = Math.max(0, Math.min(15, nextLayerIndex));
-      const targetMix = layerMixers[clampedLayer] ?? DEFAULT_LAYER_MIXER;
+      const targetMix = layerMixers[clampedLayer] ?? {
+        ...DEFAULT_LAYER_MIXER,
+        name: `Track ${clampedLayer + 1}`,
+        colorTag: defaultLayerColor(clampedLayer),
+      };
       setLayerCount((prev) => Math.max(prev, clampedLayer + 1));
-      setLayerMixers((prev) => (prev[clampedLayer] ? prev : { ...prev, [clampedLayer]: { ...DEFAULT_LAYER_MIXER } }));
+      setLayerMixers((prev) => (prev[clampedLayer] ? prev : { ...prev, [clampedLayer]: targetMix }));
       setTracks((prev) =>
         prev.map((tr) =>
           tr.id === trackId
@@ -459,11 +550,12 @@ export function StudioView({
         ),
       );
     },
-    [layerMixers],
+    [layerMixers, pushHistory],
   );
 
   const handleTrimClip = useCallback(
     (trackId: string, patch: { offsetMs: number; trimStartMs: number; durationMs: number }) => {
+      pushHistory();
       setTracks((prev) =>
         prev.map((tr) => {
           if (tr.id !== trackId) return tr;
@@ -473,92 +565,135 @@ export function StudioView({
           const basePeaks = cachedFull?.peaks ?? tr.peaks;
           const peaks =
             cachedFull && sourceDuration > 0
-              ? slicePeaksForRange(basePeaks, sourceDuration, patch.trimStartMs, patch.durationMs, 140)
+              ? slicePeaksForRange(basePeaks, sourceDuration, patch.trimStartMs, patch.durationMs, 160)
               : slicePeaksForRange(
                   tr.peaks,
                   tr.durationMs,
                   Math.max(0, patch.trimStartMs - (tr.trimStartMs ?? 0)),
                   patch.durationMs,
-                  140,
+                  160,
                 );
           return {
             ...tr,
             offsetMs: Math.max(0, Math.round(patch.offsetMs)),
             trimStartMs: Math.max(0, Math.round(patch.trimStartMs)),
-            durationMs: Math.max(180, Math.round(patch.durationMs)),
+            durationMs: Math.max(160, Math.round(patch.durationMs)),
             sourceDurationMs: sourceDuration,
             peaks: peaks.length > 0 ? peaks : tr.peaks,
           };
         }),
       );
     },
-    [],
+    [pushHistory],
   );
+
+  const buildSplitPair = useCallback((target: StudioTrackV1, atTimelineMs: number): [StudioTrackV1, StudioTrackV1] | null => {
+    const cutInClipMs = Math.round(atTimelineMs - target.offsetMs);
+    if (cutInClipMs < 140 || cutInClipMs > target.durationMs - 140) return null;
+
+    const origTrimStart = target.trimStartMs ?? 0;
+    const sourceDur = target.sourceDurationMs ?? origTrimStart + target.durationMs;
+    const leftDur = cutInClipMs;
+    const rightDur = target.durationMs - cutInClipMs;
+    const rightTrimStart = origTrimStart + cutInClipMs;
+
+    const key = target.audioRef.idbKey || target.id;
+    const cachedFull = sourcePeaksCacheRef.current.get(key);
+    const leftPeaks = cachedFull
+      ? slicePeaksForRange(cachedFull.peaks, cachedFull.durationMs, origTrimStart, leftDur, 140)
+      : slicePeaksForRange(target.peaks, target.durationMs, 0, leftDur, 140);
+    const rightPeaks = cachedFull
+      ? slicePeaksForRange(cachedFull.peaks, cachedFull.durationMs, rightTrimStart, rightDur, 140)
+      : slicePeaksForRange(target.peaks, target.durationMs, cutInClipMs, rightDur, 140);
+
+    const baseTitle = target.name.replace(/\s+\(cut(?:\s+\d+)?\)$/i, "");
+    const leftClip: StudioTrackV1 = {
+      ...target,
+      trimStartMs: origTrimStart,
+      durationMs: leftDur,
+      sourceDurationMs: sourceDur,
+      fadeOutMs: 0,
+      peaks: leftPeaks.length > 0 ? leftPeaks : target.peaks,
+    };
+    const rightClip: StudioTrackV1 = {
+      ...target,
+      id: makeClientId("trk"),
+      name: `${baseTitle} (cut)`,
+      offsetMs: target.offsetMs + cutInClipMs,
+      trimStartMs: rightTrimStart,
+      durationMs: rightDur,
+      sourceDurationMs: sourceDur,
+      fadeInMs: 0,
+      peaks: rightPeaks.length > 0 ? rightPeaks : target.peaks,
+      createdAt: new Date().toISOString(),
+    };
+    return [leftClip, rightClip];
+  }, []);
 
   const splitClipAt = useCallback(
     (trackId: string, atTimelineMs: number) => {
-      const target = tracks.find((t) => t.id === trackId);
+      const target = tracksRef.current.find((t) => t.id === trackId);
       if (!target) return;
-      const cutInClipMs = Math.round(atTimelineMs - target.offsetMs);
-      if (cutInClipMs < 140 || cutInClipMs > target.durationMs - 140) {
+      const pair = buildSplitPair(target, atTimelineMs);
+      if (!pair) {
         showNotice("Place the cut point strictly inside the audio clip to split it.");
         return;
       }
-
-      const origTrimStart = target.trimStartMs ?? 0;
-      const sourceDur = target.sourceDurationMs ?? origTrimStart + target.durationMs;
-      const leftDur = cutInClipMs;
-      const rightDur = target.durationMs - cutInClipMs;
-      const rightTrimStart = origTrimStart + cutInClipMs;
-
-      const key = target.audioRef.idbKey || target.id;
-      const cachedFull = sourcePeaksCacheRef.current.get(key);
-      const leftPeaks = cachedFull
-        ? slicePeaksForRange(cachedFull.peaks, cachedFull.durationMs, origTrimStart, leftDur, 120)
-        : slicePeaksForRange(target.peaks, target.durationMs, 0, leftDur, 120);
-      const rightPeaks = cachedFull
-        ? slicePeaksForRange(cachedFull.peaks, cachedFull.durationMs, rightTrimStart, rightDur, 120)
-        : slicePeaksForRange(target.peaks, target.durationMs, cutInClipMs, rightDur, 120);
-
-      const baseTitle = target.name.replace(/\s+\(cut(?:\s+\d+)?\)$/i, "");
-      const leftClip: StudioTrackV1 = {
-        ...target,
-        trimStartMs: origTrimStart,
-        durationMs: leftDur,
-        sourceDurationMs: sourceDur,
-        peaks: leftPeaks.length > 0 ? leftPeaks : target.peaks,
-      };
-      const rightClip: StudioTrackV1 = {
-        ...target,
-        id: makeClientId("trk"),
-        name: `${baseTitle} (cut)`,
-        offsetMs: target.offsetMs + cutInClipMs,
-        trimStartMs: rightTrimStart,
-        durationMs: rightDur,
-        sourceDurationMs: sourceDur,
-        peaks: rightPeaks.length > 0 ? rightPeaks : target.peaks,
-        createdAt: new Date().toISOString(),
-      };
-
-      const nextTracks = tracks.flatMap((t) => (t.id === trackId ? [leftClip, rightClip] : [t]));
+      pushHistory();
+      const [leftClip, rightClip] = pair;
+      const nextTracks = tracksRef.current.flatMap((t) => (t.id === trackId ? [leftClip, rightClip] : [t]));
       setTracks(nextTracks);
       setSelectedTrackId(rightClip.id);
-      if (activeId) void persistDraft(nextTracks, markers);
+      if (activeId) void persistDraft(nextTracks, markersRef.current);
       showNotice(`Split “${target.name}” at ${fmtExactSec(atTimelineMs)}.`);
     },
-    [activeId, markers, persistDraft, showNotice, tracks],
+    [activeId, buildSplitPair, persistDraft, pushHistory, showNotice],
   );
+
+  const splitAllAtPlayhead = useCallback(() => {
+    const atMs = audio.playheadMs;
+    const candidates = tracksRef.current.filter(
+      (t) => atMs > t.offsetMs + 140 && atMs < t.offsetMs + t.durationMs - 140,
+    );
+    if (candidates.length === 0) {
+      showNotice("Move the playhead across one or more clips to split all lanes.");
+      return;
+    }
+    pushHistory();
+    let count = 0;
+    let lastRightId: string | null = null;
+    const nextTracks = tracksRef.current.flatMap((tr) => {
+      const pair = buildSplitPair(tr, atMs);
+      if (!pair) return [tr];
+      count += 1;
+      lastRightId = pair[1].id;
+      return pair;
+    });
+    setTracks(nextTracks);
+    if (lastRightId) setSelectedTrackId(lastRightId);
+    if (activeId) void persistDraft(nextTracks, markersRef.current);
+    showNotice(`Split ${count} aligned ${count === 1 ? "clip" : "clips"} at ${fmtExactSec(atMs)}.`);
+  }, [activeId, audio.playheadMs, buildSplitPair, persistDraft, pushHistory, showNotice]);
 
   const splittableTrackAtPlayhead = useMemo(() => {
     const preferred = selectedTrackId ? tracks.find((t) => t.id === selectedTrackId) : undefined;
-    const isSplittableAtPlayhead = (t: StudioTrackV1) =>
+    const isSplittable = (t: StudioTrackV1) =>
       audio.playheadMs > t.offsetMs + 140 && audio.playheadMs < t.offsetMs + t.durationMs - 140;
-    if (preferred && isSplittableAtPlayhead(preferred)) return preferred;
-    return tracks.find(isSplittableAtPlayhead) ?? null;
+    if (preferred && isSplittable(preferred)) return preferred;
+    return tracks.find(isSplittable) ?? null;
   }, [audio.playheadMs, selectedTrackId, tracks]);
+
+  const splittableCountAtPlayhead = useMemo(
+    () =>
+      tracks.filter(
+        (t) => audio.playheadMs > t.offsetMs + 140 && audio.playheadMs < t.offsetMs + t.durationMs - 140,
+      ).length,
+    [audio.playheadMs, tracks],
+  );
 
   const handleDuplicateClip = useCallback(
     (track: StudioTrackV1) => {
+      pushHistory();
       const targetLayer = Math.max(0, track.layerIndex ?? 0);
       const copy: StudioTrackV1 = {
         ...track,
@@ -568,28 +703,59 @@ export function StudioView({
         layerIndex: targetLayer,
         createdAt: new Date().toISOString(),
       };
-      const next = [...tracks, copy];
+      const next = [...tracksRef.current, copy];
       setTracks(next);
       setSelectedTrackId(copy.id);
-      if (activeId) void persistDraft(next, markers);
+      if (activeId) void persistDraft(next, markersRef.current);
       showNotice(`Duplicated “${track.name}”.`);
     },
-    [activeId, markers, persistDraft, showNotice, tracks],
+    [activeId, persistDraft, pushHistory, showNotice],
+  );
+
+  const handleNormalizeClip = useCallback(
+    async (track: StudioTrackV1) => {
+      setNormalizing(true);
+      try {
+        const nextGain = await audio.computeNormalizedGain(track);
+        if (nextGain === null) {
+          showNotice("Could not measure peak amplitude for that clip.");
+          return;
+        }
+        pushHistory();
+        const layerIdx = Math.max(0, track.layerIndex ?? 0);
+        setLayerMixers((prev) => ({
+          ...prev,
+          [layerIdx]: { ...(prev[layerIdx] ?? DEFAULT_LAYER_MIXER), gain: nextGain },
+        }));
+        setTracks((prev) => prev.map((t) => (t.id === track.id ? { ...t, gain: nextGain } : t)));
+        showNotice(`Normalized “${track.name}” to -1.0 dBFS (${Math.round(nextGain * 100)}% gain).`);
+      } finally {
+        setNormalizing(false);
+      }
+    },
+    [audio, pushHistory, showNotice],
   );
 
   const handleRemoveTrack = useCallback(
     async (track: StudioTrackV1) => {
-      const nextTracks = tracks.filter((t) => t.id !== track.id);
+      pushHistory();
+      const nextTracks = tracksRef.current.filter((t) => t.id !== track.id);
       setTracks(nextTracks);
       if (selectedTrackId === track.id) setSelectedTrackId(nextTracks[0]?.id ?? null);
-      await audio.removeCachedTrackAudio(track, nextTracks);
-      if (activeId) void persistDraft(nextTracks, markers);
+      if (activeId) void persistDraft(nextTracks, markersRef.current);
+      // Note: retain IDB audio blob during current session so Undo restores audio cleanly
     },
-    [activeId, audio, markers, persistDraft, selectedTrackId, tracks],
+    [activeId, persistDraft, pushHistory, selectedTrackId],
   );
 
   function updateLayerMixer(layerIndex: number, updater: (prev: LayerMixerState) => LayerMixerState) {
-    const nextMixer = updater(layerMixers[layerIndex] ?? DEFAULT_LAYER_MIXER);
+    const nextMixer = updater(
+      layerMixers[layerIndex] ?? {
+        ...DEFAULT_LAYER_MIXER,
+        name: `Track ${layerIndex + 1}`,
+        colorTag: defaultLayerColor(layerIndex),
+      },
+    );
     setLayerMixers((prev) => ({ ...prev, [layerIndex]: nextMixer }));
     setTracks((prev) =>
       prev.map((tr) =>
@@ -609,7 +775,14 @@ export function StudioView({
   function handleAddLayer() {
     const nextIdx = layerCount;
     setLayerCount((c) => c + 1);
-    setLayerMixers((prev) => ({ ...prev, [nextIdx]: { ...DEFAULT_LAYER_MIXER } }));
+    setLayerMixers((prev) => ({
+      ...prev,
+      [nextIdx]: {
+        ...DEFAULT_LAYER_MIXER,
+        name: `Track ${nextIdx + 1}`,
+        colorTag: defaultLayerColor(nextIdx),
+      },
+    }));
     setActiveLayerIndex(nextIdx);
   }
 
@@ -625,23 +798,60 @@ export function StudioView({
     if (activeLayerIndex >= layerIdx) setActiveLayerIndex((i) => Math.max(0, i - 1));
   }
 
-  async function handleImportStem(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+  const importFilesList = useCallback(
+    async (files: FileList | File[], targetLayer: number, offsetMs: number) => {
+      const list = Array.from(files);
+      if (list.length === 0) return;
+      const imported: StudioTrackV1[] = [];
+      for (let i = 0; i < list.length; i++) {
+        const file = list[i]!;
+        const lane = targetLayer + i;
+        const tr = await audio.importAudioFile(file, lane, offsetMs);
+        if (tr) {
+          const key = tr.audioRef.idbKey || tr.id;
+          sourcePeaksCacheRef.current.set(key, {
+            peaks: tr.peaks,
+            durationMs: tr.sourceDurationMs ?? tr.durationMs,
+          });
+          imported.push(tr);
+        }
+      }
+      if (imported.length === 0) return;
+      pushHistory();
+      const nextTracks = [...tracksRef.current, ...imported];
+      setTracks(nextTracks);
+      const maxImportedLayer = imported.reduce((m, t) => Math.max(m, t.layerIndex ?? 0), targetLayer);
+      setLayerCount((prev) => Math.max(prev, maxImportedLayer + 1));
+      setLayerMixers((prev) => {
+        const next = { ...prev };
+        for (const tr of imported) {
+          const lIdx = tr.layerIndex ?? 0;
+          next[lIdx] = {
+            ...(next[lIdx] ?? DEFAULT_LAYER_MIXER),
+            name: next[lIdx]?.name ?? tr.name,
+            inputHint: "Imported WAV/Audio",
+            colorTag: tr.colorTag ?? defaultLayerColor(lIdx),
+          };
+        }
+        return next;
+      });
+      setSelectedTrackId(imported[0]!.id);
+      await persistDraft(nextTracks, markersRef.current);
+      showNotice(
+        imported.length === 1
+          ? `Imported “${imported[0]!.name}” onto Track ${(imported[0]!.layerIndex ?? 0) + 1}.`
+          : `Imported ${imported.length} audio stems onto the timeline.`,
+      );
+    },
+    [audio, persistDraft, pushHistory, showNotice],
+  );
+
+  async function handleImportInputChange(e: ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const copied = Array.from(files);
     e.target.value = "";
-    if (!file) return;
-    const tr = await audio.importAudioFile(file, activeLayerIndex, Math.round(audio.playheadMs));
-    if (!tr) return;
-    const key = tr.audioRef.idbKey || tr.id;
-    sourcePeaksCacheRef.current.set(key, {
-      peaks: tr.peaks,
-      durationMs: tr.sourceDurationMs ?? tr.durationMs,
-    });
-    const nextTracks = [...tracks, tr];
-    setTracks(nextTracks);
-    setLayerCount((prev) => Math.max(prev, activeLayerIndex + 1));
-    setSelectedTrackId(tr.id);
-    await persistDraft(nextTracks, markers);
-    showNotice(`Imported ${tr.name} onto Layer ${activeLayerIndex + 1}.`);
+    await importFilesList(copied, activeLayerIndex, Math.round(audio.playheadMs));
   }
 
   const dropMarkerAtPlayhead = useCallback(() => {
@@ -651,10 +861,10 @@ export function StudioView({
         : Math.round(audio.playheadMs);
     const label =
       markerKind === "chapter"
-        ? `Section ${markers.filter((m) => m.kind === "chapter").length + 1}`
+        ? `Chapter ${markersRef.current.filter((m) => m.kind === "chapter").length + 1}`
         : markerKind === "note"
           ? `Note @ ${fmtDuration(atMs)}`
-          : `Cue ${markers.length + 1}`;
+          : `Cue ${markersRef.current.length + 1}`;
     const created: StudioMarkerV1 = {
       id: makeClientId("mrk"),
       atMs,
@@ -662,32 +872,42 @@ export function StudioView({
       kind: markerKind,
       note: null,
     };
-    const next = [...markers, created].sort((a, b) => a.atMs - b.atMs);
+    pushHistory();
+    const next = [...markersRef.current, created].sort((a, b) => a.atMs - b.atMs);
     setMarkers(next);
-    if (activeId || tracks.length > 0) void persistDraft(tracks, next);
+    if (activeId || tracksRef.current.length > 0) void persistDraft(tracksRef.current, next);
     showNotice(`Dropped ${markerKind} marker at ${fmtDuration(atMs)}.`);
-  }, [
-    activeId,
-    audio.playheadMs,
-    audio.telemetryRef,
-    audio.transport,
-    markerKind,
-    markers,
-    persistDraft,
-    showNotice,
-    tracks,
-  ]);
+  }, [activeId, audio.playheadMs, audio.telemetryRef, audio.transport, markerKind, persistDraft, pushHistory, showNotice]);
 
   async function handleExportMix() {
-    setExporting(true);
+    setExporting("mix");
     try {
       const res = await audio.exportMixWav();
       if (res) {
         triggerDownload(res.blob, res.filename);
-        showNotice("Rendered mixed multi-layer WAV.");
+        showNotice("Exported mastered multi-track WAV (-1 dBFS peak limited).");
       }
     } finally {
-      setExporting(false);
+      setExporting(null);
+    }
+  }
+
+  async function handleExportStems() {
+    setExporting("stems");
+    try {
+      const names: Record<number, string> = {};
+      for (const [k, v] of Object.entries(layerMixers)) {
+        if (v.name) names[Number(k)] = v.name;
+      }
+      const stems = await audio.exportStemsWav(names);
+      if (stems.length > 0) {
+        for (const stem of stems) {
+          triggerDownload(stem.blob, stem.filename);
+        }
+        showNotice(`Exported ${stems.length} synced isolated track WAV ${stems.length === 1 ? "stem" : "stems"}.`);
+      }
+    } finally {
+      setExporting(null);
     }
   }
 
@@ -731,7 +951,34 @@ export function StudioView({
     [selectedTrackId, tracks],
   );
 
-  // Keyboard shortcuts: Space (Play/Pause), R (Rec/Stop on Record page), M (Marker), V (Move), C (Split), X (Split at playhead)
+  // Sync Mic 1 / Mic 2 display names into empty default layer headers
+  const handleUpdateMic1 = useCallback(
+    (patch: Partial<typeof audio.mic1>) => {
+      audio.updateMic1(patch);
+      if (patch.label !== undefined) {
+        setLayerMixers((prev) => ({
+          ...prev,
+          0: { ...(prev[0] ?? DEFAULT_LAYER_MIXER), name: patch.label || "Mic 1 · Host", colorTag: "gold" },
+        }));
+      }
+    },
+    [audio],
+  );
+
+  const handleUpdateMic2 = useCallback(
+    (patch: Partial<typeof audio.mic2>) => {
+      audio.updateMic2(patch);
+      if (patch.label !== undefined) {
+        setLayerMixers((prev) => ({
+          ...prev,
+          1: { ...(prev[1] ?? DEFAULT_LAYER_MIXER), name: patch.label || "Mic 2 · Guest", colorTag: "sky" },
+        }));
+      }
+    },
+    [audio],
+  );
+
+  // Pro Keyboard Shortcuts
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null;
@@ -744,16 +991,30 @@ export function StudioView({
       ) {
         return;
       }
+
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) handleRedo();
+        else handleUndo();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
+
       if (e.code === "Space") {
         e.preventDefault();
         if (audio.transport === "playing") audio.pausePlayback();
         else if (audio.transport === "idle") void audio.play();
-      } else if ((e.key === "r" || e.key === "R") && !e.metaKey && !e.ctrlKey && studioPage === "record") {
+      } else if ((e.key === "r" || e.key === "R") && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
         if (audio.transport === "recording" || audio.transport === "paused" || audio.transport === "counting-in") {
           audio.stopRecording();
         } else {
-          void audio.startRecording(captureRole, activeLayerIndex);
+          const baseLane = audio.captureMode === "single" ? activeLayerIndex : 0;
+          void audio.startRecording("voice", baseLane);
         }
       } else if ((e.key === "m" || e.key === "M") && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
@@ -766,7 +1027,14 @@ export function StudioView({
         setToolMode("cut");
       } else if ((e.key === "x" || e.key === "X") && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
-        if (splittableTrackAtPlayhead) splitClipAt(splittableTrackAtPlayhead.id, audio.playheadMs);
+        if (e.shiftKey) {
+          splitAllAtPlayhead();
+        } else if (splittableTrackAtPlayhead) {
+          splitClipAt(splittableTrackAtPlayhead.id, audio.playheadMs);
+        }
+      } else if ((e.key === "l" || e.key === "L") && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        setLoopEnabled((v) => !v);
       } else if ((e.key === "Delete" || e.key === "Backspace") && selectedTrack && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
         void handleRemoveTrack(selectedTrack);
@@ -777,44 +1045,81 @@ export function StudioView({
   }, [
     activeLayerIndex,
     audio,
-    captureRole,
     dropMarkerAtPlayhead,
+    handleRedo,
     handleRemoveTrack,
+    handleUndo,
     selectedTrack,
+    splitAllAtPlayhead,
     splitClipAt,
     splittableTrackAtPlayhead,
-    studioPage,
   ]);
 
   const activeFolderName = collections.find((c) => c.id === activeCollectionId)?.name ?? "Studio sessions";
   const isCaptureLive =
     audio.transport === "recording" || audio.transport === "paused" || audio.transport === "counting-in";
-  const micLabel =
-    audio.selectedDeviceId === "default"
-      ? "Default microphone"
-      : (audio.devices.find((d) => d.deviceId === audio.selectedDeviceId)?.label ?? "Default microphone");
+
+  const inspectorProps = {
+    tab: inspectorTab,
+    onChangeTab: setInspectorTab,
+    selectedTrack,
+    playheadMs: audio.playheadMs,
+    markers,
+    markerKind,
+    description,
+    bpm,
+    countInBars,
+    masterGain,
+    overdubEnabled: audio.overdubEnabled,
+    normalizing,
+    onUpdateTrack: updateTrack,
+    onSplitClipAtPlayhead: (id: string) => splitClipAt(id, audio.playheadMs),
+    onDuplicateClip: handleDuplicateClip,
+    onNormalizeClip: (tr: StudioTrackV1) => void handleNormalizeClip(tr),
+    onDownloadRawTrack: (tr: StudioTrackV1) => void handleDownloadRawTrack(tr),
+    onRemoveTrack: (tr: StudioTrackV1) => void handleRemoveTrack(tr),
+    onChangeMarkerKind: setMarkerKind,
+    onDropMarker: dropMarkerAtPlayhead,
+    onSeek: audio.seek,
+    onUpdateMarker: (markerId: string, label: string) =>
+      setMarkers((prev) => prev.map((m) => (m.id === markerId ? { ...m, label } : m))),
+    onDeleteMarker: (markerId: string) => {
+      pushHistory();
+      setMarkers((prev) => prev.filter((m) => m.id !== markerId));
+    },
+    onChangeDescription: setDescription,
+    onBlurDescription: () => {
+      if (tracks.length > 0 || activeId) void persistDraft(tracks, markers);
+    },
+    onChangeBpm: setBpm,
+    onChangeCountInBars: setCountInBars,
+    onChangeMasterGain: setMasterGain,
+    onToggleOverdub: () => audio.setOverdubEnabled(!audio.overdubEnabled),
+    onOpenPatchbay: () => setPatchbayOpen(true),
+  };
 
   return (
     <section
-      aria-label="Nexus Recording Studio"
+      aria-label="Nexus Audio Studio"
       data-studio-ready={collections.length > 0 ? "true" : "false"}
       data-studio-page={studioPage}
       className="studio-screen flex h-full w-full flex-col overflow-hidden"
     >
-      {/* Unified Full-Screen Header: Left clears Nexus emblem, Centered Record | Edit tabs, Right contextual actions */}
+      {/* Unified Apple HIG Studio Header (pl-[92px] clears floating top-left Nexus Orb trigger) */}
       <header
         data-page={studioPage}
-        className="studio-header grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 border-b border-border/75 py-2.5 pl-[92px] pr-4 sm:pr-6 md:grid-cols-[1fr_auto_1fr] md:gap-y-0 md:py-2"
+        className="studio-header grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 border-b border-border/75 py-2 pl-[92px] pr-4 sm:pr-5 md:grid-cols-[1fr_auto_1fr] md:gap-y-0"
       >
-        <div className="col-start-1 row-start-1 flex min-w-0 items-center gap-1 justify-self-start">
+        {/* Left: Session Title + Takes Drawer Chevron + Sync Indicator Dot */}
+        <div className="col-start-1 row-start-1 flex min-w-0 items-center gap-1.5 justify-self-start">
           <Input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onBlur={() => {
               if (tracks.length > 0 || activeId) void persistDraft(tracks, markers);
             }}
-            aria-label="Recording project title"
-            className="h-8 w-full min-w-0 max-w-[168px] border-0 bg-transparent px-1.5 text-[14px] font-medium shadow-none focus-visible:ring-1 sm:max-w-[195px]"
+            aria-label="Recording session title"
+            className="h-8 w-full min-w-0 max-w-[172px] border-0 bg-transparent px-1.5 text-[14px] font-medium tracking-[-0.01em] shadow-none focus-visible:ring-1 sm:max-w-[210px]"
           />
           <Tooltip>
             <TooltipTrigger
@@ -824,24 +1129,37 @@ export function StudioView({
                   size="icon-sm"
                   variant="ghost"
                   onClick={() => setTakesDrawerOpen(true)}
-                  aria-label={`Browse takes (${summaries.length})`}
+                  aria-label={`Browse saved sessions (${summaries.length})`}
                   className="h-7 w-7 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
                 >
                   <ChevronDown className="size-4" />
                 </Button>
               }
             />
-            <TooltipContent side="bottom">Takes &amp; folders ({summaries.length})</TooltipContent>
+            <TooltipContent side="bottom">Sessions &amp; folders ({summaries.length})</TooltipContent>
           </Tooltip>
-          <Badge variant="outline" className="hidden shrink-0 text-[10px] font-normal lg:inline-flex">
-            {databaseConfigured ? "Synced" : "Local IDB"}
-          </Badge>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <span
+                  aria-label={databaseConfigured ? "Cloud synced" : "Local IndexedDB storage"}
+                  className={`hidden h-2 w-2 shrink-0 rounded-full lg:inline-block ${
+                    databaseConfigured ? "bg-[#34d399]" : "bg-[color:var(--land-gold)]"
+                  }`}
+                />
+              }
+            />
+            <TooltipContent side="bottom">
+              {databaseConfigured ? "Metadata synced to cloud" : "Saved locally in browser IndexedDB"}
+            </TooltipContent>
+          </Tooltip>
         </div>
 
+        {/* Center: Crisp Apple Segmented Pill (Record | Arrange) */}
         <div
           className="studio-tabs col-span-2 row-start-2 -ml-[76px] justify-self-center sm:-ml-[68px] md:col-span-1 md:col-start-2 md:row-start-1 md:ml-0"
           role="tablist"
-          aria-label="Studio workspace page"
+          aria-label="Studio workspace view"
         >
           <span className="studio-tabs-indicator" data-page={studioPage} aria-hidden />
           <button
@@ -865,78 +1183,113 @@ export function StudioView({
             onClick={() => setStudioPage("edit")}
             className={`studio-tab ${studioPage === "edit" ? "studio-tab--active" : ""}`}
           >
-            <span>Edit</span>
+            <span>Arrange</span>
             {tracks.length > 0 ? <span className="studio-tab-count">{tracks.length}</span> : null}
           </button>
         </div>
 
-        <div className="contents md:col-start-3 md:row-start-1 md:flex md:items-center md:justify-end md:gap-2 md:justify-self-end">
-          {studioPage === "edit" ? (
-            <div className="col-span-2 row-start-3 -ml-[76px] flex flex-wrap items-center justify-center gap-1.5 sm:-ml-[68px] md:ml-0 md:gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => void persistDraft(tracks, markers)}
-                disabled={saving || tracks.length === 0}
-                className="h-8 gap-1.5 rounded-full border-border/80 bg-background/40 text-[12px]"
-              >
-                {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
-                <span>{saving ? "Saving" : "Save"}</span>
-              </Button>
+        {/* Right: Save, Export Menu (Master WAV / Isolated Stems / Route Node), Exit */}
+        <div className="col-start-2 row-start-1 flex items-center justify-end gap-1.5 justify-self-end md:col-start-3">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => void persistDraft(tracks, markers)}
+            disabled={saving || tracks.length === 0}
+            className="hidden h-8 gap-1.5 rounded-full px-3 text-[12px] sm:inline-flex"
+          >
+            {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
+            <span>{saving ? "Saving" : "Save"}</span>
+          </Button>
 
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => void handleExportMix()}
-                disabled={exporting || tracks.length === 0}
-                className="h-8 gap-1.5 rounded-full border-border/80 bg-background/40 text-[12px]"
-              >
-                {exporting ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-                <span>Export WAV</span>
-              </Button>
+          <Popover>
+            <PopoverTrigger
+              render={
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={exporting !== null}
+                  className="h-8 gap-1.5 rounded-full bg-foreground px-3.5 text-[12px] font-medium text-background hover:opacity-90"
+                >
+                  {exporting ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+                  <span>Export</span>
+                  <ChevronDown className="size-3 opacity-70" />
+                </Button>
+              }
+            />
+            <PopoverContent align="end" className="w-64 rounded-2xl p-2">
+              <div className="space-y-1">
+                <button
+                  type="button"
+                  disabled={tracks.length === 0 || exporting !== null}
+                  onClick={() => void handleExportMix()}
+                  className="flex w-full items-start gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-foreground/[0.06] disabled:opacity-45"
+                >
+                  <Download className="mt-0.5 size-4 shrink-0 text-foreground" />
+                  <div className="min-w-0">
+                    <div className="text-[12.5px] font-medium text-foreground">Master Mix (.WAV)</div>
+                    <div className="text-[11px] text-muted-foreground">Mixed stereo master with -1 dBFS limiter</div>
+                  </div>
+                </button>
 
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => void openRouting()}
-                className="h-8 gap-1.5 rounded-full bg-foreground text-background hover:opacity-90"
-              >
-                <Zap className="size-3.5" />
-                <span>Send → Node</span>
-              </Button>
-            </div>
-          ) : null}
+                <button
+                  type="button"
+                  disabled={tracks.length === 0 || exporting !== null}
+                  onClick={() => void handleExportStems()}
+                  className="flex w-full items-start gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-foreground/[0.06] disabled:opacity-45"
+                >
+                  <Layers className="mt-0.5 size-4 shrink-0 text-[color:var(--land-gold)]" />
+                  <div className="min-w-0">
+                    <div className="text-[12.5px] font-medium text-foreground">Isolated Track Stems (.WAV)</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      Synced per-mic files from 00:00 for video editors
+                    </div>
+                  </div>
+                </button>
 
-          <div className="col-start-2 row-start-1 flex items-center gap-1 justify-self-end md:gap-1.5">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={onClose}
-              className="h-8 rounded-full text-[12px] text-muted-foreground hover:text-foreground"
-            >
-              Exit
-            </Button>
+                <Separator className="my-1" />
 
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={onReleaseNode}
-              className="hidden h-8 rounded-full text-[12px] text-muted-foreground hover:text-destructive sm:inline-flex"
-            >
-              Disconnect
-            </Button>
-          </div>
+                <button
+                  type="button"
+                  onClick={() => void openRouting()}
+                  className="flex w-full items-start gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-foreground/[0.06]"
+                >
+                  <Zap className="mt-0.5 size-4 shrink-0 text-[color:var(--land-gold)]" />
+                  <div className="min-w-0">
+                    <div className="text-[12.5px] font-medium text-foreground">Route to Nexus Node</div>
+                    <div className="text-[11px] text-muted-foreground">Emit studio.recording envelope on bus</div>
+                  </div>
+                </button>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={onClose}
+            className="h-8 rounded-full px-2.5 text-[12px] text-muted-foreground hover:text-foreground"
+          >
+            Exit
+          </Button>
+
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={onReleaseNode}
+            className="hidden h-8 rounded-full px-2.5 text-[12px] text-muted-foreground hover:text-destructive xl:inline-flex"
+          >
+            Disconnect
+          </Button>
         </div>
       </header>
 
-      {/* Sliding Dual-Page Container: Record (Default) <-> Edit */}
+      {/* Sliding Dual-Surface Stage: Record (Dual-Mic Console) <-> Arrange (Multi-Track DAW) */}
       <div className="studio-pages-viewport">
         <div className="studio-pages-track" data-page={studioPage}>
-          {/* Page 1: Minimal Dedicated Recording Stage (Image 1) */}
+          {/* Page 1: Dual-Mic RØDECaster Pro II Capture Console */}
           <div
             id="studio-panel-record"
             role="tabpanel"
@@ -948,35 +1301,50 @@ export function StudioView({
           >
             <StudioCaptureStage
               transport={audio.transport}
+              captureMode={audio.captureMode}
+              rodeCaster={audio.rodeCaster}
+              devices={audio.devices}
+              selectedDeviceId={audio.selectedDeviceId}
+              mic1={audio.mic1}
+              mic2={audio.mic2}
               micReady={audio.micReady}
               micError={audio.micError}
               statusNotice={statusBanner}
+              detectedChannels={audio.detectedChannels}
+              sampleRate={audio.sampleRate}
               countInBeat={audio.countInBeat}
+              countInBars={countInBars}
+              bpm={bpm}
               metronomeEnabled={metronomeEnabled}
               overdubEnabled={audio.overdubEnabled}
               monitorInput={audio.monitorInput}
-              studioRawMic={audio.studioRawMic}
-              inputGain={audio.inputGain}
-              devices={audio.devices}
-              selectedDeviceId={audio.selectedDeviceId}
+              recordSafetyMix={audio.recordSafetyMix}
               theme={theme}
               sampleTelemetry={audio.sampleTelemetry}
-              onArmMic={() => void audio.armMicrophone()}
-              onStartRecord={() => void audio.startRecording(captureRole, activeLayerIndex)}
+              onChangeMode={(mode) => audio.setCaptureMode(mode)}
+              onUpdateMic1={handleUpdateMic1}
+              onUpdateMic2={handleUpdateMic2}
+              onArmInputs={() => void audio.armInputs()}
+              onApplyRodeCasterPreset={() => void audio.applyRodeCasterPreset()}
+              onClearClipIndicators={audio.clearClipIndicators}
+              onOpenPatchbay={() => setPatchbayOpen(true)}
+              onStartRecord={() => {
+                const baseLane = audio.captureMode === "single" ? activeLayerIndex : 0;
+                void audio.startRecording("voice", baseLane);
+              }}
               onPauseRecord={audio.pauseRecording}
               onResumeRecord={audio.resumeRecording}
               onStopRecord={audio.stopRecording}
+              onDiscardRecord={audio.discardRecording}
               onToggleMetronome={() => setMetronomeEnabled((v) => !v)}
+              onCycleCountIn={() => setCountInBars((v) => (v === 0 ? 1 : v === 1 ? 2 : 0))}
               onToggleOverdub={() => audio.setOverdubEnabled(!audio.overdubEnabled)}
               onToggleMonitor={(next) => audio.setMonitorInput(next)}
-              onToggleRawMic={(next) => audio.setStudioRawMic(next)}
-              onChangeInputGain={(val) => audio.setInputGain(val)}
-              onSelectDevice={(id) => audio.setSelectedDeviceId(id)}
               onDropMarker={dropMarkerAtPlayhead}
             />
           </div>
 
-          {/* Page 2: Dedicated Multi-Layer Editorial DAW Workspace (Image 2) */}
+          {/* Page 2: Crisp Multi-Track Arrange & Mix Workspace */}
           <div
             id="studio-panel-edit"
             role="tabpanel"
@@ -986,441 +1354,432 @@ export function StudioView({
             data-active={studioPage === "edit" ? "true" : "false"}
             className="studio-page-pane"
           >
-            <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden px-4 py-3 sm:px-6">
+            <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden px-4 py-3 sm:px-5">
               {audio.micError ? (
-                <div role="alert" className="shrink-0 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-2 text-[12.5px] text-destructive">
+                <div
+                  role="alert"
+                  className="shrink-0 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-2 text-[12.5px] text-destructive"
+                >
                   {audio.micError}
                 </div>
-              ) : null}
-
-              {statusBanner ? (
-                <div role="status" className="shrink-0 rounded-xl border border-border/80 bg-muted/40 px-4 py-1.5 text-[12px] text-foreground">
+              ) : statusBanner ? (
+                <div
+                  role="status"
+                  className="shrink-0 rounded-xl border border-border/80 bg-card/80 px-3.5 py-1.5 text-[12px] text-foreground"
+                >
                   {statusBanner}
                 </div>
               ) : null}
 
-              <div className="shrink-0">
-                <ReactiveRecordBar
-                  transport={audio.transport}
-                  micReady={audio.micReady}
-                  playheadMs={audio.playheadMs}
-                  totalTimelineMs={totalTimelineMs}
-                  summaryPeaks={summaryPeaks}
-                  countInBeat={audio.countInBeat}
-                  theme={theme}
-                  sampleTelemetry={audio.sampleTelemetry}
-                  onSeek={audio.seek}
-                  onPlay={() => void audio.play()}
-                  onPausePlay={audio.pausePlayback}
-                  onDropMarker={dropMarkerAtPlayhead}
-                />
-              </div>
+              {/* Single Cohesive Arrange Transport & Editing Strip */}
+              <div className="studio-arrange-bar flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-2xl border border-border/80 px-3 py-2">
+                {/* Left: Transport + Monospace Timecode */}
+                <div className="flex items-center gap-1.5">
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          onClick={() => audio.seek(0)}
+                          aria-label="Rewind to start"
+                          className="h-8 w-8 rounded-full"
+                        >
+                          <SkipBack className="size-3.5" />
+                        </Button>
+                      }
+                    />
+                    <TooltipContent side="bottom">Rewind to 00:00</TooltipContent>
+                  </Tooltip>
 
-            {/* Row 1: Primary Timeline Editing Tools + Inline Clip Quick Actions (Image 2 Style) */}
-            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <div className="inline-flex rounded-full border border-border/80 bg-card/60 p-0.5" role="group" aria-label="Timeline edit mode">
                   <Button
                     type="button"
-                    size="sm"
-                    variant={toolMode === "select" ? "secondary" : "ghost"}
-                    onClick={() => setToolMode("select")}
-                    className="h-7 gap-1.5 rounded-full px-2.5 text-[12px]"
+                    size="icon-sm"
+                    onClick={() => {
+                      if (audio.transport === "playing") audio.pausePlayback();
+                      else void audio.play();
+                    }}
+                    disabled={isCaptureLive}
+                    aria-label={audio.transport === "playing" ? "Pause playback (Space)" : "Play timeline (Space)"}
+                    className="h-9 w-9 rounded-full bg-foreground text-background hover:opacity-90"
                   >
-                    <MousePointer className="size-3.5" />
-                    <span>Move (V)</span>
+                    {audio.transport === "playing" ? (
+                      <Pause className="size-4 fill-current" />
+                    ) : (
+                      <Play className="size-4 translate-x-[0.5px] fill-current" />
+                    )}
                   </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={toolMode === "cut" ? "destructive" : "ghost"}
-                    onClick={() => setToolMode("cut")}
-                    className="h-7 gap-1.5 rounded-full px-2.5 text-[12px]"
-                  >
-                    <Scissors className="size-3.5" />
-                    <span>Split (C)</span>
-                  </Button>
+
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant={isCaptureLive ? "destructive" : "outline"}
+                          onClick={() => {
+                            if (isCaptureLive) audio.stopRecording();
+                            else {
+                              const baseLane = audio.captureMode === "single" ? activeLayerIndex : 0;
+                              void audio.startRecording("overdub", baseLane);
+                            }
+                          }}
+                          aria-label={isCaptureLive ? "Stop punch-in recording" : "Punch-in record at playhead"}
+                          className="h-8 w-8 rounded-full"
+                        >
+                          {isCaptureLive ? (
+                            <Square className="size-3 fill-current" />
+                          ) : (
+                            <span className="h-2.5 w-2.5 rounded-full bg-[#fc3a34]" aria-hidden />
+                          )}
+                        </Button>
+                      }
+                    />
+                    <TooltipContent side="bottom">
+                      {isCaptureLive ? "Stop capture & commit stems" : "Punch-in record at playhead (R)"}
+                    </TooltipContent>
+                  </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant={loopEnabled ? "secondary" : "ghost"}
+                          onClick={() => setLoopEnabled((v) => !v)}
+                          aria-pressed={loopEnabled}
+                          aria-label="Toggle loop playback (L)"
+                          className="h-8 w-8 rounded-full"
+                        >
+                          <Repeat className="size-3.5" />
+                        </Button>
+                      }
+                    />
+                    <TooltipContent side="bottom">Loop playback (L)</TooltipContent>
+                  </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant={metronomeEnabled ? "secondary" : "ghost"}
+                          onClick={() => setMetronomeEnabled((v) => !v)}
+                          aria-pressed={metronomeEnabled}
+                          aria-label="Toggle metronome click"
+                          className="h-8 w-8 rounded-full"
+                        >
+                          <Metronome className="size-3.5" />
+                        </Button>
+                      }
+                    />
+                    <TooltipContent side="bottom">Click metronome ({bpm} BPM)</TooltipContent>
+                  </Tooltip>
+
+                  <div className="ml-1 flex items-center gap-1 rounded-lg border border-border/70 bg-foreground/[0.03] px-2.5 py-1 font-mono text-[12px] tabular-nums">
+                    <span className="font-medium text-foreground">{fmtTimecode(audio.playheadMs)}</span>
+                    <span className="text-muted-foreground">/</span>
+                    <span className="text-muted-foreground">{fmtTimecode(totalTimelineMs)}</span>
+                  </div>
                 </div>
 
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={!splittableTrackAtPlayhead}
-                        onClick={() => {
-                          if (splittableTrackAtPlayhead) splitClipAt(splittableTrackAtPlayhead.id, audio.playheadMs);
-                        }}
-                        className="h-8 gap-1.5 rounded-full border-border/80 bg-card/60 text-[12px]"
-                      >
-                        <Scissors className="size-3.5" />
-                        <span>Split @ Playhead</span>
-                      </Button>
-                    }
-                  />
-                  <TooltipContent side="bottom">Cut audio clip at red playhead line (X)</TooltipContent>
-                </Tooltip>
-
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={handleAddLayer}
-                  className="h-8 gap-1.5 rounded-full border-border/80 bg-card/60 text-[12px]"
-                >
-                  <Layers className="size-3.5" />
-                  <span>+ Layer</span>
-                </Button>
-
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="audio/*"
-                  onChange={(e) => void handleImportStem(e)}
-                  className="hidden"
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="h-8 gap-1.5 rounded-full border-border/80 bg-card/60 text-[12px]"
-                >
-                  <Upload className="size-3.5" />
-                  <span>Import</span>
-                </Button>
-              </div>
-
-              {selectedTrack ? (
+                {/* Center: Edit Tools (Move / Razor / Split / Split All / Snap / Undo / Redo) */}
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <Input
-                    value={selectedTrack.name}
-                    onChange={(e) =>
-                      updateTrack(selectedTrack.id, (prev) => ({ ...prev, name: e.target.value }))
-                    }
-                    aria-label="Selected clip name"
-                    className="h-7 w-32 rounded-full border-border/75 bg-card/60 px-2.5 text-[11.5px] font-medium"
-                  />
-                  <span className="hidden font-mono text-[11px] text-muted-foreground tabular-nums lg:inline">
-                    {fmtExactSec(selectedTrack.offsetMs)} →{" "}
-                    {fmtExactSec(selectedTrack.offsetMs + selectedTrack.durationMs)}
-                  </span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={
-                      !(
-                        audio.playheadMs > selectedTrack.offsetMs + 140 &&
-                        audio.playheadMs < selectedTrack.offsetMs + selectedTrack.durationMs - 140
-                      )
-                    }
-                    onClick={() => splitClipAt(selectedTrack.id, audio.playheadMs)}
-                    className="h-7 gap-1 rounded-full border-border/80 bg-card/60 px-2.5 text-[11.5px]"
+                  <div
+                    className="inline-flex rounded-full border border-border/80 bg-foreground/[0.03] p-0.5"
+                    role="group"
+                    aria-label="Timeline cursor tool"
                   >
-                    <Scissors className="size-3" />
-                    <span>Split here</span>
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleDuplicateClip(selectedTrack)}
-                    className="h-7 gap-1 rounded-full border-border/80 bg-card/60 px-2.5 text-[11.5px]"
-                  >
-                    <Copy className="size-3" />
-                    <span>Duplicate</span>
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void handleDownloadRawTrack(selectedTrack)}
-                    className="h-7 gap-1 rounded-full border-border/80 bg-card/60 px-2.5 text-[11.5px]"
-                  >
-                    <Download className="size-3" />
-                    <span>Audio</span>
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => void handleRemoveTrack(selectedTrack)}
-                    className="h-7 gap-1 rounded-full px-2.5 text-[11.5px] text-destructive hover:text-destructive"
-                  >
-                    <Trash2 className="size-3" />
-                    <span>Delete</span>
-                  </Button>
-                </div>
-              ) : null}
-            </div>
-
-            {/* Row 2: Timing, Metronome, I/O Popover, Markers & Zoom */}
-            <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-              <div className="flex h-8 items-center gap-1.5 rounded-full border border-border/80 bg-card/60 px-2.5 text-[12px]">
-                <span className="text-muted-foreground">BPM</span>
-                <input
-                  type="number"
-                  min={40}
-                  max={240}
-                  value={bpm}
-                  onChange={(e) => setBpm(Math.max(40, Math.min(240, Number(e.target.value) || 120)))}
-                  aria-label="Tempo BPM"
-                  className="w-10 bg-transparent text-right font-mono font-semibold text-foreground focus:outline-none"
-                />
-              </div>
-
-              <Button
-                type="button"
-                size="sm"
-                variant={metronomeEnabled ? "secondary" : "outline"}
-                onClick={() => setMetronomeEnabled((v) => !v)}
-                aria-pressed={metronomeEnabled}
-                className="h-8 gap-1.5 rounded-full border-border/80 bg-card/60 text-[12px]"
-              >
-                <Metronome className="size-3.5" />
-                <span>Click</span>
-                {metronomeEnabled ? <span className="h-1.5 w-1.5 rounded-full bg-[#ef332c]" aria-hidden /> : null}
-              </Button>
-
-              <Select
-                value={String(countInBars)}
-                onValueChange={(v) => {
-                  if (v !== null) setCountInBars(Number(v));
-                }}
-              >
-                <SelectTrigger aria-label="Count-in bars" className="h-8 min-w-[126px] rounded-full border-border/80 bg-card/60 text-[12px]">
-                  <SelectValue>{COUNT_IN_LABELS[String(countInBars)] ?? "Count: 1 bar"}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(COUNT_IN_LABELS).map(([val, label]) => (
-                    <SelectItem key={val} value={val}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Button
-                type="button"
-                size="sm"
-                variant={audio.overdubEnabled ? "secondary" : "outline"}
-                onClick={() => audio.setOverdubEnabled(!audio.overdubEnabled)}
-                className="h-8 gap-1.5 rounded-full border-border/80 bg-card/60 text-[12px]"
-              >
-                {audio.overdubEnabled ? (
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#ef332c]" aria-hidden />
-                ) : null}
-                <span>Overdub {audio.overdubEnabled ? "On" : "Off"}</span>
-              </Button>
-
-              <Popover>
-                <PopoverTrigger
-                  render={
                     <Button
                       type="button"
                       size="sm"
-                      variant="outline"
-                      className="h-8 gap-1.5 rounded-full border-border/80 bg-card/60 text-[12px]"
+                      variant={toolMode === "select" ? "secondary" : "ghost"}
+                      onClick={() => setToolMode("select")}
+                      className="h-7 gap-1 rounded-full px-2.5 text-[11.5px]"
                     >
-                      <SlidersHorizontal className="size-3.5" />
-                      <span>Input &amp; Mix</span>
+                      <MousePointer className="size-3.5" />
+                      <span>Select</span>
                     </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={toolMode === "cut" ? "destructive" : "ghost"}
+                      onClick={() => setToolMode("cut")}
+                      className="h-7 gap-1 rounded-full px-2.5 text-[11.5px]"
+                    >
+                      <Scissors className="size-3.5" />
+                      <span>Razor</span>
+                    </Button>
+                  </div>
+
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={!splittableTrackAtPlayhead}
+                          onClick={() => {
+                            if (splittableTrackAtPlayhead) splitClipAt(splittableTrackAtPlayhead.id, audio.playheadMs);
+                          }}
+                          className="h-8 gap-1 rounded-full px-2.5 text-[11.5px]"
+                        >
+                          <Scissors className="size-3.5" />
+                          <span>Split</span>
+                        </Button>
+                      }
+                    />
+                    <TooltipContent side="bottom">Split selected clip at playhead (X)</TooltipContent>
+                  </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={splittableCountAtPlayhead === 0}
+                          onClick={splitAllAtPlayhead}
+                          className="h-8 gap-1 rounded-full px-2.5 text-[11.5px]"
+                        >
+                          <SplitSquareHorizontal className="size-3.5" />
+                          <span className="hidden sm:inline">Split All</span>
+                        </Button>
+                      }
+                    />
+                    <TooltipContent side="bottom">
+                      Cut all aligned mic tracks at playhead simultaneously (Shift+X)
+                    </TooltipContent>
+                  </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant={snapEnabled ? "secondary" : "ghost"}
+                          onClick={() => setSnapEnabled((v) => !v)}
+                          aria-pressed={snapEnabled}
+                          aria-label="Toggle magnetic snap"
+                          className="h-8 w-8 rounded-full"
+                        >
+                          <Magnet className="size-3.5" />
+                        </Button>
+                      }
+                    />
+                    <TooltipContent side="bottom">
+                      Magnetic snap to grid, markers &amp; clip edges (hold Shift to bypass)
+                    </TooltipContent>
+                  </Tooltip>
+
+                  <div className="mx-0.5 h-4 w-px bg-border/75" aria-hidden />
+
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          disabled={undoStack.length === 0}
+                          onClick={handleUndo}
+                          aria-label="Undo (Ctrl+Z)"
+                          className="h-8 w-8 rounded-full"
+                        >
+                          <Undo2 className="size-3.5" />
+                        </Button>
+                      }
+                    />
+                    <TooltipContent side="bottom">Undo (Ctrl+Z)</TooltipContent>
+                  </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="ghost"
+                          disabled={redoStack.length === 0}
+                          onClick={handleRedo}
+                          aria-label="Redo (Ctrl+Shift+Z)"
+                          className="h-8 w-8 rounded-full"
+                        >
+                          <Redo2 className="size-3.5" />
+                        </Button>
+                      }
+                    />
+                    <TooltipContent side="bottom">Redo (Ctrl+Shift+Z)</TooltipContent>
+                  </Tooltip>
+                </div>
+
+                {/* Right: Import, Zoom, I/O Patchbay, Inspector Toggle */}
+                <div className="flex items-center gap-1.5">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="audio/*"
+                    multiple
+                    onChange={(e) => void handleImportInputChange(e)}
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="h-8 gap-1.5 rounded-full px-3 text-[11.5px]"
+                  >
+                    <Upload className="size-3.5" />
+                    <span className="hidden sm:inline">Import</span>
+                  </Button>
+
+                  <div className="inline-flex h-8 items-center rounded-full border border-border/80 bg-foreground/[0.03] px-1">
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      onClick={() => setTimelineZoom((z) => Math.max(1, Number((z - 0.5).toFixed(1))))}
+                      disabled={timelineZoom <= 1}
+                      aria-label="Zoom out timeline"
+                      className="h-6 w-6 rounded-full"
+                    >
+                      <ZoomOut className="size-3.5" />
+                    </Button>
+                    <span className="px-1 font-mono text-[11px] text-muted-foreground tabular-nums">
+                      {timelineZoom}×
+                    </span>
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      onClick={() => setTimelineZoom((z) => Math.min(4, Number((z + 0.5).toFixed(1))))}
+                      disabled={timelineZoom >= 4}
+                      aria-label="Zoom in timeline"
+                      className="h-6 w-6 rounded-full"
+                    >
+                      <ZoomIn className="size-3.5" />
+                    </Button>
+                  </div>
+
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          type="button"
+                          size="icon-sm"
+                          variant="outline"
+                          onClick={() => setPatchbayOpen(true)}
+                          aria-label="Open audio hardware I/O patchbay"
+                          className="h-8 w-8 rounded-full"
+                        >
+                          <SlidersHorizontal className="size-3.5" />
+                        </Button>
+                      }
+                    />
+                    <TooltipContent side="bottom">RØDECaster Pro II I/O Patchbay</TooltipContent>
+                  </Tooltip>
+
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={inspectorOpen ? "secondary" : "outline"}
+                    onClick={() => {
+                      if (window.innerWidth < 1280) setMobileInspectorOpen((v) => !v);
+                      else setInspectorOpen((v) => !v);
+                    }}
+                    aria-pressed={inspectorOpen}
+                    className="h-8 gap-1.5 rounded-full px-3 text-[11.5px]"
+                  >
+                    <PanelRight className="size-3.5" />
+                    <span className="hidden md:inline">Inspector</span>
+                  </Button>
+                </div>
+              </div>
+
+              {/* Main Split Stage: Multi-Track DAW Canvas + Docked Apple HIG Inspector */}
+              <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
+                <TimelineWaveform
+                  tracks={tracks}
+                  markers={markers}
+                  layerCount={layerCount}
+                  activeLayerIndex={activeLayerIndex}
+                  layerMixers={layerMixers}
+                  playheadMs={audio.playheadMs}
+                  totalTimelineMs={totalTimelineMs}
+                  bpm={bpm}
+                  zoom={timelineZoom}
+                  snapEnabled={snapEnabled}
+                  loopEnabled={loopEnabled}
+                  toolMode={toolMode}
+                  selectedTrackId={selectedTrackId}
+                  theme={theme}
+                  onSelectTrack={(id) => {
+                    setSelectedTrackId(id);
+                    if (id) setInspectorTab("clip");
+                  }}
+                  onSelectLayer={(idx) => setActiveLayerIndex(idx)}
+                  onAddLayer={handleAddLayer}
+                  onRemoveLayer={handleRemoveLayer}
+                  onRenameLayer={(idx, nextName) =>
+                    setLayerMixers((prev) => ({
+                      ...prev,
+                      [idx]: { ...(prev[idx] ?? DEFAULT_LAYER_MIXER), name: nextName },
+                    }))
                   }
+                  onMoveClip={handleMoveClip}
+                  onTrimClip={handleTrimClip}
+                  onSplitClipAt={splitClipAt}
+                  onSeek={audio.seek}
+                  onSelectMarker={(m) => {
+                    setInspectorTab("markers");
+                    showNotice(`${m.label} (${fmtDuration(m.atMs)})`);
+                  }}
+                  onToggleLayerMute={(idx) =>
+                    updateLayerMixer(idx, (prev) => ({ ...prev, muted: !prev.muted }))
+                  }
+                  onToggleLayerSolo={(idx) =>
+                    updateLayerMixer(idx, (prev) => ({ ...prev, solo: !prev.solo }))
+                  }
+                  onChangeLayerGain={(idx, gain) =>
+                    updateLayerMixer(idx, (prev) => ({ ...prev, gain }))
+                  }
+                  onChangeLayerPan={(idx, pan) =>
+                    updateLayerMixer(idx, (prev) => ({ ...prev, pan }))
+                  }
+                  onDropFiles={(files, layerIdx, offsetMs) => {
+                    void importFilesList(files, layerIdx, offsetMs);
+                  }}
                 />
-                <PopoverContent align="start" className="w-80 space-y-4 rounded-2xl p-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[11.5px] font-medium text-muted-foreground">Microphone Input</label>
-                    <Select
-                      value={audio.selectedDeviceId}
-                      onValueChange={(v) => {
-                        if (v) audio.setSelectedDeviceId(v);
-                      }}
-                    >
-                      <SelectTrigger aria-label="Microphone input" className="h-8 w-full text-[12px]">
-                        <SelectValue>{micLabel}</SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="default">Default microphone</SelectItem>
-                        {audio.devices.map((d) => (
-                          <SelectItem key={d.deviceId} value={d.deviceId}>
-                            {d.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-[11.5px] font-medium text-muted-foreground">Capture Tag</label>
-                    <Select
-                      value={captureRole}
-                      onValueChange={(v) => {
-                        if (v) setCaptureRole(v as StudioTrackRole);
-                      }}
-                    >
-                      <SelectTrigger aria-label="Next track role" className="h-8 w-full text-[12px]">
-                        <SelectValue className="capitalize">{captureRole}</SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="voice">Voice / Lead</SelectItem>
-                        <SelectItem value="overdub">Overdub</SelectItem>
-                        <SelectItem value="instrumental">Layer / Instrumental</SelectItem>
-                        <SelectItem value="scratch">Scratch / Draft</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 text-[12.5px]">
-                      <Headphones className="size-3.5 text-muted-foreground" />
-                      <span>Headphone Monitor</span>
-                    </div>
-                    <Switch
-                      checked={audio.monitorInput}
-                      onCheckedChange={(checked) => audio.setMonitorInput(checked)}
-                      aria-label="Toggle headphone monitor"
+                {inspectorOpen ? (
+                  <aside
+                    aria-label="Clip and session inspector"
+                    className="studio-inspector-pane hidden w-[304px] shrink-0 overflow-hidden rounded-[18px] border border-border/80 xl:flex xl:flex-col"
+                  >
+                    <StudioInspectorContent
+                      {...inspectorProps}
+                      onClose={() => setInspectorOpen(false)}
                     />
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 text-[12.5px]">
-                      <Radio className="size-3.5 text-muted-foreground" />
-                      <span>Raw Unprocessed Mic</span>
-                    </div>
-                    <Switch
-                      checked={audio.studioRawMic}
-                      onCheckedChange={(checked) => audio.setStudioRawMic(checked)}
-                      aria-label="Toggle raw microphone processing"
-                    />
-                  </div>
-
-                  <Separator />
-
-                  <div className="space-y-2.5 text-[12px]">
-                    <label className="flex items-center justify-between gap-3">
-                      <span className="text-muted-foreground">Mic Gain</span>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="range"
-                          min={0.5}
-                          max={2}
-                          step={0.05}
-                          value={audio.inputGain}
-                          onChange={(e) => audio.setInputGain(Number(e.target.value))}
-                          className="studio-range w-28"
-                        />
-                        <span className="w-9 text-right font-mono text-[11px] tabular-nums">
-                          {Math.round(audio.inputGain * 100)}%
-                        </span>
-                      </div>
-                    </label>
-                    <label className="flex items-center justify-between gap-3">
-                      <span className="text-muted-foreground">Master Output</span>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="range"
-                          min={0}
-                          max={1.5}
-                          step={0.05}
-                          value={masterGain}
-                          onChange={(e) => setMasterGain(Number(e.target.value))}
-                          className="studio-range w-28"
-                        />
-                        <span className="w-9 text-right font-mono text-[11px] tabular-nums">
-                          {Math.round(masterGain * 100)}%
-                        </span>
-                      </div>
-                    </label>
-                  </div>
-                </PopoverContent>
-              </Popover>
-
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => setNotesDrawerOpen(true)}
-                className="h-8 gap-1.5 rounded-full border-border/80 bg-card/60 text-[12px]"
-              >
-                <Bookmark className="size-3.5 text-[color:var(--land-gold)]" />
-                <span>Markers ({markers.length})</span>
-              </Button>
-
-              <div className="inline-flex h-8 items-center rounded-full border border-border/80 bg-card/60 px-1">
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="ghost"
-                  onClick={() => setTimelineZoom((z) => Math.max(1, Number((z - 0.5).toFixed(1))))}
-                  disabled={timelineZoom <= 1}
-                  aria-label="Zoom out timeline"
-                  className="h-6 w-6 rounded-full"
-                >
-                  <ZoomOut className="size-3.5" />
-                </Button>
-                <span className="px-1.5 font-mono text-[11px] text-muted-foreground tabular-nums">
-                  {timelineZoom}×
-                </span>
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="ghost"
-                  onClick={() => setTimelineZoom((z) => Math.min(4, Number((z + 0.5).toFixed(1))))}
-                  disabled={timelineZoom >= 4}
-                  aria-label="Zoom in timeline"
-                  className="h-6 w-6 rounded-full"
-                >
-                  <ZoomIn className="size-3.5" />
-                </Button>
+                  </aside>
+                ) : null}
               </div>
             </div>
-
-            {/* Full-Height Multi-Layer DAW Canvas */}
-            <TimelineWaveform
-              tracks={tracks}
-              markers={markers}
-              layerCount={layerCount}
-              activeLayerIndex={activeLayerIndex}
-              layerMixers={layerMixers}
-              playheadMs={audio.playheadMs}
-              totalTimelineMs={totalTimelineMs}
-              bpm={bpm}
-              zoom={timelineZoom}
-              toolMode={toolMode}
-              selectedTrackId={selectedTrackId}
-              theme={theme}
-              onSelectTrack={(id) => setSelectedTrackId(id)}
-              onSelectLayer={(idx) => setActiveLayerIndex(idx)}
-              onAddLayer={handleAddLayer}
-              onRemoveLayer={handleRemoveLayer}
-              onMoveClip={handleMoveClip}
-              onTrimClip={handleTrimClip}
-              onSplitClipAt={splitClipAt}
-              onSeek={audio.seek}
-              onSelectMarker={(m) => showNotice(`${m.label} (${fmtDuration(m.atMs)})`)}
-              onToggleLayerMute={(idx) =>
-                updateLayerMixer(idx, (prev) => ({ ...prev, muted: !prev.muted }))
-              }
-              onToggleLayerSolo={(idx) =>
-                updateLayerMixer(idx, (prev) => ({ ...prev, solo: !prev.solo }))
-              }
-              onChangeLayerGain={(idx, gain) =>
-                updateLayerMixer(idx, (prev) => ({ ...prev, gain }))
-              }
-            />
           </div>
         </div>
       </div>
-    </div>
 
-      {/* Left Takes & Folders Sheet Drawer (keeps workspace full width by default) */}
+      {/* Left Sessions & Folders Sheet Drawer */}
       <Sheet open={takesDrawerOpen} onOpenChange={setTakesDrawerOpen}>
         <SheetContent side="left" className="w-[300px] p-0 sm:max-w-[340px]">
           <SheetHeader className="border-b border-border/60 px-4 py-3">
-            <SheetTitle className="text-[14px]">Studio Takes · {activeFolderName}</SheetTitle>
+            <SheetTitle className="text-[14px] font-medium">Sessions · {activeFolderName}</SheetTitle>
           </SheetHeader>
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="flex items-center justify-between gap-2 border-b border-border/60 p-3">
@@ -1474,8 +1833,8 @@ export function StudioView({
             ) : null}
 
             <div className="flex items-center justify-between px-3 py-2.5">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                Takes ({summaries.length})
+              <span className="text-[12px] font-medium text-muted-foreground">
+                Saved sessions ({summaries.length})
               </span>
               <Button
                 type="button"
@@ -1488,7 +1847,7 @@ export function StudioView({
                 className="h-7 gap-1 px-2 text-[11.5px]"
               >
                 <Plus className="size-3" />
-                <span>New take</span>
+                <span>New</span>
               </Button>
             </div>
 
@@ -1496,7 +1855,7 @@ export function StudioView({
               <div className="space-y-1.5">
                 {summaries.length === 0 ? (
                   <p className="px-2 py-4 text-[12px] text-muted-foreground">
-                    No saved takes yet. Capture a recording to keep it here.
+                    No saved sessions yet. Record a 2-mic take to keep it here.
                   </p>
                 ) : (
                   summaries.map((item) => {
@@ -1545,109 +1904,46 @@ export function StudioView({
         </SheetContent>
       </Sheet>
 
-      {/* Right Markers & Session Context Sheet Drawer */}
-      <Sheet open={notesDrawerOpen} onOpenChange={setNotesDrawerOpen}>
-        <SheetContent side="right" className="w-[340px] p-0 sm:max-w-[380px]">
-          <SheetHeader className="border-b border-border/60 px-4 py-3">
-            <SheetTitle className="text-[14px]">Markers &amp; Session Notes</SheetTitle>
+      {/* Mobile / Tablet Sheet Inspector Fallback (< xl) */}
+      <Sheet open={mobileInspectorOpen} onOpenChange={setMobileInspectorOpen}>
+        <SheetContent side="right" className="flex w-[320px] flex-col p-0 sm:max-w-[360px]">
+          <SheetHeader className="sr-only">
+            <SheetTitle>Studio Inspector</SheetTitle>
           </SheetHeader>
-          <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[12px] font-medium text-foreground">Timeline Markers ({markers.length})</span>
-                <div className="flex items-center gap-1.5">
-                  <Select
-                    value={markerKind}
-                    onValueChange={(v) => {
-                      if (v) setMarkerKind(v as StudioMarkerKind);
-                    }}
-                  >
-                    <SelectTrigger aria-label="Marker type" className="h-7 min-w-[104px] text-[11.5px]">
-                      <SelectValue>{MARKER_KIND_LABELS[markerKind]}</SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(Object.entries(MARKER_KIND_LABELS) as [StudioMarkerKind, string][]).map(([val, label]) => (
-                        <SelectItem key={val} value={val}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={dropMarkerAtPlayhead}
-                    className="h-7 rounded-full px-2.5 text-[11.5px]"
-                  >
-                    Drop @ {fmtDuration(audio.playheadMs)}
-                  </Button>
-                </div>
-              </div>
-
-              {markers.length === 0 ? (
-                <p className="text-[12px] text-muted-foreground">
-                  Press <kbd className="rounded border border-border px-1 font-mono text-[10.5px]">M</kbd> while recording
-                  or playing to mark chapters for Study Space or cut cues for Video Studio.
-                </p>
-              ) : (
-                <div className="space-y-1.5">
-                  {markers.map((m) => (
-                    <div
-                      key={m.id}
-                      className="flex items-center gap-2 rounded-xl border border-border/80 bg-background/60 px-2.5 py-1.5 text-[12px]"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => audio.seek(m.atMs)}
-                        className="font-mono text-[11px] font-semibold text-[color:var(--land-gold)] tabular-nums"
-                      >
-                        {fmtDuration(m.atMs)}
-                      </button>
-                      <input
-                        value={m.label}
-                        onChange={(e) =>
-                          setMarkers((prev) => prev.map((x) => (x.id === m.id ? { ...x, label: e.target.value } : x)))
-                        }
-                        aria-label="Marker label"
-                        className="min-w-0 flex-1 bg-transparent text-[12px] text-foreground focus:outline-none"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setMarkers((prev) => prev.filter((x) => x.id !== m.id))}
-                        aria-label={`Remove marker ${m.label}`}
-                        className="text-muted-foreground hover:text-destructive"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <Separator />
-
-            <div className="space-y-2">
-              <label className="text-[12px] font-medium text-foreground" htmlFor="studio-session-notes">
-                Session Context &amp; Notes
-              </label>
-              <textarea
-                id="studio-session-notes"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                onBlur={() => {
-                  if (tracks.length > 0 || activeId) void persistDraft(tracks, markers);
-                }}
-                placeholder="Capture lecture topic, lyrics, or edit notes before pushing to Video Studio or Study Space…"
-                rows={5}
-                className="w-full resize-none rounded-xl border border-border/80 bg-background/60 px-3 py-2 text-[12.5px] text-foreground placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-[color:var(--land-gold)]"
-              />
-            </div>
-          </div>
+          <StudioInspectorContent {...inspectorProps} />
         </SheetContent>
       </Sheet>
 
+      {/* Right-Hand RØDECaster Pro II Hardware & Live Channel Patchbay */}
+      <RodeCasterPatchbay
+        open={patchbayOpen}
+        onOpenChange={setPatchbayOpen}
+        captureMode={audio.captureMode}
+        devices={audio.devices}
+        rodeCaster={audio.rodeCaster}
+        selectedDeviceId={audio.selectedDeviceId}
+        mic1={audio.mic1}
+        mic2={audio.mic2}
+        micReady={audio.micReady}
+        detectedChannels={audio.detectedChannels}
+        sampleRate={audio.sampleRate}
+        studioRawMic={audio.studioRawMic}
+        monitorInput={audio.monitorInput}
+        recordSafetyMix={audio.recordSafetyMix}
+        sampleTelemetry={audio.sampleTelemetry}
+        onChangeMode={(mode) => audio.setCaptureMode(mode)}
+        onSelectDevice={(id) => audio.setSelectedDeviceId(id)}
+        onUpdateMic1={handleUpdateMic1}
+        onUpdateMic2={handleUpdateMic2}
+        onToggleRawMic={(next) => audio.setStudioRawMic(next)}
+        onToggleMonitor={(next) => audio.setMonitorInput(next)}
+        onToggleSafetyMix={(next) => audio.setRecordSafetyMix(next)}
+        onArmInputs={() => void audio.armInputs()}
+        onApplyRodeCasterPreset={(preferred) => void audio.applyRodeCasterPreset(preferred)}
+        onRefreshDevices={() => void audio.refreshDevices()}
+      />
+
+      {/* Nexus Node Bus Routing Sheet */}
       <StudioRoutingSheet
         open={routingOpen}
         onOpenChange={setRoutingOpen}

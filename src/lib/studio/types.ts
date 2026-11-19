@@ -19,6 +19,8 @@ export interface StudioAudioRef {
 
 export type StudioTrackRole = "voice" | "instrumental" | "scratch" | "overdub";
 
+export type StudioTrackColor = "gold" | "sky" | "emerald" | "coral" | "slate";
+
 export interface StudioTrackV1 {
   id: string;
   name: string;
@@ -33,6 +35,22 @@ export interface StudioTrackV1 {
   durationMs: number;
   /** Uncropped underlying source audio duration in ms. */
   sourceDurationMs?: number;
+  /** Non-destructive clip fade-in duration in ms. */
+  fadeInMs?: number;
+  /** Non-destructive clip fade-out duration in ms. */
+  fadeOutMs?: number;
+  /** Hardware input source descriptor (e.g. "RCP II · Ch 3 (Combo 1)"). */
+  inputSource?: string;
+  /** Optional lane/clip visual accent token for distinguishing multi-mic speakers. */
+  colorTag?: StudioTrackColor;
+  /** 80 Hz high-pass rumble filter enabled during playback & mixdown. */
+  hpfEnabled?: boolean;
+  /** Broadcast speech dynamics compressor enabled during playback & mixdown. */
+  compressorEnabled?: boolean;
+  /** 3-band subtle voice EQ trim in dB (-6 to +6). */
+  eqLowDb?: number;
+  eqMidDb?: number;
+  eqHighDb?: number;
   gain: number;
   pan: number;
   muted: boolean;
