@@ -5667,6 +5667,24 @@ textarea.cmd-field {
   will-change: transform, opacity;
 }
 
+@keyframes neural-reticle-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.neural-reticle-orbit {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: neural-reticle-spin 22s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .neural-reticle-orbit {
+    animation: none;
+  }
+}
+
 .neural-node-glyph {
   transition:
     transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
