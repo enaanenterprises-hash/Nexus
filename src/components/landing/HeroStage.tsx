@@ -172,17 +172,19 @@ export function HeroStage() {
           width="100%"
           height={56}
           borderRadius={28}
-          borderWidth={0.075}
+          borderWidth={0.28}
           brightness={50}
-          opacity={0.93}
-          blur={10}
-          displace={0.65}
-          distortionScale={-160}
+          opacity={0.86}
+          blur={7}
+          displace={2.6}
+          distortionScale={-195}
           redOffset={0}
-          greenOffset={8}
-          blueOffset={16}
-          backgroundOpacity={darkHeader ? 0.14 : 0.12}
-          saturation={1.25}
+          greenOffset={12}
+          blueOffset={26}
+          xChannel="R"
+          yChannel="G"
+          backgroundOpacity={darkHeader ? 0.2 : 0.24}
+          saturation={1.4}
           className={`landing-glass-nav mx-auto max-w-[1080px] ${
             darkHeader ? "landing-glass-nav--dark" : "landing-glass-nav--light"
           }`}

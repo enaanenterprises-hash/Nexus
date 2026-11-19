@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  useCallback,
   useEffect,
   useId,
   useRef,
@@ -275,7 +274,7 @@ const paint = (w: number, h: number, fill: (data: Uint8ClampedArray) => void) =>
   const image = context.createImageData(w, h);
   fill(image.data);
   context.putImageData(image, 0, 0);
-  return canvas.toDataURL();
+  return canvas.toDataURL("image/png");
 };
 
 const shade = (depth: Float32Array, w: number, h: number, falloff: (t: number) => number) =>
@@ -283,6 +282,92 @@ const shade = (depth: Float32Array, w: number, h: number, falloff: (t: number) =
     data.fill(255);
     for (let i = 0; i < w * h; i++) data[i * 4 + 3] = 255 * (1 - falloff(depth[i]!));
   });
+
+/**
+ * Generates a real raster PNG (`data:image/png;base64,...`) optical convex-bevel displacement map
+ * for a rounded capsule using exact signed-distance surface normals.
+ * Raster PNG maps decode synchronously in Chromium's Skia `backdrop-filter: url(#filter)` pipeline
+ * (unlike `data:image/svg+xml` which Blink blocks/stalls inside `backdrop-filter`).
+ */
+const buildCapsuleDisplacementPng = (
+  width: number,
+  height: number,
+  borderRadius: number,
+  borderWidth: number,
+  centerCalm: number,
+  blurPx: number,
+) => {
+  const w = Math.max(16, Math.round(width));
+  const h = Math.max(16, Math.round(height));
+  const hx = w * 0.5;
+  const hy = h * 0.5;
+  const cr = Math.min(borderRadius, hx, hy);
+  const shortSide = Math.min(w, h);
+  const bevel = Math.max(4, shortSide * Math.min(0.49, Math.max(0.06, borderWidth)));
+  const domeGain = Math.max(0, 1 - centerCalm);
+  const bevelPower = blurPx > 0 ? Math.max(1.15, Math.min(2.4, 1.35 + blurPx * 0.06)) : 1.5;
+
+  return paint(w, h, (data) => {
+    const innerHx = Math.max(0, hx - cr);
+    const innerHy = Math.max(0, hy - cr);
+
+    for (let y = 0; y < h; y++) {
+      const cy = y + 0.5 - hy;
+      const ay = Math.abs(cy);
+      const sy = cy < 0 ? -1 : 1;
+      const py = ay - innerHy;
+
+      for (let x = 0; x < w; x++) {
+        const cx = x + 0.5 - hx;
+        const ax = Math.abs(cx);
+        const sx = cx < 0 ? -1 : 1;
+        const px = ax - innerHx;
+
+        let depth: number;
+        let nx: number;
+        let ny: number;
+
+        if (px > 0 && py > 0) {
+          const dist = Math.hypot(px, py);
+          depth = Math.max(0, cr - dist);
+          const inv = dist > 1e-4 ? 1 / dist : 0;
+          // Outward-pointing surface normal on the rounded end-cap
+          nx = sx * px * inv;
+          ny = sy * py * inv;
+        } else {
+          const dxEdge = Math.max(0, hx - ax);
+          const dyEdge = Math.max(0, hy - ay);
+          depth = Math.min(dxEdge, dyEdge);
+          // Smooth corner normal blend so bevel light refracts without diagonal crease
+          const wx = Math.exp(-dxEdge / Math.max(bevel * 0.45, 2));
+          const wy = Math.exp(-dyEdge / Math.max(bevel * 0.45, 2));
+          const mag = Math.hypot(wx, wy) || 1;
+          nx = (sx * wx) / mag;
+          ny = (sy * wy) / mag;
+        }
+
+        const u = Math.min(1, Math.max(0, depth / bevel));
+        // Real curved glass meniscus profile: strong curvature at outer lip, smoothly easing inward
+        const rimBend = Math.pow(1 - u, bevelPower);
+
+        // Gentle interior cylindrical magnification across the calm center pane
+        const normX = cx / Math.max(hx, 1);
+        const normY = cy / Math.max(hy, 1);
+
+        const dispX = nx * rimBend * 0.92 + normX * domeGain * 0.55;
+        const dispY = ny * rimBend * 0.92 + normY * domeGain * 0.72;
+
+        const rByte = Math.max(0, Math.min(255, Math.round((0.5 + dispX * 0.48) * 255)));
+        const gByte = Math.max(0, Math.min(255, Math.round((0.5 + dispY * 0.48) * 255)));
+        const idx = (y * w + x) * 4;
+        data[idx] = rByte;
+        data[idx + 1] = gByte;
+        data[idx + 2] = gByte;
+        data[idx + 3] = 255;
+      }
+    }
+  });
+};
 
 const traceShape = (image: HTMLImageElement, width: number, height: number, ratio: number) => {
   const naturalWidth = image.naturalWidth || width;
@@ -383,7 +468,6 @@ export default function GlassSurface({
   blueOffset = 20,
   xChannel = "R",
   yChannel = "G",
-  mixBlendMode = "difference",
   refraction = true,
   renderer = "auto",
   backdrop,
@@ -393,27 +477,22 @@ export default function GlassSurface({
 }: GlassSurfaceProps) {
   const uniqueId = useId().replace(/:/g, "-");
   const filterId = `glass-filter-${uniqueId}`;
-  const redGradId = `red-grad-${uniqueId}`;
-  const blueGradId = `blue-grad-${uniqueId}`;
-  const softId = `soft-${uniqueId}`;
 
   const [capability, setCapability] = useState<{ checked: boolean; svgSupported: boolean }>({
     checked: false,
     svgSupported: false,
   });
   const [webglFailed, setWebglFailed] = useState(false);
-  const [boxSize, setBoxSize] = useState("");
+  const [dims, setDims] = useState<{ w: number; h: number }>({
+    w: typeof width === "number" ? width : 1080,
+    h: typeof height === "number" ? height : 56,
+  });
+  const [mapPng, setMapPng] = useState<string>("");
   const [loaded, setLoaded] = useState<{ src: string; image: HTMLImageElement | null }>({ src: "", image: null });
   const [art, setArt] = useState<ArtState | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const feImageRef = useRef<SVGFEImageElement>(null);
-  const redChannelRef = useRef<SVGFEDisplacementMapElement>(null);
-  const greenChannelRef = useRef<SVGFEDisplacementMapElement>(null);
-  const blueChannelRef = useRef<SVGFEDisplacementMapElement>(null);
-  const gaussianBlurRef = useRef<SVGFEGaussianBlurElement>(null);
   const traceRef = useRef<TraceResult | null>(null);
-  const shapeMapRef = useRef("");
   const mapUrlRef = useRef("");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const settingsRef = useRef<WebGLSettings>({
@@ -442,80 +521,25 @@ export default function GlassSurface({
     };
   }, [backdrop, displace, saturation, distortionScale, redOffset, greenOffset, blueOffset, xChannel, yChannel]);
 
-  const generateDisplacementMap = useCallback(() => {
-    const rect = containerRef.current?.getBoundingClientRect();
-    const actualWidth = rect?.width || 400;
-    const actualHeight = rect?.height || 200;
-    const edgeSize = Math.min(actualWidth, actualHeight) * (borderWidth * 0.5);
-
-    const svgContent = `
-      <svg width="${actualWidth}" height="${actualHeight}" viewBox="0 0 ${actualWidth} ${actualHeight}" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="${redGradId}" x1="100%" y1="0%" x2="0%" y2="0%">
-            <stop offset="0%" stop-color="#0000"/>
-            <stop offset="100%" stop-color="red"/>
-          </linearGradient>
-          <linearGradient id="${blueGradId}" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stop-color="#0000"/>
-            <stop offset="100%" stop-color="blue"/>
-          </linearGradient>
-          <filter id="${softId}" filterUnits="userSpaceOnUse" x="0" y="0" width="${actualWidth}" height="${actualHeight}" color-interpolation-filters="sRGB">
-            <feGaussianBlur stdDeviation="${blur}" />
-          </filter>
-        </defs>
-        <rect x="0" y="0" width="${actualWidth}" height="${actualHeight}" fill="black"></rect>
-        <rect x="0" y="0" width="${actualWidth}" height="${actualHeight}" rx="${borderRadius}" fill="url(#${redGradId})" />
-        <rect x="0" y="0" width="${actualWidth}" height="${actualHeight}" rx="${borderRadius}" fill="url(#${blueGradId})" style="mix-blend-mode: ${mixBlendMode}" />
-        <rect x="${edgeSize}" y="${edgeSize}" width="${actualWidth - edgeSize * 2}" height="${actualHeight - edgeSize * 2}" rx="${borderRadius}" fill="hsl(0 0% ${brightness}% / ${opacity})" filter="url(#${softId})" />
-      </svg>
-    `;
-
-    return `data:image/svg+xml,${encodeURIComponent(svgContent)}`;
-  }, [borderRadius, borderWidth, brightness, opacity, blur, mixBlendMode, redGradId, blueGradId, softId]);
-
-  const updateDisplacementMap = useCallback(() => {
-    mapUrlRef.current = shapeMapRef.current || generateDisplacementMap();
-    feImageRef.current?.setAttribute("href", mapUrlRef.current);
-  }, [generateDisplacementMap]);
-
-  useEffect(() => {
-    updateDisplacementMap();
-    const channels = [
-      { ref: redChannelRef, offset: redOffset },
-      { ref: greenChannelRef, offset: greenOffset },
-      { ref: blueChannelRef, offset: blueOffset },
-    ];
-    for (const { ref, offset } of channels) {
-      if (ref.current) {
-        ref.current.setAttribute("scale", (distortionScale + offset).toString());
-        ref.current.setAttribute("xChannelSelector", xChannel);
-        ref.current.setAttribute("yChannelSelector", yChannel);
-      }
-    }
-    gaussianBlurRef.current?.setAttribute("stdDeviation", displace.toString());
-  }, [
-    boxSize,
-    width,
-    height,
-    updateDisplacementMap,
-    displace,
-    distortionScale,
-    redOffset,
-    greenOffset,
-    blueOffset,
-    xChannel,
-    yChannel,
-  ]);
-
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return undefined;
 
-    const resizeObserver = new ResizeObserver(() => {
-      setBoxSize(`${el.offsetWidth}x${el.offsetHeight}`);
-    });
+    const measure = () => {
+      const w = Math.round(el.offsetWidth);
+      const h = Math.round(el.offsetHeight);
+      if (w > 0 && h > 0) {
+        setDims((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
+      }
+    };
+
+    const resizeObserver = new ResizeObserver(measure);
     resizeObserver.observe(el);
-    return () => resizeObserver.disconnect();
+    const frameId = requestAnimationFrame(measure);
+    return () => {
+      cancelAnimationFrame(frameId);
+      resizeObserver.disconnect();
+    };
   }, []);
 
   useEffect(() => {
@@ -538,13 +562,15 @@ export default function GlassSurface({
 
   const shapeImage = shape && loaded.src === shape ? loaded.image : null;
 
+  // Rasterize displacement map to a pure PNG data URL so Chromium decodes it synchronously inside backdrop-filter
   useEffect(() => {
-    const element = containerRef.current;
-    const w = element?.offsetWidth || 0;
-    const h = element?.offsetHeight || 0;
-    let map = "";
+    const w = dims.w;
+    const h = dims.h;
+    if (!w || !h) return undefined;
+
+    let png = "";
     let trace: TraceResult | null = null;
-    if (shapeImage && w && h) {
+    if (shapeImage) {
       const ratio = Math.min(2, window.devicePixelRatio || 1, Math.sqrt(400000 / (w * h)));
       trace = traceRef.current;
       try {
@@ -552,21 +578,25 @@ export default function GlassSurface({
           trace = { image: shapeImage, width: w, height: h, ...traceShape(shapeImage, w, h, ratio) };
           traceRef.current = trace;
         }
-        map = bendShape(trace, Math.min(w, h) * borderWidth * 0.5, Math.max(blur, 0.5), opacity, brightness / 100);
+        png = bendShape(trace, Math.min(w, h) * borderWidth * 0.5, Math.max(blur, 0.5), opacity, brightness / 100);
       } catch {
         trace = null;
         traceRef.current = null;
       }
     }
-    shapeMapRef.current = map;
-    updateDisplacementMap();
-    if (!shape) return undefined;
+
+    if (!png) {
+      png = buildCapsuleDisplacementPng(w, h, borderRadius, borderWidth, opacity, blur);
+    }
+
+    mapUrlRef.current = png;
     const frameId = requestAnimationFrame(() => {
-      if (trace) setArt({ src: shape, box: trace.box, line: trace.line, glow: trace.glow });
-      else if (loaded.src === shape) setArt({ src: shape, failed: true });
+      setMapPng(png);
+      if (shape && trace) setArt({ src: shape, box: trace.box, line: trace.line, glow: trace.glow });
+      else if (shape && loaded.src === shape) setArt({ src: shape, failed: true });
     });
     return () => cancelAnimationFrame(frameId);
-  }, [shape, shapeImage, loaded.src, boxSize, borderWidth, blur, opacity, brightness, updateDisplacementMap]);
+  }, [dims.w, dims.h, borderRadius, borderWidth, blur, opacity, brightness, shape, shapeImage, loaded.src]);
 
   useEffect(() => {
     const frameId = requestAnimationFrame(() => {
@@ -581,7 +611,7 @@ export default function GlassSurface({
     Boolean(backdrop) &&
     !webglFailed &&
     (renderer === "webgl" || (renderer === "auto" && !capability.svgSupported));
-  const refractive = !webgl && capability.svgSupported && refraction;
+  const refractive = !webgl && capability.svgSupported && refraction && Boolean(mapPng);
   const frosted = !webgl && !refractive;
 
   useEffect(() => {
@@ -823,6 +853,12 @@ export default function GlassSurface({
       ? { opacity: 0, transition: "none" }
       : {};
 
+  // Scale our full-range [-0.48, +0.48] SDF normal PNG cleanly into authentic optical pixel displacement
+  const mapScale = shape ? 1 : 0.22;
+  const rScale = (distortionScale + redOffset) * mapScale;
+  const gScale = (distortionScale + greenOffset) * mapScale;
+  const bScale = (distortionScale + blueOffset) * mapScale;
+
   const containerStyle = {
     ...style,
     width: typeof width === "number" ? `${width}px` : width,
@@ -830,24 +866,58 @@ export default function GlassSurface({
     borderRadius: `${borderRadius}px`,
     "--glass-frost": backgroundOpacity,
     "--glass-saturation": saturation,
-    "--filter-id": `url(#${filterId})`,
+    ...(refractive
+      ? {
+          backdropFilter: `url(#${filterId}) saturate(${saturation})`,
+          WebkitBackdropFilter: `url(#${filterId}) saturate(${saturation})`,
+        }
+      : null),
     ...shapeStyle,
   } as CSSProperties;
 
   return (
-    <div
-      ref={containerRef}
-      className={`glass-surface ${
-        webgl ? "glass-surface--webgl" : refractive ? "glass-surface--svg" : "glass-surface--fallback"
-      } ${className}`}
-      style={containerStyle}
-    >
-      <svg className="glass-surface__filter" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <>
+      {/* Sibling SVG Filter Def (outside the overflow:hidden / backdrop-filter element so Chromium never stalls compositing) */}
+      <svg
+        width="0"
+        height="0"
+        style={{ position: "fixed", top: 0, left: 0, pointerEvents: "none" }}
+        xmlns="http://www.w3.org/2000/svg"
+        aria-hidden="true"
+      >
         <defs>
-          <filter id={filterId} colorInterpolationFilters="sRGB" x="0%" y="0%" width="100%" height="100%">
-            <feImage ref={feImageRef} x="0" y="0" width="100%" height="100%" preserveAspectRatio="none" result="map" />
+          <filter
+            id={filterId}
+            filterUnits="userSpaceOnUse"
+            primitiveUnits="userSpaceOnUse"
+            colorInterpolationFilters="sRGB"
+            x="0"
+            y="0"
+            width={dims.w}
+            height={dims.h}
+          >
+            {mapPng ? (
+              <feImage
+                href={mapPng}
+                x="0"
+                y="0"
+                width={dims.w}
+                height={dims.h}
+                preserveAspectRatio="none"
+                result="map"
+              />
+            ) : null}
 
-            <feDisplacementMap ref={redChannelRef} in="SourceGraphic" in2="map" result="dispRed" />
+            <feGaussianBlur in="SourceGraphic" stdDeviation={Math.max(0, displace)} result="softSource" />
+
+            <feDisplacementMap
+              in="softSource"
+              in2="map"
+              scale={rScale}
+              xChannelSelector={xChannel}
+              yChannelSelector={yChannel}
+              result="dispRed"
+            />
             <feColorMatrix
               in="dispRed"
               type="matrix"
@@ -858,7 +928,14 @@ export default function GlassSurface({
               result="red"
             />
 
-            <feDisplacementMap ref={greenChannelRef} in="SourceGraphic" in2="map" result="dispGreen" />
+            <feDisplacementMap
+              in="softSource"
+              in2="map"
+              scale={gScale}
+              xChannelSelector={xChannel}
+              yChannelSelector={yChannel}
+              result="dispGreen"
+            />
             <feColorMatrix
               in="dispGreen"
               type="matrix"
@@ -869,7 +946,14 @@ export default function GlassSurface({
               result="green"
             />
 
-            <feDisplacementMap ref={blueChannelRef} in="SourceGraphic" in2="map" result="dispBlue" />
+            <feDisplacementMap
+              in="softSource"
+              in2="map"
+              scale={bScale}
+              xChannelSelector={xChannel}
+              yChannelSelector={yChannel}
+              result="dispBlue"
+            />
             <feColorMatrix
               in="dispBlue"
               type="matrix"
@@ -882,33 +966,40 @@ export default function GlassSurface({
 
             <feBlend in="red" in2="green" mode="screen" result="rg" />
             <feBlend in="rg" in2="blue" mode="screen" result="output" />
-            <feGaussianBlur ref={gaussianBlurRef} in="output" stdDeviation="0.7" />
           </filter>
         </defs>
       </svg>
 
-      {webgl ? <canvas ref={canvasRef} className="glass-surface__canvas" aria-hidden="true" /> : null}
-      {webgl ? (
-        <span className="glass-surface__frame" aria-hidden="true" style={outline ? { boxShadow: "none" } : undefined} />
-      ) : null}
-      {frosted ? <span className="glass-surface__sheen" aria-hidden="true" /> : null}
-      {frosted && !outline ? <span className="glass-surface__rim" aria-hidden="true" /> : null}
-      {outline ? (
-        <span
-          className="glass-surface__glow"
-          aria-hidden="true"
-          style={{ WebkitMaskImage: `url(${outline.glow})`, maskImage: `url(${outline.glow})` }}
-        />
-      ) : null}
-      {outline ? (
-        <span
-          className="glass-surface__line"
-          aria-hidden="true"
-          style={{ WebkitMaskImage: `url(${outline.line})`, maskImage: `url(${outline.line})` }}
-        />
-      ) : null}
+      <div
+        ref={containerRef}
+        className={`glass-surface ${
+          webgl ? "glass-surface--webgl" : refractive ? "glass-surface--svg" : "glass-surface--fallback"
+        } ${className}`}
+        style={containerStyle}
+      >
+        {webgl ? <canvas ref={canvasRef} className="glass-surface__canvas" aria-hidden="true" /> : null}
+        {webgl ? (
+          <span className="glass-surface__frame" aria-hidden="true" style={outline ? { boxShadow: "none" } : undefined} />
+        ) : null}
+        {frosted ? <span className="glass-surface__sheen" aria-hidden="true" /> : null}
+        {frosted && !outline ? <span className="glass-surface__rim" aria-hidden="true" /> : null}
+        {outline ? (
+          <span
+            className="glass-surface__glow"
+            aria-hidden="true"
+            style={{ WebkitMaskImage: `url(${outline.glow})`, maskImage: `url(${outline.glow})` }}
+          />
+        ) : null}
+        {outline ? (
+          <span
+            className="glass-surface__line"
+            aria-hidden="true"
+            style={{ WebkitMaskImage: `url(${outline.line})`, maskImage: `url(${outline.line})` }}
+          />
+        ) : null}
 
-      <div className="glass-surface__content">{children}</div>
-    </div>
+        <div className="glass-surface__content">{children}</div>
+      </div>
+    </>
   );
 }
