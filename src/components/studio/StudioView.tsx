@@ -61,9 +61,9 @@ import type {
 } from "@/lib/studio/types";
 import { slicePeaksForRange } from "@/lib/studio/wav";
 import { useTheme } from "@/lib/theme";
-import { RodeCasterPatchbay } from "./RodeCasterPatchbay";
 import { StudioCaptureStage } from "./StudioCaptureStage";
 import { StudioInspectorContent, type StudioInspectorTab } from "./StudioInspector";
+import { StudioIoPatchbay } from "./StudioIoPatchbay";
 import { StudioRoutingSheet } from "./StudioRoutingSheet";
 import {
   TimelineWaveform,
@@ -134,8 +134,8 @@ function triggerDownload(blob: Blob, filename: string) {
 
 function deriveLayerMixers(list: StudioTrackV1[]): Record<number, LayerMixerState> {
   const map: Record<number, LayerMixerState> = {
-    0: { ...DEFAULT_LAYER_MIXER, name: "Mic 1 · Host", colorTag: "gold" },
-    1: { ...DEFAULT_LAYER_MIXER, name: "Mic 2 · Guest", colorTag: "sky" },
+    0: { ...DEFAULT_LAYER_MIXER, name: "Track 1", colorTag: "gold" },
+    1: { ...DEFAULT_LAYER_MIXER, name: "Track 2", colorTag: "sky" },
   };
   for (const tr of list) {
     const idx = Math.max(0, tr.layerIndex ?? 0);
@@ -188,8 +188,8 @@ export function StudioView({
   const [layerCount, setLayerCount] = useState(2);
   const [activeLayerIndex, setActiveLayerIndex] = useState(0);
   const [layerMixers, setLayerMixers] = useState<Record<number, LayerMixerState>>({
-    0: { ...DEFAULT_LAYER_MIXER, name: "Mic 1 · Host", colorTag: "gold" },
-    1: { ...DEFAULT_LAYER_MIXER, name: "Mic 2 · Guest", colorTag: "sky" },
+    0: { ...DEFAULT_LAYER_MIXER, name: "Track 1", colorTag: "gold" },
+    1: { ...DEFAULT_LAYER_MIXER, name: "Track 2", colorTag: "sky" },
   });
 
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
@@ -482,8 +482,8 @@ export function StudioView({
     setLayerCount(2);
     setActiveLayerIndex(0);
     setLayerMixers({
-      0: { ...DEFAULT_LAYER_MIXER, name: audio.mic1.label || "Mic 1 · Host", colorTag: "gold" },
-      1: { ...DEFAULT_LAYER_MIXER, name: audio.mic2.label || "Mic 2 · Guest", colorTag: "sky" },
+      0: { ...DEFAULT_LAYER_MIXER, name: audio.inputs[0]?.label || "Track 1", colorTag: "gold" },
+      1: { ...DEFAULT_LAYER_MIXER, name: audio.inputs[1]?.label || "Track 2", colorTag: "sky" },
     });
     setSelectedTrackId(null);
     setSavedProjectSnapshot(null);
@@ -952,27 +952,19 @@ export function StudioView({
     [selectedTrackId, tracks],
   );
 
-  // Sync Mic 1 / Mic 2 display names into empty default layer headers
-  const handleUpdateMic1 = useCallback(
-    (patch: Partial<typeof audio.mic1>) => {
-      audio.updateMic1(patch);
-      if (patch.label !== undefined) {
+  // Sync input channel label edits into corresponding timeline track headers
+  const handleUpdateInput = useCallback(
+    (id: string, patch: Partial<(typeof audio.inputs)[number]>) => {
+      const slotIdx = audio.inputs.findIndex((i) => i.id === id);
+      audio.updateInput(id, patch);
+      if (patch.label !== undefined && slotIdx >= 0) {
         setLayerMixers((prev) => ({
           ...prev,
-          0: { ...(prev[0] ?? DEFAULT_LAYER_MIXER), name: patch.label || "Mic 1 · Host", colorTag: "gold" },
-        }));
-      }
-    },
-    [audio],
-  );
-
-  const handleUpdateMic2 = useCallback(
-    (patch: Partial<typeof audio.mic2>) => {
-      audio.updateMic2(patch);
-      if (patch.label !== undefined) {
-        setLayerMixers((prev) => ({
-          ...prev,
-          1: { ...(prev[1] ?? DEFAULT_LAYER_MIXER), name: patch.label || "Mic 2 · Guest", colorTag: "sky" },
+          [slotIdx]: {
+            ...(prev[slotIdx] ?? DEFAULT_LAYER_MIXER),
+            name: patch.label || `Track ${slotIdx + 1}`,
+            colorTag: prev[slotIdx]?.colorTag ?? defaultLayerColor(slotIdx),
+          },
         }));
       }
     },
@@ -1014,7 +1006,7 @@ export function StudioView({
         if (audio.transport === "recording" || audio.transport === "paused" || audio.transport === "counting-in") {
           audio.stopRecording();
         } else {
-          const baseLane = audio.captureMode === "single" ? activeLayerIndex : 0;
+          const baseLane = audio.captureMode === "solo" ? activeLayerIndex : 0;
           void audio.startRecording("voice", baseLane);
         }
       } else if ((e.key === "m" || e.key === "M") && !e.metaKey && !e.ctrlKey) {
@@ -1261,7 +1253,7 @@ export function StudioView({
                   className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[12.5px] text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
                 >
                   <SlidersHorizontal className="size-4 shrink-0" />
-                  <span>RØDECaster I/O Patchbay</span>
+                  <span>Audio I/O Patchbay</span>
                 </button>
 
                 <button
@@ -1288,10 +1280,10 @@ export function StudioView({
         </div>
       </header>
 
-      {/* Sliding Dual-Surface Stage: Record (Dual-Mic Console) <-> Arrange (Multi-Track DAW) */}
+      {/* Sliding Dual-Surface Stage: Record <-> Arrange */}
       <div className="studio-pages-viewport">
         <div className="studio-pages-track" data-page={studioPage}>
-          {/* Page 1: Dual-Mic RØDECaster Pro II Capture Console */}
+          {/* Page 1: Minimal Sculptural Recorder with Scalable Multi-Mic Console */}
           <div
             id="studio-panel-record"
             role="tabpanel"
@@ -1304,11 +1296,10 @@ export function StudioView({
             <StudioCaptureStage
               transport={audio.transport}
               captureMode={audio.captureMode}
-              rodeCaster={audio.rodeCaster}
+              useBroadcastChannelMap={audio.useBroadcastChannelMap}
               devices={audio.devices}
               selectedDeviceId={audio.selectedDeviceId}
-              mic1={audio.mic1}
-              mic2={audio.mic2}
+              inputs={audio.inputs}
               micReady={audio.micReady}
               micError={audio.micError}
               statusNotice={statusBanner}
@@ -1323,15 +1314,14 @@ export function StudioView({
               recordSafetyMix={audio.recordSafetyMix}
               theme={theme}
               sampleTelemetry={audio.sampleTelemetry}
-              onChangeMode={(mode) => audio.setCaptureMode(mode)}
-              onUpdateMic1={handleUpdateMic1}
-              onUpdateMic2={handleUpdateMic2}
+              onAddInput={audio.addInput}
+              onRemoveInput={audio.removeInput}
+              onUpdateInput={handleUpdateInput}
               onArmInputs={() => void audio.armInputs()}
-              onApplyRodeCasterPreset={() => void audio.applyRodeCasterPreset()}
               onClearClipIndicators={audio.clearClipIndicators}
               onOpenPatchbay={() => setPatchbayOpen(true)}
               onStartRecord={() => {
-                const baseLane = audio.captureMode === "single" ? activeLayerIndex : 0;
+                const baseLane = audio.captureMode === "solo" ? activeLayerIndex : 0;
                 void audio.startRecording("voice", baseLane);
               }}
               onPauseRecord={audio.pauseRecording}
@@ -1424,7 +1414,7 @@ export function StudioView({
                           onClick={() => {
                             if (isCaptureLive) audio.stopRecording();
                             else {
-                              const baseLane = audio.captureMode === "single" ? activeLayerIndex : 0;
+                              const baseLane = audio.captureMode === "solo" ? activeLayerIndex : 0;
                               void audio.startRecording("overdub", baseLane);
                             }
                           }}
@@ -1686,7 +1676,7 @@ export function StudioView({
                         </Button>
                       }
                     />
-                    <TooltipContent side="bottom">RØDECaster Pro II I/O Patchbay</TooltipContent>
+                    <TooltipContent side="bottom">Audio I/O Patchbay</TooltipContent>
                   </Tooltip>
 
                   <Button
@@ -1855,7 +1845,7 @@ export function StudioView({
               <div className="space-y-1.5">
                 {summaries.length === 0 ? (
                   <p className="px-2 py-4 text-[12px] text-muted-foreground">
-                    No saved sessions yet. Record a 2-mic take to keep it here.
+                    No saved sessions yet. Record a take to keep it here.
                   </p>
                 ) : (
                   summaries.map((item) => {
@@ -1914,17 +1904,18 @@ export function StudioView({
         </SheetContent>
       </Sheet>
 
-      {/* Right-Hand RØDECaster Pro II Hardware & Live Channel Patchbay */}
-      <RodeCasterPatchbay
+      {/* Right-Hand Audio I/O & Multi-Mic Channel Patchbay */}
+      <StudioIoPatchbay
         open={patchbayOpen}
         onOpenChange={setPatchbayOpen}
         captureMode={audio.captureMode}
         devices={audio.devices}
-        rodeCaster={audio.rodeCaster}
+        audioInterfaces={audio.audioInterfaces}
+        useBroadcastChannelMap={audio.useBroadcastChannelMap}
         selectedDeviceId={audio.selectedDeviceId}
-        mic1={audio.mic1}
-        mic2={audio.mic2}
+        inputs={audio.inputs}
         micReady={audio.micReady}
+        isRecordingLocked={isCaptureLive}
         detectedChannels={audio.detectedChannels}
         sampleRate={audio.sampleRate}
         studioRawMic={audio.studioRawMic}
@@ -1933,13 +1924,14 @@ export function StudioView({
         sampleTelemetry={audio.sampleTelemetry}
         onChangeMode={(mode) => audio.setCaptureMode(mode)}
         onSelectDevice={(id) => audio.setSelectedDeviceId(id)}
-        onUpdateMic1={handleUpdateMic1}
-        onUpdateMic2={handleUpdateMic2}
+        onAddInput={audio.addInput}
+        onRemoveInput={audio.removeInput}
+        onUpdateInput={handleUpdateInput}
         onToggleRawMic={(next) => audio.setStudioRawMic(next)}
         onToggleMonitor={(next) => audio.setMonitorInput(next)}
         onToggleSafetyMix={(next) => audio.setRecordSafetyMix(next)}
         onArmInputs={() => void audio.armInputs()}
-        onApplyRodeCasterPreset={(preferred) => void audio.applyRodeCasterPreset(preferred)}
+        onAutoConfigureMultiMic={(preferred) => void audio.autoConfigureMultiMic(preferred)}
         onRefreshDevices={() => void audio.refreshDevices()}
       />
 

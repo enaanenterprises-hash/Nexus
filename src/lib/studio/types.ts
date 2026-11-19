@@ -39,7 +39,7 @@ export interface StudioTrackV1 {
   fadeInMs?: number;
   /** Non-destructive clip fade-out duration in ms. */
   fadeOutMs?: number;
-  /** Hardware input source descriptor (e.g. "RCP II · Ch 3 (Combo 1)"). */
+  /** Hardware input source descriptor (e.g. "Ch 3 · Input 1"). */
   inputSource?: string;
   /** Optional lane/clip visual accent token for distinguishing multi-mic speakers. */
   colorTag?: StudioTrackColor;

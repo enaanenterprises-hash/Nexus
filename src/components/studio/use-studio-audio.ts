@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { deleteAudioBlob, loadAudioBlob, saveAudioBlob } from "@/lib/studio/audio-db";
 import {
+  MAX_STUDIO_INPUTS,
   MultiChannelPcmRecorder,
   classifyInputDevice,
-  detectRodeCasterDevices,
+  defaultChannelForSlot,
+  detectAudioInterfaces,
   formatHardwareChannelName,
+  type AudioInterfaceDetection,
   type MicDeviceOption,
-  type RodeCasterDetection,
   type StudioCaptureMode,
 } from "@/lib/studio/capture-engine";
 import type { StudioTrackColor, StudioTrackRole, StudioTrackV1 } from "@/lib/studio/types";
@@ -24,7 +26,7 @@ import {
   type ConnectedTrackChain,
 } from "@/lib/studio/wav";
 
-export type { MicDeviceOption, RodeCasterDetection, StudioCaptureMode };
+export type { AudioInterfaceDetection, MicDeviceOption, StudioCaptureMode };
 
 export type StudioTransportState =
   | "idle"
@@ -34,15 +36,16 @@ export type StudioTransportState =
   | "playing";
 
 export type MicChannelConfig = {
+  id: string;
   label: string;
   armed: boolean;
   muted: boolean;
   gain: number;
   hpf: boolean;
   invertPhase: boolean;
-  /** 0-based hardware channel index on the active device (`2` = Ch 3 Combo 1, `3` = Ch 4 Combo 2). */
+  /** 0-based hardware channel index on the active interface (`2` = Ch 3 Input 1 on broadcast multitrack buses). */
   channelIndex: number;
-  /** Used in `"dual-device"` mode so Mic 1 & Mic 2 can address two separate USB audio inputs. */
+  /** Used in `"multi-device"` mode so each mic can address its own USB audio device. */
   deviceId: string;
   colorTag: StudioTrackColor;
 };
@@ -60,9 +63,9 @@ export type LiveAudioTelemetry = {
   peak: number;
   clipped: boolean;
   bands: Float32Array;
-  mic1: ChannelMeterTelemetry;
-  mic2: ChannelMeterTelemetry;
-  /** Real-time RMS levels across every detected hardware channel (Ch 1 .. Ch 16) for the patchbay. */
+  /** Per-input live meters aligned by index with `inputs`. */
+  inputMeters: ChannelMeterTelemetry[];
+  /** Real-time RMS levels across every detected hardware channel (Ch 1 .. Ch 16) for the Audio I/O matrix. */
   rawChannelRms: Float32Array;
   detectedChannels: number;
   sampleRate: number;
@@ -70,11 +73,24 @@ export type LiveAudioTelemetry = {
   recordingProgressMs: number;
 };
 
+const INPUT_COLOR_CYCLE: readonly StudioTrackColor[] = ["gold", "sky", "emerald", "coral", "slate"];
+
+function colorForSlot(index: number): StudioTrackColor {
+  return INPUT_COLOR_CYCLE[index % INPUT_COLOR_CYCLE.length]!;
+}
+
 function makeTrackId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return `trk-${crypto.randomUUID()}`;
   }
   return `trk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function makeInputId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `in-${crypto.randomUUID().slice(0, 8)}`;
+  }
+  return `in-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`;
 }
 
 function createChannelMeter(): ChannelMeterTelemetry {
@@ -87,7 +103,31 @@ function createChannelMeter(): ChannelMeterTelemetry {
   };
 }
 
-/** Synthesizes a clean subtle click pulse via Web Audio oscillator routed through a dedicated metronome gain node. */
+function resetMetersClip(meters: ChannelMeterTelemetry[], resetPeakHold: boolean) {
+  for (let i = 0; i < meters.length; i++) {
+    const m = meters[i]!;
+    m.clipped = false;
+    if (resetPeakHold) m.peakHold = 0;
+  }
+}
+
+function createInitialInputs(): MicChannelConfig[] {
+  return [
+    {
+      id: "in-1",
+      label: "Mic 1",
+      armed: true,
+      muted: false,
+      gain: 1.0,
+      hpf: true,
+      invertPhase: false,
+      channelIndex: 0,
+      deviceId: "default",
+      colorTag: "gold",
+    },
+  ];
+}
+
 function triggerClickPulse(ctx: AudioContext, destination: AudioNode, atTime: number, accented: boolean) {
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
@@ -187,30 +227,9 @@ export function useStudioAudio({
   const [transport, setTransport] = useState<StudioTransportState>("idle");
   const [playheadMs, setPlayheadMs] = useState(0);
   const [devices, setDevices] = useState<MicDeviceOption[]>([]);
-  const [captureMode, setCaptureMode] = useState<StudioCaptureMode>("single");
+  const [captureMode, setCaptureMode] = useState<StudioCaptureMode>("solo");
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("default");
-  const [mic1, setMic1] = useState<MicChannelConfig>({
-    label: "Mic 1 · Host",
-    armed: true,
-    muted: false,
-    gain: 1.0,
-    hpf: true,
-    invertPhase: false,
-    channelIndex: 2, // RØDECaster Pro II Ch 3 (Combo 1) when multitrack >= 4ch
-    deviceId: "default",
-    colorTag: "gold",
-  });
-  const [mic2, setMic2] = useState<MicChannelConfig>({
-    label: "Mic 2 · Guest",
-    armed: true,
-    muted: false,
-    gain: 1.0,
-    hpf: true,
-    invertPhase: false,
-    channelIndex: 3, // RØDECaster Pro II Ch 4 (Combo 2) when multitrack >= 4ch
-    deviceId: "default",
-    colorTag: "sky",
-  });
+  const [inputs, setInputs] = useState<MicChannelConfig[]>(createInitialInputs);
   const [recordSafetyMix, setRecordSafetyMix] = useState(false);
 
   const [micReady, setMicReady] = useState(false);
@@ -222,25 +241,40 @@ export function useStudioAudio({
   const [overdubEnabled, setOverdubEnabled] = useState(true);
   const [countInBeat, setCountInBeat] = useState<number | null>(null);
 
-  const rodeCaster: RodeCasterDetection = useMemo(() => detectRodeCasterDevices(devices), [devices]);
+  const audioInterfaces: AudioInterfaceDetection = useMemo(
+    () => detectAudioInterfaces(devices),
+    [devices],
+  );
+
+  const selectedDeviceMeta = useMemo(
+    () => devices.find((d) => d.deviceId === selectedDeviceId) ?? null,
+    [devices, selectedDeviceId],
+  );
+  const useBroadcastChannelMap = useMemo(
+    () =>
+      Boolean(
+        (selectedDeviceMeta?.isBroadcastConsole ||
+          (selectedDeviceId === "default" && audioInterfaces.hasBroadcastConsole)) &&
+          detectedChannels >= 4,
+      ),
+    [audioInterfaces.hasBroadcastConsole, detectedChannels, selectedDeviceId, selectedDeviceMeta],
+  );
 
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const primaryStreamRef = useRef<MediaStream | null>(null);
-  const secondaryStreamRef = useRef<MediaStream | null>(null);
-  const primarySourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const secondarySourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const activeStreamsRef = useRef<MediaStream[]>([]);
+  const activeSourcesRef = useRef<MediaStreamAudioSourceNode[]>([]);
   const splitterRef = useRef<ChannelSplitterNode | null>(null);
   const rawChannelAnalysersRef = useRef<AnalyserNode[]>([]);
-  const mic1StripRef = useRef<MicStripNodes | null>(null);
-  const mic2StripRef = useRef<MicStripNodes | null>(null);
+  const inputStripsRef = useRef<Map<string, MicStripNodes>>(new Map());
   const playbackAnalyserRef = useRef<AnalyserNode | null>(null);
   const masterGainNodeRef = useRef<GainNode | null>(null);
   const metronomeGainNodeRef = useRef<GainNode | null>(null);
 
   const pcmRecorderRef = useRef<MultiChannelPcmRecorder | null>(null);
+  const safetyTapsRef = useRef<GainNode[]>([]);
   const activeCaptureMetaRef = useRef<{
     channels: Array<{
-      kind: "mic1" | "mic2" | "safety-l" | "safety-r";
+      kind: "input" | "safety-l" | "safety-r";
       label: string;
       layerIndex: number;
       inputSource: string;
@@ -268,22 +302,21 @@ export function useStudioAudio({
   const bpmRef = useRef(bpm);
   const transportRef = useRef<StudioTransportState>(transport);
   const captureModeRef = useRef<StudioCaptureMode>(captureMode);
-  const mic1Ref = useRef<MicChannelConfig>(mic1);
-  const mic2Ref = useRef<MicChannelConfig>(mic2);
+  const inputsRef = useRef<MicChannelConfig[]>(inputs);
+  const devicesRef = useRef<MicDeviceOption[]>(devices);
   const monitorInputRef = useRef(monitorInput);
   const studioRawMicRef = useRef(studioRawMic);
   const selectedDeviceIdRef = useRef(selectedDeviceId);
   const detectedChannelsRef = useRef(detectedChannels);
   const recordSafetyMixRef = useRef(recordSafetyMix);
-  const autoDetectedRodeOnceRef = useRef(false);
+  const useBroadcastMapRef = useRef(useBroadcastChannelMap);
 
   const telemetryRef = useRef<LiveAudioTelemetry>({
     rms: 0,
     peak: 0,
     clipped: false,
     bands: new Float32Array(32),
-    mic1: createChannelMeter(),
-    mic2: createChannelMeter(),
+    inputMeters: [createChannelMeter()],
     rawChannelRms: new Float32Array(16),
     detectedChannels: 2,
     sampleRate: 48000,
@@ -314,11 +347,11 @@ export function useStudioAudio({
     captureModeRef.current = captureMode;
   }, [captureMode]);
   useEffect(() => {
-    mic1Ref.current = mic1;
-  }, [mic1]);
+    inputsRef.current = inputs;
+  }, [inputs]);
   useEffect(() => {
-    mic2Ref.current = mic2;
-  }, [mic2]);
+    devicesRef.current = devices;
+  }, [devices]);
   useEffect(() => {
     monitorInputRef.current = monitorInput;
   }, [monitorInput]);
@@ -334,6 +367,9 @@ export function useStudioAudio({
   useEffect(() => {
     recordSafetyMixRef.current = recordSafetyMix;
   }, [recordSafetyMix]);
+  useEffect(() => {
+    useBroadcastMapRef.current = useBroadcastChannelMap;
+  }, [useBroadcastChannelMap]);
 
   useEffect(() => {
     masterGainRef.current = masterGain;
@@ -344,7 +380,7 @@ export function useStudioAudio({
     }
   }, [masterGain]);
 
-  // Synchronize live solo/mute/gain/pan & voice DSP adjustments while tracks are playing
+  // Synchronize live playback solo/mute/gain/pan & voice DSP while tracks play
   useEffect(() => {
     const ctx = audioCtxRef.current;
     if (!ctx || playbackNodesRef.current.length === 0) return;
@@ -368,52 +404,123 @@ export function useStudioAudio({
     }
   }, [tracks]);
 
-  // Synchronize Mic 1 & Mic 2 live DSP strip parameters (HPF, Trim Gain, Polarity, Mute, Monitor) smoothly
+  // Synchronize per-input live DSP strip parameters (HPF, Trim Gain, Polarity, Mute, Monitor) smoothly
   useEffect(() => {
     const ctx = audioCtxRef.current;
-    const applyStrip = (strip: MicStripNodes | null, cfg: MicChannelConfig) => {
-      if (!ctx || !strip) return;
-      strip.hpf.frequency.setTargetAtTime(cfg.hpf ? 80 : 10, ctx.currentTime, 0.02);
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    for (const cfg of inputs) {
+      const strip = inputStripsRef.current.get(cfg.id);
+      if (!strip) continue;
+      strip.hpf.frequency.setTargetAtTime(cfg.hpf ? 80 : 10, now, 0.02);
       const signedGain = cfg.gain * (cfg.invertPhase ? -1 : 1);
-      strip.trimGain.gain.setTargetAtTime(signedGain, ctx.currentTime, 0.015);
-      strip.muteGain.gain.setTargetAtTime(cfg.muted ? 0 : 1, ctx.currentTime, 0.015);
-      strip.monitorGain.gain.setTargetAtTime(monitorInput && !cfg.muted && cfg.armed ? 0.8 : 0, ctx.currentTime, 0.02);
-    };
-    applyStrip(mic1StripRef.current, mic1);
-    applyStrip(mic2StripRef.current, mic2);
-  }, [mic1, mic2, monitorInput]);
+      strip.trimGain.gain.setTargetAtTime(signedGain, now, 0.015);
+      strip.muteGain.gain.setTargetAtTime(cfg.muted ? 0 : 1, now, 0.015);
+      strip.monitorGain.gain.setTargetAtTime(monitorInput && !cfg.muted && cfg.armed ? 0.8 : 0, now, 0.02);
+    }
+  }, [inputs, monitorInput]);
 
-  // Live re-patch hardware splitter outputs when user changes Mic 1 or Mic 2 channel index without restarting stream
+  const createMicStrip = useCallback((ctx: AudioContext, cfg: MicChannelConfig): MicStripNodes => {
+    const hpf = ctx.createBiquadFilter();
+    hpf.type = "highpass";
+    hpf.frequency.value = cfg.hpf ? 80 : 10;
+    hpf.Q.value = 0.707;
+
+    const trimGain = ctx.createGain();
+    trimGain.gain.value = cfg.gain * (cfg.invertPhase ? -1 : 1);
+
+    const muteGain = ctx.createGain();
+    muteGain.gain.value = cfg.muted ? 0 : 1;
+
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.65;
+
+    const monitorGain = ctx.createGain();
+    monitorGain.gain.value = monitorInputRef.current && !cfg.muted && cfg.armed ? 0.8 : 0;
+
+    hpf.connect(trimGain);
+    trimGain.connect(muteGain);
+    muteGain.connect(analyser);
+    muteGain.connect(monitorGain);
+    monitorGain.connect(ctx.destination);
+
+    return { hpf, trimGain, muteGain, analyser, monitorGain };
+  }, []);
+
+  const disposeStrip = useCallback((strip: MicStripNodes) => {
+    const safeDisconnect = (node: AudioNode) => {
+      try {
+        node.disconnect();
+      } catch {
+        // Ignore
+      }
+    };
+    safeDisconnect(strip.hpf);
+    safeDisconnect(strip.trimGain);
+    safeDisconnect(strip.muteGain);
+    safeDisconnect(strip.analyser);
+    safeDisconnect(strip.monitorGain);
+  }, []);
+
+  // Re-patch discrete hardware splitter outputs live whenever input channel assignments or count change
+  const channelSignature = useMemo(
+    () => inputs.map((i) => `${i.id}:${i.channelIndex}`).join("|"),
+    [inputs],
+  );
+
   useEffect(() => {
+    const ctx = audioCtxRef.current;
     const splitter = splitterRef.current;
     const mode = captureModeRef.current;
-    if (!splitter || (mode !== "rcp2-multitrack" && mode !== "stereo-split")) return;
+    if (!ctx || !splitter || mode === "multi-device") return;
+
     const maxCh = Math.max(1, splitter.numberOfOutputs);
-    const ch1 = Math.max(0, Math.min(maxCh - 1, mic1.channelIndex));
-    const ch2 = Math.max(0, Math.min(maxCh - 1, mic2.channelIndex));
+    const currentInputs = inputsRef.current;
+    const activeIds = new Set(currentInputs.map((i) => i.id));
+
+    // Dispose removed strips
+    for (const [id, strip] of inputStripsRef.current.entries()) {
+      if (!activeIds.has(id)) {
+        disposeStrip(strip);
+        inputStripsRef.current.delete(id);
+      }
+    }
+
+    // Ensure every active input has a live strip
+    for (const cfg of currentInputs) {
+      if (!inputStripsRef.current.has(cfg.id)) {
+        inputStripsRef.current.set(cfg.id, createMicStrip(ctx, cfg));
+      }
+    }
 
     try {
       splitter.disconnect();
     } catch {
       // Ignore
     }
-    // Reconnect raw channel probes for the live patchbay
+
     rawChannelAnalysersRef.current.forEach((an, idx) => {
       if (idx < maxCh) {
         try {
           splitter.connect(an, idx, 0);
         } catch {
-          // Ignore out of range
+          // Ignore
         }
       }
     });
-    if (mic1StripRef.current) {
-      splitter.connect(mic1StripRef.current.hpf, ch1, 0);
+
+    for (const cfg of currentInputs) {
+      const strip = inputStripsRef.current.get(cfg.id);
+      if (!strip) continue;
+      const ch = Math.max(0, Math.min(maxCh - 1, cfg.channelIndex));
+      try {
+        splitter.connect(strip.hpf, ch, 0);
+      } catch {
+        // Ignore out of bounds
+      }
     }
-    if (mic2StripRef.current) {
-      splitter.connect(mic2StripRef.current.hpf, ch2, 0);
-    }
-  }, [mic1.channelIndex, mic2.channelIndex]);
+  }, [channelSignature, createMicStrip, disposeStrip]);
 
   const ensureAudioContext = useCallback(async (): Promise<AudioContext> => {
     if (!audioCtxRef.current) {
@@ -444,40 +551,19 @@ export function useStudioAudio({
     return audioCtxRef.current;
   }, []);
 
-  const applyDiscoveredDevices = useCallback((inputs: MicDeviceOption[]) => {
-    setDevices(inputs);
-
-    // Auto-select RØDECaster Pro II cleanly on first discovery if user hasn't explicitly chosen another device
-    const rc = detectRodeCasterDevices(inputs);
-    if (rc.detected && !autoDetectedRodeOnceRef.current && selectedDeviceIdRef.current === "default") {
-      autoDetectedRodeOnceRef.current = true;
-      if (rc.multitrackDevice) {
-        setSelectedDeviceId(rc.multitrackDevice.deviceId);
-        setCaptureMode("rcp2-multitrack");
-        setMic1((p) => ({ ...p, channelIndex: 2, deviceId: rc.multitrackDevice!.deviceId }));
-        setMic2((p) => ({ ...p, channelIndex: 3, deviceId: rc.multitrackDevice!.deviceId }));
-      } else if (rc.mainStereoDevice) {
-        setSelectedDeviceId(rc.mainStereoDevice.deviceId);
-        setCaptureMode("stereo-split");
-        setMic1((p) => ({ ...p, channelIndex: 0, deviceId: rc.mainStereoDevice!.deviceId }));
-        setMic2((p) => ({
-          ...p,
-          channelIndex: 1,
-          deviceId: rc.chatDevice?.deviceId ?? rc.mainStereoDevice!.deviceId,
-        }));
-      }
-    }
+  const applyDiscoveredDevices = useCallback((discovered: MicDeviceOption[]) => {
+    setDevices(discovered);
   }, []);
 
   const refreshDevices = useCallback(async (): Promise<MicDeviceOption[]> => {
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.enumerateDevices) return [];
     try {
       const all = await navigator.mediaDevices.enumerateDevices();
-      const inputs = all
+      const found = all
         .filter((d) => d.kind === "audioinput")
         .map((d, idx) => classifyInputDevice(d, idx));
-      applyDiscoveredDevices(inputs);
-      return inputs;
+      applyDiscoveredDevices(found);
+      return found;
     } catch {
       return [];
     }
@@ -490,10 +576,10 @@ export function useStudioAudio({
       try {
         const all = await navigator.mediaDevices.enumerateDevices();
         if (!active) return;
-        const inputs = all
+        const found = all
           .filter((d) => d.kind === "audioinput")
           .map((d, idx) => classifyInputDevice(d, idx));
-        applyDiscoveredDevices(inputs);
+        applyDiscoveredDevices(found);
       } catch {
         // Ignore device enumeration permission failures
       }
@@ -575,18 +661,26 @@ export function useStudioAudio({
     playbackNodesRef.current = [];
   }, [stopMetronome]);
 
+  const clearSafetyTaps = useCallback(() => {
+    for (const tap of safetyTapsRef.current) {
+      try {
+        tap.disconnect();
+      } catch {
+        // Ignore
+      }
+    }
+    safetyTapsRef.current = [];
+  }, []);
+
   const teardownInputs = useCallback(() => {
     pcmRecorderRef.current?.dispose();
     pcmRecorderRef.current = null;
+    clearSafetyTaps();
 
-    const stopStream = (stream: MediaStream | null) => {
-      if (!stream) return;
+    for (const stream of activeStreamsRef.current) {
       for (const t of stream.getTracks()) t.stop();
-    };
-    stopStream(primaryStreamRef.current);
-    stopStream(secondaryStreamRef.current);
-    primaryStreamRef.current = null;
-    secondaryStreamRef.current = null;
+    }
+    activeStreamsRef.current = [];
 
     const safeDisconnect = (node: AudioNode | null) => {
       try {
@@ -595,31 +689,19 @@ export function useStudioAudio({
         // Ignore
       }
     };
-    safeDisconnect(primarySourceRef.current);
-    safeDisconnect(secondarySourceRef.current);
+    for (const src of activeSourcesRef.current) safeDisconnect(src);
+    activeSourcesRef.current = [];
     safeDisconnect(splitterRef.current);
+    splitterRef.current = null;
     for (const an of rawChannelAnalysersRef.current) safeDisconnect(an);
     rawChannelAnalysersRef.current = [];
 
-    const tearStrip = (strip: MicStripNodes | null) => {
-      if (!strip) return;
-      safeDisconnect(strip.hpf);
-      safeDisconnect(strip.trimGain);
-      safeDisconnect(strip.muteGain);
-      safeDisconnect(strip.analyser);
-      safeDisconnect(strip.monitorGain);
-    };
-    tearStrip(mic1StripRef.current);
-    tearStrip(mic2StripRef.current);
+    for (const strip of inputStripsRef.current.values()) disposeStrip(strip);
+    inputStripsRef.current.clear();
 
-    primarySourceRef.current = null;
-    secondarySourceRef.current = null;
-    splitterRef.current = null;
-    mic1StripRef.current = null;
-    mic2StripRef.current = null;
     setMicReady(false);
     telemetryRef.current.isLiveMic = false;
-  }, []);
+  }, [clearSafetyTaps, disposeStrip]);
 
   useEffect(() => {
     return () => {
@@ -632,40 +714,11 @@ export function useStudioAudio({
     };
   }, [stopPlaybackSources, teardownInputs]);
 
-  const createMicStrip = useCallback((ctx: AudioContext, cfg: MicChannelConfig): MicStripNodes => {
-    const hpf = ctx.createBiquadFilter();
-    hpf.type = "highpass";
-    hpf.frequency.value = cfg.hpf ? 80 : 10;
-    hpf.Q.value = 0.707;
-
-    const trimGain = ctx.createGain();
-    trimGain.gain.value = cfg.gain * (cfg.invertPhase ? -1 : 1);
-
-    const muteGain = ctx.createGain();
-    muteGain.gain.value = cfg.muted ? 0 : 1;
-
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 256;
-    analyser.smoothingTimeConstant = 0.65;
-
-    const monitorGain = ctx.createGain();
-    monitorGain.gain.value = monitorInputRef.current && !cfg.muted && cfg.armed ? 0.8 : 0;
-
-    hpf.connect(trimGain);
-    trimGain.connect(muteGain);
-    muteGain.connect(analyser);
-    muteGain.connect(monitorGain);
-    monitorGain.connect(ctx.destination);
-
-    return { hpf, trimGain, muteGain, analyser, monitorGain };
-  }, []);
-
   const armInputs = useCallback(
     async (overrides?: {
       mode?: StudioCaptureMode;
       deviceId?: string;
-      mic1DeviceId?: string;
-      mic2DeviceId?: string;
+      inputs?: MicChannelConfig[];
       rawMode?: boolean;
     }): Promise<boolean> => {
       if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
@@ -675,58 +728,45 @@ export function useStudioAudio({
 
       const mode = overrides?.mode ?? captureModeRef.current;
       const devId = overrides?.deviceId ?? selectedDeviceIdRef.current;
-      const m1Dev = overrides?.mic1DeviceId ?? mic1Ref.current.deviceId;
-      const m2Dev = overrides?.mic2DeviceId ?? mic2Ref.current.deviceId;
-      // Browser echoCancellation / noiseSuppression silently downmix stereo & multitrack interfaces to mono,
-      // so all 2-mic modes always request raw unprocessed hardware audio.
-      const rawMode = mode !== "single" ? true : (overrides?.rawMode ?? studioRawMicRef.current);
+      const targetInputs = overrides?.inputs ?? inputsRef.current;
+      // Browser echoCancellation / noiseSuppression silently downmix stereo & multitrack streams to mono,
+      // so all multi-input modes always request raw unprocessed hardware audio.
+      const rawMode = mode !== "solo" ? true : (overrides?.rawMode ?? studioRawMicRef.current);
 
       try {
         setMicError(null);
         const ctx = await ensureAudioContext();
         teardownInputs();
 
-        if (mode === "dual-device") {
-          const stream1 = await navigator.mediaDevices.getUserMedia({
-            audio: {
-              deviceId: m1Dev && m1Dev !== "default" ? { exact: m1Dev } : undefined,
-              echoCancellation: false,
-              noiseSuppression: false,
-              autoGainControl: false,
-              channelCount: { ideal: 2 },
-            },
-          });
-          primaryStreamRef.current = stream1;
+        if (mode === "multi-device") {
+          const streamByDevice = new Map<string, { stream: MediaStream; source: MediaStreamAudioSourceNode }>();
 
-          const sameDevice = m1Dev === m2Dev && m1Dev !== "default";
-          const stream2 = sameDevice
-            ? stream1
-            : await navigator.mediaDevices.getUserMedia({
+          for (const cfg of targetInputs) {
+            const key = cfg.deviceId || "default";
+            let entry = streamByDevice.get(key);
+            if (!entry) {
+              const stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
-                  deviceId: m2Dev && m2Dev !== "default" ? { exact: m2Dev } : undefined,
+                  deviceId: key !== "default" ? { exact: key } : undefined,
                   echoCancellation: false,
                   noiseSuppression: false,
                   autoGainControl: false,
                   channelCount: { ideal: 2 },
                 },
               });
-          if (stream2 !== stream1) secondaryStreamRef.current = stream2;
+              const source = ctx.createMediaStreamSource(stream);
+              activeStreamsRef.current.push(stream);
+              activeSourcesRef.current.push(source);
+              entry = { stream, source };
+              streamByDevice.set(key, entry);
+            }
+            const strip = createMicStrip(ctx, cfg);
+            inputStripsRef.current.set(cfg.id, strip);
+            entry.source.connect(strip.hpf);
+          }
 
-          const src1 = ctx.createMediaStreamSource(stream1);
-          const src2 = ctx.createMediaStreamSource(stream2);
-          primarySourceRef.current = src1;
-          secondarySourceRef.current = src2;
-
-          const strip1 = createMicStrip(ctx, mic1Ref.current);
-          const strip2 = createMicStrip(ctx, mic2Ref.current);
-          mic1StripRef.current = strip1;
-          mic2StripRef.current = strip2;
-
-          src1.connect(strip1.hpf);
-          src2.connect(strip2.hpf);
-
-          setDetectedChannels(2);
-          telemetryRef.current.detectedChannels = 2;
+          setDetectedChannels(Math.max(2, targetInputs.length));
+          telemetryRef.current.detectedChannels = Math.max(2, targetInputs.length);
         } else {
           const stream = await navigator.mediaDevices.getUserMedia({
             audio: {
@@ -734,34 +774,45 @@ export function useStudioAudio({
               echoCancellation: !rawMode,
               noiseSuppression: !rawMode,
               autoGainControl: false,
-              channelCount: mode === "single" ? { ideal: 2 } : { ideal: 16 },
+              channelCount: mode === "solo" ? { ideal: 2 } : { ideal: 16 },
             },
           });
-          primaryStreamRef.current = stream;
+          activeStreamsRef.current.push(stream);
 
           const audioTrack = stream.getAudioTracks()[0];
           const settings = audioTrack?.getSettings?.();
           const caps = audioTrack?.getCapabilities?.() as { channelCount?: { max?: number } } | undefined;
           const src = ctx.createMediaStreamSource(stream);
-          primarySourceRef.current = src;
+          activeSourcesRef.current.push(src);
 
           const chCount = Math.max(
             1,
             Math.min(
               16,
-              settings?.channelCount ?? caps?.channelCount?.max ?? src.channelCount ?? (mode === "single" ? 1 : 2),
+              settings?.channelCount ?? caps?.channelCount?.max ?? src.channelCount ?? (mode === "solo" ? 1 : 2),
             ),
           );
 
           setDetectedChannels(chCount);
           telemetryRef.current.detectedChannels = chCount;
 
-          if (mode === "single") {
-            const strip1 = createMicStrip(ctx, mic1Ref.current);
-            mic1StripRef.current = strip1;
-            src.connect(strip1.hpf);
+          const latestDevices = devicesRef.current;
+          const matchedDev = latestDevices.find((d) => d.deviceId === devId);
+          const broadcastOffset = Boolean(
+            (matchedDev?.isBroadcastConsole ||
+              (devId === "default" && detectAudioInterfaces(latestDevices).hasBroadcastConsole)) &&
+              chCount >= 4,
+          );
+
+          if (mode === "solo" && chCount <= 2) {
+            const primary = targetInputs[0];
+            if (primary) {
+              const strip = createMicStrip(ctx, primary);
+              inputStripsRef.current.set(primary.id, strip);
+              src.connect(strip.hpf);
+            }
           } else {
-            // Discrete channel splitting preserves every RØDECaster Pro II hardware bus cleanly
+            // Discrete channel splitting preserves every hardware bus cleanly (2..16 channels)
             const splitCount = Math.max(2, chCount);
             src.channelCount = splitCount;
             src.channelCountMode = "explicit";
@@ -774,7 +825,7 @@ export function useStudioAudio({
             src.connect(splitter);
             splitterRef.current = splitter;
 
-            // Create live RMS probes on every hardware channel for the visual patchbay
+            // Live RMS probes on every hardware channel for the Audio I/O matrix
             const probes: AnalyserNode[] = [];
             for (let i = 0; i < splitCount; i++) {
               const an = ctx.createAnalyser();
@@ -785,36 +836,45 @@ export function useStudioAudio({
             }
             rawChannelAnalysersRef.current = probes;
 
-            // Clamp/adapt default RØDECaster channels if the OS exposed 2ch Stereo instead of 14/16ch Multitrack
-            let ch1 = mic1Ref.current.channelIndex;
-            let ch2 = mic2Ref.current.channelIndex;
-            if (mode === "stereo-split" || chCount < 4) {
-              ch1 = Math.min(ch1 >= chCount ? 0 : ch1, splitCount - 1);
-              ch2 = Math.min(ch2 >= chCount ? Math.min(1, splitCount - 1) : ch2, splitCount - 1);
-              if (ch1 === ch2 && splitCount >= 2) {
-                ch1 = 0;
-                ch2 = 1;
+            // Normalize channel assignments if out of range or adapting between 2ch stereo and 4+ch multitrack
+            let changed = false;
+            const adapted = targetInputs.map((cfg, idx) => {
+              let nextCh = cfg.channelIndex;
+              if (mode === "stereo-split" || chCount < 4) {
+                if (nextCh >= splitCount) {
+                  nextCh = idx % splitCount;
+                  changed = true;
+                }
+              } else if (broadcastOffset && idx === 0 && nextCh === 0 && targetInputs.length === 1) {
+                // On a 4+ch broadcast console in solo mode, keep Ch 1 (Main L) or user's chosen channel
+                nextCh = Math.min(splitCount - 1, nextCh);
+              } else if (nextCh >= splitCount) {
+                nextCh = defaultChannelForSlot(idx, {
+                  useBroadcastOffset: broadcastOffset,
+                  totalChannels: splitCount,
+                });
+                changed = true;
               }
-              setMic1((prev) => (prev.channelIndex === ch1 ? prev : { ...prev, channelIndex: ch1 }));
-              setMic2((prev) => (prev.channelIndex === ch2 ? prev : { ...prev, channelIndex: ch2 }));
-            } else {
-              ch1 = Math.max(0, Math.min(splitCount - 1, ch1));
-              ch2 = Math.max(0, Math.min(splitCount - 1, ch2));
+              return nextCh === cfg.channelIndex ? cfg : { ...cfg, channelIndex: nextCh };
+            });
+
+            if (changed) {
+              setInputs(adapted);
+              inputsRef.current = adapted;
             }
 
-            const strip1 = createMicStrip(ctx, { ...mic1Ref.current, channelIndex: ch1 });
-            const strip2 = createMicStrip(ctx, { ...mic2Ref.current, channelIndex: ch2 });
-            mic1StripRef.current = strip1;
-            mic2StripRef.current = strip2;
-
-            splitter.connect(strip1.hpf, ch1, 0);
-            splitter.connect(strip2.hpf, ch2, 0);
+            for (const cfg of adapted) {
+              const strip = createMicStrip(ctx, cfg);
+              inputStripsRef.current.set(cfg.id, strip);
+              const ch = Math.max(0, Math.min(splitCount - 1, cfg.channelIndex));
+              splitter.connect(strip.hpf, ch, 0);
+            }
           }
         }
 
         telemetryRef.current.isLiveMic = true;
-        telemetryRef.current.mic1.clipped = false;
-        telemetryRef.current.mic2.clipped = false;
+        telemetryRef.current.clipped = false;
+        resetMetersClip(telemetryRef.current.inputMeters, false);
         setMicReady(true);
         setSampleRate(ctx.sampleRate || 48000);
         telemetryRef.current.sampleRate = ctx.sampleRate || 48000;
@@ -825,8 +885,8 @@ export function useStudioAudio({
           err instanceof Error && err.name === "NotAllowedError"
             ? "Microphone permission was denied. Allow audio input access in your browser."
             : err instanceof Error && err.name === "OverconstrainedError"
-              ? "Selected audio device is unavailable. Re-select your RØDECaster Pro II or microphone."
-              : "Could not open audio interface. Check USB connection and browser audio permissions.";
+              ? "Selected audio device is unavailable. Choose another input in Audio I/O."
+              : "Could not open audio interface. Check your USB connection and browser audio permissions.";
         setMicError(msg);
         setMicReady(false);
         return false;
@@ -835,53 +895,275 @@ export function useStudioAudio({
     [createMicStrip, ensureAudioContext, refreshDevices, teardownInputs],
   );
 
-  const applyRodeCasterPreset = useCallback(
-    async (preferredMode?: "rcp2-multitrack" | "stereo-split" | "dual-device") => {
+  const autoConfigureMultiMic = useCallback(
+    async (preferredMode?: "multitrack" | "stereo-split" | "multi-device", desiredCount?: number) => {
       const latest = await refreshDevices();
-      const rc = detectRodeCasterDevices(latest);
+      const detected = detectAudioInterfaces(latest);
       setStudioRawMic(true);
-      // RØDECaster Pro II users monitor zero-latency via the hardware headphone jacks — keep browser monitor off by default
-      setMonitorInput(false);
+      if (detected.hasBroadcastConsole || detected.hasMultitrackInterface) {
+        // External broadcast interfaces provide zero-latency hardware headphone monitoring
+        setMonitorInput(false);
+      }
 
-      if (preferredMode === "dual-device" || (!preferredMode && !rc.multitrackDevice && rc.mainStereoDevice && rc.chatDevice)) {
-        const d1 = rc.mainStereoDevice?.deviceId ?? selectedDeviceIdRef.current;
-        const d2 = rc.chatDevice?.deviceId ?? rc.secondaryDevice?.deviceId ?? d1;
-        setCaptureMode("dual-device");
-        setMic1((p) => ({ ...p, armed: true, hpf: true, deviceId: d1, label: "Mic 1 · Host" }));
-        setMic2((p) => ({ ...p, armed: true, hpf: true, deviceId: d2, label: "Mic 2 · Guest" }));
-        const ok = await armInputs({ mode: "dual-device", mic1DeviceId: d1, mic2DeviceId: d2, rawMode: true });
-        if (ok) onNotice("Armed dual USB inputs — sample-locked for 2-mic recording.");
+      const count = Math.max(2, Math.min(MAX_STUDIO_INPUTS, desiredCount ?? Math.max(2, inputsRef.current.length)));
+      const existing = inputsRef.current;
+
+      if (preferredMode === "multi-device") {
+        const devicePool = detected.externalInputs.length >= 2 ? detected.externalInputs : latest;
+        const nextInputs: MicChannelConfig[] = Array.from({ length: count }, (_, idx) => {
+          const prev = existing[idx];
+          const devId = devicePool[idx]?.deviceId ?? prev?.deviceId ?? "default";
+          return {
+            id: prev?.id ?? makeInputId(),
+            label: prev?.label ?? `Mic ${idx + 1}`,
+            armed: prev?.armed ?? true,
+            muted: prev?.muted ?? false,
+            gain: prev?.gain ?? 1,
+            hpf: prev?.hpf ?? true,
+            invertPhase: prev?.invertPhase ?? false,
+            channelIndex: 0,
+            deviceId: devId,
+            colorTag: prev?.colorTag ?? colorForSlot(idx),
+          };
+        });
+        setCaptureMode("multi-device");
+        setInputs(nextInputs);
+        const ok = await armInputs({ mode: "multi-device", inputs: nextInputs, rawMode: true });
+        if (ok) onNotice(`Armed ${count} separate USB inputs — sample-locked.`);
         return;
       }
 
-      if (preferredMode === "stereo-split" || (!preferredMode && !rc.multitrackDevice)) {
-        const dev = rc.mainStereoDevice?.deviceId ?? selectedDeviceIdRef.current;
+      if (preferredMode === "stereo-split" || (!preferredMode && !detected.multitrackDevice && detected.mainStereoDevice)) {
+        const dev = detected.mainStereoDevice?.deviceId ?? selectedDeviceIdRef.current;
+        const stereoCount = 2;
+        const nextInputs: MicChannelConfig[] = Array.from({ length: stereoCount }, (_, idx) => {
+          const prev = existing[idx];
+          return {
+            id: prev?.id ?? makeInputId(),
+            label: prev?.label ?? `Mic ${idx + 1}`,
+            armed: prev?.armed ?? true,
+            muted: prev?.muted ?? false,
+            gain: prev?.gain ?? 1,
+            hpf: prev?.hpf ?? true,
+            invertPhase: prev?.invertPhase ?? false,
+            channelIndex: idx,
+            deviceId: dev,
+            colorTag: prev?.colorTag ?? colorForSlot(idx),
+          };
+        });
         setCaptureMode("stereo-split");
         setSelectedDeviceId(dev);
-        setMic1((p) => ({ ...p, armed: true, hpf: true, channelIndex: 0, label: "Mic 1 · Host" }));
-        setMic2((p) => ({ ...p, armed: true, hpf: true, channelIndex: 1, label: "Mic 2 · Guest" }));
-        const ok = await armInputs({ mode: "stereo-split", deviceId: dev, rawMode: true });
+        setInputs(nextInputs);
+        const ok = await armInputs({ mode: "stereo-split", deviceId: dev, inputs: nextInputs, rawMode: true });
         if (ok) {
-          onNotice("Stereo L/R Split armed — pan Mic 1 Hard Left and Mic 2 Hard Right on your RØDECaster Pro II.");
+          onNotice("Stereo L/R Split armed — pan Mic 1 Left and Mic 2 Right on your interface for isolated stems.");
         }
         return;
       }
 
-      const dev = rc.multitrackDevice?.deviceId ?? rc.mainStereoDevice?.deviceId ?? selectedDeviceIdRef.current;
-      setCaptureMode("rcp2-multitrack");
+      const dev = detected.multitrackDevice?.deviceId ?? detected.mainStereoDevice?.deviceId ?? selectedDeviceIdRef.current;
+      const useOffset = Boolean(detected.hasBroadcastConsole || detected.multitrackDevice?.isBroadcastConsole);
+      const nextInputs: MicChannelConfig[] = Array.from({ length: count }, (_, idx) => {
+        const prev = existing[idx];
+        return {
+          id: prev?.id ?? makeInputId(),
+          label: prev?.label ?? `Mic ${idx + 1}`,
+          armed: prev?.armed ?? true,
+          muted: prev?.muted ?? false,
+          gain: prev?.gain ?? 1,
+          hpf: prev?.hpf ?? true,
+          invertPhase: prev?.invertPhase ?? false,
+          channelIndex: defaultChannelForSlot(idx, { useBroadcastOffset: useOffset, totalChannels: 16 }),
+          deviceId: dev,
+          colorTag: prev?.colorTag ?? colorForSlot(idx),
+        };
+      });
+
+      setCaptureMode("multitrack");
       setSelectedDeviceId(dev);
-      setMic1((p) => ({ ...p, armed: true, hpf: true, channelIndex: 2, label: "Mic 1 · Host" }));
-      setMic2((p) => ({ ...p, armed: true, hpf: true, channelIndex: 3, label: "Mic 2 · Guest" }));
-      const ok = await armInputs({ mode: "rcp2-multitrack", deviceId: dev, rawMode: true });
+      setInputs(nextInputs);
+      const ok = await armInputs({ mode: "multitrack", deviceId: dev, inputs: nextInputs, rawMode: true });
       if (ok) {
         onNotice(
           detectedChannelsRef.current >= 4
-            ? `RØDECaster Pro II Multitrack armed (${detectedChannelsRef.current} ch) — Combo 1 (Ch 3) & Combo 2 (Ch 4).`
+            ? `Multitrack interface armed (${detectedChannelsRef.current} ch) — ${count} isolated inputs ready.`
             : "Interface opened in 2-channel mode — Mic 1 mapped to Ch 1 (L) and Mic 2 to Ch 2 (R).",
         );
       }
     },
     [armInputs, onNotice, refreshDevices],
+  );
+
+  const addInput = useCallback(() => {
+    const current = inputsRef.current;
+    if (current.length >= MAX_STUDIO_INPUTS) {
+      onNotice(`Up to ${MAX_STUDIO_INPUTS} simultaneous microphone inputs are supported.`);
+      return;
+    }
+
+    const nextIdx = current.length;
+    const latestDevices = devicesRef.current;
+    const detected = detectAudioInterfaces(latestDevices);
+
+    // Upgrading cleanly from Solo (1 mic) -> Multi-Mic (2 mics)
+    if (captureModeRef.current === "solo" && current.length === 1) {
+      const useMultitrack = Boolean(detected.multitrackDevice);
+      const targetMode: StudioCaptureMode = useMultitrack ? "multitrack" : "multitrack";
+      const targetDev =
+        detected.multitrackDevice?.deviceId ??
+        detected.mainStereoDevice?.deviceId ??
+        selectedDeviceIdRef.current;
+      const useOffset = Boolean(detected.hasBroadcastConsole && (useMultitrack || detectedChannelsRef.current >= 4));
+
+      const updatedFirst: MicChannelConfig = {
+        ...current[0]!,
+        channelIndex: defaultChannelForSlot(0, {
+          useBroadcastOffset: useOffset,
+          totalChannels: Math.max(4, detectedChannelsRef.current),
+        }),
+        deviceId: targetDev,
+      };
+      const addedSecond: MicChannelConfig = {
+        id: makeInputId(),
+        label: "Mic 2",
+        armed: true,
+        muted: false,
+        gain: 1,
+        hpf: true,
+        invertPhase: false,
+        channelIndex: defaultChannelForSlot(1, {
+          useBroadcastOffset: useOffset,
+          totalChannels: Math.max(4, detectedChannelsRef.current),
+        }),
+        deviceId: targetDev,
+        colorTag: colorForSlot(1),
+      };
+
+      const nextList = [updatedFirst, addedSecond];
+      setStudioRawMic(true);
+      if (detected.hasBroadcastConsole || detected.hasMultitrackInterface) setMonitorInput(false);
+      setCaptureMode(targetMode);
+      setSelectedDeviceId(targetDev);
+      setInputs(nextList);
+      if (micReady) {
+        void armInputs({ mode: targetMode, deviceId: targetDev, inputs: nextList, rawMode: true });
+      }
+      return;
+    }
+
+    // Adding Mic 3, Mic 4, ... up to Mic 8
+    const usedChannels = new Set(current.map((i) => i.channelIndex));
+    const maxCh = Math.max(detectedChannelsRef.current, nextIdx + 3, 16);
+    const preferredStart = useBroadcastMapRef.current ? 2 : 0;
+    let chosenChannel = Math.min(maxCh - 1, preferredStart + nextIdx);
+    if (usedChannels.has(chosenChannel)) {
+      for (let c = preferredStart; c < maxCh; c++) {
+        if (!usedChannels.has(c)) {
+          chosenChannel = c;
+          break;
+        }
+      }
+    }
+
+    const usedDevices = new Set(current.map((i) => i.deviceId));
+    const unusedDevice = latestDevices.find((d) => !usedDevices.has(d.deviceId))?.deviceId ?? "default";
+
+    const nextMode: StudioCaptureMode =
+      captureModeRef.current === "stereo-split" ? "multitrack" : captureModeRef.current;
+
+    const added: MicChannelConfig = {
+      id: makeInputId(),
+      label: `Mic ${nextIdx + 1}`,
+      armed: true,
+      muted: false,
+      gain: 1,
+      hpf: true,
+      invertPhase: false,
+      channelIndex: chosenChannel,
+      deviceId: nextMode === "multi-device" ? unusedDevice : selectedDeviceIdRef.current,
+      colorTag: colorForSlot(nextIdx),
+    };
+
+    const nextList = [...current, added];
+    if (nextMode !== captureModeRef.current) setCaptureMode(nextMode);
+    setInputs(nextList);
+    if (micReady && (nextMode === "multi-device" || nextMode !== captureModeRef.current)) {
+      void armInputs({ mode: nextMode, inputs: nextList, rawMode: true });
+    }
+  }, [armInputs, micReady, onNotice]);
+
+  const removeInput = useCallback(
+    (id: string) => {
+      const current = inputsRef.current;
+      if (current.length <= 1) return;
+      const nextList = current.filter((i) => i.id !== id);
+      setInputs(nextList);
+      if (nextList.length === 1) {
+        setCaptureMode("solo");
+        if (micReady) {
+          void armInputs({ mode: "solo", inputs: nextList });
+        }
+      } else if (micReady && captureModeRef.current === "multi-device") {
+        void armInputs({ mode: "multi-device", inputs: nextList });
+      }
+    },
+    [armInputs, micReady],
+  );
+
+  const updateInput = useCallback(
+    (id: string, patch: Partial<MicChannelConfig>) => {
+      const nextList = inputsRef.current.map((item) => (item.id === id ? { ...item, ...patch } : item));
+      setInputs(nextList);
+      if (patch.deviceId && captureModeRef.current === "multi-device" && micReady) {
+        void armInputs({ mode: "multi-device", inputs: nextList });
+      }
+    },
+    [armInputs, micReady],
+  );
+
+  const changeCaptureMode = useCallback(
+    (next: StudioCaptureMode) => {
+      setCaptureMode(next);
+      let nextList = inputsRef.current;
+
+      if (next === "solo") {
+        nextList = [nextList[0] ?? createInitialInputs()[0]!];
+        setInputs(nextList);
+      } else {
+        setStudioRawMic(true);
+        if (nextList.length < 2) {
+          const detected = detectAudioInterfaces(devicesRef.current);
+          const useOffset = next === "multitrack" && detected.hasBroadcastConsole;
+          nextList = [
+            {
+              ...nextList[0]!,
+              channelIndex: defaultChannelForSlot(0, { useBroadcastOffset: useOffset, totalChannels: 16 }),
+            },
+            {
+              id: makeInputId(),
+              label: "Mic 2",
+              armed: true,
+              muted: false,
+              gain: 1,
+              hpf: true,
+              invertPhase: false,
+              channelIndex: defaultChannelForSlot(1, { useBroadcastOffset: useOffset, totalChannels: 16 }),
+              deviceId: detected.secondaryDevice?.deviceId ?? selectedDeviceIdRef.current,
+              colorTag: colorForSlot(1),
+            },
+          ];
+          setInputs(nextList);
+        } else if (next === "stereo-split") {
+          nextList = nextList.slice(0, 2).map((item, idx) => ({ ...item, channelIndex: idx }));
+          setInputs(nextList);
+        }
+      }
+
+      if (micReady) {
+        void armInputs({ mode: next, inputs: nextList });
+      }
+    },
+    [armInputs, micReady],
   );
 
   const hydrateTrackBuffer = useCallback(
@@ -1036,91 +1318,76 @@ export function useStudioAudio({
     async (punchInMs: number, role: StudioTrackRole, baseLayerIndex: number) => {
       const ctx = await ensureAudioContext();
       const mode = captureModeRef.current;
-      const m1 = mic1Ref.current;
-      const m2 = mic2Ref.current;
-      const s1 = mic1StripRef.current;
-      const s2 = mic2StripRef.current;
+      const currentInputs = inputsRef.current;
       const chTotal = detectedChannelsRef.current;
-      const isRodeMulti = mode === "rcp2-multitrack" && chTotal >= 4;
+      const broadcastMap = useBroadcastMapRef.current;
 
       const sourceNodes: AudioNode[] = [];
       const channelMeta: NonNullable<typeof activeCaptureMetaRef.current>["channels"] = [];
+      clearSafetyTaps();
 
-      if (mode === "single") {
-        if (!s1) {
-          onNotice("Arm your microphone before recording.");
-          setTransport("idle");
-          return;
-        }
-        sourceNodes.push(s1.muteGain);
+      let nextLayer = Math.max(0, baseLayerIndex);
+      for (let idx = 0; idx < currentInputs.length; idx++) {
+        const cfg = currentInputs[idx]!;
+        if (mode !== "solo" && !cfg.armed) continue;
+        const strip = inputStripsRef.current.get(cfg.id);
+        if (!strip) continue;
+
+        sourceNodes.push(strip.muteGain);
+        const inputSource =
+          mode === "solo"
+            ? "Solo Input"
+            : mode === "multi-device"
+              ? `USB Input ${idx + 1}`
+              : formatHardwareChannelName(cfg.channelIndex, broadcastMap, chTotal);
+
         channelMeta.push({
-          kind: "mic1",
-          label: m1.label.trim() || `Voice ${tracksRef.current.length + 1}`,
-          layerIndex: Math.max(0, baseLayerIndex),
-          inputSource: "Solo Mic",
-          colorTag: m1.colorTag,
-          role,
+          kind: "input",
+          label: cfg.label.trim() || `Mic ${idx + 1}`,
+          layerIndex: nextLayer,
+          inputSource,
+          colorTag: cfg.colorTag,
+          role: mode === "solo" ? role : "voice",
         });
-      } else {
-        if (m1.armed && s1) {
-          sourceNodes.push(s1.muteGain);
-          channelMeta.push({
-            kind: "mic1",
-            label: m1.label.trim() || "Mic 1 · Host",
-            layerIndex: Math.max(0, baseLayerIndex),
-            inputSource:
-              mode === "dual-device"
-                ? "Dual USB · Input 1"
-                : formatHardwareChannelName(m1.channelIndex, isRodeMulti, chTotal),
-            colorTag: m1.colorTag,
-            role: "voice",
-          });
-        }
-        if (m2.armed && s2) {
-          sourceNodes.push(s2.muteGain);
-          channelMeta.push({
-            kind: "mic2",
-            label: m2.label.trim() || "Mic 2 · Guest",
-            layerIndex: Math.max(0, baseLayerIndex) + (m1.armed ? 1 : 0),
-            inputSource:
-              mode === "dual-device"
-                ? "Dual USB · Input 2"
-                : formatHardwareChannelName(m2.channelIndex, isRodeMulti, chTotal),
-            colorTag: m2.colorTag,
-            role: "voice",
-          });
-        }
-        // Optional RØDECaster Pro II Main Stereo Mix safety backup (Ch 1 & Ch 2)
-        if (recordSafetyMixRef.current && isRodeMulti && splitterRef.current && chTotal >= 4) {
-          const tapL = ctx.createGain();
-          const tapR = ctx.createGain();
-          splitterRef.current.connect(tapL, 0, 0);
-          splitterRef.current.connect(tapR, 1, 0);
-          sourceNodes.push(tapL, tapR);
-          const safetyLayer = Math.max(0, baseLayerIndex) + (m1.armed ? 1 : 0) + (m2.armed ? 1 : 0);
-          channelMeta.push(
-            {
-              kind: "safety-l",
-              label: "Main Mix Safety",
-              layerIndex: safetyLayer,
-              inputSource: "RCP II · Ch 1-2 Main Mix",
-              colorTag: "slate",
-              role: "instrumental",
-            },
-            {
-              kind: "safety-r",
-              label: "Main Mix Safety",
-              layerIndex: safetyLayer,
-              inputSource: "RCP II · Ch 1-2 Main Mix",
-              colorTag: "slate",
-              role: "instrumental",
-            },
-          );
-        }
+        nextLayer += 1;
+      }
+
+      // Optional Ch 1-2 Main Mix stereo safety stem on 4+ch multitrack buses
+      if (
+        mode === "multitrack" &&
+        recordSafetyMixRef.current &&
+        splitterRef.current &&
+        chTotal >= 4 &&
+        sourceNodes.length <= MAX_STUDIO_INPUTS
+      ) {
+        const tapL = ctx.createGain();
+        const tapR = ctx.createGain();
+        splitterRef.current.connect(tapL, 0, 0);
+        splitterRef.current.connect(tapR, 1, 0);
+        safetyTapsRef.current.push(tapL, tapR);
+        sourceNodes.push(tapL, tapR);
+        channelMeta.push(
+          {
+            kind: "safety-l",
+            label: "Main Mix Safety",
+            layerIndex: nextLayer,
+            inputSource: "Ch 1–2 Main Mix",
+            colorTag: "slate",
+            role: "instrumental",
+          },
+          {
+            kind: "safety-r",
+            label: "Main Mix Safety",
+            layerIndex: nextLayer,
+            inputSource: "Ch 1–2 Main Mix",
+            colorTag: "slate",
+            role: "instrumental",
+          },
+        );
       }
 
       if (sourceNodes.length === 0) {
-        onNotice("Arm at least one microphone channel (Mic 1 or Mic 2) before recording.");
+        onNotice("Arm at least one microphone input before recording.");
         setTransport("idle");
         return;
       }
@@ -1142,7 +1409,7 @@ export function useStudioAudio({
       recorder.start();
       setTransport("recording");
     },
-    [ensureAudioContext, onNotice, overdubEnabled, startMetronomeLoop, startTracksFrom],
+    [clearSafetyTaps, ensureAudioContext, onNotice, overdubEnabled, startMetronomeLoop, startTracksFrom],
   );
 
   const startRecording = useCallback(
@@ -1234,6 +1501,7 @@ export function useStudioAudio({
     countInTimerRef.current = undefined;
     setCountInBeat(null);
     stopPlaybackSources();
+    clearSafetyTaps();
     if (pcmRecorderRef.current) {
       void pcmRecorderRef.current.stop().finally(() => {
         pcmRecorderRef.current?.dispose();
@@ -1246,7 +1514,7 @@ export function useStudioAudio({
     telemetryRef.current.recordingProgressMs = 0;
     setTransport("idle");
     onNotice("Discarded in-progress take.");
-  }, [onNotice, stopPlaybackSources]);
+  }, [clearSafetyTaps, onNotice, stopPlaybackSources]);
 
   const stopRecording = useCallback(() => {
     window.clearTimeout(countInTimerRef.current);
@@ -1272,6 +1540,7 @@ export function useStudioAudio({
         const sr = ctx.sampleRate || 48000;
         const pcmChannels = await rec.stop();
         rec.dispose();
+        clearSafetyTaps();
         pcmRecorderRef.current = null;
         activeCaptureMetaRef.current = null;
 
@@ -1300,7 +1569,6 @@ export function useStudioAudio({
           const idbKey = `${trackId}-audio`;
           await saveAudioBlob(idbKey, wavBlob);
 
-          // Construct decoded AudioBuffer directly from captured Float32 PCM (zero decode overhead!)
           const audioBuf = ctx.createBuffer(wavChannels.length, frames, sr);
           for (let c = 0; c < wavChannels.length; c++) {
             audioBuf.copyToChannel(new Float32Array(wavChannels[c]!), c);
@@ -1346,7 +1614,7 @@ export function useStudioAudio({
         setTransport("idle");
       }
     })();
-  }, [ensureAudioContext, onNotice, onTracksCaptured, stopPlaybackSources, transport]);
+  }, [clearSafetyTaps, ensureAudioContext, onNotice, onTracksCaptured, stopPlaybackSources, transport]);
 
   const importAudioFile = useCallback(
     async (file: File, layerIndex = 0, offsetMs = 0): Promise<StudioTrackV1 | null> => {
@@ -1439,7 +1707,9 @@ export function useStudioAudio({
       }
       const rendered = await renderLayerStemsOffline(items, layerNames, items[0]!.buffer.sampleRate);
       return rendered.map((stem) => {
-        const slug = stem.label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || `track-${stem.layerIndex + 1}`;
+        const slug =
+          stem.label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") ||
+          `track-${stem.layerIndex + 1}`;
         return {
           label: stem.label,
           blob: stem.blob,
@@ -1466,13 +1736,10 @@ export function useStudioAudio({
 
   const clearClipIndicators = useCallback(() => {
     telemetryRef.current.clipped = false;
-    telemetryRef.current.mic1.clipped = false;
-    telemetryRef.current.mic1.peakHold = 0;
-    telemetryRef.current.mic2.clipped = false;
-    telemetryRef.current.mic2.peakHold = 0;
+    resetMetersClip(telemetryRef.current.inputMeters, true);
   }, []);
 
-  /** Lock-free 60fps telemetry sampler for dual-mic scopes, dBFS peak-hold meters, and live hardware channel matrix. */
+  /** Lock-free 60fps telemetry sampler for 1..8 input ribbons and 16-channel hardware matrix. */
   const sampleTelemetry = useCallback((): LiveAudioTelemetry => {
     const out = telemetryRef.current;
 
@@ -1485,17 +1752,16 @@ export function useStudioAudio({
 
     const timeBuf = timeBuf256Ref.current;
     const freqBuf = freqBuf128Ref.current;
+    const currentInputs = inputsRef.current;
+    while (out.inputMeters.length < currentInputs.length) out.inputMeters.push(createChannelMeter());
+    if (out.inputMeters.length > currentInputs.length) out.inputMeters.length = currentInputs.length;
 
     if (micReady) {
-      sampleAnalyserInto(mic1StripRef.current?.analyser ?? null, out.mic1, timeBuf, freqBuf);
-      sampleAnalyserInto(
-        captureModeRef.current === "single" ? null : (mic2StripRef.current?.analyser ?? null),
-        out.mic2,
-        timeBuf,
-        freqBuf,
-      );
+      for (let i = 0; i < currentInputs.length; i++) {
+        const strip = inputStripsRef.current.get(currentInputs[i]!.id);
+        sampleAnalyserInto(strip?.analyser ?? null, out.inputMeters[i]!, timeBuf, freqBuf);
+      }
 
-      // Probe every raw hardware channel for the live RØDECaster Pro II channel activity matrix
       const probes = rawChannelAnalysersRef.current;
       const rawBuf = rawTimeBuf128Ref.current;
       for (let c = 0; c < out.rawChannelRms.length; c++) {
@@ -1514,12 +1780,12 @@ export function useStudioAudio({
         out.rawChannelRms[c] = out.rawChannelRms[c]! * 0.35 + rms * 0.65;
       }
     } else {
-      sampleAnalyserInto(null, out.mic1, timeBuf, freqBuf);
-      sampleAnalyserInto(null, out.mic2, timeBuf, freqBuf);
+      for (let i = 0; i < out.inputMeters.length; i++) {
+        sampleAnalyserInto(null, out.inputMeters[i]!, timeBuf, freqBuf);
+      }
       for (let c = 0; c < out.rawChannelRms.length; c++) out.rawChannelRms[c] = out.rawChannelRms[c]! * 0.8;
     }
 
-    // Aggregate master / playback bus meter
     if (transport === "playing" && playbackAnalyserRef.current) {
       const temp = createChannelMeter();
       sampleAnalyserInto(playbackAnalyserRef.current, temp, timeBuf, freqBuf);
@@ -1528,12 +1794,22 @@ export function useStudioAudio({
       out.clipped = temp.clipped;
       for (let i = 0; i < out.bands.length; i++) out.bands[i] = temp.bands[i]!;
     } else if (micReady) {
-      out.rms = Math.max(out.mic1.rms, out.mic2.rms);
-      out.peak = Math.max(out.mic1.peak, out.mic2.peak);
-      out.clipped = out.mic1.clipped || out.mic2.clipped;
-      for (let i = 0; i < out.bands.length; i++) {
-        out.bands[i] = Math.max(out.mic1.bands[i] ?? 0, out.mic2.bands[i] ?? 0);
+      let maxRms = 0;
+      let maxPeak = 0;
+      let anyClip = false;
+      out.bands.fill(0);
+      for (let i = 0; i < currentInputs.length; i++) {
+        const m = out.inputMeters[i]!;
+        if (m.rms > maxRms) maxRms = m.rms;
+        if (m.peak > maxPeak) maxPeak = m.peak;
+        if (m.clipped) anyClip = true;
+        for (let b = 0; b < out.bands.length; b++) {
+          if ((m.bands[b] ?? 0) > out.bands[b]!) out.bands[b] = m.bands[b]!;
+        }
       }
+      out.rms = maxRms;
+      out.peak = maxPeak;
+      out.clipped = anyClip;
     } else {
       out.rms *= 0.84;
       out.peak *= 0.9;
@@ -1548,34 +1824,19 @@ export function useStudioAudio({
     transport,
     playheadMs,
     devices,
-    rodeCaster,
+    audioInterfaces,
+    useBroadcastChannelMap,
     captureMode,
-    setCaptureMode: (next: StudioCaptureMode) => {
-      setCaptureMode(next);
-      if (next !== "single") setStudioRawMic(true);
-      if (micReady) void armInputs({ mode: next });
-    },
+    setCaptureMode: changeCaptureMode,
     selectedDeviceId,
     setSelectedDeviceId: (id: string) => {
       setSelectedDeviceId(id);
       if (micReady) void armInputs({ deviceId: id });
     },
-    mic1,
-    updateMic1: (patch: Partial<MicChannelConfig>) => {
-      const next = { ...mic1Ref.current, ...patch };
-      setMic1(next);
-      if (patch.deviceId && captureModeRef.current === "dual-device" && micReady) {
-        void armInputs({ mic1DeviceId: patch.deviceId });
-      }
-    },
-    mic2,
-    updateMic2: (patch: Partial<MicChannelConfig>) => {
-      const next = { ...mic2Ref.current, ...patch };
-      setMic2(next);
-      if (patch.deviceId && captureModeRef.current === "dual-device" && micReady) {
-        void armInputs({ mic2DeviceId: patch.deviceId });
-      }
-    },
+    inputs,
+    addInput,
+    removeInput,
+    updateInput,
     recordSafetyMix,
     setRecordSafetyMix,
     detectedChannels,
@@ -1593,7 +1854,7 @@ export function useStudioAudio({
     setOverdubEnabled,
     countInBeat,
     armInputs,
-    applyRodeCasterPreset,
+    autoConfigureMultiMic,
     refreshDevices,
     clearClipIndicators,
     startRecording,

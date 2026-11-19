@@ -1,91 +1,137 @@
 /**
- * Sample-locked multi-channel Web Audio PCM capture engine + RØDECaster Pro II hardware helpers.
+ * Sample-locked multi-channel Web Audio PCM capture engine + multi-input USB audio interface helpers.
  *
- * Captures up to 4 mono stems (Mic 1, Mic 2, and optional Ch 1-2 Safety Mix L/R) on the exact same
- * AudioContext render quantum so dual-mic room setups never suffer inter-track drift or bleed echo.
+ * Captures 1 to 10 mono channels (up to 8 isolated microphones + optional 2-ch Main Mix safety bus)
+ * on the exact same AudioContext render quantum so multi-mic setups never suffer inter-track drift
+ * or room-bleed echo.
  */
 
-export type StudioCaptureMode = "rcp2-multitrack" | "stereo-split" | "dual-device" | "single";
+export type StudioCaptureMode = "solo" | "multitrack" | "stereo-split" | "multi-device";
+
+export const MAX_STUDIO_INPUTS = 8;
+export const MAX_PCM_CAPTURE_CHANNELS = 10; // Up to 8 isolated mics + 2-ch stereo safety bus
 
 export type MicDeviceOption = {
   deviceId: string;
   groupId: string;
   label: string;
-  isRodeCaster: boolean;
-  rodeKind: "multitrack" | "main-stereo" | "chat" | "secondary" | "generic" | null;
+  /** True when the OS audio endpoint exposes a dedicated multitrack USB bus. */
+  isMultitrackEndpoint: boolean;
+  /** True when the endpoint belongs to a multi-channel broadcast console / USB audio interface. */
+  isBroadcastConsole: boolean;
+  endpointRole: "multitrack" | "main-stereo" | "secondary" | "generic";
 };
 
-export interface RodeCasterDetection {
-  detected: boolean;
+export interface AudioInterfaceDetection {
+  hasMultitrackInterface: boolean;
+  hasBroadcastConsole: boolean;
   multitrackDevice: MicDeviceOption | null;
   mainStereoDevice: MicDeviceOption | null;
-  chatDevice: MicDeviceOption | null;
   secondaryDevice: MicDeviceOption | null;
-  allMatches: MicDeviceOption[];
+  externalInputs: MicDeviceOption[];
 }
 
-export const RODECASTER_CHANNEL_LABELS: readonly string[] = [
-  "Ch 1 · Main Mix L",
-  "Ch 2 · Main Mix R",
-  "Ch 3 · Combo 1 (Mic 1)",
-  "Ch 4 · Combo 2 (Mic 2)",
-  "Ch 5 · Combo 3",
-  "Ch 6 · Combo 4",
-  "Ch 7 · Bluetooth L",
-  "Ch 8 · Bluetooth R",
-  "Ch 9 · SMART Pads L",
-  "Ch 10 · SMART Pads R",
+/**
+ * Neutral channel map for standard broadcast multitrack USB interfaces where
+ * Ch 1-2 carry the stereo main bus and Ch 3-6 carry discrete preamp inputs 1-4.
+ */
+export const BROADCAST_MULTITRACK_LABELS: readonly string[] = [
+  "Ch 1 · Main L",
+  "Ch 2 · Main R",
+  "Ch 3 · Input 1",
+  "Ch 4 · Input 2",
+  "Ch 5 · Input 3",
+  "Ch 6 · Input 4",
+  "Ch 7 · Aux L",
+  "Ch 8 · Aux R",
+  "Ch 9 · Bus A L",
+  "Ch 10 · Bus A R",
   "Ch 11 · USB 1 L",
   "Ch 12 · USB 1 R",
   "Ch 13 · USB 2 L",
   "Ch 14 · USB 2 R",
-  "Ch 15 · Aux L",
-  "Ch 16 · Aux R",
+  "Ch 15 · Line L",
+  "Ch 16 · Line R",
 ];
 
-const RODE_REGEX = /r[øo]de\s*caster|rodecaster|rcp\s*(?:ii|2)/i;
+// Hardware heuristics stay strictly internal (never surfaced as third-party branding in UI copy).
+const BROADCAST_CONSOLE_RE = /r[øo]de\s*caster|rodecaster|rcp\s*(?:ii|2)|podtrak|dlz\s*creator|mixcast/i;
+const MULTITRACK_ENDPOINT_RE = /multitrack|multi[\s-]?track|\b(?:4|6|8|12|14|16)\s*ch\b/i;
+const EXTERNAL_INTERFACE_RE =
+  /usb|interface|scarlett|focusrite|apollo|universal audio|motu|audient|ssl|presonus|behringer|zoom|tascam|shure|wave|elgato|r[øo]de|rode|mixcast|podtrak/i;
 
 export function classifyInputDevice(raw: MediaDeviceInfo, fallbackIndex: number): MicDeviceOption {
   const label = raw.label?.trim() || `Microphone ${fallbackIndex + 1}`;
-  const isRodeCaster = RODE_REGEX.test(label);
-  let rodeKind: MicDeviceOption["rodeKind"] = null;
-  if (isRodeCaster) {
-    if (/multitrack|multi[\s-]?track/i.test(label)) rodeKind = "multitrack";
-    else if (/chat/i.test(label)) rodeKind = "chat";
-    else if (/secondary|usb\s*2/i.test(label)) rodeKind = "secondary";
-    else if (/main|stereo|usb\s*1/i.test(label)) rodeKind = "main-stereo";
-    else rodeKind = "generic";
-  }
+  const isBroadcastConsole = BROADCAST_CONSOLE_RE.test(label);
+  const isMultitrackEndpoint = MULTITRACK_ENDPOINT_RE.test(label);
+
+  let endpointRole: MicDeviceOption["endpointRole"] = "generic";
+  if (isMultitrackEndpoint) endpointRole = "multitrack";
+  else if (/secondary|chat|usb\s*2/i.test(label)) endpointRole = "secondary";
+  else if (/main|stereo|usb\s*1/i.test(label) || isBroadcastConsole) endpointRole = "main-stereo";
+
   return {
     deviceId: raw.deviceId || `mic-${fallbackIndex}`,
     groupId: raw.groupId || "",
     label,
-    isRodeCaster,
-    rodeKind,
+    isMultitrackEndpoint,
+    isBroadcastConsole,
+    endpointRole,
   };
 }
 
-export function detectRodeCasterDevices(devices: MicDeviceOption[]): RodeCasterDetection {
-  const allMatches = devices.filter((d) => d.isRodeCaster);
+export function detectAudioInterfaces(devices: MicDeviceOption[]): AudioInterfaceDetection {
+  const multitrackDevice = devices.find((d) => d.isMultitrackEndpoint) ?? null;
+  const broadcastMatches = devices.filter((d) => d.isBroadcastConsole);
+  const externalInputs = devices.filter(
+    (d) => d.isBroadcastConsole || d.isMultitrackEndpoint || EXTERNAL_INTERFACE_RE.test(d.label),
+  );
+  const mainStereoDevice =
+    broadcastMatches.find((d) => d.endpointRole === "main-stereo") ??
+    externalInputs.find((d) => d.endpointRole === "main-stereo") ??
+    broadcastMatches[0] ??
+    externalInputs[0] ??
+    null;
+  const secondaryDevice =
+    broadcastMatches.find((d) => d.endpointRole === "secondary") ??
+    externalInputs.find((d) => d.deviceId !== mainStereoDevice?.deviceId) ??
+    null;
+
   return {
-    detected: allMatches.length > 0,
-    multitrackDevice: allMatches.find((d) => d.rodeKind === "multitrack") ?? null,
-    mainStereoDevice:
-      allMatches.find((d) => d.rodeKind === "main-stereo") ??
-      allMatches.find((d) => d.rodeKind === "generic") ??
-      null,
-    chatDevice: allMatches.find((d) => d.rodeKind === "chat") ?? null,
-    secondaryDevice: allMatches.find((d) => d.rodeKind === "secondary") ?? null,
-    allMatches,
+    hasMultitrackInterface: Boolean(multitrackDevice),
+    hasBroadcastConsole: broadcastMatches.length > 0,
+    multitrackDevice,
+    mainStereoDevice,
+    secondaryDevice,
+    externalInputs,
   };
 }
 
-export function formatHardwareChannelName(index: number, isRodeMultitrack: boolean, totalChannels: number): string {
-  if (isRodeMultitrack && totalChannels >= 4 && index < RODECASTER_CHANNEL_LABELS.length) {
-    return RODECASTER_CHANNEL_LABELS[index]!;
+/**
+ * Returns the default 0-based hardware channel index for mic slot `slotIndex` (0 = Mic 1, 1 = Mic 2, ...).
+ * Broadcast multitrack consoles reserve Ch 1-2 (indices 0-1) for Main Mix L/R and place Mic 1-4 on Ch 3-6 (indices 2-5).
+ */
+export function defaultChannelForSlot(
+  slotIndex: number,
+  options: { useBroadcastOffset: boolean; totalChannels: number },
+): number {
+  const maxCh = Math.max(1, options.totalChannels);
+  if (options.useBroadcastOffset && maxCh >= 4) {
+    return Math.min(maxCh - 1, 2 + slotIndex);
+  }
+  return Math.min(maxCh - 1, slotIndex);
+}
+
+export function formatHardwareChannelName(
+  index: number,
+  useBroadcastMap: boolean,
+  totalChannels: number,
+): string {
+  if (useBroadcastMap && totalChannels >= 4 && index < BROADCAST_MULTITRACK_LABELS.length) {
+    return BROADCAST_MULTITRACK_LABELS[index]!;
   }
   if (totalChannels === 2) {
-    return index === 0 ? "Ch 1 · Left (L)" : "Ch 2 · Right (R)";
+    return index === 0 ? "Ch 1 · Left" : "Ch 2 · Right";
   }
   return `Ch ${index + 1}`;
 }
@@ -113,7 +159,7 @@ class NexusPcmRecorderProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super();
     const opts = (options && options.processorOptions) || {};
-    this.channelCount = Math.max(1, Math.min(4, opts.channelCount || 2));
+    this.channelCount = Math.max(1, Math.min(10, opts.channelCount || 2));
     this.recording = false;
     this.paused = false;
     this.chunkSize = 2048;
@@ -170,7 +216,7 @@ class NexusPcmRecorderProcessor extends AudioWorkletProcessor {
     return true;
   }
 }
-registerProcessor('nexus-pcm-recorder', NexusPcmRecorderProcessor);
+registerProcessor('nexus-pcm-recorder-v2', NexusPcmRecorderProcessor);
 `;
 
 const registeredWorkletContexts = new WeakSet<AudioContext>();
@@ -207,7 +253,7 @@ function concatFloat32(chunks: Float32Array[]): Float32Array {
 
 /**
  * Sample-locked multi-channel PCM capture tap attached inside the active AudioContext.
- * Uses AudioWorkletNode when available and falls back cleanly to ScriptProcessorNode.
+ * Supports 1..10 simultaneous discrete mono channels via AudioWorkletNode (with ScriptProcessorNode fallback).
  */
 export class MultiChannelPcmRecorder {
   private readonly ctx: AudioContext;
@@ -223,7 +269,7 @@ export class MultiChannelPcmRecorder {
 
   private constructor(ctx: AudioContext, channelCount: number) {
     this.ctx = ctx;
-    this.channelCount = Math.max(1, Math.min(4, channelCount));
+    this.channelCount = Math.max(1, Math.min(MAX_PCM_CAPTURE_CHANNELS, channelCount));
     this.chunks = Array.from({ length: this.channelCount }, () => []);
 
     this.merger = ctx.createChannelMerger(this.channelCount);
@@ -236,7 +282,7 @@ export class MultiChannelPcmRecorder {
   }
 
   static async create(ctx: AudioContext, channelSources: AudioNode[]): Promise<MultiChannelPcmRecorder> {
-    const count = Math.max(1, Math.min(4, channelSources.length));
+    const count = Math.max(1, Math.min(MAX_PCM_CAPTURE_CHANNELS, channelSources.length));
     const instance = new MultiChannelPcmRecorder(ctx, count);
 
     for (let ch = 0; ch < count; ch++) {
@@ -246,7 +292,7 @@ export class MultiChannelPcmRecorder {
 
     const workletOk = await ensurePcmWorkletLoaded(ctx);
     if (workletOk) {
-      const node = new AudioWorkletNode(ctx, "nexus-pcm-recorder", {
+      const node = new AudioWorkletNode(ctx, "nexus-pcm-recorder-v2", {
         numberOfInputs: 1,
         numberOfOutputs: 1,
         outputChannelCount: [1],
@@ -272,7 +318,6 @@ export class MultiChannelPcmRecorder {
       node.connect(instance.silentSink);
       instance.workletNode = node;
     } else {
-      // Fallback: ScriptProcessorNode keeps identical sample-locked capture if CSP blocks Blob worklets.
       const sp = ctx.createScriptProcessor(2048, count, 1);
       sp.onaudioprocess = (ev) => {
         if (!instance.isRecording || instance.isPaused) return;

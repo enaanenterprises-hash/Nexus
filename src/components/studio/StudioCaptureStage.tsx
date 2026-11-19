@@ -1,17 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   BookmarkPlus,
-  Check,
   ChevronDown,
   Headphones,
   Metronome,
   Pause,
   Play,
-  Radio,
+  Plus,
   RotateCcw,
   SlidersHorizontal,
+  Trash2,
   Volume2,
   VolumeX,
 } from "lucide-react";
@@ -21,20 +21,32 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
+  MAX_STUDIO_INPUTS,
   formatDbReadout,
   formatGainDb,
   formatHardwareChannelName,
   linearToDb,
   type MicDeviceOption,
-  type RodeCasterDetection,
   type StudioCaptureMode,
 } from "@/lib/studio/capture-engine";
+import type { StudioTrackColor } from "@/lib/studio/types";
 import type {
   ChannelMeterTelemetry,
   LiveAudioTelemetry,
   MicChannelConfig,
   StudioTransportState,
 } from "./use-studio-audio";
+
+const RIBBON_PALETTE: Record<
+  StudioTrackColor,
+  { darkRgb: readonly [number, number, number]; lightRgb: readonly [number, number, number]; dotClass: string }
+> = {
+  gold: { darkRgb: [240, 181, 74], lightRgb: [166, 116, 18], dotClass: "bg-[#f0b54a]" },
+  sky: { darkRgb: [186, 206, 226], lightRgb: [72, 92, 114], dotClass: "bg-[#94b2d0]" },
+  emerald: { darkRgb: [134, 204, 174], lightRgb: [28, 122, 86], dotClass: "bg-[#6ec49f]" },
+  coral: { darkRgb: [232, 152, 134], lightRgb: [176, 78, 58], dotClass: "bg-[#e29584]" },
+  slate: { darkRgb: [192, 192, 200], lightRgb: [92, 94, 104], dotClass: "bg-[#a1a1aa]" },
+};
 
 function formatStageClock(ms: number): string {
   const safe = Math.max(0, ms);
@@ -54,15 +66,9 @@ function dbToMeterFrac(db: number): number {
   return (clamped + 48) / 48;
 }
 
-/**
- * Draws one ultra-crisp, borderless acoustic tape ribbon onto the shared stage canvas.
- * Left of needle: delicate rolling history trace.
- * Right of needle: live harmonic voice response.
- * Zero canvas shadowBlur, zero glow halos — pure hairline optical craft.
- */
-function drawAcousticTrack(
+function drawAcousticRibbon(
   ctx: CanvasRenderingContext2D,
-  meter: ChannelMeterTelemetry,
+  meter: ChannelMeterTelemetry | undefined,
   history: number[],
   options: {
     width: number;
@@ -77,7 +83,7 @@ function drawAcousticTrack(
     nowMs: number;
     reduceMotion: boolean;
     label?: string;
-    showBaseline?: boolean;
+    compact: boolean;
   },
 ) {
   const {
@@ -93,35 +99,34 @@ function drawAcousticTrack(
     nowMs,
     reduceMotion,
     label,
-    showBaseline,
+    compact,
   } = options;
 
   const [ar, ag, ab] = accentRgb;
-  const effectiveRms = isMuted ? 0 : meter.rms;
-  const effectivePeak = isMuted ? 0 : meter.peak;
+  const effectiveRms = !meter || isMuted ? 0 : meter.rms;
+  const effectivePeak = !meter || isMuted ? 0 : meter.peak;
 
-  // Hairline acoustic datum rule + calibrated rangefinder ticks
-  if (showBaseline) {
-    ctx.strokeStyle = isLight ? "rgba(14, 15, 18, 0.075)" : "rgba(255, 255, 255, 0.065)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, cy);
-    ctx.lineTo(width, cy);
-    ctx.stroke();
+  // Hairline datum rule + subtle rangefinder ticks
+  ctx.strokeStyle = isLight ? "rgba(14, 15, 18, 0.07)" : "rgba(255, 255, 255, 0.06)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, cy);
+  ctx.lineTo(width, cy);
+  ctx.stroke();
 
+  if (!compact) {
     const tickStep = 28;
-    ctx.strokeStyle = isLight ? "rgba(14, 15, 18, 0.06)" : "rgba(255, 255, 255, 0.055)";
+    ctx.strokeStyle = isLight ? "rgba(14, 15, 18, 0.055)" : "rgba(255, 255, 255, 0.05)";
     ctx.beginPath();
     for (let x = cx % tickStep; x < width; x += tickStep) {
       const major = Math.abs(Math.round((x - cx) / tickStep)) % 4 === 0;
-      const tickH = major ? 5 : 2.5;
+      const tickH = major ? 4.5 : 2;
       ctx.moveTo(x, cy - tickH);
       ctx.lineTo(x, cy + tickH);
     }
     ctx.stroke();
   }
 
-  // Quiet tucked channel name on far left when in 2-Mic mode
   if (label) {
     ctx.font = "500 11px Manrope, -apple-system, 'SF Pro Display', sans-serif";
     ctx.fillStyle = isLight
@@ -135,7 +140,7 @@ function drawAcousticTrack(
   const leftCount = Math.max(20, Math.floor((cx - 10) / step));
   const rightCount = Math.max(20, Math.floor((width - cx - 10) / step));
 
-  // LEFT OF NEEDLE: Recorded tape history tapering smoothly into negative space
+  // LEFT OF NEEDLE: Recorded trace tapering gently into negative space
   for (let i = 0; i < leftCount; i++) {
     const x = cx - 7 - i * step;
     if (x < 6) break;
@@ -169,14 +174,15 @@ function drawAcousticTrack(
 
   // RIGHT OF NEEDLE: Live voice-reactive spectrum contour
   const isHotPeak = effectivePeak > 0.78 && !isMuted;
+  const bands = meter?.bands;
   for (let i = 0; i < rightCount; i++) {
     const x = cx + 7 + i * step;
     if (x > width - 6) break;
     const norm = i / rightCount;
     const edgeFade = Math.max(0.08, 1 - Math.pow(norm, 1.4));
 
-    const bandIdx = Math.min(meter.bands.length - 1, Math.floor(norm * (meter.bands.length * 0.82)));
-    const bandVal = isMuted ? 0 : (meter.bands[bandIdx] ?? 0);
+    const bandIdx = bands ? Math.min(bands.length - 1, Math.floor(norm * (bands.length * 0.82))) : 0;
+    const bandVal = isMuted || !bands ? 0 : (bands[bandIdx] ?? 0);
     const liveLevel = isLive ? bandVal * 0.74 + effectiveRms * 0.36 : 0.016;
     const breath = !reduceMotion && isLive && !isMuted ? 0.018 + 0.01 * Math.sin(nowMs * 0.0022 - i * 0.28) : 0.016;
     const amp = Math.max(breath, liveLevel) * (0.28 + 0.72 * (1 - norm * 0.68));
@@ -202,55 +208,56 @@ function drawAcousticTrack(
   }
 }
 
-function ProChannelRow({
-  slot,
+function InputStripRow({
   cfg,
+  slotIndex,
   sourceTag,
-  isDualMic,
+  isMultiMic,
   isActiveTake,
-  meterRef,
-  dbRef,
+  canRemove,
+  onRegisterMeter,
+  onRegisterDb,
   onUpdate,
+  onRemove,
   onOpenPatchbay,
 }: {
-  slot: "mic1" | "mic2";
   cfg: MicChannelConfig;
+  slotIndex: number;
   sourceTag: string;
-  isDualMic: boolean;
+  isMultiMic: boolean;
   isActiveTake: boolean;
-  meterRef: RefObject<HTMLDivElement | null>;
-  dbRef: RefObject<HTMLSpanElement | null>;
+  canRemove: boolean;
+  onRegisterMeter: (id: string, el: HTMLDivElement | null) => void;
+  onRegisterDb: (id: string, el: HTMLSpanElement | null) => void;
   onUpdate: (patch: Partial<MicChannelConfig>) => void;
+  onRemove: () => void;
   onOpenPatchbay: () => void;
 }) {
+  const dotClass = RIBBON_PALETTE[cfg.colorTag]?.dotClass ?? "bg-[#f0b54a]";
+
   return (
-    <div className="flex flex-col gap-3 py-3 first:pt-1 last:pb-1">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span
-            className={`h-2 w-2 shrink-0 rounded-full ${
-              slot === "mic1" ? "bg-[#f0b54a]" : "bg-[#d1d1d6]"
-            }`}
-            aria-hidden
-          />
+    <div className="flex flex-col gap-2.5 py-3 first:pt-1 last:pb-1">
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className={`h-2 w-2 shrink-0 rounded-full ${dotClass}`} aria-hidden />
           <input
             type="text"
             value={cfg.label}
             onChange={(e) => onUpdate({ label: e.target.value })}
-            aria-label={slot === "mic1" ? "Mic 1 name" : "Mic 2 name"}
-            className="w-36 truncate rounded-md bg-transparent px-1 py-0.5 text-[13px] font-medium text-foreground hover:bg-foreground/[0.04] focus:bg-foreground/[0.07] focus:outline-none"
+            aria-label={`Input ${slotIndex + 1} name`}
+            className="w-32 truncate rounded-md bg-transparent px-1 py-0.5 text-[13px] font-medium text-foreground hover:bg-foreground/[0.04] focus:bg-foreground/[0.07] focus:outline-none"
           />
           <button
             type="button"
             onClick={onOpenPatchbay}
-            className="truncate font-mono text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+            className="max-w-[140px] truncate font-mono text-[11px] text-muted-foreground transition-colors hover:text-foreground"
           >
             {sourceTag}
           </button>
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          {isDualMic ? (
+          {isMultiMic ? (
             <button
               type="button"
               disabled={isActiveTake}
@@ -295,7 +302,7 @@ function ProChannelRow({
             variant={cfg.invertPhase ? "secondary" : "ghost"}
             onClick={() => onUpdate({ invertPhase: !cfg.invertPhase })}
             aria-pressed={cfg.invertPhase}
-            aria-label={`Invert phase on ${cfg.label}`}
+            aria-label={`Invert polarity on ${cfg.label}`}
             className="h-7 w-7 rounded-full p-0 font-mono text-[12px]"
           >
             Ø
@@ -317,20 +324,33 @@ function ProChannelRow({
               {formatGainDb(cfg.gain)}
             </span>
           </label>
+
+          {canRemove ? (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              disabled={isActiveTake}
+              onClick={onRemove}
+              aria-label={`Remove ${cfg.label}`}
+              className="h-7 w-7 rounded-full text-muted-foreground hover:text-destructive"
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
+          ) : null}
         </div>
       </div>
 
-      {/* Slim hairline dBFS meter bar */}
       <div className="flex items-center gap-2.5">
         <div className="h-[3px] flex-1 overflow-hidden rounded-full bg-foreground/[0.08]">
           <div
-            ref={meterRef}
+            ref={(el) => onRegisterMeter(cfg.id, el)}
             style={{ transform: "scaleX(0.004)", transformOrigin: "left center" }}
             className="h-full w-full rounded-full bg-[linear-gradient(90deg,#34d399_0%,#34d399_72%,#f0b54a_88%,#e12621_98%)] will-change-transform"
           />
         </div>
         <span
-          ref={dbRef}
+          ref={(el) => onRegisterDb(cfg.id, el)}
           className="w-12 text-right font-mono text-[10.5px] text-muted-foreground tabular-nums"
         >
           -∞ dB
@@ -343,11 +363,10 @@ function ProChannelRow({
 export function StudioCaptureStage({
   transport,
   captureMode,
-  rodeCaster,
+  useBroadcastChannelMap,
   devices,
   selectedDeviceId,
-  mic1,
-  mic2,
+  inputs,
   micReady,
   micError,
   statusNotice,
@@ -362,11 +381,10 @@ export function StudioCaptureStage({
   recordSafetyMix,
   theme,
   sampleTelemetry,
-  onChangeMode,
-  onUpdateMic1,
-  onUpdateMic2,
+  onAddInput,
+  onRemoveInput,
+  onUpdateInput,
   onArmInputs,
-  onApplyRodeCasterPreset,
   onClearClipIndicators,
   onOpenPatchbay,
   onStartRecord,
@@ -383,11 +401,10 @@ export function StudioCaptureStage({
 }: {
   transport: StudioTransportState;
   captureMode: StudioCaptureMode;
-  rodeCaster: RodeCasterDetection;
+  useBroadcastChannelMap: boolean;
   devices: MicDeviceOption[];
   selectedDeviceId: string;
-  mic1: MicChannelConfig;
-  mic2: MicChannelConfig;
+  inputs: MicChannelConfig[];
   micReady: boolean;
   micError: string | null;
   statusNotice: string | null;
@@ -402,11 +419,10 @@ export function StudioCaptureStage({
   recordSafetyMix: boolean;
   theme: "dark" | "light";
   sampleTelemetry: () => LiveAudioTelemetry;
-  onChangeMode: (mode: StudioCaptureMode) => void;
-  onUpdateMic1: (patch: Partial<MicChannelConfig>) => void;
-  onUpdateMic2: (patch: Partial<MicChannelConfig>) => void;
+  onAddInput: () => void;
+  onRemoveInput: (id: string) => void;
+  onUpdateInput: (id: string, patch: Partial<MicChannelConfig>) => void;
   onArmInputs: () => void;
-  onApplyRodeCasterPreset: () => void;
   onClearClipIndicators: () => void;
   onOpenPatchbay: () => void;
   onStartRecord: () => void;
@@ -421,26 +437,21 @@ export function StudioCaptureStage({
   onToggleMonitor: (next: boolean) => void;
   onDropMarker: () => void;
 }) {
-  const [proConsoleOpen, setProConsoleOpen] = useState(false);
+  const [mixerTrayOpen, setMixerTrayOpen] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const timerRef = useRef<HTMLDivElement>(null);
-  const mic1DbRef = useRef<HTMLSpanElement>(null);
-  const mic2DbRef = useRef<HTMLSpanElement>(null);
-  const mic1MeterRef = useRef<HTMLDivElement>(null);
-  const mic2MeterRef = useRef<HTMLDivElement>(null);
   const clipDotRef = useRef<HTMLButtonElement>(null);
-
-  const hist1Ref = useRef<number[]>([]);
-  const hist2Ref = useRef<number[]>([]);
+  const meterElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const dbElsRef = useRef<Map<string, HTMLSpanElement>>(new Map());
+  const historiesRef = useRef<Map<string, number[]>>(new Map());
   const lastSampleRef = useRef<number>(0);
 
   const stateRef = useRef({
     transport,
     captureMode,
     micReady,
-    mic1,
-    mic2,
+    inputs,
     theme,
     sampleTelemetry,
   });
@@ -450,18 +461,27 @@ export function StudioCaptureStage({
       transport,
       captureMode,
       micReady,
-      mic1,
-      mic2,
+      inputs,
       theme,
       sampleTelemetry,
     };
-  }, [captureMode, mic1, mic2, micReady, sampleTelemetry, theme, transport]);
+  }, [captureMode, inputs, micReady, sampleTelemetry, theme, transport]);
 
   useEffect(() => {
     if (transport === "idle") {
       lastSampleRef.current = 0;
     }
   }, [transport]);
+
+  const registerMeter = useCallback((id: string, el: HTMLDivElement | null) => {
+    if (el) meterElsRef.current.set(id, el);
+    else meterElsRef.current.delete(id);
+  }, []);
+
+  const registerDb = useCallback((id: string, el: HTMLSpanElement | null) => {
+    if (el) dbElsRef.current.set(id, el);
+    else dbElsRef.current.delete(id);
+  }, []);
 
   useEffect(() => {
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -480,43 +500,52 @@ export function StudioCaptureStage({
       const isLight = s.theme === "light";
       const isRec = s.transport === "recording";
       const isLive = s.micReady || isRec || s.transport === "counting-in";
-      const isDual = s.captureMode !== "single";
+      const count = Math.max(1, s.inputs.length);
 
       if (timerRef.current) {
         timerRef.current.textContent = formatStageClock(tel.recordingProgressMs);
       }
 
-      // Live quiet dB & drawer meter updates (zero React re-renders)
-      const m1Rms = s.mic1.muted ? 0 : tel.mic1.rms;
-      const m2Rms = s.mic2.muted ? 0 : tel.mic2.rms;
-      if (mic1DbRef.current) {
-        mic1DbRef.current.textContent = formatDbReadout(Math.max(m1Rms, s.mic1.muted ? 0 : tel.mic1.peak * 0.85));
+      let anyClip = false;
+      let anySignal = false;
+      for (let i = 0; i < s.inputs.length; i++) {
+        const inp = s.inputs[i]!;
+        const meter = tel.inputMeters[i];
+        const rms = !meter || inp.muted ? 0 : meter.rms;
+        const peak = !meter || inp.muted ? 0 : meter.peak;
+        if (meter?.clipped) anyClip = true;
+        if (rms > 0.006) anySignal = true;
+
+        const dbEl = dbElsRef.current.get(inp.id);
+        if (dbEl) dbEl.textContent = formatDbReadout(Math.max(rms, peak * 0.85));
+
+        const meterEl = meterElsRef.current.get(inp.id);
+        if (meterEl) {
+          const frac = rms <= 0.0005 ? 0 : dbToMeterFrac(linearToDb(rms));
+          meterEl.style.transform = `scaleX(${Math.max(0.004, frac).toFixed(3)})`;
+        }
       }
-      if (mic2DbRef.current) {
-        mic2DbRef.current.textContent = formatDbReadout(Math.max(m2Rms, s.mic2.muted ? 0 : tel.mic2.peak * 0.85));
-      }
-      if (mic1MeterRef.current) {
-        const f1 = m1Rms <= 0.0005 ? 0 : dbToMeterFrac(linearToDb(m1Rms));
-        mic1MeterRef.current.style.transform = `scaleX(${Math.max(0.004, f1).toFixed(3)})`;
-      }
-      if (mic2MeterRef.current) {
-        const f2 = m2Rms <= 0.0005 ? 0 : dbToMeterFrac(linearToDb(m2Rms));
-        mic2MeterRef.current.style.transform = `scaleX(${Math.max(0.004, f2).toFixed(3)})`;
-      }
+
       if (clipDotRef.current) {
-        clipDotRef.current.dataset.clipped = tel.mic1.clipped || tel.mic2.clipped ? "true" : "false";
+        clipDotRef.current.dataset.clipped = anyClip ? "true" : "false";
       }
 
-      if ((isRec || (isLive && (m1Rms > 0.006 || m2Rms > 0.006))) && nowMs - lastSampleRef.current >= 36) {
+      if ((isRec || (isLive && anySignal)) && nowMs - lastSampleRef.current >= 36) {
         lastSampleRef.current = nowMs;
-        const v1 = s.mic1.muted ? 0.012 : Math.min(1, Math.max(0.02, m1Rms * 1.45 + tel.mic1.peak * 0.3));
-        hist1Ref.current.push(v1);
-        if (hist1Ref.current.length > 260) hist1Ref.current.shift();
-
-        if (isDual) {
-          const v2 = s.mic2.muted ? 0.012 : Math.min(1, Math.max(0.02, m2Rms * 1.45 + tel.mic2.peak * 0.3));
-          hist2Ref.current.push(v2);
-          if (hist2Ref.current.length > 260) hist2Ref.current.shift();
+        for (let i = 0; i < s.inputs.length; i++) {
+          const inp = s.inputs[i]!;
+          const meter = tel.inputMeters[i];
+          const val =
+            !meter || inp.muted
+              ? 0.012
+              : Math.min(1, Math.max(0.02, meter.rms * 1.45 + meter.peak * 0.3));
+          let hist = historiesRef.current.get(inp.id);
+          if (!hist) {
+            hist = [];
+            historiesRef.current.set(inp.id, hist);
+          }
+          hist.push(val);
+          if (hist.length > 260) hist.shift();
         }
       }
 
@@ -539,72 +568,42 @@ export function StudioCaptureStage({
           const cx = width * 0.5;
           ctx.clearRect(0, 0, width, height);
 
-          const goldAccent = isLight ? ([166, 116, 18] as const) : ([240, 181, 74] as const);
-          const silverAccent = isLight ? ([82, 84, 94] as const) : ([209, 209, 214] as const);
+          const laneH = height / count;
+          for (let i = 0; i < count; i++) {
+            const inp = s.inputs[i]!;
+            const meter = tel.inputMeters[i];
+            const hist = historiesRef.current.get(inp.id) ?? [];
+            const cy = laneH * (i + 0.5);
+            const maxBarH = laneH * (count === 1 ? 0.42 : 0.38);
+            const palette = RIBBON_PALETTE[inp.colorTag] ?? RIBBON_PALETTE.gold;
 
-          if (isDual) {
-            // Two serene, parallel acoustic tape ribbons separated by clean negative space
-            const topY = height * 0.27;
-            const botY = height * 0.73;
-            const maxH = height * 0.2;
+            if (i > 0) {
+              ctx.strokeStyle = isLight ? "rgba(14, 15, 18, 0.05)" : "rgba(255, 255, 255, 0.045)";
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              ctx.moveTo(0, laneH * i);
+              ctx.lineTo(width, laneH * i);
+              ctx.stroke();
+            }
 
-            drawAcousticTrack(ctx, tel.mic1, hist1Ref.current, {
+            drawAcousticRibbon(ctx, meter, hist, {
               width,
-              cy: topY,
-              maxBarH: maxH,
+              cy,
+              maxBarH,
               cx,
-              accentRgb: goldAccent,
+              accentRgb: isLight ? palette.lightRgb : palette.darkRgb,
               isLight,
-              isRec: isRec && s.mic1.armed,
-              isLive: isLive && s.mic1.armed,
-              isMuted: s.mic1.muted,
+              isRec: isRec && (count === 1 || inp.armed),
+              isLive: isLive && (count === 1 || inp.armed),
+              isMuted: inp.muted,
               nowMs,
               reduceMotion,
-              label: s.mic1.label || "Mic 1",
-              showBaseline: true,
-            });
-
-            // Whisper hairline dividing the two parallel staves
-            ctx.strokeStyle = isLight ? "rgba(14, 15, 18, 0.05)" : "rgba(255, 255, 255, 0.045)";
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(0, height * 0.5);
-            ctx.lineTo(width, height * 0.5);
-            ctx.stroke();
-
-            drawAcousticTrack(ctx, tel.mic2, hist2Ref.current, {
-              width,
-              cy: botY,
-              maxBarH: maxH,
-              cx,
-              accentRgb: silverAccent,
-              isLight,
-              isRec: isRec && s.mic2.armed,
-              isLive: isLive && s.mic2.armed,
-              isMuted: s.mic2.muted,
-              nowMs,
-              reduceMotion,
-              label: s.mic2.label || "Mic 2",
-              showBaseline: true,
-            });
-          } else {
-            drawAcousticTrack(ctx, tel.mic1, hist1Ref.current, {
-              width,
-              cy: height * 0.5,
-              maxBarH: height * 0.4,
-              cx,
-              accentRgb: goldAccent,
-              isLight,
-              isRec,
-              isLive,
-              isMuted: s.mic1.muted,
-              nowMs,
-              reduceMotion,
-              showBaseline: true,
+              label: count > 1 ? inp.label || `Mic ${i + 1}` : undefined,
+              compact: count > 2,
             });
           }
 
-          // Single sculptural vertical needle bisecting the entire acoustic stage (zero blur/glow)
+          // Single sculptural vertical needle bisecting the entire acoustic horizon (zero blur/glow)
           const needleTop = 10;
           const needleBot = height - 10;
           ctx.strokeStyle = isRec
@@ -640,44 +639,43 @@ export function StudioCaptureStage({
     return () => cancelAnimationFrame(rafId);
   }, []);
 
-  const isDualMic = captureMode !== "single";
+  const isMultiMic = inputs.length > 1 || captureMode !== "solo";
   const isRecording = transport === "recording";
   const isPaused = transport === "paused";
   const isCounting = transport === "counting-in";
   const isActiveTake = isRecording || isPaused || isCounting;
-  const isRodeMultitrack = captureMode === "rcp2-multitrack" && detectedChannels >= 4;
 
-  const armedCount = isDualMic
-    ? (mic1.armed ? 1 : 0) + (mic2.armed ? 1 : 0) + (recordSafetyMix && isRodeMultitrack ? 1 : 0)
+  const armedCount = isMultiMic
+    ? inputs.filter((i) => i.armed).length +
+      (captureMode === "multitrack" && recordSafetyMix && detectedChannels >= 4 ? 1 : 0)
     : 1;
 
   const activeDeviceLabel =
-    selectedDeviceId === "default"
-      ? rodeCaster.detected
-        ? "RØDECaster Pro II"
-        : "Built-in Microphone"
-      : rodeCaster.detected
-        ? "RØDECaster Pro II"
+    captureMode === "multi-device"
+      ? `${inputs.length} USB Inputs`
+      : selectedDeviceId === "default"
+        ? "Microphone"
         : (devices.find((d) => d.deviceId === selectedDeviceId)?.label ?? "Audio Interface");
 
-  const mic1SourceTag =
-    captureMode === "single"
-      ? activeDeviceLabel
-      : captureMode === "dual-device"
-        ? (devices.find((d) => d.deviceId === mic1.deviceId)?.label ?? "USB Input 1")
-        : formatHardwareChannelName(mic1.channelIndex, isRodeMultitrack, detectedChannels);
+  const canvasHeightClass =
+    inputs.length <= 1
+      ? "h-[192px] sm:h-[228px]"
+      : inputs.length === 2
+        ? "h-[212px] sm:h-[252px]"
+        : inputs.length === 3
+          ? "h-[248px] sm:h-[280px]"
+          : "h-[276px] sm:h-[312px]";
 
-  const mic2SourceTag =
-    captureMode === "dual-device"
-      ? (devices.find((d) => d.deviceId === mic2.deviceId)?.label ?? "USB Input 2")
-      : formatHardwareChannelName(mic2.channelIndex, isRodeMultitrack, detectedChannels);
+  const canAddMore =
+    !isActiveTake &&
+    inputs.length < (captureMode === "stereo-split" ? 2 : MAX_STUDIO_INPUTS);
 
   return (
     <section
       aria-label="Nexus Audio Recorder"
       className="studio-capture-stage relative flex h-full w-full flex-col justify-between overflow-y-auto px-6 pb-8 pt-6 sm:px-10"
     >
-      {/* Top Whisper Pill — Single Quiet Hardware & Mode Entry Point */}
+      {/* Top Whisper Pill — Single Quiet Input Indicator */}
       <div className="mx-auto flex w-full max-w-[1040px] shrink-0 flex-col items-center gap-2">
         <div className="flex flex-wrap items-center justify-center gap-2">
           <button
@@ -691,18 +689,23 @@ export function StudioCaptureStage({
                   ? "bg-[#e12621]"
                   : micReady
                     ? "bg-[#34d399]"
-                    : rodeCaster.detected
-                      ? "bg-[#f0b54a]"
-                      : "bg-muted-foreground/45"
+                    : "bg-muted-foreground/45"
               }`}
               aria-hidden
             />
-            <span className="max-w-[200px] truncate font-medium text-foreground">{activeDeviceLabel}</span>
-            <span className="text-muted-foreground/70" aria-hidden>·</span>
-            <span className="font-mono text-[11px] tabular-nums">
-              {isDualMic ? `${armedCount} Mics` : "Solo"}
-              {micReady ? ` · ${(sampleRate / 1000).toFixed(0)} kHz` : ""}
-            </span>
+            <span className="max-w-[220px] truncate font-medium text-foreground">{activeDeviceLabel}</span>
+            {isMultiMic ? (
+              <>
+                <span className="text-muted-foreground/70" aria-hidden>·</span>
+                <span className="font-mono text-[11px] tabular-nums">{armedCount} Mics</span>
+              </>
+            ) : null}
+            {micReady ? (
+              <>
+                <span className="text-muted-foreground/70" aria-hidden>·</span>
+                <span className="font-mono text-[11px] tabular-nums">{(sampleRate / 1000).toFixed(0)} kHz</span>
+              </>
+            ) : null}
           </button>
 
           <button
@@ -736,9 +739,7 @@ export function StudioCaptureStage({
             onClick={() => {
               if (!micReady && transport === "idle") onArmInputs();
             }}
-            className={`block w-full cursor-pointer ${
-              isDualMic ? "h-[208px] sm:h-[248px]" : "h-[184px] sm:h-[224px]"
-            }`}
+            className={`block w-full cursor-pointer ${canvasHeightClass}`}
             aria-label="Live voice waveform tape"
           />
 
@@ -753,7 +754,7 @@ export function StudioCaptureStage({
           ) : null}
         </div>
 
-        {/* Sculptural Light-Weight Tabular Clock + Tactile Machined Record Shutter */}
+        {/* Sculptural Light-Weight Tabular Clock + Tactile Machined Shutter */}
         <div className="flex flex-col items-center gap-6">
           <div className="flex flex-col items-center gap-1">
             <div
@@ -764,22 +765,20 @@ export function StudioCaptureStage({
             </div>
             <p className="text-[12px] text-muted-foreground">
               {isRecording
-                ? isDualMic
+                ? isMultiMic
                   ? `Recording ${armedCount} synced stems`
                   : "Recording"
                 : isPaused
                   ? "Paused"
                   : micReady
-                    ? isDualMic
-                      ? "Ready · Tap shutter or press R"
-                      : "Mic live · Ready to record"
+                    ? isMultiMic
+                      ? `${armedCount} inputs live`
+                      : "Mic live"
                     : "Tap shutter to record"}
             </p>
           </div>
 
-          {/* Primary Concentric Shutter Transport Row */}
           <div className="flex items-center justify-center gap-6">
-            {/* Left flanking control: Pause / Resume (visible only during active take) */}
             <div className="flex w-11 justify-center">
               {isRecording || isPaused ? (
                 <Tooltip>
@@ -801,7 +800,6 @@ export function StudioCaptureStage({
               ) : null}
             </div>
 
-            {/* Center Iconic Apple-style Concentric Shutter Record / Stop Button */}
             <button
               type="button"
               onClick={() => {
@@ -815,7 +813,6 @@ export function StudioCaptureStage({
               <span className="studio-shutter-core" aria-hidden />
             </button>
 
-            {/* Right flanking control: Marker during capture, or Discard when paused */}
             <div className="flex w-11 justify-center">
               {isRecording ? (
                 <Tooltip>
@@ -856,111 +853,85 @@ export function StudioCaptureStage({
           </div>
         </div>
 
-        {/* Progressive Disclosure: Sleek Collapsible Pro 2-Mic Console Tray (Hidden at face value!) */}
-        {proConsoleOpen ? (
-          <div className="studio-pro-tray w-full max-w-[760px] rounded-[20px] border border-border/80 px-5 py-4">
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-border/60">
-              <div className="inline-flex items-center rounded-full border border-border/75 bg-foreground/[0.03] p-0.5">
-                <button
-                  type="button"
-                  disabled={isActiveTake}
-                  onClick={() => onChangeMode("rcp2-multitrack")}
-                  aria-pressed={isDualMic}
-                  className={`h-7 rounded-full px-3 text-[11.5px] font-medium transition-colors disabled:opacity-50 ${
-                    isDualMic ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  2-Mic Studio
-                </button>
-                <button
-                  type="button"
-                  disabled={isActiveTake}
-                  onClick={() => onChangeMode("single")}
-                  aria-pressed={!isDualMic}
-                  className={`h-7 rounded-full px-3 text-[11.5px] font-medium transition-colors disabled:opacity-50 ${
-                    !isDualMic ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  Solo Mic
-                </button>
-              </div>
-
+        {/* Progressive Disclosure: Collapsible Pro Multi-Mic Input Mixer Tray (Hidden at face value!) */}
+        {mixerTrayOpen ? (
+          <div className="studio-pro-tray w-full max-w-[780px] rounded-[20px] border border-border/80 px-5 py-4">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2.5">
               <div className="flex items-center gap-2">
-                {isDualMic ? (
+                <span className="text-[12.5px] font-medium text-foreground">
+                  {inputs.length === 1 ? "Input channel" : `Inputs (${inputs.length})`}
+                </span>
+                {canAddMore ? (
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
-                    disabled={isActiveTake}
-                    onClick={onApplyRodeCasterPreset}
-                    className="h-7 gap-1.5 rounded-full px-3 text-[11.5px]"
+                    onClick={onAddInput}
+                    className="h-7 gap-1 rounded-full px-2.5 text-[11.5px]"
                   >
-                    {micReady && rodeCaster.detected ? (
-                      <Check className="size-3 text-[#34d399]" />
-                    ) : (
-                      <Radio className="size-3 text-[color:var(--land-gold)]" />
-                    )}
-                    <span>RCP II Auto-Setup</span>
+                    <Plus className="size-3" />
+                    <span>Add mic</span>
                   </Button>
                 ) : null}
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={onOpenPatchbay}
-                  className="h-7 gap-1.5 rounded-full px-2.5 text-[11.5px] text-muted-foreground hover:text-foreground"
-                >
-                  <SlidersHorizontal className="size-3" />
-                  <span>Full Patchbay</span>
-                </Button>
               </div>
+
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={onOpenPatchbay}
+                className="h-7 gap-1.5 rounded-full px-2.5 text-[11.5px] text-muted-foreground hover:text-foreground"
+              >
+                <SlidersHorizontal className="size-3" />
+                <span>Audio I/O</span>
+              </Button>
             </div>
 
             <div className="divide-y divide-border/55">
-              <ProChannelRow
-                slot="mic1"
-                cfg={mic1}
-                sourceTag={mic1SourceTag}
-                isDualMic={isDualMic}
-                isActiveTake={isActiveTake}
-                meterRef={mic1MeterRef}
-                dbRef={mic1DbRef}
-                onUpdate={onUpdateMic1}
-                onOpenPatchbay={onOpenPatchbay}
-              />
-              {isDualMic ? (
-                <ProChannelRow
-                  slot="mic2"
-                  cfg={mic2}
-                  sourceTag={mic2SourceTag}
-                  isDualMic={isDualMic}
-                  isActiveTake={isActiveTake}
-                  meterRef={mic2MeterRef}
-                  dbRef={mic2DbRef}
-                  onUpdate={onUpdateMic2}
-                  onOpenPatchbay={onOpenPatchbay}
-                />
-              ) : null}
+              {inputs.map((inp, idx) => {
+                const sourceTag =
+                  captureMode === "solo"
+                    ? activeDeviceLabel
+                    : captureMode === "multi-device"
+                      ? (devices.find((d) => d.deviceId === inp.deviceId)?.label ?? `USB Input ${idx + 1}`)
+                      : formatHardwareChannelName(inp.channelIndex, useBroadcastChannelMap, detectedChannels);
+                return (
+                  <InputStripRow
+                    key={inp.id}
+                    cfg={inp}
+                    slotIndex={idx}
+                    sourceTag={sourceTag}
+                    isMultiMic={isMultiMic}
+                    isActiveTake={isActiveTake}
+                    canRemove={inputs.length > 1}
+                    onRegisterMeter={registerMeter}
+                    onRegisterDb={registerDb}
+                    onUpdate={(patch) => onUpdateInput(inp.id, patch)}
+                    onRemove={() => onRemoveInput(inp.id)}
+                    onOpenPatchbay={onOpenPatchbay}
+                  />
+                );
+              })}
             </div>
           </div>
         ) : null}
       </div>
 
-      {/* Whisper-Quiet Bottom Utility Footer (3 calm triggers, zero visual bulk) */}
+      {/* Whisper-Quiet Bottom Utility Footer */}
       <footer className="mx-auto flex shrink-0 flex-wrap items-center justify-center gap-1 text-[12px] text-muted-foreground">
         <button
           type="button"
-          onClick={() => setProConsoleOpen((v) => !v)}
-          aria-expanded={proConsoleOpen}
+          onClick={() => setMixerTrayOpen((v) => !v)}
+          aria-expanded={mixerTrayOpen}
           className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 font-medium transition-colors ${
-            proConsoleOpen
+            mixerTrayOpen
               ? "bg-foreground/10 text-foreground"
               : "hover:bg-foreground/[0.05] hover:text-foreground"
           }`}
         >
-          <span>Pro Console</span>
+          <span>{inputs.length > 1 ? `Inputs (${inputs.length})` : "Mixer"}</span>
           <ChevronDown
-            className={`size-3.5 transition-transform duration-200 ${proConsoleOpen ? "rotate-180" : ""}`}
+            className={`size-3.5 transition-transform duration-200 ${mixerTrayOpen ? "rotate-180" : ""}`}
           />
         </button>
 
@@ -972,7 +943,7 @@ export function StudioCaptureStage({
           className="inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 font-medium transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
         >
           <SlidersHorizontal className="size-3.5" />
-          <span>RØDECaster I/O</span>
+          <span>Audio I/O</span>
         </button>
 
         <span className="text-border" aria-hidden>·</span>

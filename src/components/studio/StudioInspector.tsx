@@ -665,7 +665,7 @@ export function StudioInspectorContent({
               className="h-9 w-full justify-center gap-1.5 rounded-xl text-[12px]"
             >
               <SlidersHorizontal className="size-3.5" />
-              <span>Open RØDECaster I/O Patchbay</span>
+              <span>Open Audio I/O Patchbay</span>
             </Button>
           </div>
         ) : null}

@@ -949,7 +949,7 @@ export function TimelineWaveform({
             {tracks.length === 0 ? (
               <div className="pointer-events-none absolute inset-x-0 bottom-0 top-[30px] flex items-center justify-center px-6 text-center">
                 <p className="max-w-md text-[12.5px] leading-relaxed text-muted-foreground">
-                  Record a 2-mic RØDECaster session on the Capture tab, or drag and drop WAV, MP3, or M4A stems directly
+                  Record a solo or multi-mic take on the Record tab, or drag and drop WAV, MP3, or M4A stems directly
                   onto this timeline.
                 </p>
               </div>
