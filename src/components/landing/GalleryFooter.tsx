@@ -66,31 +66,28 @@ export function GalleryFooter() {
   }, []);
 
   return (
-    <footer id="gallery-footer" aria-label="Site footer">
-      {/* Band 1: Obsidian Black Centered Vertical Editorial Navigation */}
-      <div
-        data-obsidian-band="true"
-        className="landing-obsidian border-t border-white/[0.08] bg-black text-[#f5f5f7]"
-      >
-        <div className="mx-auto flex max-w-[1360px] flex-col items-center px-6 pt-20 pb-20 sm:px-10 sm:pt-28 sm:pb-28">
-          <nav aria-label="Footer navigation" className="flex flex-col items-center gap-1.5 text-center sm:gap-2">
-            {MONUMENTAL_LINKS.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="gal-link-underline font-editorial px-4 py-1 text-[clamp(2rem,4.3vw,3.35rem)] font-normal leading-[1.15] tracking-[-0.032em] text-[#f5f5f7] transition-colors duration-200 hover:text-[#f0b54a] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f0b54a]"
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
-        </div>
+    <footer
+      id="gallery-footer"
+      aria-label="Site footer"
+      className="border-t border-[#0e0f12]/[0.08] bg-white text-[#0e0f12]"
+    >
+      {/* Band 1: Pure Gallery White Centered Vertical Editorial Navigation */}
+      <div className="mx-auto flex max-w-[1360px] flex-col items-center px-6 pt-20 pb-10 sm:px-10 sm:pt-28 sm:pb-14">
+        <nav aria-label="Footer navigation" className="flex flex-col items-center gap-1.5 text-center sm:gap-2">
+          {MONUMENTAL_LINKS.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="gal-link-underline font-editorial px-4 py-1 text-[clamp(2rem,4.3vw,3.35rem)] font-normal leading-[1.15] tracking-[-0.032em] text-[#0e0f12] transition-colors duration-200 hover:text-[#9a6910] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#9a6910]"
+            >
+              {link.label}
+            </Link>
+          ))}
+        </nav>
       </div>
 
-      {/* Final Colophon Part (Pure Gallery White): Monumental Nexus Wordmark + Nexus Atelier + Made in Toronto */}
-      <div className="border-t border-[#0e0f12]/[0.08] bg-white text-[#0e0f12]">
-        {/* Band 2: Full-Width Edge-to-Edge Monumental Wordmark */}
-        <div ref={wordmarkRef} className="mx-auto max-w-[1380px] px-4 pt-12 pb-8 sm:px-8 sm:pt-16 sm:pb-12">
+      {/* Band 2: Full-Width Edge-to-Edge Monumental Wordmark */}
+      <div ref={wordmarkRef} className="mx-auto max-w-[1380px] px-4 pt-6 pb-8 sm:px-8 sm:pt-8 sm:pb-12">
           <div aria-hidden="true" className="w-full select-none overflow-hidden">
             <div className="gal-wordmark-rise" data-visible={wordmarkVisible ? "true" : "false"}>
               <svg
@@ -166,8 +163,7 @@ export function GalleryFooter() {
               <span className="h-2 w-2 rounded-full bg-[#15803d]" aria-hidden="true" />
               <span>Open Beta</span>
             </span>
-            <span className="text-[#636570]">&copy; 2026 Nexus Neural Labs</span>
-          </div>
+          <span className="text-[#636570]">&copy; 2026 Nexus Neural Labs</span>
         </div>
       </div>
     </footer>
