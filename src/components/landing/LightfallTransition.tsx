@@ -16,9 +16,9 @@ export function LightfallTransition() {
       aria-hidden="true"
       className="relative h-[460px] w-full select-none overflow-hidden sm:h-[540px] lg:h-[600px]"
       style={{
-        // Matching raised-cosine Oklab fallback for SSR / non-WebGL frames (single monotonic curve, zero seams)
+        // Matching front-loaded raised-cosine Oklab fallback for SSR / non-WebGL frames
         background:
-          "linear-gradient(180deg, #ffffff 0%, #faf9f6 10%, #e4e2dc 20%, #c1beb7 30%, #96938c 40%, #6a6862 50%, #42413d 60%, #22211f 70%, #0d0d0c 80%, #030303 90%, #000000 100%)",
+          "linear-gradient(180deg, #ffffff 0%, #e8e7e4 10%, #aeaca7 20%, #6a6864 30%, #333230 40%, #121211 50%, #040404 60%, #010101 70%, #000000 80%, #000000 100%)",
       }}
     >
       <div className="absolute inset-0">

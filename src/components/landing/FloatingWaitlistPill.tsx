@@ -49,7 +49,7 @@ export function FloatingWaitlistPill() {
       const transitionEl = document.getElementById("lightfall-transition");
       if (transitionEl) {
         const r = transitionEl.getBoundingClientRect();
-        if (r.top + r.height * 0.48 <= probeY && r.bottom >= probeY) {
+        if (r.top + r.height * 0.30 <= probeY && r.bottom >= probeY) {
           dark = true;
         }
       }
