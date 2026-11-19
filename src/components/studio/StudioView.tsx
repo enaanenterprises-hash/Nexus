@@ -9,6 +9,7 @@ import {
   Loader2,
   Magnet,
   Metronome,
+  MoreHorizontal,
   MousePointer,
   PanelRight,
   Pause,
@@ -197,10 +198,10 @@ export function StudioView({
   const [timelineZoom, setTimelineZoom] = useState(1);
   const [studioPage, setStudioPage] = useState<"record" | "edit">("record");
 
-  // Drawers, Inspector & Patchbay
+  // Drawers, Inspector & Patchbay (Inspector stays quietly collapsed by default for gallery calm)
   const [takesDrawerOpen, setTakesDrawerOpen] = useState(false);
   const [patchbayOpen, setPatchbayOpen] = useState(false);
-  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
   const [inspectorTab, setInspectorTab] = useState<StudioInspectorTab>("clip");
   const [newFolderOpen, setNewFolderOpen] = useState(false);
@@ -1105,13 +1106,13 @@ export function StudioView({
       data-studio-page={studioPage}
       className="studio-screen flex h-full w-full flex-col overflow-hidden"
     >
-      {/* Unified Apple HIG Studio Header (pl-[92px] clears floating top-left Nexus Orb trigger) */}
+      {/* Quiet Apple HIG Studio Header (pl-[92px] clears floating top-left Nexus Orb trigger) */}
       <header
         data-page={studioPage}
-        className="studio-header grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 border-b border-border/75 py-2 pl-[92px] pr-4 sm:pr-5 md:grid-cols-[1fr_auto_1fr] md:gap-y-0"
+        className="studio-header grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 py-2.5 pl-[92px] pr-5 sm:pr-6 md:grid-cols-[1fr_auto_1fr] md:gap-y-0"
       >
-        {/* Left: Session Title + Takes Drawer Chevron + Sync Indicator Dot */}
-        <div className="col-start-1 row-start-1 flex min-w-0 items-center gap-1.5 justify-self-start">
+        {/* Left: Quiet Session Title + Sessions Chevron */}
+        <div className="col-start-1 row-start-1 flex min-w-0 items-center gap-1 justify-self-start">
           <Input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -1119,7 +1120,7 @@ export function StudioView({
               if (tracks.length > 0 || activeId) void persistDraft(tracks, markers);
             }}
             aria-label="Recording session title"
-            className="h-8 w-full min-w-0 max-w-[172px] border-0 bg-transparent px-1.5 text-[14px] font-medium tracking-[-0.01em] shadow-none focus-visible:ring-1 sm:max-w-[210px]"
+            className="h-8 w-full min-w-0 max-w-[168px] border-0 bg-transparent px-1.5 text-[14px] font-medium tracking-[-0.01em] text-foreground/90 shadow-none hover:text-foreground focus-visible:ring-1 sm:max-w-[204px]"
           />
           <Tooltip>
             <TooltipTrigger
@@ -1138,24 +1139,9 @@ export function StudioView({
             />
             <TooltipContent side="bottom">Sessions &amp; folders ({summaries.length})</TooltipContent>
           </Tooltip>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <span
-                  aria-label={databaseConfigured ? "Cloud synced" : "Local IndexedDB storage"}
-                  className={`hidden h-2 w-2 shrink-0 rounded-full lg:inline-block ${
-                    databaseConfigured ? "bg-[#34d399]" : "bg-[color:var(--land-gold)]"
-                  }`}
-                />
-              }
-            />
-            <TooltipContent side="bottom">
-              {databaseConfigured ? "Metadata synced to cloud" : "Saved locally in browser IndexedDB"}
-            </TooltipContent>
-          </Tooltip>
         </div>
 
-        {/* Center: Crisp Apple Segmented Pill (Record | Arrange) */}
+        {/* Center: Minimal Segmented Pill (Record | Arrange) */}
         <div
           className="studio-tabs col-span-2 row-start-2 -ml-[76px] justify-self-center sm:-ml-[68px] md:col-span-1 md:col-start-2 md:row-start-1 md:ml-0"
           role="tablist"
@@ -1188,33 +1174,36 @@ export function StudioView({
           </button>
         </div>
 
-        {/* Right: Save, Export Menu (Master WAV / Isolated Stems / Route Node), Exit */}
+        {/* Right: Single Consolidated Action Menu + Quiet Exit */}
         <div className="col-start-2 row-start-1 flex items-center justify-end gap-1.5 justify-self-end md:col-start-3">
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={() => void persistDraft(tracks, markers)}
-            disabled={saving || tracks.length === 0}
-            className="hidden h-8 gap-1.5 rounded-full px-3 text-[12px] sm:inline-flex"
-          >
-            {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
-            <span>{saving ? "Saving" : "Save"}</span>
-          </Button>
-
           <Popover>
             <PopoverTrigger
               render={
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={exporting !== null}
-                  className="h-8 gap-1.5 rounded-full bg-foreground px-3.5 text-[12px] font-medium text-background hover:opacity-90"
-                >
-                  {exporting ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-                  <span>Export</span>
-                  <ChevronDown className="size-3 opacity-70" />
-                </Button>
+                tracks.length > 0 || studioPage === "edit" ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={exporting !== null}
+                    className="h-8 gap-1.5 rounded-full bg-foreground px-3.5 text-[12px] font-medium text-background hover:opacity-90"
+                  >
+                    {exporting || saving ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <Download className="size-3.5" />
+                    )}
+                    <span>Export</span>
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label="Studio actions"
+                    className="h-8 w-8 rounded-full text-muted-foreground hover:text-foreground"
+                  >
+                    <MoreHorizontal className="size-4" />
+                  </Button>
+                )
               }
             />
             <PopoverContent align="end" className="w-64 rounded-2xl p-2">
@@ -1228,7 +1217,7 @@ export function StudioView({
                   <Download className="mt-0.5 size-4 shrink-0 text-foreground" />
                   <div className="min-w-0">
                     <div className="text-[12.5px] font-medium text-foreground">Master Mix (.WAV)</div>
-                    <div className="text-[11px] text-muted-foreground">Mixed stereo master with -1 dBFS limiter</div>
+                    <div className="text-[11px] text-muted-foreground">Peak-limited stereo master</div>
                   </div>
                 </button>
 
@@ -1241,24 +1230,47 @@ export function StudioView({
                   <Layers className="mt-0.5 size-4 shrink-0 text-[color:var(--land-gold)]" />
                   <div className="min-w-0">
                     <div className="text-[12.5px] font-medium text-foreground">Isolated Track Stems (.WAV)</div>
-                    <div className="text-[11px] text-muted-foreground">
-                      Synced per-mic files from 00:00 for video editors
-                    </div>
+                    <div className="text-[11px] text-muted-foreground">Synced per-mic stems from 00:00</div>
                   </div>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={saving || tracks.length === 0}
+                  onClick={() => void persistDraft(tracks, markers)}
+                  className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[12.5px] font-medium text-foreground transition-colors hover:bg-foreground/[0.06] disabled:opacity-45"
+                >
+                  <Save className="size-4 shrink-0 text-muted-foreground" />
+                  <span>{saving ? "Saving session…" : "Save session"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void openRouting()}
+                  className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[12.5px] font-medium text-foreground transition-colors hover:bg-foreground/[0.06]"
+                >
+                  <Zap className="size-4 shrink-0 text-[color:var(--land-gold)]" />
+                  <span>Route to Nexus Node</span>
                 </button>
 
                 <Separator className="my-1" />
 
                 <button
                   type="button"
-                  onClick={() => void openRouting()}
-                  className="flex w-full items-start gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-foreground/[0.06]"
+                  onClick={() => setPatchbayOpen(true)}
+                  className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[12.5px] text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
                 >
-                  <Zap className="mt-0.5 size-4 shrink-0 text-[color:var(--land-gold)]" />
-                  <div className="min-w-0">
-                    <div className="text-[12.5px] font-medium text-foreground">Route to Nexus Node</div>
-                    <div className="text-[11px] text-muted-foreground">Emit studio.recording envelope on bus</div>
-                  </div>
+                  <SlidersHorizontal className="size-4 shrink-0" />
+                  <span>RØDECaster I/O Patchbay</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onReleaseNode}
+                  className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[12.5px] text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <Trash2 className="size-4 shrink-0" />
+                  <span>Disconnect Studio node</span>
                 </button>
               </div>
             </PopoverContent>
@@ -1269,19 +1281,9 @@ export function StudioView({
             size="sm"
             variant="ghost"
             onClick={onClose}
-            className="h-8 rounded-full px-2.5 text-[12px] text-muted-foreground hover:text-foreground"
+            className="h-8 rounded-full px-3 text-[12px] text-muted-foreground hover:text-foreground"
           >
-            Exit
-          </Button>
-
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={onReleaseNode}
-            className="hidden h-8 rounded-full px-2.5 text-[12px] text-muted-foreground hover:text-destructive xl:inline-flex"
-          >
-            Disconnect
+            Done
           </Button>
         </div>
       </header>
@@ -1336,6 +1338,7 @@ export function StudioView({
               onResumeRecord={audio.resumeRecording}
               onStopRecord={audio.stopRecording}
               onDiscardRecord={audio.discardRecording}
+              onChangeBpm={setBpm}
               onToggleMetronome={() => setMetronomeEnabled((v) => !v)}
               onCycleCountIn={() => setCountInBars((v) => (v === 0 ? 1 : v === 1 ? 2 : 0))}
               onToggleOverdub={() => audio.setOverdubEnabled(!audio.overdubEnabled)}
@@ -1749,9 +1752,6 @@ export function StudioView({
                   }
                   onChangeLayerGain={(idx, gain) =>
                     updateLayerMixer(idx, (prev) => ({ ...prev, gain }))
-                  }
-                  onChangeLayerPan={(idx, pan) =>
-                    updateLayerMixer(idx, (prev) => ({ ...prev, pan }))
                   }
                   onDropFiles={(files, layerIdx, offsetMs) => {
                     void importFilesList(files, layerIdx, offsetMs);

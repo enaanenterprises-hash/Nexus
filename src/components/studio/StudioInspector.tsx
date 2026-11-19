@@ -42,10 +42,10 @@ const COUNT_IN_LABELS: Record<string, string> = {
 
 const COLOR_SWATCHES: Array<{ id: StudioTrackColor; label: string; dotClass: string }> = [
   { id: "gold", label: "Gold (Host)", dotClass: "bg-[#f0b54a]" },
-  { id: "sky", label: "Sky (Guest)", dotClass: "bg-[#38bdf8]" },
-  { id: "emerald", label: "Emerald (Stem)", dotClass: "bg-[#34d399]" },
-  { id: "coral", label: "Coral (Overdub)", dotClass: "bg-[#fb7185]" },
-  { id: "slate", label: "Slate (Safety)", dotClass: "bg-[#a1a1aa]" },
+  { id: "sky", label: "Slate Blue (Guest)", dotClass: "bg-[#94b2d0]" },
+  { id: "emerald", label: "Sage (Stem)", dotClass: "bg-[#6ec49f]" },
+  { id: "coral", label: "Clay (Overdub)", dotClass: "bg-[#e29584]" },
+  { id: "slate", label: "Silver (Safety)", dotClass: "bg-[#a1a1aa]" },
 ];
 
 function fmtExactSec(ms: number): string {
@@ -306,9 +306,37 @@ export function StudioInspectorContent({
 
               <Separator />
 
-              {/* Non-Destructive Fade In / Fade Out Envelopes */}
+              {/* Non-Destructive Fade Envelopes & Stereo Balance */}
               <div className="space-y-2.5">
-                <span className="text-[12px] font-medium text-foreground">Fades</span>
+                <span className="text-[12px] font-medium text-foreground">Envelope &amp; balance</span>
+                <label className="flex items-center justify-between gap-2 text-[11.5px]">
+                  <span className="w-16 text-muted-foreground">Stereo pan</span>
+                  <input
+                    type="range"
+                    min={-1}
+                    max={1}
+                    step={0.05}
+                    value={selectedTrack.pan}
+                    onDoubleClick={() =>
+                      onUpdateTrack(selectedTrack.id, (prev) => ({ ...prev, pan: 0 }))
+                    }
+                    onChange={(e) =>
+                      onUpdateTrack(selectedTrack.id, (prev) => ({
+                        ...prev,
+                        pan: Number(e.target.value),
+                      }))
+                    }
+                    className="studio-range min-w-0 flex-1"
+                  />
+                  <span className="w-12 text-right font-mono text-[10.5px] text-muted-foreground tabular-nums">
+                    {Math.abs(selectedTrack.pan) < 0.04
+                      ? "Center"
+                      : selectedTrack.pan < 0
+                        ? `L ${Math.round(Math.abs(selectedTrack.pan) * 100)}`
+                        : `R ${Math.round(selectedTrack.pan * 100)}`}
+                  </span>
+                </label>
+
                 <label className="flex items-center justify-between gap-2 text-[11.5px]">
                   <span className="w-16 text-muted-foreground">Fade in</span>
                   <input

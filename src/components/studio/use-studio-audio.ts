@@ -187,7 +187,7 @@ export function useStudioAudio({
   const [transport, setTransport] = useState<StudioTransportState>("idle");
   const [playheadMs, setPlayheadMs] = useState(0);
   const [devices, setDevices] = useState<MicDeviceOption[]>([]);
-  const [captureMode, setCaptureMode] = useState<StudioCaptureMode>("rcp2-multitrack");
+  const [captureMode, setCaptureMode] = useState<StudioCaptureMode>("single");
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("default");
   const [mic1, setMic1] = useState<MicChannelConfig>({
     label: "Mic 1 · Host",

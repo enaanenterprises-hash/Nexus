@@ -375,7 +375,7 @@ export function RodeCasterPatchbay({
                           aria-label={`Assign channel ${chIdx + 1} to Mic 2`}
                           className={`h-7 min-w-[34px] rounded-md border px-2 font-mono text-[11px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-[color:var(--land-gold)] ${
                             isMic2
-                              ? "border-[#38bdf8] bg-[#38bdf8]/20 text-foreground"
+                              ? "border-[#94b2d0] bg-[#94b2d0]/20 text-foreground"
                               : "border-border/70 bg-transparent text-muted-foreground hover:text-foreground"
                           }`}
                         >

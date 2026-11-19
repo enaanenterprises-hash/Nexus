@@ -45,20 +45,20 @@ type DragSession =
       previewDurationMs: number;
     };
 
-const LANE_HEIGHT = 86;
+const LANE_HEIGHT = 84;
 const RULER_HEIGHT = 30;
 const EDGE_HANDLE_PX = 9;
 const MIN_CLIP_MS = 160;
 
 const COLOR_PALETTE: Record<
   StudioTrackColor,
-  { darkRgb: readonly [number, number, number]; lightRgb: readonly [number, number, number]; stripeClass: string }
+  { darkRgb: readonly [number, number, number]; lightRgb: readonly [number, number, number]; dotClass: string }
 > = {
-  gold: { darkRgb: [240, 181, 74], lightRgb: [184, 120, 16], stripeClass: "bg-[#f0b54a]" },
-  sky: { darkRgb: [56, 189, 248], lightRgb: [2, 132, 199], stripeClass: "bg-[#38bdf8]" },
-  emerald: { darkRgb: [52, 211, 153], lightRgb: [5, 150, 105], stripeClass: "bg-[#34d399]" },
-  coral: { darkRgb: [251, 113, 133], lightRgb: [225, 29, 72], stripeClass: "bg-[#fb7185]" },
-  slate: { darkRgb: [161, 161, 170], lightRgb: [82, 82, 91], stripeClass: "bg-[#a1a1aa]" },
+  gold: { darkRgb: [240, 181, 74], lightRgb: [166, 116, 18], dotClass: "bg-[#f0b54a]" },
+  sky: { darkRgb: [186, 206, 226], lightRgb: [72, 92, 114], dotClass: "bg-[#94b2d0]" },
+  emerald: { darkRgb: [134, 204, 174], lightRgb: [28, 122, 86], dotClass: "bg-[#6ec49f]" },
+  coral: { darkRgb: [232, 152, 134], lightRgb: [176, 78, 58], dotClass: "bg-[#e29584]" },
+  slate: { darkRgb: [176, 176, 184], lightRgb: [92, 94, 104], dotClass: "bg-[#a1a1aa]" },
 };
 
 function defaultColorForLayer(layerIdx: number): StudioTrackColor {
@@ -81,12 +81,6 @@ function formatClipDuration(ms: number): string {
   const m = Math.floor(safe / 60_000);
   const s = Math.floor((safe % 60_000) / 1000);
   return `${m}:${String(s).padStart(2, "0")}`;
-}
-
-function formatPanLabel(pan: number): string {
-  if (Math.abs(pan) < 0.04) return "C";
-  const pct = Math.round(Math.abs(pan) * 100);
-  return pan < 0 ? `L${pct}` : `R${pct}`;
 }
 
 function clamp(n: number, min: number, max: number): number {
@@ -130,7 +124,6 @@ export function TimelineWaveform({
   onToggleLayerMute,
   onToggleLayerSolo,
   onChangeLayerGain,
-  onChangeLayerPan,
   onDropFiles,
 }: {
   tracks: StudioTrackV1[];
@@ -160,7 +153,6 @@ export function TimelineWaveform({
   onToggleLayerMute: (layerIndex: number) => void;
   onToggleLayerSolo: (layerIndex: number) => void;
   onChangeLayerGain: (layerIndex: number, gain: number) => void;
-  onChangeLayerPan: (layerIndex: number, pan: number) => void;
   onDropFiles?: (files: FileList, layerIndex: number, offsetMs: number) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -323,28 +315,24 @@ export function TimelineWaveform({
       const clipH = LANE_HEIGHT - 14;
       const clipTop = yTop + 7;
 
-      // Clip card fill & crisp accent border
-      ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${audible ? (isSelected ? (isLight ? 0.14 : 0.16) : isLight ? 0.08 : 0.085) : 0.03})`;
+      // Quiet, restrained clip container with crisp 1px hairline border
+      ctx.fillStyle = isLight
+        ? `rgba(${cr}, ${cg}, ${cb}, ${audible ? (isSelected ? 0.12 : 0.06) : 0.025})`
+        : `rgba(${cr}, ${cg}, ${cb}, ${audible ? (isSelected ? 0.13 : 0.065) : 0.022})`;
       ctx.strokeStyle = isSelected
-        ? `rgba(${cr}, ${cg}, ${cb}, ${isLight ? 0.92 : 0.9})`
-        : `rgba(${cr}, ${cg}, ${cb}, ${audible ? (isLight ? 0.38 : 0.36) : 0.16})`;
-      ctx.lineWidth = isSelected ? 1.5 : 1;
+        ? `rgba(${cr}, ${cg}, ${cb}, ${isLight ? 0.85 : 0.82})`
+        : `rgba(${cr}, ${cg}, ${cb}, ${audible ? (isLight ? 0.3 : 0.26) : 0.12})`;
+      ctx.lineWidth = isSelected ? 1.25 : 1;
       ctx.beginPath();
       ctx.roundRect(x0, clipTop, clipW, clipH, 10);
       ctx.fill();
       ctx.stroke();
 
-      // Top accent header hairline inside clip
-      ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${audible ? 0.85 : 0.25})`;
-      ctx.beginPath();
-      ctx.roundRect(x0 + 1, clipTop + 1, Math.min(clipW - 2, clipW - 2), 2.5, [10, 10, 0, 0]);
-      ctx.fill();
-
       // Trim edge handles when selected
       if (isSelected && clipW > 28) {
-        ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, 0.85)`;
-        ctx.fillRect(x0 + 3.5, clipTop + clipH * 0.32, 2, clipH * 0.36);
-        ctx.fillRect(x0 + clipW - 5.5, clipTop + clipH * 0.32, 2, clipH * 0.36);
+        ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, 0.75)`;
+        ctx.fillRect(x0 + 3.5, clipTop + clipH * 0.34, 1.5, clipH * 0.32);
+        ctx.fillRect(x0 + clipW - 5, clipTop + clipH * 0.34, 1.5, clipH * 0.32);
       }
 
       // Clip title + duration caption
@@ -784,13 +772,13 @@ export function TimelineWaveform({
       }`}
     >
       <div className="flex min-h-full items-stretch">
-        {/* Left Unified Track Headers & Inline Mixer Gutter */}
-        <div className="studio-gutter sticky left-0 z-10 flex w-[170px] shrink-0 flex-col border-r border-border/75 sm:w-[224px]">
+        {/* Left Track Headers & Quiet Mixer Gutter */}
+        <div className="studio-gutter sticky left-0 z-10 flex w-[160px] shrink-0 flex-col border-r border-border/75 sm:w-[200px]">
           <div
             style={{ height: `${RULER_HEIGHT}px` }}
             className="flex items-center justify-between border-b border-border/75 px-3 text-[11.5px] font-medium text-muted-foreground"
           >
-            <span>Tracks ({effectiveLayers})</span>
+            <span>Tracks</span>
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -806,7 +794,7 @@ export function TimelineWaveform({
                   </Button>
                 }
               />
-              <TooltipContent side="right">Add track lane</TooltipContent>
+              <TooltipContent side="right">Add track</TooltipContent>
             </Tooltip>
           </div>
 
@@ -830,39 +818,39 @@ export function TimelineWaveform({
                   key={`layer-${idx}`}
                   style={{ height: `${LANE_HEIGHT}px` }}
                   onClick={() => onSelectLayer(idx)}
-                  className={`relative flex flex-col justify-between border-b border-border/70 py-2 pl-3 pr-2.5 transition-colors ${
+                  className={`flex flex-col justify-between border-b border-border/65 px-3 py-2.5 transition-colors ${
                     isExtraGhost
-                      ? "bg-[color:var(--land-gold)]/12"
+                      ? "bg-[color:var(--land-gold)]/10"
                       : isTarget
-                        ? "bg-foreground/[0.04]"
+                        ? "bg-foreground/[0.035]"
                         : "hover:bg-foreground/[0.02]"
                   }`}
                 >
-                  {/* Color Accent Spine */}
-                  <span
-                    className={`absolute bottom-1.5 left-0 top-1.5 w-[3px] rounded-r-full ${COLOR_PALETTE[colorKey].stripeClass} ${
-                      isTarget ? "opacity-100" : "opacity-55"
-                    }`}
-                    aria-hidden
-                  />
-
-                  {/* Top Row: Editable Track Name + M / S / Delete */}
+                  {/* Top Row: Quiet 6px Status Dot + Editable Track Name + M / S */}
                   <div className="flex items-start justify-between gap-1.5">
                     <div className="min-w-0 flex-1">
-                      <input
-                        type="text"
-                        value={mixer.name ?? `Track ${idx + 1}`}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => onRenameLayer(idx, e.target.value)}
-                        aria-label={`Track ${idx + 1} name`}
-                        className="w-full truncate rounded bg-transparent px-1 py-0.5 text-[12px] font-medium text-foreground transition-colors hover:bg-foreground/[0.05] focus:bg-foreground/[0.08] focus:outline-none"
-                      />
-                      <div className="truncate px-1 font-mono text-[10px] text-muted-foreground">
-                        {inputHint || (layerClips.length > 0 ? `${layerClips.length} ${layerClips.length === 1 ? "clip" : "clips"}` : "Empty lane")}
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${COLOR_PALETTE[colorKey].dotClass} ${
+                            isTarget ? "opacity-100" : "opacity-60"
+                          }`}
+                          aria-hidden
+                        />
+                        <input
+                          type="text"
+                          value={mixer.name ?? `Track ${idx + 1}`}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => onRenameLayer(idx, e.target.value)}
+                          aria-label={`Track ${idx + 1} name`}
+                          className="w-full truncate rounded bg-transparent py-0.5 text-[12px] font-medium text-foreground transition-colors hover:bg-foreground/[0.04] focus:bg-foreground/[0.07] focus:outline-none"
+                        />
+                      </div>
+                      <div className="truncate pl-3 font-mono text-[10px] text-muted-foreground/80">
+                        {inputHint || (layerClips.length > 0 ? `${layerClips.length} ${layerClips.length === 1 ? "clip" : "clips"}` : "Empty")}
                       </div>
                     </div>
 
-                    <div className="flex shrink-0 items-center gap-0.5 pt-0.5">
+                    <div className="flex shrink-0 items-center gap-1 pt-0.5">
                       <button
                         type="button"
                         onClick={(e) => {
@@ -871,10 +859,10 @@ export function TimelineWaveform({
                         }}
                         aria-pressed={mixer.muted}
                         aria-label={`Mute ${mixer.name ?? `Track ${idx + 1}`}`}
-                        className={`h-6 w-6 rounded-md font-mono text-[10.5px] font-semibold transition-colors ${
+                        className={`h-6 w-6 rounded-md font-mono text-[10px] font-medium transition-colors ${
                           mixer.muted
-                            ? "bg-destructive text-white"
-                            : "bg-foreground/[0.05] text-muted-foreground hover:text-foreground"
+                            ? "bg-destructive/90 text-white"
+                            : "text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground"
                         }`}
                       >
                         M
@@ -887,10 +875,10 @@ export function TimelineWaveform({
                         }}
                         aria-pressed={mixer.solo}
                         aria-label={`Solo ${mixer.name ?? `Track ${idx + 1}`}`}
-                        className={`h-6 w-6 rounded-md font-mono text-[10.5px] font-semibold transition-colors ${
+                        className={`h-6 w-6 rounded-md font-mono text-[10px] font-medium transition-colors ${
                           mixer.solo
                             ? "bg-[color:var(--land-gold)] text-[#09090b]"
-                            : "bg-foreground/[0.05] text-muted-foreground hover:text-foreground"
+                            : "text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground"
                         }`}
                       >
                         S
@@ -911,8 +899,8 @@ export function TimelineWaveform({
                     </div>
                   </div>
 
-                  {/* Bottom Row: Volume Fader (dB) + Pan Slider (L/C/R) */}
-                  <div className="flex items-center gap-2">
+                  {/* Bottom Row: Clean Hairline Volume Fader + Tabular dB Readout */}
+                  <div className="flex items-center gap-2 pl-3">
                     <input
                       type="range"
                       min={0}
@@ -931,27 +919,6 @@ export function TimelineWaveform({
                     <span className="w-[42px] shrink-0 text-right font-mono text-[10px] text-muted-foreground tabular-nums">
                       {formatGainDb(mixer.gain)}
                     </span>
-                    <div className="hidden items-center gap-1 sm:flex">
-                      <input
-                        type="range"
-                        min={-1}
-                        max={1}
-                        step={0.05}
-                        value={mixer.pan}
-                        onClick={(e) => e.stopPropagation()}
-                        onDoubleClick={(e) => {
-                          e.stopPropagation();
-                          onChangeLayerPan(idx, 0);
-                        }}
-                        onChange={(e) => onChangeLayerPan(idx, Number(e.target.value))}
-                        aria-label={`${mixer.name ?? `Track ${idx + 1}`} stereo pan`}
-                        title="Stereo Pan (double-click to center)"
-                        className="studio-range w-11"
-                      />
-                      <span className="w-6 shrink-0 text-right font-mono text-[9.5px] text-muted-foreground tabular-nums">
-                        {formatPanLabel(mixer.pan)}
-                      </span>
-                    </div>
                   </div>
                 </div>
               );
