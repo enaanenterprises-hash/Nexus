@@ -27,7 +27,6 @@ import {
 } from "lucide-react";
 import {
   EcosystemBridgeVisual,
-  EcosystemField,
   NeuralNetworkPreview,
   type EcosystemLayer,
 } from "./WorkspaceVisuals";
@@ -1658,22 +1657,19 @@ export function SingularityStage() {
       id="workspace"
       className="relative scroll-mt-24 overflow-hidden bg-[#000000] pt-14 pb-20 text-[#f5f5f7] sm:pt-18 sm:pb-24"
     >
-      {/* Ground-up astronomical observatory backdrop & active golden signal conduits */}
-      <EcosystemField activeLayer={activeLayer} />
-
       <div className="relative z-10 mx-auto max-w-[1400px] px-5 sm:px-8 lg:px-10">
-        {/* Expansive Asymmetric Editorial Header + Live Shared Ecosystem Schematic */}
-        <div className="grid grid-cols-1 items-end gap-8 lg:grid-cols-12 lg:gap-10">
-          <div className="lg:col-span-7">
-            <h2 className="font-editorial text-[clamp(2.55rem,5.2vw,4.4rem)] leading-[1.01] font-normal tracking-[-0.038em] text-[#f5f5f7]">
+        {/* Clean Editorial Header + Braided Golden Signal Sculpture */}
+        <div className="grid grid-cols-1 items-center gap-8 lg:grid-cols-12 lg:gap-10">
+          <div className="lg:col-span-6">
+            <h2 className="font-editorial text-[clamp(2.55rem,5.1vw,4.35rem)] leading-[1.01] font-normal tracking-[-0.038em] text-[#f5f5f7]">
               Build unified workflows
             </h2>
-            <p className="mt-5 max-w-[56ch] text-[16.5px] leading-[1.6] text-[#b4b4bc] sm:text-[18px]">
+            <p className="mt-5 max-w-[52ch] text-[16.5px] leading-[1.6] text-[#b4b4bc] sm:text-[18px]">
               Nexus brings your personal assistant, your daily dashboard, and your everyday tools into one shared ecosystem. All working together
             </p>
           </div>
 
-          <div className="lg:col-span-5">
+          <div className="lg:col-span-6">
             <EcosystemBridgeVisual activeLayer={activeLayer} onSelect={setActiveLayer} />
           </div>
         </div>

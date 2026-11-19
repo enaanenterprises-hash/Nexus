@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from "react";
 import { ArrowUp, Lock, Plus } from "lucide-react";
 import { NeuralThreadsWebGL } from "@/components/dashboard/NeuralThreadsWebGL";
 import { computeStageLayout } from "@/components/dashboard/stage-layout";
@@ -15,12 +15,55 @@ const LAYER_INDEX: Record<EcosystemLayer, number> = {
   nodes: 2,
 };
 
+type FilamentArm = {
+  /** Base polar angle in radians (0 = right, -PI/2 = straight up, -PI = left). */
+  angle: number;
+  /** Slight organic S-curve bend across the arm length. */
+  curve: number;
+  /** Normalized reach radius multiplier relative to stage scale. */
+  reach: number;
+  /** Number of interwoven silk strands in this bundle. */
+  strands: number;
+  /** Normalized position along arm (0..1) where the hourglass waist pinches tightest. */
+  waistT: number;
+  /** Maximum swell width before waist pinch (px multiplier). */
+  swell: number;
+  /** Maximum fan flare width after waist pinch (px multiplier). */
+  flare: number;
+  /** Optional linked ecosystem layer index (0 = network, 1 = command, 2 = nodes). */
+  layerIdx: number | null;
+};
+
+const SIGNAL_ARMS: FilamentArm[] = [
+  // Sweeping left lateral silk wing
+  { angle: -Math.PI + 0.16, curve: -0.14, reach: 1.08, strands: 22, waistT: 0.56, swell: 28, flare: 52, layerIdx: null },
+  // Upper-left braided stream — Neural Network
+  { angle: -Math.PI * 0.72, curve: -0.06, reach: 1.06, strands: 24, waistT: 0.55, swell: 32, flare: 62, layerIdx: 0 },
+  // Vertical center braided stream — Command
+  { angle: -Math.PI * 0.5, curve: 0.0, reach: 1.02, strands: 24, waistT: 0.56, swell: 30, flare: 54, layerIdx: 1 },
+  // Upper-right braided stream — Nodes
+  { angle: -Math.PI * 0.28, curve: 0.06, reach: 1.06, strands: 24, waistT: 0.55, swell: 32, flare: 62, layerIdx: 2 },
+  // Sweeping right lateral silk wing
+  { angle: -0.16, curve: 0.14, reach: 1.08, strands: 22, waistT: 0.56, swell: 28, flare: 52, layerIdx: null },
+];
+
+function deterministicHash(n: number): number {
+  const s = Math.sin(n * 127.1 + 311.7) * 43758.5453123;
+  return s - Math.floor(s);
+}
+
 /**
- * Ground-up atmospheric Obsidian Observatory backdrop for the unified workflows stage:
- * hair-fine astronomical meridian arcs + a live golden signal meridian feeding 3 smooth
- * architectural conduits directly toward the active layer selector.
+ * Braided golden filament signal-bus sculpture inspired by luminous optical silk bundles:
+ * five interwoven golden streams emerging from a radiant pearl-white core on pitch black,
+ * pinching cleanly through hourglass waists and fanning into gossamer threads.
  */
-export function EcosystemField({ activeLayer }: { activeLayer: EcosystemLayer }) {
+export function EcosystemBridgeVisual({
+  activeLayer,
+  onSelect,
+}: {
+  activeLayer: EcosystemLayer;
+  onSelect: (layer: EcosystemLayer) => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const targetIdxRef = useRef<number>(LAYER_INDEX[activeLayer]);
 
@@ -45,124 +88,167 @@ export function EcosystemField({ activeLayer }: { activeLayer: EcosystemLayer })
     const draw = (dt: number) => {
       if (!reduceMotion) {
         clock += dt;
-        smoothIdx += (targetIdxRef.current - smoothIdx) * (1 - Math.exp(-dt * 5.2));
+        smoothIdx += (targetIdxRef.current - smoothIdx) * (1 - Math.exp(-dt * 5.0));
       } else {
         smoothIdx = targetIdxRef.current;
       }
 
+      ctx.globalCompositeOperation = "source-over";
       ctx.clearRect(0, 0, width, height);
 
       const cx = width * 0.5;
-      const topOriginY = 0;
-      const arcCenterY = height * 1.18;
-      const maxR = Math.max(width * 0.72, height * 1.15);
+      const cy = height * 0.87;
+      const rx = width * 0.54;
+      const ry = height * 0.92;
+      const samples = 26;
 
-      // 1. Hair-fine concentric observatory meridian arcs (quiet architectural scale)
       ctx.save();
-      for (let i = 0; i < 4; i++) {
-        const r = maxR * (0.48 + i * 0.16);
-        ctx.beginPath();
-        ctx.arc(cx, arcCenterY, r, Math.PI * 1.14, Math.PI * 1.86);
-        ctx.strokeStyle = i === 1 ? "rgba(240, 181, 74, 0.055)" : "rgba(255, 255, 255, 0.032)";
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
+      ctx.globalCompositeOperation = "lighter";
 
-      // Subtle coordinate tick notches along the golden reference arc
-      const tickR = maxR * 0.64;
-      for (let k = -6; k <= 6; k++) {
-        const angle = -Math.PI / 2 + k * 0.085;
-        const x1 = cx + Math.cos(angle) * (tickR - 3);
-        const y1 = arcCenterY + Math.sin(angle) * (tickR - 3);
-        const x2 = cx + Math.cos(angle) * (tickR + 3);
-        const y2 = arcCenterY + Math.sin(angle) * (tickR + 3);
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.strokeStyle = k === 0 ? "rgba(240, 181, 74, 0.24)" : "rgba(255, 255, 255, 0.06)";
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
+      // 1. Braided golden silk filament bundles
+      SIGNAL_ARMS.forEach((arm, armIdx) => {
+        const proximity =
+          arm.layerIdx === null ? 0.25 : Math.max(0, 1 - Math.abs(smoothIdx - arm.layerIdx));
+        const boost = 0.64 + proximity * 0.52;
 
-      // 2. Central descending spine & 3 architectural conduits guiding eye flow into the 3-tab rail
-      const splitY = Math.min(130, height * 0.22);
-      const targetY = Math.min(340, height * 0.56);
-      const spanX = Math.min(width * 0.34, 460);
-      const branches = [cx - spanX, cx, cx + spanX];
+        const dirX = Math.cos(arm.angle);
+        const dirY = Math.sin(arm.angle);
+        const perpX = -dirY;
+        const perpY = dirX;
 
-      // Incoming vertical spine descending seamlessly from the Lightfall transition above
-      const spineGrad = ctx.createLinearGradient(cx, topOriginY, cx, splitY);
-      spineGrad.addColorStop(0, "rgba(240, 181, 74, 0)");
-      spineGrad.addColorStop(0.55, "rgba(240, 181, 74, 0.32)");
-      spineGrad.addColorStop(1, "rgba(240, 181, 74, 0.58)");
-      ctx.beginPath();
-      ctx.moveTo(cx, topOriginY);
-      ctx.lineTo(cx, splitY);
-      ctx.strokeStyle = spineGrad;
-      ctx.lineWidth = 1;
-      ctx.stroke();
+        for (let s = 0; s < arm.strands; s++) {
+          const seed = armIdx * 97 + s * 13 + 1;
+          const u = arm.strands > 1 ? (s / (arm.strands - 1)) * 2 - 1 : 0;
+          const phase = deterministicHash(seed) * Math.PI * 2;
+          const freq = 1.65 + deterministicHash(seed + 3) * 1.15;
+          const strandScale = 0.72 + deterministicHash(seed + 7) * 0.56;
+          const isHotCore = Math.abs(u) < 0.36;
 
-      // Three sweeping optical conduits branching cleanly to Neural Network / Command / Nodes
-      branches.forEach((bx, idx) => {
-        const proximity = Math.max(0, 1 - Math.abs(smoothIdx - idx));
-        const cp1x = cx + (bx - cx) * 0.24;
-        const cp1y = splitY + (targetY - splitY) * 0.45;
-        const cp2x = bx - (bx - cx) * 0.14;
-        const cp2y = targetY - (targetY - splitY) * 0.25;
+          ctx.beginPath();
+          for (let i = 0; i <= samples; i++) {
+            const t = i / samples;
+            // Radial progression scaled cleanly to container aspect ratio
+            const distX = dirX * t * rx * arm.reach;
+            const distY = dirY * t * ry * arm.reach;
+            // Subtle graceful S-curve sweep
+            const bend = Math.sin(t * Math.PI) * arm.curve * Math.min(rx, ry) * 0.55;
 
-        const bGrad = ctx.createLinearGradient(cx, splitY, bx, targetY);
-        if (proximity > 0.05) {
-          bGrad.addColorStop(0, `rgba(240, 181, 74, ${(0.12 + 0.44 * proximity).toFixed(3)})`);
-          bGrad.addColorStop(0.65, `rgba(240, 181, 74, ${(0.08 + 0.26 * proximity).toFixed(3)})`);
-          bGrad.addColorStop(1, "rgba(240, 181, 74, 0)");
-        } else {
-          bGrad.addColorStop(0, "rgba(255, 255, 255, 0.06)");
-          bGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
+            // Hourglass lotus envelope: tight at core -> organic swell -> crisp focal waist pinch -> gossamer fan
+            let env: number;
+            if (t < arm.waistT) {
+              const p = t / arm.waistT;
+              const petal = Math.sin(p * Math.PI);
+              env = 2.0 + arm.swell * Math.pow(petal, 0.85) * (1 - 0.1 * p);
+            } else {
+              const q = (t - arm.waistT) / (1 - arm.waistT);
+              env = 2.2 + arm.flare * Math.pow(q, 1.32);
+            }
+
+            // Helical intertwining weave so fibers genuinely cross & shimmer at the waist
+            const twist = Math.sin(t * Math.PI * freq + phase + clock * (0.45 + 0.14 * proximity));
+            const lateral =
+              (u * 0.76 + twist * 0.42 * (0.4 + 0.6 * (1 - Math.abs(u)))) * env * strandScale;
+
+            const px = cx + distX + perpX * (bend + lateral);
+            const py = cy + distY + perpY * (bend + lateral);
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+
+          const alpha = (isHotCore ? 0.29 : 0.15) * boost * (0.72 + 0.28 * (1 - Math.abs(u)));
+          ctx.strokeStyle = isHotCore
+            ? `rgba(255, 244, 212, ${alpha.toFixed(3)})`
+            : `rgba(240, 186, 84, ${alpha.toFixed(3)})`;
+          ctx.lineWidth = isHotCore ? 0.95 : 0.65;
+          ctx.stroke();
         }
 
+        // Subtle luminous focal bloom right at each waist neck
+        const wx = cx + dirX * arm.waistT * rx * arm.reach + perpX * (Math.sin(arm.waistT * Math.PI) * arm.curve * Math.min(rx, ry) * 0.55);
+        const wy = cy + dirY * arm.waistT * ry * arm.reach + perpY * (Math.sin(arm.waistT * Math.PI) * arm.curve * Math.min(rx, ry) * 0.55);
+        const waistR = 16 + proximity * 14;
+        const waistGlow = ctx.createRadialGradient(wx, wy, 0, wx, wy, waistR);
+        waistGlow.addColorStop(0, `rgba(255, 246, 218, ${(0.22 * boost).toFixed(3)})`);
+        waistGlow.addColorStop(0.45, `rgba(240, 181, 74, ${(0.1 * boost).toFixed(3)})`);
+        waistGlow.addColorStop(1, "rgba(240, 181, 74, 0)");
+        ctx.fillStyle = waistGlow;
         ctx.beginPath();
-        ctx.moveTo(cx, splitY);
-        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, bx, targetY);
-        ctx.strokeStyle = bGrad;
-        ctx.lineWidth = 0.9 + proximity * 0.55;
-        ctx.stroke();
+        ctx.arc(wx, wy, waistR, 0, Math.PI * 2);
+        ctx.fill();
 
-        // Travelling golden optical packet gliding down the active conduit
-        if (proximity > 0.2 && !reduceMotion) {
-          const u = (clock * 0.36 + idx * 0.17) % 1;
-          const inv = 1 - u;
-          const px =
-            inv * inv * inv * cx +
-            3 * inv * inv * u * cp1x +
-            3 * inv * u * u * cp2x +
-            u * u * u * bx;
-          const py =
-            inv * inv * inv * splitY +
-            3 * inv * inv * u * cp1y +
-            3 * inv * u * u * cp2y +
-            u * u * u * targetY;
-          const fade = Math.sin(Math.PI * u) * proximity;
-          const glow = ctx.createRadialGradient(px, py, 0, px, py, 14);
-          glow.addColorStop(0, `rgba(255, 245, 214, ${(0.85 * fade).toFixed(3)})`);
-          glow.addColorStop(0.35, `rgba(240, 181, 74, ${(0.42 * fade).toFixed(3)})`);
-          glow.addColorStop(1, "rgba(240, 181, 74, 0)");
-          ctx.fillStyle = glow;
-          ctx.beginPath();
-          ctx.arc(px, py, 14, 0, Math.PI * 2);
-          ctx.fill();
+        // Travelling luminous signal sparks along the active arm
+        if (arm.layerIdx !== null && proximity > 0.25 && !reduceMotion) {
+          for (let m = 0; m < 2; m++) {
+            const mt = (clock * 0.34 + m * 0.5 + armIdx * 0.19) % 1;
+            const bend = Math.sin(mt * Math.PI) * arm.curve * Math.min(rx, ry) * 0.55;
+            const sx = cx + dirX * mt * rx * arm.reach + perpX * bend;
+            const sy = cy + dirY * mt * ry * arm.reach + perpY * bend;
+            const fade = Math.sin(mt * Math.PI) * proximity;
+            const spark = ctx.createRadialGradient(sx, sy, 0, sx, sy, 9);
+            spark.addColorStop(0, `rgba(255, 250, 232, ${(0.9 * fade).toFixed(3)})`);
+            spark.addColorStop(0.4, `rgba(240, 181, 74, ${(0.35 * fade).toFixed(3)})`);
+            spark.addColorStop(1, "rgba(240, 181, 74, 0)");
+            ctx.fillStyle = spark;
+            ctx.beginPath();
+            ctx.arc(sx, sy, 9, 0, Math.PI * 2);
+            ctx.fill();
+          }
         }
       });
 
-      // Pinpoint golden junction jewel where the vertical spine splits into the 3 ecosystem layers
-      const hubGlow = ctx.createRadialGradient(cx, splitY, 0, cx, splitY, 22);
-      hubGlow.addColorStop(0, "rgba(255, 246, 220, 0.92)");
-      hubGlow.addColorStop(0.24, "rgba(240, 181, 74, 0.38)");
-      hubGlow.addColorStop(1, "rgba(240, 181, 74, 0)");
-      ctx.fillStyle = hubGlow;
+      // 2. Fine starlight dust motes drifting delicately around the golden silk
+      for (let d = 0; d < 28; d++) {
+        const a = -Math.PI + 0.1 + deterministicHash(d * 19 + 5) * (Math.PI - 0.2);
+        const rBase = 0.22 + deterministicHash(d * 31 + 11) * 0.72;
+        const drift = reduceMotion ? 0 : Math.sin(clock * 0.7 + d) * 0.02;
+        const dx = cx + Math.cos(a) * (rBase + drift) * rx * 0.96;
+        const dy = cy + Math.sin(a) * (rBase + drift) * ry * 0.92;
+        const twinkle = 0.35 + 0.55 * (0.5 + 0.5 * Math.sin(clock * 1.4 + d * 2.1));
+        ctx.fillStyle = `rgba(255, 242, 206, ${(0.42 * twinkle).toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(dx, dy, 0.75 + deterministicHash(d * 7) * 0.65, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 3. Radiant Pearl-White / Burnished-Gold Singularity Core at bottom center
+      const coreOuter = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.min(width * 0.24, 96));
+      coreOuter.addColorStop(0, "rgba(255, 253, 246, 0.98)");
+      coreOuter.addColorStop(0.16, "rgba(255, 244, 212, 0.82)");
+      coreOuter.addColorStop(0.42, "rgba(240, 181, 74, 0.32)");
+      coreOuter.addColorStop(1, "rgba(240, 181, 74, 0)");
+      ctx.fillStyle = coreOuter;
       ctx.beginPath();
-      ctx.arc(cx, splitY, 22, 0, Math.PI * 2);
+      ctx.arc(cx, cy, Math.min(width * 0.24, 96), 0, Math.PI * 2);
       ctx.fill();
 
+      ctx.restore();
+
+      // Clean horizon mask below core & subtle edge feathering into pure #000000
+      ctx.save();
+      ctx.globalCompositeOperation = "source-over";
+      const baseMask = ctx.createLinearGradient(0, cy + 1, 0, height);
+      baseMask.addColorStop(0, "rgba(0, 0, 0, 0.78)");
+      baseMask.addColorStop(0.35, "rgba(0, 0, 0, 1)");
+      ctx.fillStyle = baseMask;
+      ctx.fillRect(0, cy + 1, width, height - cy);
+
+      const leftFade = ctx.createLinearGradient(0, 0, width * 0.12, 0);
+      leftFade.addColorStop(0, "rgba(0, 0, 0, 1)");
+      leftFade.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx.fillStyle = leftFade;
+      ctx.fillRect(0, 0, width * 0.12, height);
+
+      const rightFade = ctx.createLinearGradient(width * 0.88, 0, width, 0);
+      rightFade.addColorStop(0, "rgba(0, 0, 0, 0)");
+      rightFade.addColorStop(1, "rgba(0, 0, 0, 1)");
+      ctx.fillStyle = rightFade;
+      ctx.fillRect(width * 0.88, 0, width * 0.12, height);
+
+      const topFade = ctx.createLinearGradient(0, 0, 0, height * 0.16);
+      topFade.addColorStop(0, "rgba(0, 0, 0, 0.92)");
+      topFade.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx.fillStyle = topFade;
+      ctx.fillRect(0, 0, width, height * 0.16);
       ctx.restore();
     };
 
@@ -209,165 +295,21 @@ export function EcosystemField({ activeLayer }: { activeLayer: EcosystemLayer })
     };
   }, []);
 
+  function handleCanvasClick(event: MouseEvent<HTMLDivElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const rx = (event.clientX - rect.left) / Math.max(rect.width, 1);
+    if (rx < 0.36) onSelect("network");
+    else if (rx > 0.64) onSelect("nodes");
+    else onSelect("command");
+  }
+
   return (
-    <canvas
-      ref={canvasRef}
-      className="pointer-events-none absolute inset-x-0 top-0 h-[560px] w-full"
+    <div
+      onClick={handleCanvasClick}
+      className="relative h-[210px] w-full cursor-pointer overflow-hidden bg-black sm:h-[246px]"
       aria-hidden="true"
-    />
-  );
-}
-
-const BRIDGE_EVENTS: Record<EcosystemLayer, string> = {
-  network: "nexus:intent",
-  command: "command:focus-changed",
-  nodes: "studio:take-routed",
-};
-
-/**
- * Ground-up interactive SVG shared-ecosystem schematic showing Neural Network, Command, and Nodes
- * wired together through one bidirectional nexusBus. Clicking any node switches the main stage.
- */
-export function EcosystemBridgeVisual({
-  activeLayer,
-  onSelect,
-}: {
-  activeLayer: EcosystemLayer;
-  onSelect: (layer: EcosystemLayer) => void;
-}) {
-  const eventTopic = BRIDGE_EVENTS[activeLayer];
-  const nodes: Array<{ id: EcosystemLayer; label: string; sub: string; cx: number }> = [
-    { id: "network", label: "Neural Network", sub: "Assistant", cx: 74 },
-    { id: "command", label: "Command", sub: "Dashboard", cx: 220 },
-    { id: "nodes", label: "Nodes", sub: "Extensions", cx: 366 },
-  ];
-
-  return (
-    <div className="relative overflow-hidden rounded-[18px] border border-white/[0.09] bg-[#09090d]/90 p-4">
-      <div className="flex items-center justify-between gap-2 text-[12px]">
-        <span className="font-medium text-[#d1d1d6]">Shared signal bus</span>
-        <span className="font-mono text-[11px] text-[#9d9da6]">{eventTopic}</span>
-      </div>
-
-      <svg
-        viewBox="0 0 440 116"
-        className="mt-1.5 block h-auto w-full overflow-visible"
-        role="group"
-        aria-label="Interactive Nexus shared ecosystem diagram"
-      >
-        <defs>
-          <linearGradient id="eco-bridge-gold" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#f0b54a" stopOpacity="0.22" />
-            <stop offset="50%" stopColor="#ffd99a" stopOpacity="0.92" />
-            <stop offset="100%" stopColor="#f0b54a" stopOpacity="0.22" />
-          </linearGradient>
-        </defs>
-
-        {/* Upper arched direct bus link (Neural Network <-> Nodes) */}
-        <path
-          d="M 74 48 C 146 6, 294 6, 366 48"
-          fill="none"
-          stroke={activeLayer !== "command" ? "url(#eco-bridge-gold)" : "rgba(255,255,255,0.14)"}
-          strokeWidth={activeLayer !== "command" ? 1.35 : 1}
-          strokeDasharray="4 4"
-        />
-
-        {/* Direct horizontal bus lines (Network <-> Command <-> Nodes) */}
-        <line
-          x1="100"
-          y1="48"
-          x2="194"
-          y2="48"
-          stroke={activeLayer === "network" || activeLayer === "command" ? "#f0b54a" : "rgba(255,255,255,0.16)"}
-          strokeOpacity={activeLayer === "network" || activeLayer === "command" ? 0.72 : 1}
-          strokeWidth="1.25"
-        />
-        <line
-          x1="246"
-          y1="48"
-          x2="340"
-          y2="48"
-          stroke={activeLayer === "command" || activeLayer === "nodes" ? "#f0b54a" : "rgba(255,255,255,0.16)"}
-          strokeOpacity={activeLayer === "command" || activeLayer === "nodes" ? 0.72 : 1}
-          strokeWidth="1.25"
-        />
-
-        {/* Animated travelling signal beads along the shared bus */}
-        <circle r="2.6" fill="#fff7e2">
-          <animateMotion dur="2.8s" repeatCount="indefinite" path="M 74 48 L 220 48 L 366 48" />
-        </circle>
-        <circle r="2.2" fill="#f0b54a">
-          <animateMotion dur="3.6s" repeatCount="indefinite" path="M 366 48 C 294 6, 146 6, 74 48" />
-        </circle>
-
-        {/* Three Interactive Architectural Layer Nodes */}
-        {nodes.map((node) => {
-          const isSelected = activeLayer === node.id;
-          return (
-            <g
-              key={node.id}
-              onClick={() => onSelect(node.id)}
-              className="cursor-pointer"
-              role="button"
-              tabIndex={0}
-              aria-label={`Inspect ${node.label}`}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onSelect(node.id);
-                }
-              }}
-            >
-              {isSelected ? (
-                <circle
-                  cx={node.cx}
-                  cy="48"
-                  r="24"
-                  fill="none"
-                  stroke="#f0b54a"
-                  strokeOpacity="0.45"
-                  strokeWidth="1"
-                  strokeDasharray="14 18"
-                  className="neural-reticle-orbit"
-                />
-              ) : null}
-              <circle
-                cx={node.cx}
-                cy="48"
-                r="18"
-                fill={isSelected ? "#17171c" : "#0e0e12"}
-                stroke={isSelected ? "#f0b54a" : "rgba(255,255,255,0.18)"}
-                strokeWidth={isSelected ? 1.5 : 1}
-              />
-              <circle
-                cx={node.cx}
-                cy="48"
-                r="4"
-                fill={isSelected ? "#f0b54a" : "rgba(245,245,247,0.45)"}
-              />
-              <text
-                x={node.cx}
-                y="88"
-                textAnchor="middle"
-                fill={isSelected ? "#f5f5f7" : "#a1a1a6"}
-                fontSize="11.5"
-                fontWeight={isSelected ? 600 : 500}
-              >
-                {node.label}
-              </text>
-              <text
-                x={node.cx}
-                y="104"
-                textAnchor="middle"
-                fill={isSelected ? "#d1d1d6" : "#7c7c85"}
-                fontSize="10"
-              >
-                {node.sub}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
+    >
+      <canvas ref={canvasRef} className="block h-full w-full" />
     </div>
   );
 }
