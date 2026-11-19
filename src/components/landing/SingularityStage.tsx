@@ -1647,7 +1647,7 @@ function NodesPreview({ theme }: { theme: PreviewTheme }) {
 
 export function SingularityStage() {
   const [activeLayer, setActiveLayer] = useState<EcosystemLayer>("network");
-  const [previewTheme, setPreviewTheme] = useState<PreviewTheme>("dark");
+  const [previewTheme, setPreviewTheme] = useState<PreviewTheme>("light");
 
   const activeMeta = LAYER_TABS.find((t) => t.id === activeLayer) ?? LAYER_TABS[0]!;
   const isLightPreview = previewTheme === "light";
