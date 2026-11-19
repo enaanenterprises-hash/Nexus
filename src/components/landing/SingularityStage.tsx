@@ -25,7 +25,6 @@ import {
   Sun,
   Zap,
 } from "lucide-react";
-import { NexusMark } from "./NexusLogo";
 import {
   EcosystemBridgeVisual,
   EcosystemField,
@@ -37,39 +36,27 @@ type PreviewTheme = "dark" | "light";
 type CommandTab = "overview" | "automations" | "connections";
 type CommandPreset = "morning" | "deep-work";
 
-/* ─── Layer Metadata (3 Switchable Menus — Slim Copy) ─────────────────────── */
+/* ─── Layer Metadata (3 Switchable Menus — Pill Bar + Stage Caption) ──────── */
 
 const LAYER_TABS: Array<{
   id: EcosystemLayer;
   title: string;
-  role: string;
   description: string;
-  breadcrumb: string;
-  chromeStatus: string;
 }> = [
   {
     id: "network",
     title: "Neural Network",
-    role: "Personal assistant",
-    description: "Ambient assistant wired across your workspace.",
-    breadcrumb: "Nexus · Neural Network",
-    chromeStatus: "WebGL canopy · 5 orbital sockets",
+    description: "Your personal assistant—wired live across your schedule, inbox, and tools.",
   },
   {
     id: "command",
     title: "Command",
-    role: "Daily dashboard",
-    description: "Calendar, mail, tasks, focus, and automations.",
-    breadcrumb: "Nexus · Command",
-    chromeStatus: "4×2 board · AES-256 vault",
+    description: "Your daily dashboard—uniting calendar, mail, tasks, focus, and automations.",
   },
   {
     id: "nodes",
     title: "Nodes",
-    role: "Modular extensions",
-    description: "Isolated tools snapped into orbital sockets.",
-    breadcrumb: "Nexus · Nodes",
-    chromeStatus: "Spatial Studio · nexusBus v1",
+    description: "Modular extensions—isolated tools snapped into capability-scoped sockets.",
   },
 ];
 
@@ -278,44 +265,6 @@ function formatClock(totalSeconds: number): string {
   const mins = Math.floor(totalSeconds / 60);
   const secs = totalSeconds % 60;
   return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-}
-
-/* ─── Bespoke 1.5px Architectural Icons for the 3 Menus ───────────────────── */
-
-function LayerGlyph({ layer }: { layer: EcosystemLayer }) {
-  if (layer === "network") {
-    return (
-      <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" fill="none" aria-hidden="true">
-        <circle cx="12" cy="14" r="3.2" stroke="currentColor" strokeWidth="1.5" />
-        <path d="M12 10.8 C12 7.5 12 6 12 4.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-        <path d="M9.4 12 C7.2 10.2 5.8 8.4 4.8 6.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-        <path d="M14.6 12 C16.8 10.2 18.2 8.4 19.2 6.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-        <circle cx="12" cy="4" r="1.4" fill="currentColor" />
-        <circle cx="4.5" cy="6" r="1.4" fill="currentColor" />
-        <circle cx="19.5" cy="6" r="1.4" fill="currentColor" />
-        <path d="M4.5 18.5 Q12 15.2 19.5 18.5" stroke="currentColor" strokeWidth="1.25" strokeOpacity="0.55" strokeLinecap="round" />
-      </svg>
-    );
-  }
-  if (layer === "command") {
-    return (
-      <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" fill="none" aria-hidden="true">
-        <rect x="3.5" y="4" width="7.5" height="9.5" rx="2" stroke="currentColor" strokeWidth="1.5" />
-        <rect x="13" y="4" width="7.5" height="6" rx="2" stroke="currentColor" strokeWidth="1.5" />
-        <rect x="13" y="12" width="7.5" height="8" rx="2" stroke="currentColor" strokeWidth="1.5" />
-        <rect x="3.5" y="15.5" width="7.5" height="4.5" rx="1.8" stroke="currentColor" strokeWidth="1.5" strokeOpacity="0.65" />
-      </svg>
-    );
-  }
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" fill="none" aria-hidden="true">
-      <circle cx="12" cy="18" r="2.2" fill="currentColor" />
-      <path d="M12 15.8 L6.2 9.4 M12 15.8 L12 6.8 M12 15.8 L17.8 9.4" stroke="currentColor" strokeWidth="1.35" strokeOpacity="0.7" />
-      <circle cx="5.5" cy="8.5" r="2.2" stroke="currentColor" strokeWidth="1.45" />
-      <circle cx="12" cy="5.2" r="2.2" stroke="currentColor" strokeWidth="1.45" />
-      <circle cx="18.5" cy="8.5" r="2.2" stroke="currentColor" strokeWidth="1.45" />
-    </svg>
-  );
 }
 
 /* ─── Authentic Command Dashboard Preview (Monochrome Precision UI) ───────── */
@@ -1729,67 +1678,34 @@ export function SingularityStage() {
           </div>
         </div>
 
-        {/* Expansive 3-Menu Architectural Selector Rail (Monochrome Text & Chrome) */}
-        <div
-          role="tablist"
-          aria-label="Explore Nexus surfaces"
-          className="mt-10 grid grid-cols-1 overflow-hidden rounded-t-[20px] border border-b-0 border-white/[0.1] bg-[#07070a]/95 md:mt-11 md:grid-cols-3"
-        >
-          {LAYER_TABS.map((tab, index) => {
-            const active = activeLayer === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                aria-controls={`workspace-panel-${tab.id}`}
-                onClick={() => setActiveLayer(tab.id)}
-                className={`group relative flex cursor-pointer flex-col gap-1.5 px-5 py-4.5 text-left transition-colors focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-white/75 sm:px-6 ${
-                  index > 0 ? "border-t border-white/[0.08] md:border-t-0 md:border-l" : ""
-                } ${active ? "bg-[#0e0e13]" : "bg-transparent hover:bg-white/[0.025]"}`}
-              >
-                {/* Crisp white top edge indicator bar */}
-                <span
-                  className={`pointer-events-none absolute inset-x-0 top-0 h-[1.5px] transition-opacity duration-300 ${
-                    active ? "bg-gradient-to-r from-white/15 via-white/80 to-white/15 opacity-100" : "opacity-0"
-                  }`}
-                  aria-hidden="true"
-                />
-
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <span className={active ? "text-[#f5f5f7]" : "text-[#8e8e95] group-hover:text-[#c9c9d0]"}>
-                      <LayerGlyph layer={tab.id} />
-                    </span>
-                    <span
-                      className={`text-[15.5px] font-semibold tracking-[-0.015em] transition-colors ${
-                        active ? "text-[#f5f5f7]" : "text-[#b8b8c0] group-hover:text-[#f5f5f7]"
-                      }`}
-                    >
-                      {tab.title}
-                    </span>
-                  </div>
-
-                  <span
-                    className={`rounded-full px-2.5 py-0.5 text-[11.5px] font-medium transition-colors ${
-                      active ? "bg-white/[0.11] text-[#f5f5f7]" : "bg-white/[0.04] text-[#8e8e95]"
-                    }`}
-                  >
-                    {tab.role}
-                  </span>
-                </div>
-
-                <p
-                  className={`text-[13px] leading-[1.48] transition-colors ${
-                    active ? "text-[#b8b8c0]" : "text-[#85858e] group-hover:text-[#a8a8b2]"
+        {/* Separate Floating Pill Bar: Neural Network · Command · Nodes */}
+        <div className="mt-9 mb-4 flex justify-center sm:mt-10 sm:mb-5">
+          <div
+            role="tablist"
+            aria-label="Explore Nexus surfaces"
+            className="inline-flex max-w-full items-center gap-1 rounded-full border border-white/[0.11] bg-[#0b0b10]/95 p-1.5 backdrop-blur-md"
+          >
+            {LAYER_TABS.map((tab) => {
+              const active = activeLayer === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  aria-controls={`workspace-panel-${tab.id}`}
+                  onClick={() => setActiveLayer(tab.id)}
+                  className={`min-h-[40px] cursor-pointer rounded-full px-4 py-2 text-[13px] font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/75 sm:px-6 sm:text-[14px] ${
+                    active
+                      ? "bg-[#f5f5f7] text-[#09090b] shadow-xs"
+                      : "text-[#a1a1a6] hover:bg-white/[0.06] hover:text-[#f5f5f7]"
                   }`}
                 >
-                  {tab.description}
-                </p>
-              </button>
-            );
-          })}
+                  {tab.title}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Expansive Widescreen Observatory Frame */}
@@ -1797,9 +1713,9 @@ export function SingularityStage() {
           id={`workspace-panel-${activeLayer}`}
           role="tabpanel"
           aria-label={`${activeMeta.title} interactive preview`}
-          className="relative overflow-hidden rounded-b-[22px] border border-white/[0.11] bg-[#0a0a0e] shadow-[0_32px_90px_-34px_rgba(0,0,0,0.92)]"
+          className="relative overflow-hidden rounded-[22px] border border-white/[0.11] bg-[#0a0a0e] shadow-[0_32px_90px_-34px_rgba(0,0,0,0.92)]"
         >
-          {/* Unified Window Chrome */}
+          {/* Minimal Stage Top Bar: Active Description + Light/Dark Switcher Only */}
           <div
             className={`flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-5 ${
               isLightPreview
@@ -1807,84 +1723,49 @@ export function SingularityStage() {
                 : "border-white/[0.08] bg-[#0c0c10] text-[#f5f5f7]"
             }`}
           >
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5" aria-hidden="true">
-                <span
-                  className={`h-2.5 w-2.5 rounded-full ${
-                    isLightPreview ? "bg-[#0e0f12]/18" : "bg-white/18"
-                  }`}
-                />
-                <span
-                  className={`h-2.5 w-2.5 rounded-full ${
-                    isLightPreview ? "bg-[#0e0f12]/18" : "bg-white/18"
-                  }`}
-                />
-                <span
-                  className={`h-2.5 w-2.5 rounded-full ${
-                    isLightPreview ? "bg-[#0e0f12]/18" : "bg-white/18"
-                  }`}
-                />
-              </div>
+            <p
+              key={activeMeta.id}
+              className={`lp-stage-panel text-[13px] leading-[1.45] sm:text-[13.5px] ${
+                isLightPreview ? "text-[#4a4c55]" : "text-[#b8b8c0]"
+              }`}
+            >
+              {activeMeta.description}
+            </p>
 
-              <span
-                className={`h-3.5 w-[1px] ${isLightPreview ? "bg-[#0e0f12]/12" : "bg-white/12"}`}
-                aria-hidden="true"
-              />
-
-              <div className="flex items-center gap-2">
-                <NexusMark className="h-4 w-4 shrink-0" />
-                <span className="text-[12.5px] font-medium">{activeMeta.breadcrumb}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <span
-                className={`hidden items-center gap-2 text-[11.5px] sm:inline-flex ${
-                  isLightPreview ? "text-[#575b66]" : "text-[#9d9da6]"
-                }`}
-              >
-                <span
-                  className={`h-1.5 w-1.5 rounded-full ${isLightPreview ? "bg-[#0e0f12]/55" : "bg-white/60"}`}
-                  aria-hidden="true"
-                />
-                {activeMeta.chromeStatus}
-              </span>
-
-              {/* Light / Dark Preview Theme Switcher */}
-              <div
-                className={`inline-flex items-center rounded-full border p-0.5 text-[11.5px] ${
+            {/* Light / Dark Preview Theme Switcher */}
+            <div
+              className={`inline-flex shrink-0 items-center rounded-full border p-0.5 text-[11.5px] ${
+                isLightPreview
+                  ? "border-[#0e0f12]/[0.1] bg-[#f3f4f6]"
+                  : "border-white/[0.1] bg-[#15151b]"
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => setPreviewTheme("light")}
+                aria-pressed={isLightPreview}
+                className={`inline-flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 font-medium transition-colors ${
                   isLightPreview
-                    ? "border-[#0e0f12]/[0.1] bg-[#f3f4f6]"
-                    : "border-white/[0.1] bg-[#15151b]"
+                    ? "bg-white text-[#0e0f12] shadow-xs"
+                    : "text-[#9d9da6] hover:text-white"
                 }`}
               >
-                <button
-                  type="button"
-                  onClick={() => setPreviewTheme("light")}
-                  aria-pressed={isLightPreview}
-                  className={`inline-flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 font-medium transition-colors ${
-                    isLightPreview
-                      ? "bg-white text-[#0e0f12] shadow-xs"
-                      : "text-[#9d9da6] hover:text-white"
-                  }`}
-                >
-                  <Sun className="size-3" strokeWidth={1.85} aria-hidden="true" />
-                  Light
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPreviewTheme("dark")}
-                  aria-pressed={!isLightPreview}
-                  className={`inline-flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 font-medium transition-colors ${
-                    !isLightPreview
-                      ? "bg-white/[0.14] text-white"
-                      : "text-[#575b66] hover:text-[#0e0f12]"
-                  }`}
-                >
-                  <Moon className="size-3" strokeWidth={1.85} aria-hidden="true" />
-                  Dark
-                </button>
-              </div>
+                <Sun className="size-3" strokeWidth={1.85} aria-hidden="true" />
+                Light
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewTheme("dark")}
+                aria-pressed={!isLightPreview}
+                className={`inline-flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 font-medium transition-colors ${
+                  !isLightPreview
+                    ? "bg-white/[0.14] text-white"
+                    : "text-[#575b66] hover:text-[#0e0f12]"
+                }`}
+              >
+                <Moon className="size-3" strokeWidth={1.85} aria-hidden="true" />
+                Dark
+              </button>
             </div>
           </div>
 

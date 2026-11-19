@@ -92,11 +92,11 @@ export function IntegrationsAtlas() {
           </h2>
           <div className="flex items-center gap-6 text-[13px] text-[#a1a1a6]">
             <span className="inline-flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#f5f5f7]" aria-hidden="true" />
+              <span className="h-2 w-2 rounded-full bg-[#22c55e]" aria-hidden="true" />
               <span>Live in beta</span>
             </span>
             <span className="inline-flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full border border-white/35" aria-hidden="true" />
+              <span className="h-2 w-2 rounded-full border border-white/35" aria-hidden="true" />
               <span>Planned</span>
             </span>
           </div>
@@ -117,7 +117,7 @@ export function IntegrationsAtlas() {
                   <li key={item.name} className="flex items-center justify-between gap-3">
                     <span className={item.live ? "text-[#e4e4e9]" : "text-[#8e8e95]"}>{item.name}</span>
                     {item.live ? (
-                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#f5f5f7]" aria-label="Live" />
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#22c55e]" aria-label="Live" />
                     ) : (
                       <span className="text-[12px] text-[#8e8e95]">Planned</span>
                     )}
