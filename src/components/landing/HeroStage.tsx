@@ -191,7 +191,7 @@ export function HeroStage() {
           className="pointer-events-none absolute inset-0"
           style={{
             background:
-              "radial-gradient(ellipse 52% 44% at 50% 47%, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.48) 48%, rgba(255, 255, 255, 0) 80%)",
+              "radial-gradient(ellipse 46% 40% at 50% 47%, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0.36) 48%, rgba(255, 255, 255, 0) 76%)",
           }}
           aria-hidden="true"
         />
@@ -205,13 +205,13 @@ export function HeroStage() {
         <div className="relative z-10 mx-auto flex w-full max-w-[920px] flex-col items-center text-center">
           <h1 className="font-editorial max-w-[18ch] text-[clamp(2.75rem,5.9vw,5rem)] font-normal leading-[1.03] tracking-[-0.04em] text-[#0e0f12] [text-wrap:balance]">
             <span className="gal-line-mask">
-              <span className="gal-line-inner gal-line-inner--1">One intelligence,</span>
+              <span className="gal-line-inner gal-line-inner--1">Every tool,</span>
             </span>
             <span className="gal-line-mask">
-              <span className="gal-line-inner gal-line-inner--2">connecting</span>
+              <span className="gal-line-inner gal-line-inner--2">every thought,</span>
             </span>
             <span className="gal-line-mask">
-              <span className="gal-line-inner gal-line-inner--3">everything you do.</span>
+              <span className="gal-line-inner gal-line-inner--3">woven into one.</span>
             </span>
           </h1>
 

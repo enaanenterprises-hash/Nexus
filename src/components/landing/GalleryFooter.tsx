@@ -91,24 +91,24 @@ export function GalleryFooter() {
         <div aria-hidden="true" className="w-full select-none overflow-hidden">
           <div className="gal-wordmark-rise" data-visible={wordmarkVisible ? "true" : "false"}>
             <svg
-              viewBox="0 0 1200 345"
+              viewBox="0 0 1200 225"
               className="block h-auto w-full"
               preserveAspectRatio="xMidYMid meet"
               role="presentation"
             >
               <text
                 x="600"
-                y="292"
+                y="186"
                 textAnchor="middle"
                 fill="#0e0f12"
                 style={{
                   fontFamily: 'var(--font-editorial), "New York", Georgia, serif',
-                  fontSize: "388px",
+                  fontSize: "204px",
                   fontWeight: 500,
-                  letterSpacing: "-0.048em",
+                  letterSpacing: "-0.044em",
                 }}
               >
-                Nexus
+                Nexus Atelier
               </text>
             </svg>
           </div>
@@ -122,11 +122,11 @@ export function GalleryFooter() {
           <div className="flex items-center justify-center gap-3 md:justify-start">
             <Link
               href="/"
-              aria-label="Nexus home"
+              aria-label="Nexus Atelier home"
               className="inline-flex items-center gap-2.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#9a6910]"
             >
               <NexusMark className="h-8 w-8 shrink-0" />
-              <span className="text-[16px] font-semibold tracking-[-0.025em] text-[#0e0f12]">Nexus</span>
+              <span className="text-[16px] font-semibold tracking-[-0.025em] text-[#0e0f12]">Nexus Atelier</span>
             </Link>
           </div>
 
@@ -144,7 +144,7 @@ export function GalleryFooter() {
           {/* Right: Origin Signature */}
           <div className="text-center text-[13px] leading-[1.55] text-[#52545d] md:text-right">
             <p>Designed &amp; Engineered in Toronto</p>
-            <p className="text-[#636570]">by Nexus</p>
+            <p className="text-[#636570]">By Nexus Neural Labs</p>
           </div>
         </div>
 
@@ -163,7 +163,7 @@ export function GalleryFooter() {
             <span className="h-2 w-2 rounded-full bg-[#15803d]" aria-hidden="true" />
             <span>Open Beta</span>
           </span>
-          <span className="text-[#636570]">&copy; 2026 Nexus</span>
+          <span className="text-[#636570]">&copy; 2026 Nexus Neural Labs</span>
         </div>
       </div>
     </footer>

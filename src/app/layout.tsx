@@ -25,7 +25,7 @@ const editorialSerif = Source_Serif_4({
 export const metadata: Metadata = {
   title: "Nexus",
   description:
-    "One intelligence, connecting everything you do. Daily feeds, recording studio, web research, and modular workspaces in one private room.",
+    "Every tool, every thought, woven into one. Daily feeds, recording studio, web research, and modular workspaces in one private room.",
 };
 
 export default function RootLayout({

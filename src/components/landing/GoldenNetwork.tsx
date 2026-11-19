@@ -52,14 +52,14 @@ const DARK_BUCKETS = [
   { count: 12, width: 3.4, color: "204, 116, 28", alpha: 0.03 },
 ] as const;
 
-/** Spun 24k burnished gold & sunlit champagne filaments calibrated for source-over rendering on Gallery Light (#ffffff). */
+/** Radiant 24k sunlit gold filaments calibrated for luminous source-over rendering on Gallery Light (#ffffff). */
 const LIGHT_BUCKETS = [
-  { count: 110, width: 0.62, color: "186, 134, 28", alpha: 0.34 },
-  { count: 80, width: 0.96, color: "206, 154, 44", alpha: 0.24 },
-  { count: 46, width: 1.4, color: "166, 114, 20", alpha: 0.17 },
-  { count: 24, width: 2.3, color: "222, 176, 68", alpha: 0.11 },
-  { count: 46, width: 0.45, color: "138, 90, 12", alpha: 0.4 },
-  { count: 12, width: 3.6, color: "236, 198, 100", alpha: 0.08 },
+  { count: 110, width: 0.68, color: "234, 174, 28", alpha: 0.42 },
+  { count: 80, width: 1.05, color: "248, 192, 42", alpha: 0.34 },
+  { count: 46, width: 1.5, color: "218, 150, 18", alpha: 0.24 },
+  { count: 24, width: 2.5, color: "255, 206, 64", alpha: 0.16 },
+  { count: 46, width: 0.48, color: "194, 128, 12", alpha: 0.46 },
+  { count: 12, width: 3.8, color: "255, 218, 92", alpha: 0.12 },
 ] as const;
 
 const PARTICLE_COUNT = 460;
@@ -247,21 +247,21 @@ export function GoldenNetwork({
       ctx.fillRect(0, 0, width, height);
 
       if (isLight) {
-        // Warm sunlit gallery atmosphere radiating cleanly into pure #ffffff at the viewport perimeter
+        // Radiant sunlit gold atmosphere radiating cleanly into pure #ffffff at the viewport perimeter
         ctx.globalAlpha = ease;
-        radialGlow(ctx, lightCenter, S * 0.92 * breathe, [
-          [0, "rgba(246, 224, 158, 0.22)"],
-          [0.4, "rgba(242, 214, 142, 0.09)"],
-          [0.75, "rgba(248, 236, 204, 0.03)"],
+        radialGlow(ctx, lightCenter, S * 0.95 * breathe, [
+          [0, "rgba(255, 218, 98, 0.32)"],
+          [0.38, "rgba(255, 206, 78, 0.15)"],
+          [0.72, "rgba(255, 224, 132, 0.05)"],
           [1, "rgba(255, 255, 255, 0)"],
         ]);
-        radialGlow(ctx, core, S * 0.34 * breathe, [
-          [0, "rgba(234, 190, 82, 0.22)"],
-          [0.55, "rgba(232, 194, 96, 0.06)"],
+        radialGlow(ctx, core, S * 0.36 * breathe, [
+          [0, "rgba(255, 204, 58, 0.34)"],
+          [0.52, "rgba(248, 192, 48, 0.11)"],
           [1, "rgba(255, 255, 255, 0)"],
         ]);
-        radialGlow(ctx, node, S * 0.24, [
-          [0, "rgba(226, 178, 66, 0.18)"],
+        radialGlow(ctx, node, S * 0.26, [
+          [0, "rgba(250, 194, 44, 0.28)"],
           [1, "rgba(255, 255, 255, 0)"],
         ]);
       } else {
@@ -330,15 +330,15 @@ export function GoldenNetwork({
       });
 
       if (isLight) {
-        radialGlow(ctx, core, S * 0.11 * breathe, [
-          [0, "rgba(255, 253, 246, 0.96)"],
-          [0.24, "rgba(244, 210, 118, 0.55)"],
-          [0.58, "rgba(212, 158, 44, 0.16)"],
+        radialGlow(ctx, core, S * 0.12 * breathe, [
+          [0, "rgba(255, 253, 242, 0.98)"],
+          [0.24, "rgba(255, 214, 86, 0.68)"],
+          [0.58, "rgba(242, 178, 30, 0.24)"],
           [1, "rgba(255, 255, 255, 0)"],
         ]);
-        radialGlow(ctx, node, S * 0.065, [
-          [0, "rgba(255, 252, 242, 0.92)"],
-          [0.32, "rgba(222, 174, 62, 0.42)"],
+        radialGlow(ctx, node, S * 0.072, [
+          [0, "rgba(255, 252, 238, 0.94)"],
+          [0.32, "rgba(248, 192, 46, 0.54)"],
           [1, "rgba(255, 255, 255, 0)"],
         ]);
       } else {
@@ -358,21 +358,21 @@ export function GoldenNetwork({
       const falloff = (p: Vec) =>
         Math.max(0, 1 - Math.hypot(p.x - lightCenter.x, p.y - lightCenter.y) / lightRadius);
 
-      ctx.fillStyle = isLight ? "rgb(186, 134, 28)" : "rgb(255, 214, 140)";
+      ctx.fillStyle = isLight ? "rgb(232, 168, 22)" : "rgb(255, 214, 140)";
       for (const d of field.dust) {
         const outgoing = paths[d.filament]!.slice(1);
         const base = pointOnPath(outgoing, d.t);
         const p = { x: base.x + d.offset.x * S, y: base.y + d.offset.y * S };
         const twinkle = 0.5 + 0.5 * Math.sin(time * 1.4 + d.phase);
-        ctx.globalAlpha = ease * d.alpha * twinkle * Math.min(1, falloff(p) * (isLight ? 1.15 : 1.5)) * (isLight ? 0.55 : 1);
+        ctx.globalAlpha = ease * d.alpha * twinkle * Math.min(1, falloff(p) * (isLight ? 1.25 : 1.5)) * (isLight ? 0.68 : 1);
         ctx.fillRect(p.x, p.y, d.size, d.size);
       }
 
-      ctx.fillStyle = isLight ? "rgb(154, 102, 16)" : "rgb(255, 240, 205)";
+      ctx.fillStyle = isLight ? "rgb(206, 138, 12)" : "rgb(255, 240, 205)";
       for (const p of field.particles) {
         if (!reduceMotion) p.u = (p.u + p.speed * dt) % 1;
         const pos = pointOnPath(paths[p.filament]!, p.u);
-        ctx.globalAlpha = ease * p.alpha * Math.min(1, falloff(pos) * 1.55) * (isLight ? 0.72 : 1);
+        ctx.globalAlpha = ease * p.alpha * Math.min(1, falloff(pos) * 1.6) * (isLight ? 0.85 : 1);
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, p.size, 0, Math.PI * 2);
         ctx.fill();
