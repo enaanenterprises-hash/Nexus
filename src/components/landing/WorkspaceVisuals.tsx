@@ -15,21 +15,17 @@ const LAYER_INDEX: Record<EcosystemLayer, number> = {
   nodes: 2,
 };
 
-const BRIDGE_EVENTS: Record<EcosystemLayer, string> = {
-  network: "nexus:intent",
-  command: "command:focus-changed",
-  nodes: "studio:take-routed",
-};
-
 const BRIDGE_NODES: Array<{
   id: EcosystemLayer;
   label: string;
   sub: string;
   nx: number;
+  ny: number;
+  labelPlacement: "top" | "bottom";
 }> = [
-  { id: "network", label: "Neural Network", sub: "Assistant", nx: 0.18 },
-  { id: "command", label: "Command", sub: "Dashboard", nx: 0.5 },
-  { id: "nodes", label: "Nodes", sub: "Extensions", nx: 0.82 },
+  { id: "network", label: "Neural Network", sub: "Assistant", nx: 0.5, ny: 0.28, labelPlacement: "top" },
+  { id: "command", label: "Command", sub: "Dashboard", nx: 0.21, ny: 0.72, labelPlacement: "bottom" },
+  { id: "nodes", label: "Nodes", sub: "Extensions", nx: 0.79, ny: 0.72, labelPlacement: "bottom" },
 ];
 
 function deterministicHash(n: number): number {
@@ -38,9 +34,9 @@ function deterministicHash(n: number): number {
 }
 
 /**
- * Interactive 3-Node Shared Signal Bus where Neural Network, Command, and Nodes
- * are connected by living braided golden optical filaments that pinch cleanly at each
- * node and swell into interwoven silk bundles between them.
+ * Borderless 3-Node Triangle Shared Signal Bus sitting directly on the #111216 landing page:
+ * Neural Network at the top apex, Command at bottom-left, and Nodes at bottom-right,
+ * connected along all three sides by living braided golden optical filaments.
  */
 export function EcosystemBridgeVisual({
   activeLayer,
@@ -75,7 +71,7 @@ export function EcosystemBridgeVisual({
       y0: number,
       x1: number,
       y1: number,
-      archY: number,
+      bowPerp: number,
       strands: number,
       swellPx: number,
       intensity: number,
@@ -90,36 +86,33 @@ export function EcosystemBridgeVisual({
       const perpX = -dy / len;
       const perpY = dx / len;
 
+      const midX = (x0 + x1) * 0.5 + perpX * bowPerp;
+      const midY = (y0 + y1) * 0.5 + perpY * bowPerp;
+
       for (let s = 0; s < strands; s++) {
         const seed = seedBase + s * 17;
         const u = strands > 1 ? (s / (strands - 1)) * 2 - 1 : 0;
         const phase = deterministicHash(seed) * Math.PI * 2;
-        const freq = 1.8 + deterministicHash(seed + 5) * 1.3;
+        const freq = 1.85 + deterministicHash(seed + 5) * 1.25;
         const strandScale = 0.72 + deterministicHash(seed + 11) * 0.54;
         const isHotCore = Math.abs(u) < 0.34;
 
         ctx.beginPath();
         for (let i = 0; i <= samples; i++) {
           const t = i / samples;
-          // Base quadratic curve between endpoints with optional vertical arch
           const inv = 1 - t;
-          const midX = (x0 + x1) * 0.5;
-          const midY = (y0 + y1) * 0.5 + archY;
           const bx = inv * inv * x0 + 2 * inv * t * midX + t * t * x1;
           const by = inv * inv * y0 + 2 * inv * t * midY + t * t * y1;
 
-          // Envelope: pinches razor-tight at node sockets, swells into braided silk between nodes,
-          // or flares outward at open outer wings
           let env: number;
           if (pinchStart && pinchEnd) {
             const bell = Math.sin(t * Math.PI);
-            // Double-swell braided wave between two nodes with a subtle mid-pinch waist
-            const harmonic = 0.72 + 0.28 * Math.sin(t * Math.PI * 2 + phase * 0.35);
-            env = 1.6 + swellPx * Math.pow(bell, 0.78) * harmonic;
+            const harmonic = 0.74 + 0.26 * Math.sin(t * Math.PI * 2 + phase * 0.35);
+            env = 1.4 + swellPx * Math.pow(bell, 0.78) * harmonic;
           } else if (pinchStart && !pinchEnd) {
-            env = 1.6 + swellPx * Math.pow(t, 1.18);
+            env = 1.4 + swellPx * Math.pow(t, 1.2);
           } else {
-            env = 1.6 + swellPx * Math.pow(1 - t, 1.18);
+            env = 1.4 + swellPx * Math.pow(1 - t, 1.2);
           }
 
           const twist = Math.sin(t * Math.PI * freq + phase + clock * (0.55 + 0.2 * intensity));
@@ -132,13 +125,43 @@ export function EcosystemBridgeVisual({
           else ctx.lineTo(px, py);
         }
 
-        const alpha = (isHotCore ? 0.31 : 0.155) * intensity * (0.72 + 0.28 * (1 - Math.abs(u)));
+        const alpha = (isHotCore ? 0.32 : 0.16) * intensity * (0.72 + 0.28 * (1 - Math.abs(u)));
         ctx.strokeStyle = isHotCore
           ? `rgba(255, 245, 214, ${alpha.toFixed(3)})`
           : `rgba(240, 185, 82, ${alpha.toFixed(3)})`;
         ctx.lineWidth = isHotCore ? 0.95 : 0.64;
         ctx.stroke();
       }
+    };
+
+    const drawSparkAlong = (
+      x0: number,
+      y0: number,
+      x1: number,
+      y1: number,
+      bowPerp: number,
+      u: number,
+      alphaScale: number,
+    ) => {
+      const dx = x1 - x0;
+      const dy = y1 - y0;
+      const len = Math.max(1, Math.hypot(dx, dy));
+      const perpX = -dy / len;
+      const perpY = dx / len;
+      const midX = (x0 + x1) * 0.5 + perpX * bowPerp;
+      const midY = (y0 + y1) * 0.5 + perpY * bowPerp;
+      const inv = 1 - u;
+      const sx = inv * inv * x0 + 2 * inv * u * midX + u * u * x1;
+      const sy = inv * inv * y0 + 2 * inv * u * midY + u * u * y1;
+      const fade = Math.sin(u * Math.PI) * alphaScale;
+      const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, 10);
+      g.addColorStop(0, `rgba(255, 250, 232, ${(0.92 * fade).toFixed(3)})`);
+      g.addColorStop(0.4, `rgba(240, 181, 74, ${(0.36 * fade).toFixed(3)})`);
+      g.addColorStop(1, "rgba(240, 181, 74, 0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(sx, sy, 10, 0, Math.PI * 2);
+      ctx.fill();
     };
 
     const draw = (dt: number) => {
@@ -152,34 +175,32 @@ export function EcosystemBridgeVisual({
       ctx.globalCompositeOperation = "source-over";
       ctx.clearRect(0, 0, width, height);
 
-      const nodeY = height * 0.48;
-      const pts = BRIDGE_NODES.map((n) => ({ x: width * n.nx, y: nodeY }));
-      const p0 = pts[0]!;
-      const p1 = pts[1]!;
-      const p2 = pts[2]!;
+      const pts = BRIDGE_NODES.map((n) => ({ x: width * n.nx, y: height * n.ny }));
+      const p0 = pts[0]!; // Top apex: Neural Network
+      const p1 = pts[1]!; // Bottom-left: Command
+      const p2 = pts[2]!; // Bottom-right: Nodes
 
-      // Active intensities for each connection based on selected node
       const w0 = Math.max(0, 1 - Math.abs(smoothIdx - 0));
       const w1 = Math.max(0, 1 - Math.abs(smoothIdx - 1));
       const w2 = Math.max(0, 1 - Math.abs(smoothIdx - 2));
 
       const link01Intensity = 0.68 + Math.max(w0, w1) * 0.52;
+      const link02Intensity = 0.68 + Math.max(w0, w2) * 0.52;
       const link12Intensity = 0.68 + Math.max(w1, w2) * 0.52;
-      const arch02Intensity = 0.52 + Math.max(w0, w2) * 0.52;
 
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
 
-      // 1. Subtle outer gossamer silk wings fanning left of Node 0 and right of Node 2
+      // 1. Subtle outer gossamer silk wisps fanning outward from the two basal triangle vertices
       drawBraidedBundle(
-        p0.x,
-        p0.y,
-        -width * 0.04,
-        p0.y - height * 0.14,
-        -height * 0.04,
-        14,
-        24,
-        0.5 + w0 * 0.35,
+        p1.x,
+        p1.y,
+        width * 0.02,
+        height * 0.82,
+        -6,
+        12,
+        18,
+        0.46 + w1 * 0.3,
         101,
         true,
         false,
@@ -187,90 +208,34 @@ export function EcosystemBridgeVisual({
       drawBraidedBundle(
         p2.x,
         p2.y,
-        width * 1.04,
-        p2.y - height * 0.14,
-        -height * 0.04,
-        14,
-        24,
-        0.5 + w2 * 0.35,
+        width * 0.98,
+        height * 0.82,
+        6,
+        12,
+        18,
+        0.46 + w2 * 0.3,
         211,
         true,
         false,
       );
 
-      // 2. Overarching braided golden filament bridge (Neural Network <-> Nodes)
-      drawBraidedBundle(
-        p0.x,
-        p0.y,
-        p2.x,
-        p2.y,
-        -height * 0.52,
-        16,
-        19,
-        arch02Intensity,
-        307,
-        true,
-        true,
-      );
+      // 2. Left Triangle Edge: Neural Network (top) <-> Command (bottom-left)
+      drawBraidedBundle(p0.x, p0.y, p1.x, p1.y, 12, 22, 18, link01Intensity, 307, true, true);
 
-      // 3. Primary braided golden filament connection: Neural Network <-> Command
-      drawBraidedBundle(
-        p0.x,
-        p0.y,
-        p1.x,
-        p1.y,
-        height * 0.04,
-        22,
-        22,
-        link01Intensity,
-        409,
-        true,
-        true,
-      );
+      // 3. Right Triangle Edge: Neural Network (top) <-> Nodes (bottom-right)
+      drawBraidedBundle(p0.x, p0.y, p2.x, p2.y, -12, 22, 18, link02Intensity, 409, true, true);
 
-      // 4. Primary braided golden filament connection: Command <-> Nodes
-      drawBraidedBundle(
-        p1.x,
-        p1.y,
-        p2.x,
-        p2.y,
-        height * 0.04,
-        22,
-        22,
-        link12Intensity,
-        523,
-        true,
-        true,
-      );
+      // 4. Bottom Base Triangle Edge: Command (bottom-left) <-> Nodes (bottom-right)
+      drawBraidedBundle(p1.x, p1.y, p2.x, p2.y, 10, 22, 19, link12Intensity, 523, true, true);
 
-      // 5. Travelling white-gold signal sparks gliding along the braided filaments between the 3 nodes
+      // 5. Travelling white-gold signal sparks gliding along all 3 braided triangle sides
       if (!reduceMotion) {
-        const u1 = (clock * 0.38) % 1;
-        const sx1 = p0.x + (p1.x - p0.x) * u1;
-        const sy1 = p0.y + Math.sin(u1 * Math.PI) * (height * 0.02);
-        const g1 = ctx.createRadialGradient(sx1, sy1, 0, sx1, sy1, 10);
-        g1.addColorStop(0, "rgba(255, 250, 232, 0.92)");
-        g1.addColorStop(0.4, "rgba(240, 181, 74, 0.36)");
-        g1.addColorStop(1, "rgba(240, 181, 74, 0)");
-        ctx.fillStyle = g1;
-        ctx.beginPath();
-        ctx.arc(sx1, sy1, 10, 0, Math.PI * 2);
-        ctx.fill();
-
-        const u2 = (clock * 0.38 + 0.45) % 1;
-        const sx2 = p1.x + (p2.x - p1.x) * u2;
-        const sy2 = p1.y + Math.sin(u2 * Math.PI) * (height * 0.02);
-        const g2 = ctx.createRadialGradient(sx2, sy2, 0, sx2, sy2, 10);
-        g2.addColorStop(0, "rgba(255, 250, 232, 0.92)");
-        g2.addColorStop(0.4, "rgba(240, 181, 74, 0.36)");
-        g2.addColorStop(1, "rgba(240, 181, 74, 0)");
-        ctx.fillStyle = g2;
-        ctx.beginPath();
-        ctx.arc(sx2, sy2, 10, 0, Math.PI * 2);
-        ctx.fill();
+        drawSparkAlong(p0.x, p0.y, p1.x, p1.y, 12, (clock * 0.36) % 1, link01Intensity);
+        drawSparkAlong(p1.x, p1.y, p2.x, p2.y, 10, (clock * 0.36 + 0.33) % 1, link12Intensity);
+        drawSparkAlong(p2.x, p2.y, p0.x, p0.y, 12, (clock * 0.36 + 0.66) % 1, link02Intensity);
       }
 
-      // 6. Luminous golden pinch-bloom at each of the 3 node waists
+      // 6. Luminous golden pinch-bloom at each of the 3 triangle node vertices
       pts.forEach((pt, idx) => {
         const prox = Math.max(0, 1 - Math.abs(smoothIdx - idx));
         const r = 24 + prox * 14;
@@ -284,12 +249,12 @@ export function EcosystemBridgeVisual({
         ctx.fill();
       });
 
-      // 7. Fine starlight dust motes along the braided bridge
-      for (let d = 0; d < 22; d++) {
-        const dx = width * (0.08 + deterministicHash(d * 19 + 3) * 0.84);
-        const dy = nodeY + (deterministicHash(d * 31 + 7) - 0.56) * height * 0.62;
+      // 7. Fine starlight dust motes drifting around the braided golden triangle
+      for (let d = 0; d < 24; d++) {
+        const dx = width * (0.12 + deterministicHash(d * 19 + 3) * 0.76);
+        const dy = height * (0.16 + deterministicHash(d * 31 + 7) * 0.68);
         const twinkle = 0.35 + 0.6 * (0.5 + 0.5 * Math.sin(clock * 1.5 + d * 2.3));
-        ctx.fillStyle = `rgba(255, 242, 206, ${(0.4 * twinkle).toFixed(3)})`;
+        ctx.fillStyle = `rgba(255, 242, 206, ${(0.38 * twinkle).toFixed(3)})`;
         ctx.beginPath();
         ctx.arc(dx, dy, 0.75 + deterministicHash(d * 11) * 0.55, 0, Math.PI * 2);
         ctx.fill();
@@ -341,92 +306,88 @@ export function EcosystemBridgeVisual({
     };
   }, []);
 
-  const eventTopic = BRIDGE_EVENTS[activeLayer];
-
   return (
     <div
-      className="relative overflow-hidden rounded-[18px] border border-white/[0.09] bg-[#15161c]/90 p-4 sm:p-5"
+      className="relative h-[220px] w-full sm:h-[244px]"
       role="group"
-      aria-label="Interactive Nexus shared signal bus"
+      aria-label="Interactive Nexus shared ecosystem triangle"
     >
-      <div className="flex items-center justify-between gap-2 text-[12px]">
-        <span className="font-medium text-[#d1d1d6]">Shared signal bus</span>
-        <span className="font-mono text-[11px] text-[#9d9da6]">{eventTopic}</span>
-      </div>
+      <canvas
+        ref={canvasRef}
+        className="pointer-events-none absolute inset-0 block h-full w-full"
+        aria-hidden="true"
+      />
 
-      {/* Braided Golden Filament Canvas + 3 Interactive Nodes */}
-      <div className="relative mt-1.5 h-[136px] w-full sm:h-[148px]">
-        <canvas
-          ref={canvasRef}
-          className="pointer-events-none absolute inset-0 block h-full w-full"
-          aria-hidden="true"
-        />
-
-        {BRIDGE_NODES.map((node) => {
-          const isSelected = activeLayer === node.id;
-          return (
-            <button
-              key={node.id}
-              type="button"
-              onClick={() => onSelect(node.id)}
-              aria-pressed={isSelected}
-              style={{ left: `${node.nx * 100}%` }}
-              className="group absolute top-[48%] flex -translate-x-1/2 -translate-y-[19px] cursor-pointer flex-col items-center focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white/75"
-            >
-              {/* Node optical reticle sitting right at the braided filament pinch waist */}
-              <span className="relative flex h-[38px] w-[38px] items-center justify-center">
-                {isSelected ? (
-                  <svg
-                    viewBox="0 0 50 50"
-                    className="neural-reticle-orbit pointer-events-none absolute -inset-1.5 h-[50px] w-[50px]"
-                    aria-hidden="true"
-                  >
-                    <circle
-                      cx="25"
-                      cy="25"
-                      r="23"
-                      fill="none"
-                      stroke="#f0b54a"
-                      strokeOpacity="0.55"
-                      strokeWidth="1.1"
-                      strokeDasharray="14 18"
-                    />
-                  </svg>
-                ) : null}
-                <span
-                  className={`flex h-9 w-9 items-center justify-center rounded-full border transition-all ${
-                    isSelected
-                      ? "border-[#f0b54a] bg-[#181610]/90 shadow-[0_0_20px_rgba(240,181,74,0.35)]"
-                      : "border-white/[0.22] bg-[#13141a]/90 group-hover:border-[#f0b54a]/55"
-                  }`}
+      {BRIDGE_NODES.map((node) => {
+        const isSelected = activeLayer === node.id;
+        return (
+          <button
+            key={node.id}
+            type="button"
+            onClick={() => onSelect(node.id)}
+            aria-pressed={isSelected}
+            style={{ left: `${node.nx * 100}%`, top: `${node.ny * 100}%` }}
+            className="group absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white/75"
+          >
+            {/* Node optical reticle sitting right at the triangle vertex pinch waist */}
+            <span className="relative flex h-[38px] w-[38px] items-center justify-center">
+              {isSelected ? (
+                <svg
+                  viewBox="0 0 50 50"
+                  className="neural-reticle-orbit pointer-events-none absolute -inset-1.5 h-[50px] w-[50px]"
+                  aria-hidden="true"
                 >
-                  <span
-                    className={`h-2 w-2 rounded-full transition-colors ${
-                      isSelected ? "bg-[#fff4d4]" : "bg-white/45 group-hover:bg-[#f0b54a]"
-                    }`}
+                  <circle
+                    cx="25"
+                    cy="25"
+                    r="23"
+                    fill="none"
+                    stroke="#f0b54a"
+                    strokeOpacity="0.55"
+                    strokeWidth="1.1"
+                    strokeDasharray="14 18"
                   />
-                </span>
-              </span>
-
-              {/* Monochrome Node Title & Sub-caption */}
+                </svg>
+              ) : null}
               <span
-                className={`mt-2.5 text-[11.5px] leading-tight font-semibold whitespace-nowrap transition-colors ${
+                className={`flex h-9 w-9 items-center justify-center rounded-full border transition-all ${
+                  isSelected
+                    ? "border-[#f0b54a] bg-[#181610]/90 shadow-[0_0_20px_rgba(240,181,74,0.35)]"
+                    : "border-white/[0.22] bg-[#13141a]/90 group-hover:border-[#f0b54a]/55"
+                }`}
+              >
+                <span
+                  className={`h-2 w-2 rounded-full transition-colors ${
+                    isSelected ? "bg-[#fff4d4]" : "bg-white/45 group-hover:bg-[#f0b54a]"
+                  }`}
+                />
+              </span>
+            </span>
+
+            {/* Monochrome Node Title & Sub-caption placed cleanly outside the triangle */}
+            <span
+              className={`pointer-events-none absolute left-1/2 flex -translate-x-1/2 flex-col items-center whitespace-nowrap ${
+                node.labelPlacement === "top" ? "bottom-full mb-2" : "top-full mt-2"
+              }`}
+            >
+              <span
+                className={`text-[11.5px] leading-tight font-semibold transition-colors ${
                   isSelected ? "text-[#f5f5f7]" : "text-[#a1a1a6] group-hover:text-[#f5f5f7]"
                 }`}
               >
                 {node.label}
               </span>
               <span
-                className={`mt-0.5 text-[10px] leading-tight whitespace-nowrap transition-colors ${
+                className={`mt-0.5 text-[10px] leading-tight transition-colors ${
                   isSelected ? "text-[#d1d1d6]" : "text-[#7c7c85]"
                 }`}
               >
                 {node.sub}
               </span>
-            </button>
-          );
-        })}
-      </div>
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

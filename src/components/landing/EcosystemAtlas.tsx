@@ -82,7 +82,7 @@ export function IntegrationsAtlas() {
   return (
     <section
       id="integrations"
-      className="scroll-mt-24 border-y border-white/[0.08] bg-[#15161b] px-6 py-20 sm:px-10 lg:px-14 lg:py-24"
+      className="scroll-mt-24 border-y border-white/[0.08] bg-[#111216] px-6 py-20 sm:px-10 lg:px-14 lg:py-24"
       aria-label="Integrations"
     >
       <div className="mx-auto max-w-[1280px]">
@@ -139,7 +139,7 @@ export function SecurityAndWaitlist() {
     <>
       <section
         id="security"
-        className="scroll-mt-24 bg-[#15161b] px-6 py-20 sm:px-10 lg:px-14 lg:py-24"
+        className="scroll-mt-24 bg-[#111216] px-6 py-20 sm:px-10 lg:px-14 lg:py-24"
         aria-label="Security"
       >
         <div className="mx-auto grid max-w-[1280px] grid-cols-1 gap-10 lg:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] lg:gap-16">

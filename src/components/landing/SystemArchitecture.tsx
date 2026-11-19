@@ -115,7 +115,7 @@ export function SystemArchitecture() {
       {/* Platform roadmap paired with live morphing Orbital Horizon */}
       <section
         id="roadmap"
-        className="scroll-mt-24 border-b border-white/[0.08] bg-[#15161b] px-6 py-20 sm:px-10 lg:px-14 lg:py-24"
+        className="scroll-mt-24 border-b border-white/[0.08] bg-[#111216] px-6 py-20 sm:px-10 lg:px-14 lg:py-24"
         aria-label="Platform roadmap"
       >
         <div className="mx-auto grid max-w-[1280px] grid-cols-1 gap-10 lg:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] lg:gap-16">
