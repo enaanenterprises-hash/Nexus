@@ -10,11 +10,12 @@ colors:
   signal-destructive: "#f87171"
   signal-success: "#4ade80"
   pitch-black: "#000000"
+  obsidian-stage: "#070709"
   matte-obsidian: "#0a0a0c"
   socket-well: "#0b0b0e"
-  obsidian-canvas: "#0f0f12"
-  obsidian-surface: "#16161a"
-  obsidian-elevated: "#1c1c21"
+  obsidian-canvas: "#0c0c0f"
+  obsidian-surface: "#131317"
+  obsidian-elevated: "#17171c"
   obsidian-selected: "#24242b"
   obsidian-active-cell: "#2e2e36"
   pure-white: "#ffffff"
@@ -22,22 +23,22 @@ colors:
   chrome-primary: "#f4f4f6"
   obsidian-on-light: "#09090b"
   silver-secondary: "#d1d1d6"
-  ash-muted: "#a1a1a6"
+  ash-muted: "#9d9da6"
   pewter-meta: "#8e8e95"
-  hairline-subtle: "rgba(255, 255, 255, 0.09)"
-  border-default: "rgba(255, 255, 255, 0.12)"
-  border-strong: "rgba(255, 255, 255, 0.16)"
-  gallery-canvas: "#eceae5"
-  gallery-surface: "#f5f4f0"
-  gallery-ink: "#1a1917"
-  gallery-gold: "#9a761c"
+  hairline-subtle: "rgba(255, 255, 255, 0.085)"
+  border-default: "rgba(255, 255, 255, 0.11)"
+  border-strong: "rgba(255, 255, 255, 0.15)"
+  gallery-canvas: "#f7f6f2"
+  gallery-surface: "#ffffff"
+  gallery-ink: "#0e0f12"
+  gallery-gold: "#a67412"
   gallery-paper: "#f7f6f2"
   gallery-stone: "#efede8"
   gallery-obsidian: "#0e0f12"
-  gallery-secondary: "#52545d"
-  gallery-meta: "#636570"
+  gallery-secondary: "#52545e"
+  gallery-meta: "#686a73"
   burnished-gold: "#9a6910"
-  sculptural-gold: "#c9932c"
+  sculptural-gold: "#c88d18"
   gallery-success: "#15803d"
 typography:
   display:
@@ -84,7 +85,7 @@ typography:
     letterSpacing: "0em"
     fontFeature: "\"tnum\" 1"
   mono:
-    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+    fontFamily: "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace"
     fontSize: "0.75rem"
     fontWeight: 400
     lineHeight: 1.6
@@ -174,7 +175,7 @@ components:
 
 Nexus spans two complementary visual polarities built on one architectural grammar:
 - **Public Landing Surface (`/` — Gallery Light + Burnished Gold):** Crisp luminous white (`#ffffff`) and warm sunlit stone (`#f7f6f2` / `#efede8`) grounds paired with deep obsidian ink (`#0e0f12`, `#52545d`, `#636570`), sculptural `Source Serif 4` editorial display typography, living 24k burnished-gold neural networks (`#9a6910` / `#c9932c` rendered via `source-over` optics), Apple HIG concentric radii (`22px -> 14px -> 8px`), Apple Liquid Glass (`rgba(255,255,255,0.86)` + `blur(26px)`) reserved strictly for floating chrome, an inline-medallion editorial manifesto, and a monumental 3-band footer.
-- **Authenticated Operating Environment & Auxiliary Routes (`/dashboard`, `/waitlist`, `/signup`, `/about`, `/security` — Obsidian Observatory + Gallery Light Alternate):** Pure pitch black (`#000000`) stepping through a controlled monochrome obsidian ramp separated by crisp `1px` white hairlines and Singularity Gold (`#f0b54a`), with an optional in-app Gallery Light mode (`#eceae5` / `#f5f4f0`).
+- **Authenticated Operating Environment & Auxiliary Routes (`/dashboard`, `/waitlist`, `/signup`, `/about`, `/security` — Dual-Mode Atelier: Obsidian Observatory & Gallery Light):** Unified across Network, Command, Studio, and Nodes in both **Obsidian Dark** (`#070709` neural stage, `#0c0c0f` Command & Nodes canvas, `#131317` surfaces, `#f0b54a` molten 24k gold optics) and **Gallery Light** (`#ffffff` neural paper, `#f7f6f2` Command & Nodes canvas, `#ffffff` crisp cards, `#0e0f12` obsidian ink, `#c88d18` / `#a67412` radiant 24k gold optics). Floating chrome (flat 2D geometric blade menu, Spotlight `⌘K` Quick Bar, Focus Session Popover, voice bar, node panels) uses Apple Liquid Glass strictly over moving content. The Network stage renders pure monochrome 24k gold laminar optical silk ribbons with natural opening unfurl, viscous pointer parting, acoustic mouse-press tension/pluck ripples, and precision concentric node reticles; Command elevates into a 3-tab hub (`Overview | Automations | Connections`) with Live Focus timer ring, `⌘K` Quick Bar, 1-click 4×2 Board Presets, and visual automation signal conduits; Nodes expands into a full-screen Spatial Nodes Studio with an interactive 5-socket SVG constellation, live Signal Router, plain-English capability matrix, and real-time `nexusBus` stream.
 
 Across both the public landing experience and the authenticated operating environment, information density is disciplined rather than decorative. Editorial bands use asymmetric two-column splits, generous pitch-black breathing room, and hairline-divided ledgers; interactive workspaces compress cleanly into nested obsidian containers with tabular alignment and zero gratuitous chrome. Authenticated dashboard and onboarding flows also carry a Gallery Light counterpart built on warm stone surfaces and charcoal ink with muted bronze-gold accents, preserving identical monochrome restraint in daylight.
 

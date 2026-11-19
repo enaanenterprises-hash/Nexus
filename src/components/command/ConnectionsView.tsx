@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { ChevronDown, ExternalLink } from "lucide-react";
+import { ChevronDown, ExternalLink, Search, X } from "lucide-react";
 import { cn } from "cn";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -35,6 +35,8 @@ export function ConnectionsView({
   const state = command.state!;
   const [open, setOpen] = useState<string | null>(focusId);
   const [showPlanned, setShowPlanned] = useState(false);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<"all" | "connected" | "available">("all");
   const now = useNow(30_000);
   const connections = useMemo(
     () => new Map(state.connections.map((c) => [c.connectorId, c])),
@@ -44,38 +46,123 @@ export function ConnectionsView({
   const planned = CONNECTOR_CATALOG.filter((m) => m.live.status === "planned");
   const categories = Object.keys(CONNECTOR_CATEGORIES) as ConnectorCategory[];
 
+  const normalizedQuery = search.trim().toLowerCase();
+  const filteredAvailable = useMemo(() => {
+    return available.filter((m) => {
+      const isConnected = connections.has(m.id);
+      if (filter === "connected" && !isConnected) return false;
+      if (filter === "available" && isConnected) return false;
+      if (!normalizedQuery) return true;
+      return (
+        m.name.toLowerCase().includes(normalizedQuery) ||
+        m.description.toLowerCase().includes(normalizedQuery) ||
+        CONNECTOR_CATEGORIES[m.category].label.toLowerCase().includes(normalizedQuery)
+      );
+    });
+  }, [available, connections, filter, normalizedQuery]);
+
+  const connectedCount = available.filter((m) => connections.has(m.id)).length;
+  const unconnectedCount = available.length - connectedCount;
+
   return (
-    <div className="cmd-connections">
-      <header className="max-w-[40rem]">
-        <p className="text-[14px] leading-relaxed text-[color:var(--land-muted)]">
-          The APIs and connections Nexus will use for nodes and the rest of the architecture. Connect,
-          disconnect, and status live here, not on the overview. Tokens are encrypted on the server
-          and never sent back to the browser.
-        </p>
+    <div className="cmd-connections mx-auto">
+      <header className="space-y-4">
+        <div className="max-w-[42rem]">
+          <h2 className="font-editorial text-[1.75rem] leading-tight font-normal tracking-[-0.02em] text-foreground">
+            Connected services
+          </h2>
+          <p className="mt-1.5 text-[14px] leading-relaxed text-[color:var(--land-muted)]">
+            The APIs and accounts Nexus uses across Command, widgets, and modular nodes. Tokens are
+            encrypted on the server and never sent back to the browser.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="relative min-w-[210px] flex-1 max-w-sm">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search services or categories…"
+              className="cmd-field h-9 w-full rounded-full pr-8 pl-9 text-[13px]"
+              aria-label="Search connections"
+            />
+            {search ? (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                aria-label="Clear search"
+                className="absolute top-1/2 right-2.5 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground hover:text-foreground"
+              >
+                <X className="size-3.5" />
+              </button>
+            ) : null}
+          </div>
+
+          <div className="flex items-center gap-1.5" role="group" aria-label="Filter services">
+            {(
+              [
+                { id: "all", label: "All", count: available.length },
+                { id: "connected", label: "Connected", count: connectedCount },
+                { id: "available", label: "Available", count: unconnectedCount },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                aria-pressed={filter === opt.id}
+                onClick={() => setFilter(opt.id)}
+                className={`cmd-preset-chip ${filter === opt.id ? "cmd-preset-chip--active" : ""}`}
+              >
+                <span>{opt.label}</span>
+                <span className="text-[10.5px] tabular-nums opacity-70">{opt.count}</span>
+              </button>
+            ))}
+          </div>
+        </div>
       </header>
 
-      {categories.map((cat) => {
-        const list = available.filter((m) => m.category === cat);
-        if (!list.length) return null;
-        return (
-          <section key={cat} className="mt-9">
-            <h3 className="dash-eyebrow">{CONNECTOR_CATEGORIES[cat].label}</h3>
-            <ul className="mt-2">
-              {list.map((m) => (
-                <ConnectorRow
-                  key={m.id}
-                  now={now}
-                  manifest={m}
-                  connection={connections.get(m.id) ?? null}
-                  command={command}
-                  open={open === m.id}
-                  onToggle={(next) => setOpen(next ? m.id : null)}
-                />
-              ))}
-            </ul>
-          </section>
-        );
-      })}
+      {filteredAvailable.length === 0 ? (
+        <div className="mt-8 rounded-2xl border border-dashed border-border bg-card/50 px-5 py-8 text-center">
+          <p className="text-[14px] text-foreground">No services match your current filter.</p>
+          <button
+            type="button"
+            onClick={() => {
+              setSearch("");
+              setFilter("all");
+            }}
+            className="mt-2 text-[12.5px] font-medium text-[color:var(--land-gold-soft)] underline underline-offset-4"
+          >
+            Reset filter
+          </button>
+        </div>
+      ) : (
+        categories.map((cat) => {
+          const list = filteredAvailable.filter((m) => m.category === cat);
+          if (!list.length) return null;
+          return (
+            <section key={cat} className="mt-9">
+              <h3 className="text-[12px] font-medium text-muted-foreground">
+                {CONNECTOR_CATEGORIES[cat].label}
+              </h3>
+              <ul className="mt-2.5 rounded-2xl border border-border bg-card px-4">
+                {list.map((m) => (
+                  <ConnectorRow
+                    key={m.id}
+                    now={now}
+                    manifest={m}
+                    connection={connections.get(m.id) ?? null}
+                    command={command}
+                    open={open === m.id}
+                    onToggle={(next) => setOpen(next ? m.id : null)}
+                  />
+                ))}
+              </ul>
+            </section>
+          );
+        })
+      )}
 
       <Collapsible
         open={showPlanned}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
-import { GripVertical, Plus } from "lucide-react";
+import { GripVertical, LayoutGrid, Plus, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -11,6 +11,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  COMMAND_BOARD_PRESETS,
+  matchesPreset,
+  type CommandBoardPreset,
+} from "@/lib/command/presets";
 import {
   COMMAND_WIDGETS,
   OVERVIEW_COLUMNS,
@@ -71,7 +76,17 @@ type DragState = {
   targetId: string | "__end__" | null;
 };
 
-export function OverviewView({ command, onConnections }: { command: CommandController; onConnections: () => void }) {
+export function OverviewView({
+  command,
+  expandRequest = null,
+  onApplyPreset,
+  onConnections,
+}: {
+  command: CommandController;
+  expandRequest?: { widgetId: string; serial: number } | null;
+  onApplyPreset?: (preset: CommandBoardPreset) => void;
+  onConnections: () => void;
+}) {
   const overviewIds = command.state?.overview;
   const ids = useMemo(() => overviewIds ?? [], [overviewIds]);
   const placed = useMemo(() => placeWidgets(ids), [ids]);
@@ -81,6 +96,7 @@ export function OverviewView({ command, onConnections }: { command: CommandContr
   const [drag, setDrag] = useState<DragState | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const idsRef = useRef(ids);
+  const handledExpandRef = useRef<number | null>(null);
 
   useEffect(() => {
     idsRef.current = ids;
@@ -90,15 +106,37 @@ export function OverviewView({ command, onConnections }: { command: CommandContr
     dragRef.current = drag;
   }, [drag]);
 
+  // Honor external Spotlight ⌘K jump-to-widget requests cleanly
+  useEffect(() => {
+    if (!expandRequest || expandRequest.serial === handledExpandRef.current) return;
+    handledExpandRef.current = expandRequest.serial;
+    const { widgetId } = expandRequest;
+    const current = idsRef.current;
+    if (!current.includes(widgetId) && overviewAccepts(current, widgetId)) {
+      void command.setOverview(placeWidgets([...current, widgetId]).map((w) => w.id));
+    }
+    const frame = window.requestAnimationFrame(() => {
+      setPendingMailId(null);
+      setExpandedId(widgetId);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [expandRequest, command]);
+
+  const usedCells = useMemo(() => placed.reduce((sum, w) => sum + w.w * w.h, 0), [placed]);
+  const totalCells = OVERVIEW_COLUMNS * OVERVIEW_ROWS;
+
   const pageFull = useMemo(
     () => COMMAND_WIDGETS.every((widget) => !overviewAccepts(ids, widget.id)),
     [ids],
   );
   const openCell = useMemo(() => findFirstOpenCell(placed), [placed]);
-  const expandedWidget = useMemo(
-    () => (expandedId ? placed.find((w) => w.id === expandedId) ?? null : null),
-    [expandedId, placed],
-  );
+  const expandedWidget = useMemo(() => {
+    if (!expandedId) return null;
+    const found = placed.find((w) => w.id === expandedId);
+    if (found) return found;
+    const def = widgetDef(expandedId);
+    return def ? { id: def.id, w: def.w, h: def.h, x: 0, y: 0 } : null;
+  }, [expandedId, placed]);
 
   const collapse = useCallback(() => {
     setExpandedId(null);
@@ -217,6 +255,16 @@ export function OverviewView({ command, onConnections }: { command: CommandContr
     void command.setOverview(placeWidgets([...ids, id]).map((widget) => widget.id));
   }
 
+  function applyPreset(preset: CommandBoardPreset) {
+    setOpen(false);
+    collapse();
+    if (onApplyPreset) {
+      onApplyPreset(preset);
+    } else {
+      void command.setOverview([...preset.widgets]);
+    }
+  }
+
   function remove(id: string) {
     if (expandedId === id) collapse();
     void command.setOverview(ids.filter((widget) => widget !== id));
@@ -224,6 +272,48 @@ export function OverviewView({ command, onConnections }: { command: CommandContr
 
   return (
     <div className="cmd-overview-page">
+      {!expandedWidget ? (
+        <div className="mx-auto flex w-full max-w-[1720px] flex-wrap items-center justify-between gap-2 px-1 pt-1 pb-0.5">
+          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Workspace presets">
+            <span className="mr-1 hidden items-center gap-1 text-[11.5px] font-medium text-muted-foreground sm:inline-flex">
+              <Sparkles className="size-3 text-[color:var(--land-gold)]" />
+              Layouts
+            </span>
+            {COMMAND_BOARD_PRESETS.map((preset) => {
+              const active = matchesPreset(ids, preset);
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  disabled={command.pending === "overview"}
+                  onClick={() => applyPreset(preset)}
+                  title={preset.tagline}
+                  aria-pressed={active}
+                  className={`cmd-preset-chip ${active ? "cmd-preset-chip--active" : ""}`}
+                >
+                  {preset.name}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="hidden text-[11.5px] tabular-nums text-muted-foreground md:inline">
+              {usedCells}/{totalCells} cells
+            </span>
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              disabled={command.pending === "overview"}
+              className="cmd-preset-chip"
+            >
+              <LayoutGrid className="size-3.5 text-[color:var(--land-gold)]" />
+              <span>Widgets</span>
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {expandedWidget ? (
         <div className="cmd-expanded-stage">
           <WidgetSlot
@@ -332,17 +422,33 @@ export function OverviewView({ command, onConnections }: { command: CommandContr
       ) : null}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="gap-0 overflow-hidden border border-border bg-popover p-0 text-popover-foreground shadow-2xl ring-0 sm:max-w-[920px]">
+        <DialogContent className="gap-0 overflow-hidden rounded-3xl border border-border bg-popover p-0 text-popover-foreground shadow-2xl ring-0 sm:max-w-[940px]">
           <DialogHeader className="border-b border-border px-6 pt-5 pb-4">
-            <DialogTitle className="font-heading text-2xl font-normal tracking-tight">
-              Select a widget
+            <DialogTitle className="font-editorial text-2xl font-normal tracking-tight">
+              Curate your Command board
             </DialogTitle>
             <DialogDescription className="text-[13px]">
-              Choose a live tile to place onto your 4×2 Command overview board.
+              Snap individual live widgets onto your 4×2 desk, or load a full layout in one click.
             </DialogDescription>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {COMMAND_BOARD_PRESETS.map((preset) => {
+                const active = matchesPreset(ids, preset);
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => applyPreset(preset)}
+                    className={`cmd-preset-chip ${active ? "cmd-preset-chip--active" : ""}`}
+                  >
+                    <span>{preset.name}</span>
+                    <span className="text-[10.5px] text-muted-foreground">· {preset.widgets.length}</span>
+                  </button>
+                );
+              })}
+            </div>
           </DialogHeader>
 
-          <ScrollArea className="max-h-[72svh]">
+          <ScrollArea className="max-h-[70svh]">
             <div className="cmd-gallery-grid">
               {COMMAND_WIDGETS.map((widget) => {
                 const alreadyAdded = ids.includes(widget.id);

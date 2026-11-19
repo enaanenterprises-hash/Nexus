@@ -30,7 +30,7 @@ import { CommandIcon, LockIcon, MoonIcon, NetworkIcon, NodesIcon, PlusIcon, SunI
 
 export type PanelId = "today" | "nodes" | "settings" | { extension: ExtensionId };
 
-export type Surface = { view: "home" | "research" | "command" | "studio"; panel: PanelId | null };
+export type Surface = { view: "home" | "research" | "command" | "studio" | "nodes"; panel: PanelId | null };
 
 const isPanel = (panel: PanelId | null, id: PanelId) =>
   typeof id === "string" ? panel === id : typeof panel === "object" && panel?.extension === id.extension;
@@ -90,6 +90,7 @@ export const NodeMenu = memo(function NodeMenu({
   navRef,
   onHome,
   onCommand,
+  onNodes,
   onPanel,
   onReplaySetup,
 }: {
@@ -101,6 +102,7 @@ export const NodeMenu = memo(function NodeMenu({
   navRef?: RefObject<HTMLElement | null>;
   onHome: () => void;
   onCommand: () => void;
+  onNodes: () => void;
   onPanel: (panel: PanelId) => void;
   onReplaySetup?: () => void;
 }) {
@@ -151,9 +153,9 @@ export const NodeMenu = memo(function NodeMenu({
       </MenuItem>
       <MenuItem
         label="Nodes"
-        tooltip="Manage modular nodes"
-        active={isPanel(surface.panel, "nodes")}
-        onClick={() => onPanel("nodes")}
+        tooltip="Spatial nodes studio"
+        active={surface.view === "nodes" || isPanel(surface.panel, "nodes")}
+        onClick={onNodes}
       >
         <NodesIcon />
       </MenuItem>
@@ -188,6 +190,7 @@ export const NodeMenu = memo(function NodeMenu({
         used={used}
         cap={cap}
         disabled={floating && !open}
+        onNodes={onNodes}
         onPanel={onPanel}
         onReplaySetup={onReplaySetup}
       />
@@ -200,6 +203,7 @@ function TierMenu({
   used,
   cap,
   disabled,
+  onNodes,
   onPanel,
   onReplaySetup,
 }: {
@@ -207,6 +211,7 @@ function TierMenu({
   used: number;
   cap: number;
   disabled: boolean;
+  onNodes: () => void;
   onPanel: (panel: PanelId) => void;
   onReplaySetup?: () => void;
 }) {
@@ -302,7 +307,7 @@ function TierMenu({
               className="cursor-pointer rounded-xl px-2.5 py-2 text-[13px]"
               onClick={() => {
                 setTierMenuOpen(false);
-                onPanel("nodes");
+                onNodes();
               }}
             >
               <Blocks className="size-4 text-muted-foreground" />

@@ -29,6 +29,7 @@ import { getConnector } from "@/lib/connectors/catalog";
 import { researchIntent } from "@/lib/nexus/brain";
 import { ExtensionHub } from "./ExtensionHub";
 import { ExtensionPanel } from "./ExtensionPanel";
+import { NodesView } from "./NodesView";
 import {
   NeuralStage,
   type SocketVisual,
@@ -183,8 +184,18 @@ export function Dashboard({
     setSurface({ view: "studio", panel: null });
   }, []);
 
+  const openNodes = useCallback((slotId?: SlotId | null) => {
+    setMenuOpen(false);
+    if (slotId !== undefined) setSelected(slotId);
+    setSurface({ view: "nodes", panel: null });
+  }, []);
+
   const openPanel = useCallback(
     (panel: PanelId) => {
+      if (panel === "nodes") {
+        openNodes();
+        return;
+      }
       if (typeof panel === "object" && panel.extension === STUDIO_NODE_ID) {
         openStudio();
         return;
@@ -197,7 +208,7 @@ export function Dashboard({
         return { view: s.view, panel: same ? null : panel };
       });
     },
-    [openStudio],
+    [openNodes, openStudio],
   );
 
   const goHome = useCallback(() => {
@@ -227,15 +238,14 @@ export function Dashboard({
         openPanel({ extension: slot.occupiedBy });
         return;
       }
-      setSelected(slotId);
-      setSurface((s) => ({ ...s, panel: "nodes" }));
+      openNodes(slotId);
       flash(
         canUseSlot(slot, currentHub.entitlement)
-          ? "Socket selected. Choose an extension to snap into it."
+          ? "Socket selected. Choose a module to snap into it."
           : "Pro sockets unlock with Nexus Pro. Try “Preview Pro” to open them.",
       );
     },
-    [openPanel, flash],
+    [openNodes, openPanel, flash],
   );
 
   const handleSelectSocket = useCallback(
@@ -418,7 +428,12 @@ export function Dashboard({
       }
       if (surface.panel) {
         setSurface((s) => ({ ...s, panel: null }));
-      } else if (surface.view === "command" || surface.view === "research" || surface.view === "studio") {
+      } else if (
+        surface.view === "command" ||
+        surface.view === "research" ||
+        surface.view === "studio" ||
+        surface.view === "nodes"
+      ) {
         setSurface({ view: "home", panel: null });
       } else if (menuOpen) {
         setMenuOpen(false);
@@ -429,7 +444,15 @@ export function Dashboard({
   }, [surface.panel, surface.view, menuOpen]);
 
   useEffect(() => {
-    if ((surface.view !== "home" && surface.view !== "studio" && surface.view !== "command") || !menuOpen) return;
+    if (
+      (surface.view !== "home" &&
+        surface.view !== "studio" &&
+        surface.view !== "command" &&
+        surface.view !== "nodes") ||
+      !menuOpen
+    ) {
+      return;
+    }
     function onPointerDown(event: PointerEvent) {
       const target = event.target as Node | null;
       if (!target) return;
@@ -666,7 +689,9 @@ export function Dashboard({
 
   const panel = surface.panel;
   const isNetworkHome = surface.view === "home";
-  const usesFloatingMenu = isNetworkHome || surface.view === "studio" || surface.view === "command";
+  const usesFloatingMenu =
+    isNetworkHome || surface.view === "studio" || surface.view === "command" || surface.view === "nodes";
+  const hasCompactTopBar = surface.view === "command" || surface.view === "nodes";
 
   if (!setupDone) {
     return (
@@ -706,7 +731,7 @@ export function Dashboard({
       <section
         aria-label="Nexus Laniakea network"
         className="absolute inset-0"
-        hidden={surface.view === "command"}
+        hidden={surface.view === "command" || surface.view === "nodes"}
       >
         <NeuralStage signal={signal} onSelectSocket={handleSelectSocket} />
         <div className="dash-scrim--home pointer-events-none absolute inset-0" />
@@ -714,13 +739,13 @@ export function Dashboard({
 
       <header
         className={`landing-enter pointer-events-none absolute inset-x-0 top-0 z-40 flex items-center ${
-          surface.view === "command" ? "h-12" : "h-16"
+          hasCompactTopBar ? "h-12" : "h-16"
         }`}
       >
             {usesFloatingMenu ? (
               <div
                 className={`pointer-events-auto inline-flex shrink-0 justify-center ${
-                  surface.view === "command" ? "ml-2 w-[52px]" : "ml-[14px] w-[74px]"
+                  hasCompactTopBar ? "ml-2 w-[52px]" : "ml-[14px] w-[74px]"
                 }`}
               >
                 <NexusMenuButton
@@ -747,6 +772,7 @@ export function Dashboard({
             open={usesFloatingMenu ? menuOpen : true}
             onHome={goHome}
             onCommand={handleOpenCommand}
+            onNodes={() => openNodes()}
             onPanel={openPanel}
             onReplaySetup={replaySetup}
           />
@@ -787,8 +813,27 @@ export function Dashboard({
             <div className="command-screen" hidden={surface.view !== "command"}>
               <CommandView
                 userName={firstName}
+                visible={surface.view === "command"}
                 openCount={commandOpenCount}
                 request={commandRequest}
+                onClose={() => setSurface({ view: "home", panel: null })}
+              />
+            </div>
+          ) : null}
+
+          {surface.view === "nodes" ? (
+            <div className="nodes-fullscreen">
+              <NodesView
+                hub={hub}
+                selectedSlotId={selected}
+                notice={notice}
+                onDismissNotice={() => setNotice(null)}
+                onSelectSlot={(slotId) => setSelected(slotId)}
+                onSnap={(id, slotId) => void snap(id, slotId)}
+                onRelease={(id) => void release(id)}
+                onTogglePro={() => setStubPro(!hub.entitlement.isPro)}
+                onTransfer={(fromId, toId) => triggerNodeTransfer(fromId, toId)}
+                onOpenStudio={openStudio}
                 onClose={() => setSurface({ view: "home", panel: null })}
               />
             </div>
@@ -856,6 +901,7 @@ export function Dashboard({
                       id={panel.extension}
                       onRelease={release}
                       onTransfer={(fromId, toId) => triggerNodeTransfer(fromId, toId)}
+                      onOpenNodes={(slotId) => openNodes(slotId)}
                     />
                   )}
                 </div>

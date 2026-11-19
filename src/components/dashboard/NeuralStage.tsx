@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useEffect, useRef } from "react";
+import { Lock, Plus } from "lucide-react";
 import type { NexusBrainState } from "@/lib/extensions";
 import {
   add,
@@ -10,15 +11,11 @@ import {
   lerp,
   observeCanvasActivity,
   polar,
+  radialGlow,
   seededHelpers,
   type Vec,
 } from "@/lib/network/geometry";
-import {
-  computeStageLayout,
-  type ArmGeometry,
-  type HorizonWingGeometry,
-  type StageLayout,
-} from "./stage-layout";
+import { computeStageLayout, type ArmGeometry, type StageLayout } from "./stage-layout";
 
 export type SocketVisual = "occupied" | "open" | "locked";
 
@@ -42,83 +39,55 @@ export type StageSignal = {
   activeSocket?: number | null;
   /** Skip drawing while a full view covers the stage. */
   paused?: boolean;
-  /** Skip opening silence and continue the singularity explosion straight into node expansion. */
+  /** Skip opening bloom delay and continue the singularity explosion straight into node unfurl. */
   fromSetupExplosion?: boolean;
 };
 
 /* ============================================================================
-   MATHEMATICAL CONSTANTS & SPECTRAL PALETTE
+   OPTICAL CONSTANTS & PURE MONOCHROME GOLD SPECTRAL PALETTES
    ============================================================================ */
 
 type Rgb = readonly [number, number, number];
 
 const TAU = Math.PI * 2;
-/** Phase I (0..1.6s): "Waking up Nexus…" on pure black before the neural network pops to life. */
-const WAKE_SILENCE_SECONDS = 1.6;
-const INTRO_SPRING_SECONDS = 1.65;
-const SOCKET_U = 0.33; // Parametric position of the node socket waist along each arm (0 = core, 1 = beyond screen corner)
-const SPINE_SAMPLES = 48;
-const FILAMENTS_PER_ARM = 48;
-const HORIZON_STRANDS = 80;
-const CURVE_STEPS = 22;
+const SOCKET_U = 0.36; // Parametric position of each node waist along its ribbon spine (0 = core, 1 = periphery)
+const SPINE_SAMPLES = 44;
+const FILAMENTS_PER_ARM = 22; // Disciplined, uncrowded laminar silk ribbons (zero messy noise)
+const HORIZON_STRANDS = 34;
+const CURVE_STEPS = 24;
 const SAMPLE_US = Array.from({ length: CURVE_STEPS + 1 }, (_, k) => k / CURVE_STEPS);
 
-const POW_LUT_SIZE = 256;
-const POW084_LUT = Float64Array.from({ length: POW_LUT_SIZE }, (_, i) => Math.pow(i / 255, 0.84));
-const POW124_LUT = Float64Array.from({ length: POW_LUT_SIZE }, (_, i) => Math.pow(i / 255, 1.24));
-const POW115_LUT = Float64Array.from({ length: POW_LUT_SIZE }, (_, i) => Math.pow(i / 255, 1.15));
+// Dark Mode: Molten 24k Observatory Gold + Cool Quiet Platinum for dormant arms
+const DARK_GOLD_CORE: Rgb = [255, 248, 224];
+const DARK_GOLD_BRIGHT: Rgb = [255, 220, 138];
+const DARK_GOLD_MID: Rgb = [242, 182, 66];
+const DARK_GOLD_DEEP: Rgb = [202, 132, 32];
+const DARK_DORMANT: Rgb = [128, 122, 110];
 
-function sampleLut(lut: Float64Array, x: number): number {
-  const scaled = clamp(x, 0, 1) * 255;
-  const idx = scaled | 0;
-  if (idx >= 255) return lut[255]!;
-  return lut[idx]! + (lut[idx + 1]! - lut[idx]!) * (scaled - idx);
-}
+// Light Mode: Radiant 24k Sunlit Atelier Gold on Pure Gallery Paper (#ffffff)
+const LIGHT_GOLD_CORE: Rgb = [255, 232, 130];
+const LIGHT_GOLD_BRIGHT: Rgb = [248, 194, 42];
+const LIGHT_GOLD_MID: Rgb = [228, 166, 22];
+const LIGHT_GOLD_DEEP: Rgb = [184, 122, 12];
+const LIGHT_DORMANT: Rgb = [144, 142, 136];
 
-const GOLD_CORE: Rgb = [255, 250, 232];
-const GOLD_BRIGHT: Rgb = [255, 224, 156];
-const GOLD_MID: Rgb = [246, 182, 74];
-const GOLD_DEEP: Rgb = [212, 128, 34];
-const DORMANT_BRONZE: Rgb = [118, 84, 38];
-
-// Light-mode pale 18k champagne light-gold palette: luminous sunlit gold against soft pearl off-white without dark brown mud
-const GOLD_LIGHT_SPECULAR: Rgb = [248, 226, 152];
-const GOLD_LIGHT_BRIGHT: Rgb = [232, 196, 98];
-const GOLD_LIGHT_MID: Rgb = [212, 172, 66];
-const GOLD_LIGHT_DEEP: Rgb = [192, 150, 48];
-const DORMANT_LIGHT_PLATINUM: Rgb = [166, 162, 154];
-
-const CRIMSON_HOT: Rgb = [255, 104, 82];
-const CRIMSON_PURE: Rgb = [252, 48, 44];
-const CRIMSON_DEEP: Rgb = [196, 20, 30];
-
-const CRIMSON_LIGHT_HOT: Rgb = [228, 68, 36];
-const CRIMSON_LIGHT_PURE: Rgb = [204, 22, 28];
-const CRIMSON_LIGHT_DEEP: Rgb = [154, 12, 20];
-
-/**
- * Connected ('occupied') nodes blaze at 1.0.
- * Disconnected ('open' / 'locked') nodes drop to a dim dark-bronze level (0.14 / 0.08)
- * so they clearly read as DARK/OFF while preserving the mathematical arm geometry.
- */
 const SOCKET_TARGET_LEVEL: Record<SocketVisual, number> = {
   occupied: 1.0,
-  open: 0.14,
-  locked: 0.08,
+  open: 0.24,
+  locked: 0.14,
 };
 
 const BRAIN_TARGET_ENERGY: Record<NexusBrainState, number> = {
-  idle: 0.16,
+  idle: 0.18,
   thinking: 1.0,
-  responding: 0.76,
+  responding: 0.72,
 };
 
-/** Four optical depth layers per arm: wide atmospheric bloom -> medium silk -> crisp filament -> specular core hair. */
-const DEPTH_LAYERS = [
-  { width: 2.8, alpha: 0.088, hot: 0.0 },
-  { width: 1.25, alpha: 0.22, hot: 0.35 },
-  { width: 0.72, alpha: 0.4, hot: 0.7 },
-  { width: 0.44, alpha: 0.65, hot: 1.0 },
+/** Three refined optical fiber tiers: soft atmospheric silk, primary sculpted strand, crisp specular core hair. */
+const FIBER_TIERS = [
+  { width: 2.2, alpha: 0.1, hot: 0.0 },
+  { width: 1.05, alpha: 0.28, hot: 0.45 },
+  { width: 0.52, alpha: 0.54, hot: 1.0 },
 ] as const;
 
 const mixRgb = (a: Rgb, b: Rgb, t: number): string => {
@@ -140,8 +109,10 @@ const smoothstep = (edge0: number, edge1: number, x: number): number => {
   return t * t * (3 - 2 * t);
 };
 
+const easeOutCubic = (x: number): number => 1 - Math.pow(1 - clamp(x, 0, 1), 3);
+
 /* ============================================================================
-   PARAMETRIC FIELD STRUCTURES
+   FIELD & PHYSICS STRUCTURES
    ============================================================================ */
 
 type SpineFrame = {
@@ -150,49 +121,34 @@ type SpineFrame = {
   tangents: Vec[];
   socketPt: Vec;
   tipPt: Vec;
-};
-
-type PointerField = {
-  pos: Vec;
-  vel: Vec;
-  parallax: Vec;
-  presence: number;
+  /** Current parametric unfurl extent (0..1) of this arm during opening animation. */
+  unfurl: number;
 };
 
 type ArmFilament = {
   arm: number;
-  layer: number;
-  /** Signed transverse coordinate in [-1, 1] at the spindle belly. */
+  tier: number;
+  /** Stratified laminar coordinate in [-1, 1] across the silk ribbon. */
   xi: number;
-  /** Optical crossover factor: +1 stays on same side through waist, -0.82 crosses through caustic focus. */
+  /** Smooth optical braid twist factor through the node waist. */
   crossover: number;
-  /** Outer corner plume fan multiplier. */
+  /** Gentle outer fan taper multiplier. */
   flareSpread: number;
-  /** Coherent biharmonic wave phase & frequency modifiers. */
+  /** Tightly coupled spatial phase so strands breathe together like cohesive silk. */
   phase: number;
-  freqMul: number;
-  /** Singularity wake-up stagger in [0, 1]. */
+  /** Fine per-strand unfurl offset in [0, 0.14]. */
   stagger: number;
 };
 
 type HorizonFilament = {
-  layer: number;
-  chirality: -1 | 1;
-  waistOffset: number;
-  leftAngle: number;
-  rightAngle: number;
-  leftReach: number;
-  rightReach: number;
-  curvature: number;
+  tier: number;
+  side: -1 | 1;
+  spreadAngle: number;
+  reachMul: number;
+  waistY: number;
+  bend: number;
   phase: number;
   stagger: number;
-};
-
-type SynapticBridge = {
-  fromArm: number;
-  toArm: number;
-  archLift: number;
-  phase: number;
 };
 
 type FlowPhoton = {
@@ -204,18 +160,7 @@ type FlowPhoton = {
   alpha: number;
 };
 
-type HorizonPhoton = {
-  strandIdx: number;
-  u: number;
-  speed: number;
-  size: number;
-  alpha: number;
-};
-
-/**
- * Travelling crimson information wave along an arm's flowing lines (replaces orbs).
- */
-type SolitonWave = {
+type SignalWave = {
   arm: number;
   u: number;
   speed: number;
@@ -223,251 +168,192 @@ type SolitonWave = {
   intensity: number;
 };
 
+/** Tactile acoustic pluck + expanding liquid ripple created when pressing or releasing anywhere on the neural web. */
+type PressImpulse = {
+  x: number;
+  y: number;
+  age: number;
+  duration: number;
+  strength: number;
+  /** -1 = release rebound pluck, +1 = initial touch press ripple */
+  polarity: 1 | -1;
+};
+
 type CoreRipple = {
   u: number;
-  crimson: boolean;
   strength: number;
 };
 
-/* ============================================================================
-   PROCEDURAL FIELD GENERATOR
-   ============================================================================ */
+type PointerPhysics = {
+  pos: Vec;
+  vel: Vec;
+  presence: number;
+  isDown: boolean;
+  holdPos: Vec;
+  holdStrength: number;
+};
 
 function createNeuralField(armCount: number) {
-  const { rnd, gauss, between } = seededHelpers(20261116);
+  const { rnd, gauss, between } = seededHelpers(20261119);
 
-  const pickLayer = (i: number): number => {
-    const r = (i * 0.61803398875 + rnd() * 0.22) % 1;
-    if (r < 0.14) return 0;
-    if (r < 0.44) return 1;
-    if (r < 0.78) return 2;
-    return 3;
+  const pickTier = (i: number): number => {
+    if (i % 5 === 0) return 0; // Atmospheric silk sheath
+    if (i % 3 === 0) return 2; // Crisp specular core hair
+    return 1; // Primary silk thread
   };
 
   const armFilaments: ArmFilament[] = [];
-  const armLayerBatches: number[][][] = Array.from({ length: armCount }, () =>
-    DEPTH_LAYERS.map(() => [] as number[]),
+  const armTierBatches: number[][][] = Array.from({ length: armCount }, () =>
+    FIBER_TIERS.map(() => [] as number[]),
   );
 
   for (let arm = 0; arm < armCount; arm++) {
     for (let i = 0; i < FILAMENTS_PER_ARM; i++) {
-      // Stratified laminar distribution across [-1, 1] with an inner core + wide outer harmonic sheath
       const stratified = ((i + 0.5) / FILAMENTS_PER_ARM) * 2 - 1;
-      const isOuterSheath = i % 4 === 0;
-      const xi = clamp(
-        stratified * (isOuterSheath ? 1.32 : 0.94) + gauss() * 0.08,
-        -1.45,
-        1.45,
-      );
-      const layer = pickLayer(i);
+      const xi = clamp(stratified * 0.96 + gauss() * 0.04, -1.08, 1.08);
+      const tier = pickTier(i);
       const idx = armFilaments.length;
       armFilaments.push({
         arm,
-        layer,
+        tier,
         xi,
-        crossover: i % 3 === 0 ? -0.86 : i % 3 === 1 ? 0.72 : -0.42,
-        flareSpread: (0.88 + 0.68 * Math.abs(xi)) * between(0.9, 1.18),
-        // Coherent phase across xi with gentle variation so lines flow as a lush, unified wave
-        phase: arm * 1.25 + xi * 1.35 + gauss() * 0.2,
-        freqMul: between(0.94, 1.08),
-        stagger: clamp(Math.abs(xi) * 0.18 + rnd() * 0.34, 0, 0.56),
+        // Gentle optical lens convergence: inner threads cross softly, outer silk glides parallel
+        crossover: Math.abs(xi) < 0.45 ? -0.68 : 0.74,
+        flareSpread: 0.84 + 0.42 * Math.abs(xi),
+        phase: arm * 1.15 + xi * 0.65,
+        stagger: Math.abs(xi) * 0.12,
       });
-      armLayerBatches[arm]![layer]!.push(idx);
+      armTierBatches[arm]![tier]!.push(idx);
     }
   }
 
-  // Continuous cross-core horizon filaments that sweep into the 4 corners while leaving bottom-center open
+  // Serene sweeping lateral wings framing the left and right horizon
   const horizonFilaments: HorizonFilament[] = [];
-  const horizonLayerBatches: number[][] = DEPTH_LAYERS.map(() => [] as number[]);
+  const horizonTierBatches: number[][] = FIBER_TIERS.map(() => [] as number[]);
 
   for (let i = 0; i < HORIZON_STRANDS; i++) {
-    const layer = pickLayer(i);
-    const chirality: -1 | 1 = i % 2 === 0 ? 1 : -1;
-    const stratified = ((i + 0.5) / HORIZON_STRANDS) * 2 - 1;
-    const leftLift = stratified * 0.64 + gauss() * 0.06;
-    const rightLift = stratified * 0.64 + gauss() * 0.06;
+    const side: -1 | 1 = i % 2 === 0 ? -1 : 1;
+    const localIdx = Math.floor(i / 2);
+    const localCount = HORIZON_STRANDS / 2;
+    const stratified = ((localIdx + 0.5) / localCount) * 2 - 1;
+    const tier = pickTier(i);
     const idx = horizonFilaments.length;
     horizonFilaments.push({
-      layer,
-      chirality,
-      waistOffset: stratified * 0.028,
-      leftAngle: Math.PI - leftLift * chirality,
-      rightAngle: rightLift * chirality,
-      leftReach: between(1.02, 1.48),
-      rightReach: between(1.02, 1.48),
-      curvature: stratified * 0.24,
-      phase: stratified * 1.35 + rnd() * 0.4,
-      stagger: clamp(Math.abs(stratified) * 0.34 + 0.06, 0.04, 0.56),
+      tier,
+      side,
+      spreadAngle: stratified * 0.34,
+      reachMul: between(0.84, 1.18),
+      waistY: stratified * 0.022,
+      bend: stratified * 0.16,
+      phase: stratified * 0.9 + (side > 0 ? 1.2 : 0),
+      stagger: Math.abs(stratified) * 0.18,
     });
-    horizonLayerBatches[layer]!.push(idx);
+    horizonTierBatches[tier]!.push(idx);
   }
 
-  // Lush harmonic bridges between adjacent connected node sockets
-  const bridges: SynapticBridge[] = [];
-  for (let a = 0; a < armCount - 1; a++) {
-    for (let k = 0; k < 9; k++) {
-      bridges.push({
-        fromArm: a,
-        toArm: a + 1,
-        archLift: between(-0.14, 0.08) + (k - 4) * 0.028,
-        phase: k * 0.65 + a,
-      });
-    }
-  }
-
-  // Photons flowing along the 5 functional node arms
-  const armPhotons: FlowPhoton[] = Array.from({ length: 220 }, (_, i) => {
-    const filamentIdx = i % armFilaments.length;
-    const f = armFilaments[filamentIdx]!;
+  // Sparse, deliberate luminous photons gliding smoothly along active arms
+  const armPhotons: FlowPhoton[] = Array.from({ length: armCount * 14 }, (_, i) => {
+    const arm = i % armCount;
+    const armStart = arm * FILAMENTS_PER_ARM;
+    const filamentIdx = armStart + (Math.floor(i / armCount) * 3) % FILAMENTS_PER_ARM;
     return {
-      arm: f.arm,
+      arm,
       filamentIdx,
       u: rnd(),
-      speed: between(0.055, 0.13),
-      size: between(0.65, 1.8),
-      alpha: between(0.48, 0.98),
+      speed: between(0.045, 0.095),
+      size: between(1.0, 2.0),
+      alpha: between(0.45, 0.92),
     };
   });
 
-  // Photons gliding along the horizon corner wings
-  const horizonPhotons: HorizonPhoton[] = Array.from({ length: 75 }, () => ({
-    strandIdx: Math.floor(rnd() * horizonFilaments.length),
-    u: rnd(),
-    speed: between(0.038, 0.085),
-    size: between(0.55, 1.45),
-    alpha: between(0.35, 0.82),
-  }));
-
   return {
     armFilaments,
-    armLayerBatches,
+    armTierBatches,
     horizonFilaments,
-    horizonLayerBatches,
-    bridges,
+    horizonTierBatches,
     armPhotons,
-    horizonPhotons,
   };
 }
 
-/* ============================================================================
-   CONTINUOUS C2 DIFFERENTIAL GEOMETRY & VENTURI-CAUSTIC ENVELOPE MATH
-   ============================================================================ */
-
-/**
- * Second-order underdamped spring pop from the singularity (r = 0 -> 1)
- * that begins only AFTER the "Waking up Nexus…" silence completes.
- */
-function singularityUnfurl(intro: number, stagger: number): number {
-  const u = clamp((intro - stagger * 0.22) / (1 - stagger * 0.22), 0, 1);
-  if (u <= 0) return 0.001;
-  // Softly damped harmonic spring combined with C2 quintic smootherstep for ultra-smooth expansion
-  const zeta = 0.8;
-  const omegaN = 3.9;
-  const omegaD = omegaN * Math.sqrt(1 - zeta * zeta);
-  const tau = u * 1.9;
-  const decay = Math.exp(-zeta * omegaN * tau);
-  const spring =
-    1 -
-    decay *
-      (Math.cos(omegaD * tau) +
-        (zeta / Math.sqrt(1 - zeta * zeta)) * Math.sin(omegaD * tau));
-  const quintic = u * u * u * (u * (u * 6 - 15) + 10);
-  return clamp(lerp(quintic, spring, 0.65), 0.001, 1.03);
+/** Smooth center-outward arm unfurl progression (0..1) so center arm leads and outer arms follow like blooming petals. */
+function computeArmUnfurl(elapsed: number, armIndex: number, totalArms: number, fromExplosion: boolean): number {
+  const centerIdx = (totalArms - 1) * 0.5;
+  const distFromCenter = Math.abs(armIndex - centerIdx);
+  const startDelay = fromExplosion ? distFromCenter * 0.06 : 0.18 + distFromCenter * 0.1;
+  const duration = fromExplosion ? 1.15 : 1.48;
+  const raw = clamp((elapsed - startDelay) / duration, 0, 1);
+  // Smooth C2 quintic ease-out (zero mechanical overshoot or jarring snap)
+  return 1 - Math.pow(1 - raw, 3.2);
 }
 
-/**
- * Samples a C2-continuous spine frame from `core` (u = 0), through `socket` (u = SOCKET_U),
- * and out past the viewport corner (`cornerTip`, u = 1), with living harmonic sway.
- */
+/** Samples one C2-continuous ribbon spine from core (u = 0) through socket (u = SOCKET_U) to tip (u = 1). */
 function sampleArmSpine(
   arm: ArmGeometry,
   L: StageLayout,
   time: number,
-  intro: number,
-  pointer: PointerField,
+  unfurl: number,
+  pointer: PointerPhysics,
 ): SpineFrame {
   const { core, radius: R } = L;
-  const unfurlInner = singularityUnfurl(intro, 0.04);
-  const unfurlOuter = singularityUnfurl(intro, 0.18);
 
-  const slowWave = Math.sin(time * 0.28 + arm.index * 1.45);
-  const deepWave = Math.cos(time * 0.18 + arm.index * 2.1);
+  // Serene low-frequency laminar breath (no nervous shivering)
+  const breathA = Math.sin(time * 0.34 + arm.index * 1.18);
+  const breathB = Math.cos(time * 0.22 + arm.index * 1.65);
 
   const perpAngle = arm.coreAngle + Math.PI * 0.5;
-  const socketSway = polar(R * 0.014 * slowWave, perpAngle);
+  const socketSway = polar(R * 0.014 * breathA, perpAngle);
 
-  // Light, silky cursor breathing on the arm spine (never snaps or pulls violently)
-  let localPullX = 0;
-  let localPullY = 0;
-  if (pointer.presence > 0.005) {
+  // Subtle viscous pointer yield on the arm waist
+  let yieldX = 0;
+  let yieldY = 0;
+  if (pointer.presence > 0.004) {
     const dx = arm.socket.x - pointer.pos.x;
     const dy = arm.socket.y - pointer.pos.y;
     const distSq = dx * dx + dy * dy;
-    const sigma = R * 0.56;
+    const sigma = R * 0.62;
     const k = pointer.presence * Math.exp(-distSq / (2 * sigma * sigma));
-    const dist = Math.sqrt(distSq) + 48;
-    localPullX = pointer.vel.x * 0.035 * k - (dx / dist) * R * 0.008 * k;
-    localPullY = pointer.vel.y * 0.035 * k - (dy / dist) * R * 0.008 * k;
+    const dist = Math.sqrt(distSq) + 54;
+    yieldX = (dx / dist) * R * 0.012 * k + pointer.vel.x * 0.03 * k;
+    yieldY = (dy / dist) * R * 0.012 * k + pointer.vel.y * 0.03 * k;
   }
 
-  const rawSocket = add(arm.socket, {
-    x: socketSway.x + pointer.parallax.x * 0.08 + localPullX,
-    y: socketSway.y + pointer.parallax.y * 0.08 + localPullY,
+  const socketPt = add(arm.socket, {
+    x: socketSway.x + yieldX,
+    y: socketSway.y + yieldY,
   });
 
-  const socketPt: Vec = {
-    x: lerp(core.x, rawSocket.x, unfurlInner),
-    y: lerp(core.y, rawSocket.y, unfurlInner),
-  };
-
-  const tangentAngle =
-    Math.atan2(arm.socketTangent.y, arm.socketTangent.x) + 0.018 * deepWave;
+  const tangentAngle = Math.atan2(arm.socketTangent.y, arm.socketTangent.x) + 0.016 * breathB;
   const T_sock = { x: Math.cos(tangentAngle), y: Math.sin(tangentAngle) };
 
   const innerDist = Math.hypot(socketPt.x - core.x, socketPt.y - core.y);
-  const c1 = add(
-    core,
-    polar(innerDist * 0.46, arm.coreAngle + 0.025 * slowWave),
-  );
+  const c1 = add(core, polar(innerDist * 0.48, arm.coreAngle + 0.02 * breathA));
   const c2: Vec = {
     x: socketPt.x - T_sock.x * innerDist * 0.38,
     y: socketPt.y - T_sock.y * innerDist * 0.38,
   };
 
-  const rawTip = add(
-    arm.cornerTip,
-    polar(R * 0.075 * deepWave, arm.cornerAngle + Math.PI * 0.5),
-  );
-  const tipPt: Vec = {
-    x: lerp(socketPt.x, rawTip.x, unfurlOuter),
-    y: lerp(socketPt.y, rawTip.y, unfurlOuter),
-  };
-
+  const tipPt = add(arm.cornerTip, polar(R * 0.055 * breathB, arm.cornerAngle + Math.PI * 0.5));
   const outerDist = Math.hypot(tipPt.x - socketPt.x, tipPt.y - socketPt.y);
-  // d1 is collinear with c2 -> socketPt so the spine is 100% kink-free at the socket
+
+  // Collinear d1 preserves strict C1/C2 smoothness right through the node waist
   const d1: Vec = {
-    x: socketPt.x + T_sock.x * outerDist * 0.32,
-    y: socketPt.y + T_sock.y * outerDist * 0.32,
+    x: socketPt.x + T_sock.x * outerDist * 0.3,
+    y: socketPt.y + T_sock.y * outerDist * 0.3,
   };
   const d2 = add(
     socketPt,
-    polar(
-      outerDist * 0.68,
-      lerp(tangentAngle, arm.cornerAngle, 0.65) - 0.03 * slowWave,
-    ),
+    polar(outerDist * 0.64, lerp(tangentAngle, arm.cornerAngle, 0.62) - 0.024 * breathA),
   );
 
   const socketIdx = Math.round((SPINE_SAMPLES - 1) * SOCKET_U);
   const pts: Vec[] = new Array(SPINE_SAMPLES);
 
   for (let i = 0; i <= socketIdx; i++) {
-    const t = i / socketIdx;
-    pts[i] = bezier(core, c1, c2, socketPt, t);
+    pts[i] = bezier(core, c1, c2, socketPt, i / socketIdx);
   }
   const outerCount = SPINE_SAMPLES - 1 - socketIdx;
   for (let i = 1; i <= outerCount; i++) {
-    const t = i / outerCount;
-    pts[socketIdx + i] = bezier(socketPt, d1, d2, tipPt, t);
+    pts[socketIdx + i] = bezier(socketPt, d1, d2, tipPt, i / outerCount);
   }
 
   const tangents: Vec[] = new Array(SPINE_SAMPLES);
@@ -484,30 +370,26 @@ function sampleArmSpine(
     normals[i] = { x: -ty, y: tx };
   }
 
-  return { pts, normals, tangents, socketPt, tipPt };
+  return { pts, normals, tangents, socketPt, tipPt, unfurl };
 }
 
 /**
- * Evaluates a filament's exact 2D position along its parent arm spine at parameter u in [0, 1],
- * combining the Venturi-Caustic waist envelope, optical braid crossover, and smooth travelling waves.
+ * Computes exact 2D filament coordinate with:
+ * - Venturi-Caustic ribbon envelope pinching gracefully into the node waist
+ * - Meditative coherent laminar wave travel
+ * - Viscous fluid mouse-over parting + silky wake
+ * - Tactile mouse-press hold tension & damped harp-string acoustic ripple
  */
-function writeArmFilamentPoint(
+function evaluateFilamentPoint(
   f: ArmFilament,
   spine: SpineFrame,
   u: number,
   R: number,
   armPhase: number,
   armLevel: number,
-  callHeat: number,
-  solitonBoost: number,
-  hasPointer: boolean,
-  pointerX: number,
-  pointerY: number,
-  pointerPresence: number,
-  pointerVelX: number,
-  pointerVelY: number,
-  invTwoSigmaSq: number,
-  maxDistSq: number,
+  signalBoost: number,
+  pointer: PointerPhysics,
+  impulses: readonly PressImpulse[],
   outXs: Float64Array,
   outYs: Float64Array,
   outIdx: number,
@@ -526,55 +408,88 @@ function writeArmFilamentPoint(
   const nx = lerp(n0.x, n1.x, frac);
   const ny = lerp(n0.y, n1.y, frac);
 
-  const waistRadius = R * lerp(0.064, 0.038, armLevel) * (1 - 0.07 * callHeat);
+  // Tighter, crisper optical waist when live; softly relaxed when open/dormant
+  const waistRadius = R * lerp(0.036, 0.022, armLevel);
 
   let envelope = 0;
   let braidSign = f.xi;
 
   if (u <= SOCKET_U) {
     const s = u / SOCKET_U;
-    const spindleBell = Math.sin(Math.PI * sampleLut(POW084_LUT, s));
-    const bellyWidth = R * (0.24 + 0.035 * (1 - armLevel));
+    const bell = Math.sin(Math.PI * Math.pow(s, 0.88));
+    const bellyWidth = R * (0.145 + 0.02 * (1 - armLevel));
     const crossoverBlend = lerp(1, f.crossover, 0.5 - 0.5 * Math.cos(Math.PI * s));
     braidSign = f.xi * crossoverBlend;
-    envelope = bellyWidth * spindleBell + waistRadius * Math.sin(s * Math.PI * 0.5);
+    envelope = bellyWidth * bell + waistRadius * Math.sin(s * Math.PI * 0.5);
   } else {
     const s = (u - SOCKET_U) / (1 - SOCKET_U);
     braidSign = f.xi * f.crossover;
-    const smoothStart = s * s * (3 - 2 * s);
-    const powerFlare = sampleLut(POW124_LUT, s);
-    const flare = (smoothStart * 0.28 + powerFlare * 0.72) * R * 2.55 * f.flareSpread;
-    envelope = waistRadius + flare;
+    const flareCurve = Math.pow(s, 1.32);
+    envelope = waistRadius + flareCurve * R * 1.48 * f.flareSpread;
   }
 
-  const uWave = u * f.freqMul;
-  const phase = armPhase * f.freqMul;
-  const wave1 = Math.sin(uWave * 4.6 - phase + f.phase);
-  const wave2 = Math.cos(uWave * 6.8 - phase * 1.18 - f.phase * 0.9);
-  const waveAmp =
-    R *
-    (0.011 + 0.042 * sampleLut(POW115_LUT, u)) *
-    (1 + 0.16 * callHeat + 0.14 * solitonBoost);
+  // Coherent, unhurried silk undulation traveling softly outward
+  const laminarWave = Math.sin(u * 3.1 - armPhase + f.phase);
+  const subHarmonic = Math.cos(u * 1.9 - armPhase * 0.65 + f.phase * 0.5);
+  const waveAmp = R * (0.008 + 0.028 * Math.pow(u, 1.15)) * (1 + 0.22 * signalBoost);
 
-  const offset = braidSign * envelope + (wave1 * 0.76 + wave2 * 0.24) * waveAmp;
-
+  const offset = braidSign * envelope + (laminarWave * 0.72 + subHarmonic * 0.28) * waveAmp;
   let px = cx + nx * offset;
   let py = cy + ny * offset;
 
-  if (hasPointer && u > 0.02) {
-    const dx = px - pointerX;
-    const dy = py - pointerY;
+  const corePin = smoothstep(0.015, 0.14, u);
+  const elasticity = 0.65 + 0.35 * Math.abs(f.xi);
+
+  // 1. Viscous Fluid Mouse-Over Parting & Tangential Silk Wake
+  if (pointer.presence > 0.004 && corePin > 0) {
+    const dx = px - pointer.pos.x;
+    const dy = py - pointer.pos.y;
     const distSq = dx * dx + dy * dy;
+    const sigma = R * 0.38;
+    const invTwoSigSq = 1 / (2 * sigma * sigma);
+    if (distSq < sigma * sigma * 6.5) {
+      const k = pointer.presence * Math.exp(-distSq * invTwoSigSq) * corePin * elasticity;
+      const dist = Math.sqrt(distSq) + 26;
+      // Smooth parting around cursor + gentle silky wake trailing pointer movement
+      const partMag = R * 0.036 * k;
+      px += (dx / dist) * partMag + pointer.vel.x * 0.12 * k;
+      py += (dy / dist) * partMag + pointer.vel.y * 0.12 * k;
+    }
+  }
 
-    if (distSq < maxDistSq) {
-      const k = pointerPresence * Math.exp(-distSq * invTwoSigmaSq);
-      const corePin = smoothstep(0.02, 0.14, u);
-      const elasticity = 0.65 + 0.4 * Math.abs(f.xi);
-      const dist = Math.sqrt(distSq) + 28;
+  // 2. Tactile Hold Tension: pressing & holding draws nearby fibers gently toward your touch like silk harp strings
+  if (pointer.holdStrength > 0.005 && corePin > 0) {
+    const dx = pointer.holdPos.x - px;
+    const dy = pointer.holdPos.y - py;
+    const distSq = dx * dx + dy * dy;
+    const holdSigma = R * 0.44;
+    if (distSq < holdSigma * holdSigma * 6) {
+      const k = pointer.holdStrength * Math.exp(-distSq / (2 * holdSigma * holdSigma)) * corePin * elasticity;
+      px += dx * 0.14 * k;
+      py += dy * 0.14 * k;
+    }
+  }
 
-      const partMag = R * 0.022 * k * corePin * elasticity;
-      px += (dx / dist) * partMag + pointerVelX * 0.09 * k * corePin * elasticity;
-      py += (dy / dist) * partMag + pointerVelY * 0.09 * k * corePin * elasticity;
+  // 3. Acoustic Press / Release Pluck Waves propagating naturally across the fibers
+  if (impulses.length > 0 && corePin > 0) {
+    for (let m = 0; m < impulses.length; m++) {
+      const imp = impulses[m]!;
+      const dx = px - imp.x;
+      const dy = py - imp.y;
+      const dist = Math.hypot(dx, dy);
+      const waveRadius = imp.age * R * 1.45;
+      const bandSigma = R * 0.24;
+      const ringDiff = dist - waveRadius;
+      const ringEnv = Math.exp(-(ringDiff * ringDiff) / (2 * bandSigma * bandSigma));
+      if (ringEnv < 0.01) continue;
+
+      const decay = Math.exp(-imp.age * 3.4) * (1 - imp.age / imp.duration);
+      const osc = Math.sin(imp.age * 16 - dist * 0.042);
+      const disp = R * 0.042 * imp.strength * decay * ringEnv * osc * corePin * elasticity * imp.polarity;
+      const invD = 1 / (dist + 18);
+      // Transverse normal pluck + radial ripple gives true stringed-silk feel
+      px += (dx * invD * 0.55 + nx * 0.45) * disp;
+      py += (dy * invD * 0.55 + ny * 0.45) * disp;
     }
   }
 
@@ -582,12 +497,7 @@ function writeArmFilamentPoint(
   outYs[outIdx] = py;
 }
 
-function traceSmoothPolylineScratch(
-  ctx: CanvasRenderingContext2D,
-  xs: Float64Array,
-  ys: Float64Array,
-  len: number,
-) {
+function traceSmoothPolyline(ctx: CanvasRenderingContext2D, xs: Float64Array, ys: Float64Array, len: number) {
   if (len < 2) return;
   ctx.moveTo(xs[0]!, ys[0]!);
   for (let i = 0; i < len - 1; i++) {
@@ -595,12 +505,10 @@ function traceSmoothPolylineScratch(
     const i1 = i;
     const i2 = i + 1;
     const i3 = i + 2 < len ? i + 2 : len - 1;
-
     const p1x = xs[i1]!;
     const p1y = ys[i1]!;
     const p2x = xs[i2]!;
     const p2y = ys[i2]!;
-
     ctx.bezierCurveTo(
       p1x + (p2x - xs[i0]!) / 6,
       p1y + (p2y - ys[i0]!) / 6,
@@ -610,272 +518,6 @@ function traceSmoothPolylineScratch(
       p2y,
     );
   }
-}
-
-function evaluateHorizonCurve(
-  h: HorizonFilament,
-  L: StageLayout,
-  time: number,
-  intro: number,
-  wingBoost: number,
-  pointer: PointerField,
-): [Vec, Vec, Vec, Vec, Vec, Vec, Vec] {
-  const { core, scale: S, radius: R } = L;
-  const reach = singularityUnfurl(intro, h.stagger);
-  const swayA = Math.sin(time * 0.28 + h.phase);
-  const swayB = Math.cos(time * 0.21 + h.phase * 1.3);
-
-  const waist: Vec = {
-    x: core.x,
-    y: core.y + h.waistOffset * R * reach,
-  };
-
-  const lAngle = h.leftAngle + 0.028 * swayA * (1 + 0.2 * wingBoost);
-  const rAngle = h.rightAngle + 0.028 * swayB * (1 + 0.2 * wingBoost);
-
-  const lDist = h.leftReach * S * reach;
-  const rDist = h.rightReach * S * reach;
-
-  const pLeft = add(core, polar(lDist, lAngle));
-  const pRight = add(core, polar(rDist, rAngle));
-
-  const bridgeAngle = (rAngle + (lAngle - Math.PI)) * 0.5 + 0.018 * swayA;
-  const pull = Math.min(lDist, rDist) * 0.34;
-  const tVec = { x: Math.cos(bridgeAngle) * pull, y: Math.sin(bridgeAngle) * pull };
-
-  const deflectPoint = (pt: Vec): Vec => {
-    if (pointer.presence <= 0.005) return pt;
-    const dx = pt.x - pointer.pos.x;
-    const dy = pt.y - pointer.pos.y;
-    const distSq = dx * dx + dy * dy;
-    const sigma = R * 0.52;
-    const k = pointer.presence * Math.exp(-distSq / (2 * sigma * sigma));
-    if (k < 0.002) return pt;
-    const dist = Math.sqrt(distSq) + 36;
-    return {
-      x: pt.x + (dx / dist) * R * 0.018 * k + pointer.vel.x * 0.07 * k,
-      y: pt.y + (dy / dist) * R * 0.018 * k + pointer.vel.y * 0.07 * k,
-    };
-  };
-
-  const cLeft1 = deflectPoint(add(pLeft, polar(lDist * 0.38, lAngle + Math.PI + h.curvature)));
-  const cLeft2 = deflectPoint({ x: waist.x - tVec.x, y: waist.y - tVec.y });
-
-  const cRight1 = deflectPoint({ x: waist.x + tVec.x, y: waist.y + tVec.y });
-  const cRight2 = deflectPoint(add(pRight, polar(rDist * 0.38, rAngle + Math.PI - h.curvature)));
-
-  return [pLeft, cLeft1, cLeft2, waist, cRight1, cRight2, pRight];
-}
-
-function pointOnHorizonCurve(
-  curve: [Vec, Vec, Vec, Vec, Vec, Vec, Vec],
-  u: number,
-): Vec {
-  if (u <= 0.5) {
-    return bezier(curve[0], curve[1], curve[2], curve[3], u * 2);
-  }
-  return bezier(curve[3], curve[4], curve[5], curve[6], (u - 0.5) * 2);
-}
-
-type StageSpriteAtlas = {
-  fieldDark: HTMLCanvasElement | null;
-  fieldCallDark: HTMLCanvasElement | null;
-  fieldLight: HTMLCanvasElement | null;
-  anaDark: HTMLCanvasElement | null;
-  anaLight: HTMLCanvasElement | null;
-  heartDark: HTMLCanvasElement | null;
-  heartLight: HTMLCanvasElement | null;
-  photonGoldDark: HTMLCanvasElement | null;
-  photonHorizonGoldDark: HTMLCanvasElement | null;
-  photonCrimsonDark: HTMLCanvasElement | null;
-  photonGoldLight: HTMLCanvasElement | null;
-  photonHorizonGoldLight: HTMLCanvasElement | null;
-  photonCrimsonLight: HTMLCanvasElement | null;
-};
-
-function buildMoffatSprite(
-  size: number,
-  coreScaleRatio: number,
-  beta: number,
-  innerRgb: Rgb,
-  midRgb: Rgb,
-  outerRgb: Rgb,
-): HTMLCanvasElement | null {
-  if (typeof document === "undefined") return null;
-  const off = document.createElement("canvas");
-  off.width = size;
-  off.height = size;
-  const octx = off.getContext("2d");
-  if (!octx) return null;
-  const half = size * 0.5;
-  const g = octx.createRadialGradient(half, half, 0, half, half, half);
-  const stops = 16;
-  for (let i = 0; i <= stops; i++) {
-    const u = i / stops;
-    const rNorm = u / coreScaleRatio;
-    const moffat = Math.pow(1 + rNorm * rNorm, -beta);
-    const windowFade = 1 - u * u * (3 - 2 * u);
-    const a = clamp(moffat * windowFade, 0, 1);
-    const rgb =
-      u < 0.35
-        ? mixRgb(innerRgb, midRgb, u / 0.35)
-        : mixRgb(midRgb, outerRgb, (u - 0.35) / 0.65);
-    g.addColorStop(u, `rgba(${rgb}, ${a})`);
-  }
-  octx.fillStyle = g;
-  octx.fillRect(0, 0, size, size);
-  return off;
-}
-
-function buildPhotonSprite(size: number, rgb: Rgb): HTMLCanvasElement | null {
-  if (typeof document === "undefined") return null;
-  const off = document.createElement("canvas");
-  off.width = size;
-  off.height = size;
-  const octx = off.getContext("2d");
-  if (!octx) return null;
-  const half = size * 0.5;
-  const g = octx.createRadialGradient(half, half, 0, half, half, half);
-  const col = `${rgb[0]}, ${rgb[1]}, ${rgb[2]}`;
-  g.addColorStop(0, `rgba(${col}, 1)`);
-  g.addColorStop(0.36, `rgba(${col}, 0.92)`);
-  g.addColorStop(0.62, `rgba(${col}, 0.28)`);
-  g.addColorStop(1, `rgba(${col}, 0)`);
-  octx.fillStyle = g;
-  octx.fillRect(0, 0, size, size);
-  return off;
-}
-
-function createStageSpriteAtlas(): StageSpriteAtlas {
-  const darkFieldOuter: Rgb = [198, 116, 28];
-  const darkFieldCallOuter = mixRgbTuple(darkFieldOuter, [238, 48, 42], 0.35);
-  const lightFieldOuter: Rgb = [208, 168, 68];
-  return {
-    fieldDark: buildMoffatSprite(256, 0.24, 1.85, [255, 224, 152], [242, 174, 62], darkFieldOuter),
-    fieldCallDark: buildMoffatSprite(256, 0.24, 1.85, [255, 224, 152], [242, 174, 62], darkFieldCallOuter),
-    fieldLight: buildMoffatSprite(256, 0.24, 1.85, [248, 228, 156], [232, 196, 102], lightFieldOuter),
-    anaDark: buildMoffatSprite(256, 0.22, 2.2, [255, 242, 206], [248, 192, 86], darkFieldOuter),
-    anaLight: buildMoffatSprite(256, 0.22, 2.2, [250, 232, 168], [234, 200, 108], lightFieldOuter),
-    heartDark: buildMoffatSprite(256, 0.2, 2.45, [255, 248, 228], [252, 212, 124], [236, 162, 52]),
-    heartLight: buildMoffatSprite(256, 0.2, 2.45, [252, 240, 190], [238, 206, 116], [216, 176, 78]),
-    photonGoldDark: buildPhotonSprite(24, GOLD_CORE),
-    photonHorizonGoldDark: buildPhotonSprite(24, GOLD_BRIGHT),
-    photonCrimsonDark: buildPhotonSprite(24, CRIMSON_PURE),
-    photonGoldLight: buildPhotonSprite(24, GOLD_LIGHT_SPECULAR),
-    photonHorizonGoldLight: buildPhotonSprite(24, GOLD_LIGHT_BRIGHT),
-    photonCrimsonLight: buildPhotonSprite(24, CRIMSON_LIGHT_PURE),
-  };
-}
-
-/**
- * Mathematically engineered Optical Singularity Core using:
- * 1) Pre-baked 16-stop analytical Moffat Point-Spread Function (PSF) sprites:
- *      I(r) = (1 + (r / r_0)^2)^(-beta)
- *    which are C^infinity smooth (eliminating Mach-band rings) with zero per-frame gradient allocations.
- * 2) An anisotropic elliptical caustic lens (aligned with the filament waist) so the
- *    luminance emerges organically from the converging strands rather than sitting
- *    on top like a round sticker.
- * 3) 36 logarithmic-spiral caustic micro-involutes woven into the core waist.
- */
-function renderOpticalSingularityCore(
-  ctx: CanvasRenderingContext2D,
-  core: Vec,
-  R: number,
-  S: number,
-  time: number,
-  energy: number,
-  introEase: number,
-  globalCallHeat: number,
-  isLight: boolean,
-  atlas: StageSpriteAtlas,
-  invCache: { grad: CanvasGradient | null; reach: number; isLight: boolean },
-  explosionAfterglow = 0,
-) {
-  if (introEase <= 0.005) return;
-
-  const breathe = 1 + 0.032 * Math.sin(time * 0.65) + 0.05 * energy + 0.08 * explosionAfterglow;
-
-  ctx.save();
-  ctx.translate(core.x, core.y);
-  ctx.globalCompositeOperation = isLight ? "source-over" : "lighter";
-
-  // 1. Wide Anisotropic Elliptical Atmospheric Caustic Field (hugs the filament waist)
-  const fieldR = S * 0.36 * breathe * introEase;
-  const fieldAlpha = clamp((isLight ? 0.26 : 0.22) * (1 + 0.18 * energy) * introEase, 0, 1);
-  const fieldSprite = isLight ? atlas.fieldLight : atlas.fieldDark;
-  if (fieldSprite && fieldAlpha > 0.005) {
-    ctx.save();
-    ctx.scale(1.38, 0.82);
-    ctx.globalAlpha = !isLight && globalCallHeat > 0.05 ? fieldAlpha * (1 - globalCallHeat * 0.6) : fieldAlpha;
-    ctx.drawImage(fieldSprite, -fieldR, -fieldR, fieldR * 2, fieldR * 2);
-    if (!isLight && globalCallHeat > 0.05 && atlas.fieldCallDark) {
-      ctx.globalAlpha = fieldAlpha * globalCallHeat;
-      ctx.drawImage(atlas.fieldCallDark, -fieldR, -fieldR, fieldR * 2, fieldR * 2);
-    }
-    ctx.restore();
-  }
-
-  // 2. Logarithmic-Spiral Caustic Micro-Involutes Woven Into the Core Waist
-  const involuteCount = 36;
-  const involuteReach = R * 0.22 * breathe * introEase;
-  if (!invCache.grad || invCache.isLight !== isLight || Math.abs(invCache.reach - involuteReach) > 2) {
-    const invColor = isLight ? "220, 182, 78" : "255, 228, 162";
-    const invGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.max(1, involuteReach));
-    invGrad.addColorStop(0, `rgba(${invColor}, ${isLight ? 0.32 : 0.22})`);
-    invGrad.addColorStop(0.45, `rgba(${invColor}, ${isLight ? 0.13 : 0.08})`);
-    invGrad.addColorStop(1, `rgba(${invColor}, 0)`);
-    invCache.grad = invGrad;
-    invCache.reach = involuteReach;
-    invCache.isLight = isLight;
-  }
-
-  ctx.save();
-  ctx.globalAlpha = introEase;
-  ctx.beginPath();
-  for (let i = 0; i < involuteCount; i++) {
-    const baseTheta = (i / involuteCount) * TAU + time * 0.08 * (i % 2 === 0 ? 1 : -1);
-    const curl = (i % 2 === 0 ? 1 : -1) * 0.42;
-    const r1 = involuteReach * 0.35;
-    const r2 = involuteReach * (0.72 + 0.24 * Math.sin(i * 1.7 + time * 0.4));
-    const c1x = Math.cos(baseTheta + curl * 0.4) * r1 * 1.25;
-    const c1y = Math.sin(baseTheta + curl * 0.4) * r1 * 0.82;
-    const c2x = Math.cos(baseTheta + curl * 0.8) * r2 * 0.85;
-    const c2y = Math.sin(baseTheta + curl * 0.8) * r2 * 0.68;
-    const ex = Math.cos(baseTheta + curl) * r2 * 1.15;
-    const ey = Math.sin(baseTheta + curl) * r2 * 0.78;
-    ctx.moveTo(0, 0);
-    ctx.bezierCurveTo(c1x, c1y, c2x, c2y, ex, ey);
-  }
-  ctx.lineWidth = isLight ? 0.65 : 0.5;
-  ctx.strokeStyle = invCache.grad;
-  ctx.stroke();
-  ctx.restore();
-
-  // 3. Subtle Anamorphic Horizontal Caustic Whisper (stretches cleanly from setup explosion tail)
-  const anamorphicR = R * (0.28 + 0.14 * explosionAfterglow) * breathe * introEase;
-  const anaAlpha = clamp((isLight ? 0.32 : 0.28) * (1 + 0.22 * energy) * introEase + 0.38 * explosionAfterglow, 0, 1);
-  const anaSprite = isLight ? atlas.anaLight : atlas.anaDark;
-  if (anaSprite && anaAlpha > 0.005) {
-    ctx.save();
-    ctx.scale(2.65 + 2.4 * explosionAfterglow, 0.22 - 0.05 * explosionAfterglow);
-    ctx.globalAlpha = anaAlpha;
-    ctx.drawImage(anaSprite, -anamorphicR, -anamorphicR, anamorphicR * 2, anamorphicR * 2);
-    ctx.restore();
-  }
-
-  // 4. Inner Moffat Caustic Core (Soft, Silk-Blended Singularity Heart — No Hard White Sticker)
-  const heartR = R * 0.19 * breathe * introEase;
-  const heartAlpha = clamp((isLight ? 0.62 : 0.56) * (1 + 0.16 * energy) * introEase, 0, 1);
-  const heartSprite = isLight ? atlas.heartLight : atlas.heartDark;
-  if (heartSprite && heartAlpha > 0.005) {
-    ctx.save();
-    ctx.scale(1.18, 0.9);
-    ctx.globalAlpha = heartAlpha;
-    ctx.drawImage(heartSprite, -heartR, -heartR, heartR * 2, heartR * 2);
-    ctx.restore();
-  }
-
-  ctx.restore();
 }
 
 /* ============================================================================
@@ -892,8 +534,10 @@ export const NeuralStage = memo(function NeuralStage({
   className?: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const nodeButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const signalRef = useRef(signal);
   const onSelectRef = useRef(onSelectSocket);
+  const hoveredNodeRef = useRef<number>(-1);
   const redrawRef = useRef<(() => void) | null>(null);
   const syncLoopRef = useRef<(() => void) | null>(null);
   const socketCount = signal.sockets.length;
@@ -911,30 +555,16 @@ export const NeuralStage = memo(function NeuralStage({
     if (!canvas || !ctx) return;
 
     const field = createNeuralField(socketCount);
-    const atlas = createStageSpriteAtlas();
-    const invCache: { grad: CanvasGradient | null; reach: number; isLight: boolean } = {
-      grad: null,
-      reach: 0,
-      isLight: false,
-    };
-    let cachedBgW = 0;
-    let cachedBgH = 0;
-    let cachedBgGrad: CanvasGradient | null = null;
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const scratchXs = new Float64Array(CURVE_STEPS + 1);
     const scratchYs = new Float64Array(CURVE_STEPS + 1);
 
     const armLevels: number[] = signalRef.current.sockets.map((s) => SOCKET_TARGET_LEVEL[s]);
-    // Per-arm trailing-edge crimson intensity (connected nodes transition toward crimson near the outer edges)
-    const armTrailingEdgeHeat: number[] = signalRef.current.sockets.map((s) =>
-      s === "occupied" ? 0.65 : 0,
-    );
-    const armTrailingImpulse: number[] = new Array<number>(socketCount).fill(0);
-    const armWaveHeat: number[] = new Array<number>(socketCount).fill(0);
-    // Integrated monotonic wave phases prevent phase jumps (t * dω/dt) when node activity changes
+    const armHoverHeat: number[] = new Array<number>(socketCount).fill(0);
     const armWavePhases: number[] = new Array<number>(socketCount).fill(0);
     const prevStates: SocketVisual[] = [...signalRef.current.sockets];
-    const solitons: SolitonWave[] = [];
+    const signals: SignalWave[] = [];
+    const impulses: PressImpulse[] = [];
     const ripples: CoreRipple[] = [];
 
     let lastSnapSerial = signalRef.current.snap?.serial ?? 0;
@@ -943,33 +573,75 @@ export const NeuralStage = memo(function NeuralStage({
     let lastActiveSocket: number | null = signalRef.current.activeSocket ?? null;
 
     const fromExplosion = Boolean(signalRef.current.fromSetupExplosion);
-    let energy = fromExplosion ? 1.45 : BRAIN_TARGET_ENERGY[signalRef.current.brain];
-    let globalCallHeat = 0;
-    let globalCallImpulse = 0;
-    let autoTransferClock = 3.8;
-    let autoTransferIdx = 0;
-    let rippleClock = 0;
-    let wakeShockFired = fromExplosion;
+    let energy = fromExplosion ? 1.35 : BRAIN_TARGET_ENERGY[signalRef.current.brain];
+    let autoPulseClock = 5.4;
+    let autoPulseIdx = 0;
 
     if (fromExplosion && !reduceMotion) {
-      ripples.push({ u: 0.14, crimson: false, strength: 1.35 });
-      ripples.push({ u: 0.03, crimson: false, strength: 0.95 });
+      ripples.push({ u: 0.12, strength: 1.0 });
     }
 
-    const pointerTarget: Vec = { x: 0, y: 0 };
-    const pointerSmooth: Vec = { x: 0, y: 0 };
-    const pointerPosSmooth: Vec = { x: -9999, y: -9999 };
-    const pointerVelSmooth: Vec = { x: 0, y: 0 };
-    let pointerPresence = 0;
+    const pointer: PointerPhysics = {
+      pos: { x: -9999, y: -9999 },
+      vel: { x: 0, y: 0 },
+      presence: 0,
+      isDown: false,
+      holdPos: { x: -9999, y: -9999 },
+      holdStrength: 0,
+    };
     let pointerClient: Vec | null = null;
 
     let layout = computeStageLayout(1, 1, socketCount);
+    let latestSocketPts: Vec[] = layout.sockets;
     let frame = 0;
     let last = 0;
     let smoothDt = 1 / 60;
-    let smoothTime = 0;
-    let explodedStarted = false;
+    let elapsed = reduceMotion ? 10 : 0;
     let elementActive = true;
+
+    const launchSignalWave = (fromSocket: number, toSocket: number, intensity = 1) => {
+      if (reduceMotion) return;
+      if (fromSocket >= 0 && fromSocket < socketCount) {
+        signals.push({ arm: fromSocket, u: 0.78, speed: 0.56, direction: -1, intensity });
+      }
+      if (toSocket >= 0 && toSocket < socketCount) {
+        signals.push({
+          arm: toSocket,
+          u: fromSocket >= 0 ? -0.22 : 0,
+          speed: 0.58,
+          direction: 1,
+          intensity,
+        });
+      } else if (fromSocket < 0 && toSocket < 0) {
+        signalRef.current.sockets.forEach((s, idx) => {
+          if (s === "occupied") {
+            signals.push({ arm: idx, u: -idx * 0.06, speed: 0.52, direction: 1, intensity: intensity * 0.85 });
+          }
+        });
+      }
+      ripples.push({ u: 0, strength: 0.65 * intensity });
+    };
+
+    const findNearestArm = (pt: Vec): number => {
+      let bestArm = -1;
+      let bestDist = Infinity;
+      for (let i = 0; i < latestSocketPts.length; i++) {
+        const sock = latestSocketPts[i]!;
+        // Distance to segment core -> socket -> extended direction
+        const dx = sock.x - layout.core.x;
+        const dy = sock.y - layout.core.y;
+        const lenSq = dx * dx + dy * dy || 1;
+        const t = clamp(((pt.x - layout.core.x) * dx + (pt.y - layout.core.y) * dy) / lenSq, 0, 2.1);
+        const projX = layout.core.x + dx * t;
+        const projY = layout.core.y + dy * t;
+        const d = Math.hypot(pt.x - projX, pt.y - projY);
+        if (d < bestDist) {
+          bestDist = d;
+          bestArm = i;
+        }
+      }
+      return bestDist < layout.radius * 0.55 ? bestArm : -1;
+    };
 
     const onPointerMove = (e: PointerEvent) => {
       const rect = canvas.getBoundingClientRect();
@@ -977,87 +649,76 @@ export const NeuralStage = memo(function NeuralStage({
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
       if (!pointerClient) {
-        pointerPosSmooth.x = x;
-        pointerPosSmooth.y = y;
+        pointer.pos.x = x;
+        pointer.pos.y = y;
       }
       pointerClient = { x, y };
-      pointerTarget.x = ((x / rect.width) - 0.5) * 10;
-      pointerTarget.y = ((y / rect.height) - 0.5) * 10;
+      if (pointer.isDown) {
+        pointer.holdPos.x = x;
+        pointer.holdPos.y = y;
+      }
     };
 
     const onPointerLeave = () => {
       pointerClient = null;
-      pointerTarget.x = 0;
-      pointerTarget.y = 0;
+      if (pointer.isDown) {
+        pointer.isDown = false;
+      }
     };
 
-    const onClick = (e: MouseEvent) => {
-      if (!onSelectRef.current) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 0) return;
       const rect = canvas.getBoundingClientRect();
-      const clickPt = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-      for (let i = 0; i < layout.sockets.length; i++) {
-        const sock = layout.sockets[i]!;
-        if (Math.hypot(clickPt.x - sock.x, clickPt.y - sock.y) <= 28) {
-          launchInformationWave(-1, i);
-          onSelectRef.current(i);
-          return;
+      const pt = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+
+      pointer.isDown = true;
+      pointer.holdPos.x = pt.x;
+      pointer.holdPos.y = pt.y;
+      pointerClient = pt;
+
+      if (!reduceMotion) {
+        impulses.push({
+          x: pt.x,
+          y: pt.y,
+          age: 0,
+          duration: 1.5,
+          strength: 0.85,
+          polarity: 1,
+        });
+        if (impulses.length > 6) impulses.shift();
+
+        const nearArm = findNearestArm(pt);
+        if (nearArm >= 0) {
+          signals.push({ arm: nearArm, u: 0.04, speed: 0.5, direction: 1, intensity: 0.72 });
+        } else {
+          ripples.push({ u: 0, strength: 0.45 });
         }
+      }
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
+      if (!pointer.isDown) return;
+      pointer.isDown = false;
+      const rect = canvas.getBoundingClientRect();
+      const pt = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      if (!reduceMotion) {
+        // Gentle silk harp rebound impulse on release
+        impulses.push({
+          x: pt.x,
+          y: pt.y,
+          age: 0,
+          duration: 1.7,
+          strength: 1.0,
+          polarity: -1,
+        });
+        if (impulses.length > 6) impulses.shift();
       }
     };
 
     window.addEventListener("pointermove", onPointerMove, { passive: true });
     window.addEventListener("pointerleave", onPointerLeave);
-    canvas.addEventListener("click", onClick);
-
-    /**
-     * Spawns a flowing crimson wave along the lines between `fromSocket` and `toSocket`
-     * (no orbs — the flowing lines themselves turn crimson red where the information travels).
-     */
-    const launchInformationWave = (fromSocket: number, toSocket: number) => {
-      globalCallImpulse = 1;
-      if (fromSocket >= 0 && fromSocket < socketCount) {
-        armTrailingImpulse[fromSocket] = 1;
-        if (!reduceMotion) {
-          solitons.push({
-            arm: fromSocket,
-            u: 0.72,
-            speed: 0.55,
-            direction: -1,
-            intensity: 1,
-          });
-        }
-      }
-      if (toSocket >= 0 && toSocket < socketCount) {
-        armTrailingImpulse[toSocket] = 1;
-        if (!reduceMotion) {
-          solitons.push({
-            arm: toSocket,
-            u: fromSocket >= 0 ? -0.35 : 0,
-            speed: 0.58,
-            direction: 1,
-            intensity: 1,
-          });
-        }
-      } else if (toSocket < 0 && fromSocket < 0) {
-        signalRef.current.sockets.forEach((s, idx) => {
-          if (s === "occupied") {
-            armTrailingImpulse[idx] = 1;
-            if (!reduceMotion) {
-              solitons.push({
-                arm: idx,
-                u: idx * -0.08,
-                speed: 0.58,
-                direction: 1,
-                intensity: 1,
-              });
-            }
-          }
-        });
-      }
-      if (!reduceMotion) {
-        ripples.push({ u: 0, crimson: true, strength: 0.85 });
-      }
-    };
+    window.addEventListener("pointerup", onPointerUp, { passive: true });
+    canvas.addEventListener("pointerdown", onPointerDown, { passive: true });
 
     const draw = (time: number, dt: number) => {
       const { brain, sockets, snap, transfer, activeSocket, theme } = signalRef.current;
@@ -1065,623 +726,517 @@ export const NeuralStage = memo(function NeuralStage({
       const L = layout;
       const { width, height, core, radius: R, scale: S } = L;
 
-      // ——— 1. Pure Pitch-Black Background (or Soft Alabaster Off-White in Light Mode) ———
+      // ——— 1. Pure Atelier Canvas Background (Gallery Light #ffffff | Obsidian Observatory #070709) ———
       ctx.globalCompositeOperation = "source-over";
       ctx.globalAlpha = 1;
-      if (isLight) {
-        if (!cachedBgGrad || cachedBgW !== width || cachedBgH !== height) {
-          const bgGrad = ctx.createRadialGradient(core.x, core.y, 0, core.x, core.y, Math.hypot(width, height) * 0.75);
-          bgGrad.addColorStop(0, "#f2f1ed");
-          bgGrad.addColorStop(0.55, "#eceae5");
-          bgGrad.addColorStop(1, "#e4e1db");
-          cachedBgGrad = bgGrad;
-          cachedBgW = width;
-          cachedBgH = height;
-        }
-        ctx.fillStyle = cachedBgGrad;
-      } else {
-        ctx.fillStyle = "#000000";
-      }
+      ctx.fillStyle = isLight ? "#ffffff" : "#070709";
       ctx.fillRect(0, 0, width, height);
 
-      // ——— 2. Phase I Opening Silence (t < 1.60s): skipped when continuing from setup explosion ———
-      if (!reduceMotion && !fromExplosion && time < WAKE_SILENCE_SECONDS) {
-        return;
-      }
-
-      const activeTime = reduceMotion
-        ? 10
-        : fromExplosion
-          ? time
-          : Math.max(0, time - WAKE_SILENCE_SECONDS);
-      const intro = reduceMotion
-        ? 1
-        : fromExplosion
-          ? Math.min(1, 0.16 + activeTime / INTRO_SPRING_SECONDS)
-          : Math.min(1, activeTime / INTRO_SPRING_SECONDS);
-      const introEase = 1 - Math.pow(1 - intro, 3);
-      const coreIntro = fromExplosion ? 1 : introEase;
-      const explosionAfterglow = fromExplosion && !reduceMotion ? Math.exp(-activeTime * 2.2) : 0;
-
-      // Smooth pointer parallax, position, and doubly-damped drift velocity (zero polling jitter)
-      const pFollow = reduceMotion ? 1 : 1 - Math.exp(-dt * 3.5);
-      pointerSmooth.x = lerp(pointerSmooth.x, pointerTarget.x, pFollow);
-      pointerSmooth.y = lerp(pointerSmooth.y, pointerTarget.y, pFollow);
-
-      const posFollow = reduceMotion ? 1 : 1 - Math.exp(-dt * 8.5);
-      if (pointerClient) {
-        const prevPx = pointerPosSmooth.x;
-        const prevPy = pointerPosSmooth.y;
-        pointerPosSmooth.x = lerp(prevPx, pointerClient.x, posFollow);
-        pointerPosSmooth.y = lerp(prevPy, pointerClient.y, posFollow);
-
-        const invDt = dt > 0.001 ? 1 / dt : 60;
-        const smoothVx = clamp((pointerPosSmooth.x - prevPx) * invDt * 0.055, -24, 24);
-        const smoothVy = clamp((pointerPosSmooth.y - prevPy) * invDt * 0.055, -24, 24);
-        const velFollow = reduceMotion ? 1 : 1 - Math.exp(-dt * 5.0);
-        pointerVelSmooth.x = lerp(pointerVelSmooth.x, smoothVx, velFollow);
-        pointerVelSmooth.y = lerp(pointerVelSmooth.y, smoothVy, velFollow);
-        pointerPresence = lerp(pointerPresence, 1, 1 - Math.exp(-dt * 4.5));
+      // Subtle warm atmospheric bloom anchored behind the singularity core (blends cleanly into solid ground)
+      const coreBloom = reduceMotion ? 1 : easeOutCubic(Math.min(1, time / 0.65));
+      if (isLight) {
+        radialGlow(ctx, core, S * 0.58 * (0.4 + 0.6 * coreBloom), [
+          [0, "rgba(255, 224, 118, 0.24)"],
+          [0.36, "rgba(255, 212, 86, 0.09)"],
+          [0.72, "rgba(255, 232, 160, 0.025)"],
+          [1, "rgba(255, 255, 255, 0)"],
+        ]);
       } else {
-        const decay = Math.exp(-dt * 4.5);
-        pointerVelSmooth.x *= decay;
-        pointerVelSmooth.y *= decay;
-        pointerPresence = lerp(pointerPresence, 0, 1 - Math.exp(-dt * 2.4));
+        radialGlow(ctx, core, S * 0.52 * (0.4 + 0.6 * coreBloom), [
+          [0, "rgba(242, 182, 66, 0.14)"],
+          [0.38, "rgba(202, 132, 32, 0.05)"],
+          [1, "rgba(7, 7, 9, 0)"],
+        ]);
       }
 
-      const pointerField: PointerField = {
-        pos: pointerPosSmooth,
-        vel: pointerVelSmooth,
-        parallax: pointerSmooth,
-        presence: pointerPresence,
-      };
-      const hasPointer = pointerPresence > 0.005;
-      const sigma = R * 0.46;
-      const invTwoSigmaSq = 1 / (2 * sigma * sigma);
-      const maxDistSq = (1 / invTwoSigmaSq) * 3.4;
+      // ——— 2. Smooth Damped Pointer & Hold Physics ———
+      const posFollow = reduceMotion ? 1 : 1 - Math.exp(-dt * 9.5);
+      if (pointerClient) {
+        const prevX = pointer.pos.x;
+        const prevY = pointer.pos.y;
+        pointer.pos.x = lerp(prevX, pointerClient.x, posFollow);
+        pointer.pos.y = lerp(prevY, pointerClient.y, posFollow);
+        const invDt = dt > 0.001 ? 1 / dt : 60;
+        const rawVx = clamp((pointer.pos.x - prevX) * invDt * 0.048, -22, 22);
+        const rawVy = clamp((pointer.pos.y - prevY) * invDt * 0.048, -22, 22);
+        const velFollow = reduceMotion ? 1 : 1 - Math.exp(-dt * 5.5);
+        pointer.vel.x = lerp(pointer.vel.x, rawVx, velFollow);
+        pointer.vel.y = lerp(pointer.vel.y, rawVy, velFollow);
+        pointer.presence = lerp(pointer.presence, 1, 1 - Math.exp(-dt * 5.0));
+      } else {
+        const decay = Math.exp(-dt * 5.0);
+        pointer.vel.x *= decay;
+        pointer.vel.y *= decay;
+        pointer.presence = lerp(pointer.presence, 0, 1 - Math.exp(-dt * 2.8));
+      }
+      pointer.holdStrength = lerp(
+        pointer.holdStrength,
+        pointer.isDown ? 1 : 0,
+        reduceMotion ? 1 : 1 - Math.exp(-dt * (pointer.isDown ? 8.5 : 5.5)),
+      );
 
-      // Detect state transitions that call nodes or send information between nodes
+      // Advance active press/release impulses
+      for (let i = impulses.length - 1; i >= 0; i--) {
+        const imp = impulses[i]!;
+        imp.age += dt;
+        if (imp.age >= imp.duration) impulses.splice(i, 1);
+      }
+
+      // ——— 3. State Signals, Snap Pulses & Serene Ambient Context Pulses ———
       if (brain !== lastBrain) {
         if (brain === "thinking" || brain === "responding") {
-          launchInformationWave(-1, activeSocket ?? -1);
+          launchSignalWave(-1, activeSocket ?? -1, 1.0);
         }
         lastBrain = brain;
       }
-
       if ((activeSocket ?? null) !== lastActiveSocket) {
         if (activeSocket !== null && activeSocket !== undefined && activeSocket >= 0) {
-          launchInformationWave(-1, activeSocket);
+          launchSignalWave(-1, activeSocket, 0.9);
         }
         lastActiveSocket = activeSocket ?? null;
       }
-
       if (snap && snap.serial !== lastSnapSerial) {
         lastSnapSerial = snap.serial;
-        launchInformationWave(-1, snap.index);
+        launchSignalWave(-1, snap.index, 1.15);
       }
-
       if (transfer && transfer.serial !== lastTransferSerial) {
         lastTransferSerial = transfer.serial;
-        launchInformationWave(transfer.fromSocket, transfer.toSocket);
+        launchSignalWave(transfer.fromSocket, transfer.toSocket, 1.1);
       }
 
-      // Periodic information waves flowing between connected nodes
-      if (!reduceMotion && intro >= 1 && brain === "idle") {
-        autoTransferClock -= dt;
-        if (autoTransferClock <= 0) {
-          autoTransferClock = 4.6;
+      if (!reduceMotion && time > 2.2 && brain === "idle") {
+        autoPulseClock -= dt;
+        if (autoPulseClock <= 0) {
+          autoPulseClock = 6.2;
           const occupied = sockets.map((s, i) => (s === "occupied" ? i : -1)).filter((i) => i >= 0);
           if (occupied.length >= 2) {
-            const from = occupied[autoTransferIdx % occupied.length]!;
-            const to = occupied[(autoTransferIdx + 1) % occupied.length]!;
-            autoTransferIdx++;
-            launchInformationWave(from, to);
+            const from = occupied[autoPulseIdx % occupied.length]!;
+            const to = occupied[(autoPulseIdx + 1) % occupied.length]!;
+            autoPulseIdx++;
+            launchSignalWave(from, to, 0.65);
           } else if (occupied.length === 1) {
-            autoTransferIdx++;
-            launchInformationWave(-1, occupied[0]!);
+            autoPulseIdx++;
+            launchSignalWave(-1, occupied[0]!, 0.6);
           }
         }
       }
 
-      const isCallingAnyNode =
-        brain === "thinking" ||
-        brain === "responding" ||
-        (activeSocket !== null && activeSocket !== undefined && activeSocket >= 0);
+      energy = lerp(energy, BRAIN_TARGET_ENERGY[brain], reduceMotion ? 1 : 1 - Math.exp(-dt * 2.2));
 
-      globalCallImpulse *= Math.exp(-dt * 0.72);
-      const targetGlobalCall = Math.max(isCallingAnyNode ? 1 : 0, globalCallImpulse);
-      globalCallHeat = lerp(
-        globalCallHeat,
-        targetGlobalCall,
-        reduceMotion ? 1 : 1 - Math.exp(-dt * (targetGlobalCall > globalCallHeat ? 3.2 : 1.15)),
-      );
-
-      energy = lerp(
-        energy,
-        BRAIN_TARGET_ENERGY[brain],
-        reduceMotion ? 1 : 1 - Math.exp(-dt * 2.0),
-      );
-
-      // Update per-arm levels, smooth trailing-edge crimson heat, and monotonic wave phases
-      sockets.forEach((s, i) => {
-        const prev = prevStates[i];
-        if (prev !== s) {
+      for (let i = 0; i < socketCount; i++) {
+        const s = sockets[i]!;
+        if (prevStates[i] !== s) {
           prevStates[i] = s;
-          if (s === "occupied") {
-            armTrailingImpulse[i] = 1.0;
-            launchInformationWave(-1, i);
-          }
+          if (s === "occupied") launchSignalWave(-1, i, 1.05);
         }
-
-        let hoverBoost = 0;
-        if (pointerClient && L.sockets[i]) {
-          const d = Math.hypot(pointerClient.x - L.sockets[i]!.x, pointerClient.y - L.sockets[i]!.y);
-          hoverBoost = clamp(1 - d / (R * 0.45), 0, 1) * (s === "occupied" ? 0.12 : 0.06);
+        const isHovered = hoveredNodeRef.current === i;
+        let pointerNear = 0;
+        if (pointerClient && latestSocketPts[i]) {
+          const d = Math.hypot(pointerClient.x - latestSocketPts[i]!.x, pointerClient.y - latestSocketPts[i]!.y);
+          pointerNear = clamp(1 - d / (R * 0.42), 0, 1);
         }
-        const targetLevel = clamp(SOCKET_TARGET_LEVEL[s] + hoverBoost, 0, 1.15);
-        armLevels[i] = lerp(
-          armLevels[i] ?? targetLevel,
-          targetLevel,
-          reduceMotion ? 1 : 1 - Math.exp(-dt * 3.0),
-        );
+        const hoverTarget = Math.max(isHovered ? 1 : 0, pointerNear * 0.65, activeSocket === i ? 0.9 : 0);
+        armHoverHeat[i] = lerp(armHoverHeat[i] ?? 0, hoverTarget, reduceMotion ? 1 : 1 - Math.exp(-dt * 7.5));
 
-        const armIsCalled =
-          activeSocket === i || ((brain === "thinking" || brain === "responding") && s === "occupied");
-        armTrailingImpulse[i] = (armTrailingImpulse[i] ?? 0) * Math.exp(-dt * 0.72);
-        const targetEdgeCrimson =
-          s === "occupied"
-            ? armIsCalled
-              ? 1.0
-              : Math.max(0.65, globalCallHeat * 0.85, armTrailingImpulse[i]!)
-            : 0;
-        armTrailingEdgeHeat[i] = lerp(
-          armTrailingEdgeHeat[i] ?? 0,
-          targetEdgeCrimson,
-          reduceMotion ? 1 : 1 - Math.exp(-dt * (targetEdgeCrimson > (armTrailingEdgeHeat[i] ?? 0) ? 3.4 : 1.2)),
-        );
+        const targetLevel = clamp(SOCKET_TARGET_LEVEL[s] + (armHoverHeat[i] ?? 0) * 0.22, 0, 1.2);
+        armLevels[i] = lerp(armLevels[i] ?? targetLevel, targetLevel, reduceMotion ? 1 : 1 - Math.exp(-dt * 3.6));
 
         if (!reduceMotion) {
-          armWavePhases[i] =
-            (armWavePhases[i] ?? 0) +
-            dt * (0.52 + 0.24 * (armTrailingEdgeHeat[i] ?? 0) + 0.18 * energy);
+          armWavePhases[i] = (armWavePhases[i] ?? 0) + dt * (0.38 + 0.14 * energy + 0.1 * (armHoverHeat[i] ?? 0));
         }
-      });
-
-      // Advance crimson information waves along the arms
-      for (let i = solitons.length - 1; i >= 0; i--) {
-        const sol = solitons[i]!;
-        if (!reduceMotion) sol.u += sol.speed * sol.direction * dt;
-        if (sol.direction > 0 && sol.u >= 1.2) solitons.splice(i, 1);
-        else if (sol.direction < 0 && sol.u <= -0.15) solitons.splice(i, 1);
       }
 
-      // Opening singularity shockwave when popping to life
-      if (!reduceMotion && intro > 0.04 && !wakeShockFired) {
-        wakeShockFired = true;
-        ripples.push({ u: 0.01, crimson: false, strength: 0.95 });
-      }
-
-      if (!reduceMotion && brain === "responding") {
-        rippleClock -= dt;
-        if (rippleClock <= 0) {
-          rippleClock = 0.88;
-          ripples.push({ u: 0, crimson: true, strength: 0.85 });
+      for (let i = signals.length - 1; i >= 0; i--) {
+        const sig = signals[i]!;
+        if (!reduceMotion) sig.u += sig.speed * sig.direction * dt;
+        if ((sig.direction > 0 && sig.u >= 1.15) || (sig.direction < 0 && sig.u <= -0.15)) {
+          signals.splice(i, 1);
         }
-      } else {
-        rippleClock = 0;
       }
 
-      const goldCore = isLight ? GOLD_LIGHT_SPECULAR : GOLD_CORE;
-      const goldBright = isLight ? GOLD_LIGHT_BRIGHT : GOLD_BRIGHT;
-      const goldMid = isLight ? GOLD_LIGHT_MID : GOLD_MID;
-      const goldDeep = isLight ? GOLD_LIGHT_DEEP : GOLD_DEEP;
-      const crimsonHot = isLight ? CRIMSON_LIGHT_HOT : CRIMSON_HOT;
-      const crimsonPure = isLight ? CRIMSON_LIGHT_PURE : CRIMSON_PURE;
-      const crimsonDeep = isLight ? CRIMSON_LIGHT_DEEP : CRIMSON_DEEP;
+      const goldCore = isLight ? LIGHT_GOLD_CORE : DARK_GOLD_CORE;
+      const goldBright = isLight ? LIGHT_GOLD_BRIGHT : DARK_GOLD_BRIGHT;
+      const goldMid = isLight ? LIGHT_GOLD_MID : DARK_GOLD_MID;
+      const goldDeep = isLight ? LIGHT_GOLD_DEEP : DARK_GOLD_DEEP;
+      const dormantRgb = isLight ? LIGHT_DORMANT : DARK_DORMANT;
       const blendOp: GlobalCompositeOperation = isLight ? "source-over" : "lighter";
-      const alphaScale = isLight ? 1.85 : 1.0;
+      const alphaScale = isLight ? 1.48 : 1.0;
 
       ctx.globalCompositeOperation = blendOp;
-      ctx.globalAlpha = fromExplosion ? 1 : Math.min(1, intro * 2.4);
 
-      // ——— 3. Deep Atmospheric Singularity Under-Field ———
-      const fieldRadius = S * 1.25 * (0.18 + 0.82 * introEase) * (1 + 0.1 * energy);
-
-      // ——— 4. Pre-sample C2 Spine Frames for the 5 Functional Node Arms ———
-      const spines = L.arms.map((arm) =>
-        sampleArmSpine(arm, L, activeTime, intro, pointerField),
-      );
-
-      // ——— 5. Continuous Corner-Sweeping Horizon Wings (Gold Body -> Crimson Near Outer Edges) ———
-      const horizonCurves = field.horizonFilaments.map((h) =>
-        evaluateHorizonCurve(h, L, activeTime, intro, globalCallHeat, pointerField),
-      );
-
-      const anyConnected = sockets.some((s) => s === "occupied");
-      const horizonEdgeRed = Math.max(anyConnected ? 0.55 : 0, globalCallHeat);
-
-      field.horizonLayerBatches.forEach((indices, layerIdx) => {
-        if (!indices.length) return;
-        const layer = DEPTH_LAYERS[layerIdx]!;
-        const baseRgb = mixRgbTuple(goldMid, goldBright, layer.hot);
-        const coreColor = `${baseRgb[0]}, ${baseRgb[1]}, ${baseRgb[2]}`;
-        const midTrailColor = mixRgb(baseRgb, crimsonHot, horizonEdgeRed * 0.78);
-        const outerTrailColor = mixRgb(goldDeep, crimsonPure, horizonEdgeRed * 0.96);
-        const a = layer.alpha * (isLight ? 0.68 : 0.52) * alphaScale * (0.75 + 0.35 * energy);
-
-        const g = ctx.createRadialGradient(core.x, core.y, 0, core.x, core.y, fieldRadius);
-        g.addColorStop(0, `rgba(${coreColor}, ${Math.min(1, a * 2.1)})`);
-        g.addColorStop(0.28, `rgba(${coreColor}, ${Math.min(1, a * 1.15)})`);
-        g.addColorStop(0.56, `rgba(${coreColor}, ${a * 0.56})`);
-        // Near the outer edges, the flowing lines transition toward crimson red
-        g.addColorStop(0.74, `rgba(${midTrailColor}, ${a * (0.34 + 0.34 * horizonEdgeRed)})`);
-        g.addColorStop(0.9, `rgba(${outerTrailColor}, ${a * (0.18 + 0.3 * horizonEdgeRed)})`);
-        g.addColorStop(1, `rgba(${outerTrailColor}, 0)`);
-
-        ctx.beginPath();
-        for (const idx of indices) {
-          const c = horizonCurves[idx]!;
-          ctx.moveTo(c[0].x, c[0].y);
-          ctx.bezierCurveTo(c[1].x, c[1].y, c[2].x, c[2].y, c[3].x, c[3].y);
-          ctx.bezierCurveTo(c[4].x, c[4].y, c[5].x, c[5].y, c[6].x, c[6].y);
-        }
-        ctx.lineWidth = layer.width * (isLight ? 0.98 : 0.85);
-        ctx.strokeStyle = g;
-        ctx.stroke();
+      // ——— 4. Sample C2 Ribbon Spines & Parametric Opening Unfurl ———
+      const spines = L.arms.map((arm) => {
+        const unfurl = reduceMotion ? 1 : computeArmUnfurl(time, arm.index, socketCount, fromExplosion);
+        return sampleArmSpine(arm, L, time, unfurl, pointer);
       });
+      latestSocketPts = spines.map((sp) => sp.socketPt);
 
-      // Lower-lateral horizon corner spines
-      L.horizonWings.forEach((wing: HorizonWingGeometry) => {
-        const reach = singularityUnfurl(intro, 0.22);
-        const c1 = { x: lerp(core.x, wing.c1.x, reach), y: lerp(core.y, wing.c1.y, reach) };
-        const c2 = { x: lerp(core.x, wing.c2.x, reach), y: lerp(core.y, wing.c2.y, reach) };
-        const tip = { x: lerp(core.x, wing.tip.x, reach), y: lerp(core.y, wing.tip.y, reach) };
-        const wg = ctx.createLinearGradient(core.x, core.y, tip.x, tip.y);
-        const goldStr = `${goldMid[0]}, ${goldMid[1]}, ${goldMid[2]}`;
-        const edgeStr = mixRgb(goldDeep, crimsonPure, horizonEdgeRed * 0.92);
-        wg.addColorStop(0, `rgba(${goldStr}, ${0.22 * alphaScale})`);
-        wg.addColorStop(0.55, `rgba(${goldStr}, ${0.09 * alphaScale})`);
-        wg.addColorStop(0.82, `rgba(${edgeStr}, ${(0.05 + 0.09 * horizonEdgeRed) * alphaScale})`);
-        wg.addColorStop(1, `rgba(${edgeStr}, 0)`);
-        ctx.beginPath();
-        ctx.moveTo(core.x, core.y);
-        ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, tip.x, tip.y);
-        ctx.lineWidth = 1.3;
-        ctx.strokeStyle = wg;
-        ctx.stroke();
-      });
-
-      // ——— 6. Subtle Inter-Node Harmonic Bridges between Adjacent Connected Sockets ———
-      for (const b of field.bridges) {
-        const lvlA = armLevels[b.fromArm] ?? 0;
-        const lvlB = armLevels[b.toArm] ?? 0;
-        const bridgeStrength = Math.min(lvlA, lvlB);
-        if (bridgeStrength < 0.45) continue;
-
-        const pA = spines[b.fromArm]!.socketPt;
-        const pB = spines[b.toArm]!.socketPt;
-        const mid: Vec = { x: (pA.x + pB.x) * 0.5, y: (pA.y + pB.y) * 0.5 };
-        const dirFromCore = Math.atan2(mid.y - core.y, mid.x - core.x);
-        const sway = Math.sin(activeTime * 0.5 + b.phase) * R * 0.022;
-        const ctrl = add(mid, polar(R * b.archLift + sway, dirFromCore));
-
-        ctx.beginPath();
-        ctx.moveTo(pA.x, pA.y);
-        ctx.quadraticCurveTo(ctrl.x, ctrl.y, pB.x, pB.y);
-        ctx.lineWidth = 0.5;
-        ctx.strokeStyle = `rgba(${goldBright.join(", ")}, ${0.09 * bridgeStrength * alphaScale * introEase})`;
-        ctx.stroke();
+      // Sync accessible HTML node overlays strictly via GPU transform (zero React state churn!)
+      for (let i = 0; i < socketCount; i++) {
+        const btn = nodeButtonRefs.current[i];
+        if (!btn) continue;
+        const sp = spines[i]!;
+        const nodeBloom = smoothstep(SOCKET_U * 0.72, SOCKET_U + 0.18, sp.unfurl);
+        btn.style.transform = `translate3d(${sp.socketPt.x.toFixed(1)}px, ${sp.socketPt.y.toFixed(1)}px, 0) translate(-50%, -50%) scale(${(0.84 + 0.16 * nodeBloom).toFixed(3)})`;
+        btn.style.opacity = nodeBloom.toFixed(3);
       }
 
-      // ——— 7. The 5 Primary Functional Node Arms (Continuous C2 Venturi-Caustic Flowing Wave Bundles) ———
-      // - Zero artificial radialGlow circles at the nodes!
-      // - Connected nodes are lit up in rich molten gold, transitioning near the outer edges to crimson red.
-      // - Disconnected nodes go dark (muted dim bronze in dark mode, subtle warm platinum in light mode).
-      // - When sending information between nodes, a crimson wave flows directly along the lines!
-      const steadyBlend = smoothstep(0.62, 1.0, intro);
-      const ARM_STOPS = [0, 0.16, 0.34, 0.5, 0.64, 0.74, 0.84, 1.0] as const;
+      // ——— 5. Serene Twin Horizon Silk Wings ———
+      const horizonUnfurl = reduceMotion ? 1 : easeOutCubic(clamp((time - 0.15) / 1.45, 0, 1));
+      if (horizonUnfurl > 0.01) {
+        field.horizonTierBatches.forEach((indices, tierIdx) => {
+          const tier = FIBER_TIERS[tierIdx]!;
+          const col = mixRgb(goldMid, goldBright, tier.hot);
+          const a = tier.alpha * (isLight ? 0.52 : 0.36) * alphaScale * horizonUnfurl;
+          const g = ctx.createRadialGradient(core.x, core.y, 0, core.x, core.y, S * 0.84);
+          g.addColorStop(0, `rgba(${col}, ${clamp(a * 1.4, 0, 0.88)})`);
+          g.addColorStop(0.45, `rgba(${col}, ${clamp(a * 0.65, 0, 0.7)})`);
+          g.addColorStop(1, `rgba(${col}, 0)`);
 
+          ctx.beginPath();
+          for (const idx of indices) {
+            const h = field.horizonFilaments[idx]!;
+            const reach = clamp((horizonUnfurl - h.stagger) / (1 - h.stagger), 0, 1);
+            if (reach <= 0.01) continue;
+            const sway = Math.sin(time * 0.28 + h.phase) * 0.025;
+            const baseAngle = h.side < 0 ? Math.PI - 0.14 : 0.14;
+            const angle = baseAngle + h.spreadAngle + sway;
+            const dist = S * 0.76 * h.reachMul * easeOutCubic(reach);
+            const p0: Vec = { x: core.x, y: core.y + h.waistY * R };
+            const p3 = add(core, polar(dist, angle));
+            let c1 = add(p0, polar(dist * 0.34, angle + h.bend));
+            let c2 = add(p0, polar(dist * 0.7, angle - h.bend * 0.6));
+
+            if (pointer.presence > 0.005) {
+              const deflect = (pt: Vec): Vec => {
+                const dx = pt.x - pointer.pos.x;
+                const dy = pt.y - pointer.pos.y;
+                const d2 = dx * dx + dy * dy;
+                const sig = R * 0.42;
+                const k = pointer.presence * Math.exp(-d2 / (2 * sig * sig));
+                if (k < 0.003) return pt;
+                const d = Math.sqrt(d2) + 30;
+                return {
+                  x: pt.x + (dx / d) * R * 0.026 * k + pointer.vel.x * 0.08 * k,
+                  y: pt.y + (dy / d) * R * 0.026 * k + pointer.vel.y * 0.08 * k,
+                };
+              };
+              c1 = deflect(c1);
+              c2 = deflect(c2);
+            }
+
+            ctx.moveTo(p0.x, p0.y);
+            ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, p3.x, p3.y);
+          }
+          ctx.lineWidth = tier.width * (isLight ? 0.92 : 0.85);
+          ctx.strokeStyle = g;
+          ctx.stroke();
+        });
+      }
+
+      // ——— 6. Gossamer Inter-Node Synaptic Chords (ONLY between adjacent live occupied nodes) ———
+      for (let i = 0; i < socketCount - 1; i++) {
+        if (sockets[i] !== "occupied" || sockets[i + 1] !== "occupied") continue;
+        const spA = spines[i]!;
+        const spB = spines[i + 1]!;
+        const bloom = Math.min(
+          smoothstep(SOCKET_U, SOCKET_U + 0.22, spA.unfurl),
+          smoothstep(SOCKET_U, SOCKET_U + 0.22, spB.unfurl),
+        );
+        if (bloom <= 0.02) continue;
+
+        const mid: Vec = { x: (spA.socketPt.x + spB.socketPt.x) * 0.5, y: (spA.socketPt.y + spB.socketPt.y) * 0.5 };
+        const dirFromCore = Math.atan2(mid.y - core.y, mid.x - core.x);
+        for (let k = -1; k <= 1; k++) {
+          const sway = Math.sin(time * 0.36 + i * 1.4 + k * 0.7) * R * 0.014;
+          const ctrl = add(mid, polar(R * (0.04 + k * 0.025) + sway, dirFromCore));
+          ctx.beginPath();
+          ctx.moveTo(spA.socketPt.x, spA.socketPt.y);
+          ctx.quadraticCurveTo(ctrl.x, ctrl.y, spB.socketPt.x, spB.socketPt.y);
+          ctx.lineWidth = k === 0 ? 0.75 : 0.45;
+          ctx.strokeStyle = `rgba(${goldBright.join(", ")}, ${(k === 0 ? 0.22 : 0.1) * bloom * alphaScale})`;
+          ctx.stroke();
+        }
+      }
+
+      // ——— 7. The 5 Sculpted Laminar Node Ribbons ———
       for (let armIdx = 0; armIdx < socketCount; armIdx++) {
         const spine = spines[armIdx]!;
-        const level = armLevels[armIdx] ?? 0.1;
-        const edgeRed = armTrailingEdgeHeat[armIdx] ?? 0;
-        const armPhase = reduceMotion ? 4 : (armWavePhases[armIdx] ?? 0);
-        const isConnected = level > 0.35;
+        if (spine.unfurl <= 0.008) continue;
 
-        // Check active crimson information wave position along this arm
-        let waveCenterU = -1;
-        let waveStrength = 0;
-        let armSolitonBoost = 0;
-        for (const sol of solitons) {
-          if (sol.arm === armIdx && sol.u >= 0 && sol.u <= 1.05) {
-            waveCenterU = sol.u;
-            waveStrength = Math.max(waveStrength, Math.sin(clamp(sol.u, 0, 1) * Math.PI) * sol.intensity);
-            const distFromSocket = Math.abs(sol.u - SOCKET_U);
-            armSolitonBoost = Math.max(
-              armSolitonBoost,
-              Math.exp(-(distFromSocket * distFromSocket) / 0.085) * sol.intensity,
-            );
+        const level = armLevels[armIdx] ?? 0.2;
+        const hover = armHoverHeat[armIdx] ?? 0;
+        const isLive = sockets[armIdx] === "occupied";
+        const armPhase = reduceMotion ? 3.2 : (armWavePhases[armIdx] ?? 0);
+
+        // Evaluate active travelling luminous signal pulse along this arm
+        let sigCenter = -1;
+        let sigStrength = 0;
+        for (const sig of signals) {
+          if (sig.arm === armIdx && sig.u >= -0.05 && sig.u <= 1.05) {
+            sigCenter = sig.u;
+            sigStrength = Math.max(sigStrength, Math.sin(clamp(sig.u, 0, 1) * Math.PI) * sig.intensity);
           }
         }
 
-        const targetArmWaveHeat = clamp(edgeRed * 0.45 + waveStrength * 0.55, 0, 1);
-        armWaveHeat[armIdx] = lerp(
-          armWaveHeat[armIdx] ?? targetArmWaveHeat,
-          targetArmWaveHeat,
-          reduceMotion ? 1 : 1 - Math.exp(-dt * 2.8),
-        );
-        const smoothWaveHeat = armWaveHeat[armIdx]!;
+        // Check if mouse is hovering along this ribbon for gentle local sheen
+        let pointerWarmth = hover * 0.35;
+        if (pointer.presence > 0.01) {
+          const midPt = spine.pts[Math.floor(SPINE_SAMPLES * 0.28)]!;
+          const d = Math.hypot(pointer.pos.x - midPt.x, pointer.pos.y - midPt.y);
+          pointerWarmth = Math.max(pointerWarmth, clamp(1 - d / (R * 0.55), 0, 1) * pointer.presence * 0.4);
+        }
 
-        // Precompute arm stop profiles once across all 4 depth layers
-        const armStopRedMix = ARM_STOPS.map((u) => {
-          let infoWaveRed = 0;
-          if (waveCenterU >= 0 && waveStrength > 0.01) {
-            const d = (u - waveCenterU) / 0.14;
-            infoWaveRed = Math.exp(-0.5 * d * d) * waveStrength;
-          }
-          const trailingEdgeRed = smoothstep(0.64, 0.9, u) * edgeRed;
-          return {
-            redMix: clamp(Math.max(infoWaveRed * 0.96, trailingEdgeRed), 0, 1),
-            infoWaveRed,
-          };
-        });
-        const endFadeColor = mixRgb(goldDeep, crimsonDeep, edgeRed);
+        const reachEnd = spine.unfurl;
+        const tipSampleIdx = Math.min(SPINE_SAMPLES - 1, Math.max(1, Math.round(reachEnd * (SPINE_SAMPLES - 1))));
+        const currentTip = spine.pts[tipSampleIdx]!;
 
-        for (let layerIdx = 0; layerIdx < DEPTH_LAYERS.length; layerIdx++) {
-          const layer = DEPTH_LAYERS[layerIdx]!;
-          const batch = field.armLayerBatches[armIdx]![layerIdx]!;
+        for (let tierIdx = 0; tierIdx < FIBER_TIERS.length; tierIdx++) {
+          const tier = FIBER_TIERS[tierIdx]!;
+          const batch = field.armTierBatches[armIdx]![tierIdx]!;
           if (!batch.length) continue;
 
-          // Connected arms use full molten 24k gold; disconnected arms use dormant bronze (dark) or warm platinum (light)
-          const activeGold = mixRgbTuple(goldMid, goldCore, layer.hot);
-          const dormantColor = isLight ? DORMANT_LIGHT_PLATINUM : DORMANT_BRONZE;
-          const baseRgb = isConnected
-            ? activeGold
-            : mixRgbTuple(dormantColor, activeGold, clamp((level - 0.08) * 1.5, 0, 1));
-          const baseRgbStr = `${baseRgb[0]}, ${baseRgb[1]}, ${baseRgb[2]}`;
+          const activeRgb = mixRgbTuple(goldMid, goldCore, tier.hot);
+          const baseRgb = isLive
+            ? activeRgb
+            : mixRgbTuple(dormantRgb, activeRgb, clamp(hover * 0.72 + sigStrength * 0.5, 0, 1));
+          const colStr = `${baseRgb[0]}, ${baseRgb[1]}, ${baseRgb[2]}`;
+          const highlightStr = `${goldCore[0]}, ${goldCore[1]}, ${goldCore[2]}`;
 
           const baseAlpha =
-            layer.alpha *
+            tier.alpha *
             alphaScale *
-            (isConnected ? 0.36 + 1.04 * level : level * (isLight ? 0.85 : 0.65)) *
-            (1 + 0.2 * energy + 0.32 * waveStrength);
+            (isLive ? 0.58 + 0.52 * level : 0.26 + 0.42 * hover) *
+            (1 + 0.18 * energy + 0.26 * pointerWarmth);
 
-          const armGrad = ctx.createLinearGradient(
-            core.x,
-            core.y,
-            spine.tipPt.x,
-            spine.tipPt.y,
-          );
-
-          // Sample multi-stop gradient along u in [0, 1]:
-          //   - During intro growth (steadyBlend < 1), taper softly to 0 alpha BEFORE any filament tip ends!
-          //   - At steady state (steadyBlend = 1), maintain molten gold through waist and crimson near outer corners.
-          for (let sIdx = 0; sIdx < ARM_STOPS.length; sIdx++) {
-            const u = ARM_STOPS[sIdx]!;
-            if (u === 1.0) {
-              armGrad.addColorStop(1.0, `rgba(${endFadeColor}, 0)`);
-              continue;
-            }
-            const { redMix, infoWaveRed } = armStopRedMix[sIdx]!;
-            const targetCrimson = u > 0.82 ? crimsonPure : crimsonHot;
-            const stopColor =
-              redMix > 0.02
-                ? mixRgb(baseRgb, targetCrimson, redMix)
-                : baseRgbStr;
-
-            const steadyProfile =
-              u === 0
-                ? 1.85
-                : u <= 0.36
-                  ? 1.38
-                  : u <= 0.64
-                    ? 0.96
-                    : 0.48 + 0.34 * redMix;
-            const growProfile =
-              u === 0
-                ? 1.85
-                : u <= 0.28
-                  ? 1.38
-                  : u <= 0.44
-                    ? 0.82
-                    : u <= 0.60
-                      ? 0.30
-                      : u <= 0.74
-                        ? 0.06
-                        : 0;
-            const uProfile = lerp(growProfile, steadyProfile, steadyBlend);
-            const waveBoost = 1 + 0.55 * infoWaveRed;
-            const stopAlpha = clamp(baseAlpha * uProfile * waveBoost, 0, 1);
-            armGrad.addColorStop(u, `rgba(${stopColor}, ${stopAlpha})`);
+          const grad = ctx.createLinearGradient(core.x, core.y, currentTip.x, currentTip.y);
+          grad.addColorStop(0, `rgba(${colStr}, ${clamp(baseAlpha * 1.45, 0, 0.96)})`);
+          grad.addColorStop(0.32, `rgba(${colStr}, ${clamp(baseAlpha * 1.15, 0, 0.92)})`);
+          if (sigCenter > 0.06 && sigCenter < 0.92 && sigStrength > 0.04) {
+            grad.addColorStop(
+              clamp(sigCenter, 0.08, 0.9),
+              `rgba(${highlightStr}, ${clamp(baseAlpha * (1.4 + 0.8 * sigStrength), 0, 1)})`,
+            );
           }
+          grad.addColorStop(0.68, `rgba(${colStr}, ${clamp(baseAlpha * 0.42, 0, 0.72)})`);
+          grad.addColorStop(1, `rgba(${goldDeep.join(", ")}, 0)`);
 
           ctx.beginPath();
           for (const fIdx of batch) {
             const f = field.armFilaments[fIdx]!;
-            const fReach =
-              intro >= 0.999
-                ? 1
-                : clamp(0.84 + 0.16 * singularityUnfurl(intro, f.stagger), 0.84, 1);
+            const fReach = clamp((reachEnd - f.stagger * 0.5) / (1 - f.stagger * 0.5), 0, 1);
+            if (fReach <= 0.01) continue;
+
             for (let k = 0; k <= CURVE_STEPS; k++) {
-              writeArmFilamentPoint(
+              evaluateFilamentPoint(
                 f,
                 spine,
                 SAMPLE_US[k]! * fReach,
                 R,
                 armPhase,
                 level,
-                smoothWaveHeat,
-                armSolitonBoost,
-                hasPointer,
-                pointerPosSmooth.x,
-                pointerPosSmooth.y,
-                pointerPresence,
-                pointerVelSmooth.x,
-                pointerVelSmooth.y,
-                invTwoSigmaSq,
-                maxDistSq,
+                sigStrength,
+                pointer,
+                impulses,
                 scratchXs,
                 scratchYs,
                 k,
               );
             }
-            traceSmoothPolylineScratch(ctx, scratchXs, scratchYs, CURVE_STEPS + 1);
+            traceSmoothPolyline(ctx, scratchXs, scratchYs, CURVE_STEPS + 1);
           }
 
-          ctx.lineWidth = layer.width * (0.85 + 0.45 * level + 0.14 * waveStrength) * (isLight ? 1.24 : 1);
-          ctx.strokeStyle = armGrad;
+          ctx.lineWidth = tier.width * (isLive ? 1.05 + 0.14 * hover : 0.84 + 0.18 * hover);
+          ctx.strokeStyle = grad;
           ctx.stroke();
-
-          // In Light Mode, add a fine sunlit champagne-gold lustre thread along the inner core strands of connected arms
-          if (isLight && isConnected && layerIdx === 3) {
-            const lustreGrad = ctx.createLinearGradient(core.x, core.y, spine.tipPt.x, spine.tipPt.y);
-            lustreGrad.addColorStop(0, "rgba(255, 240, 184, 0.92)");
-            lustreGrad.addColorStop(0.34, "rgba(242, 210, 118, 0.78)");
-            lustreGrad.addColorStop(0.58, `rgba(222, 184, 82, ${lerp(0.18, 0.48, steadyBlend)})`);
-            lustreGrad.addColorStop(0.76, `rgba(210, 170, 68, ${lerp(0, 0.2, steadyBlend)})`);
-            lustreGrad.addColorStop(1, "rgba(210, 170, 68, 0)");
-            ctx.lineWidth = 0.36;
-            ctx.strokeStyle = lustreGrad;
-            ctx.stroke();
-          }
         }
       }
 
-      // ——— 8. Expanding Harmonic Ripples from the Singularity Core ———
-      ctx.lineWidth = 1.1;
+      // ——— 8. Expanding Subtle Caustic Ripples (Core + Mouse-Press Touch Waves) ———
+      ctx.globalCompositeOperation = blendOp;
       for (let i = ripples.length - 1; i >= 0; i--) {
         const rp = ripples[i]!;
-        if (!reduceMotion) rp.u += dt * 0.46;
+        if (!reduceMotion) rp.u += dt * 0.44;
         if (rp.u >= 1) {
           ripples.splice(i, 1);
           continue;
         }
-        const fade = Math.pow(1 - rp.u, 2) * rp.strength;
-        const rpColor = rp.crimson
-          ? mixRgb(goldBright, crimsonPure, clamp(rp.u * 1.35, 0, 1))
-          : `${goldBright[0]}, ${goldBright[1]}, ${goldBright[2]}`;
-        ctx.strokeStyle = `rgba(${rpColor}, ${0.3 * fade * alphaScale})`;
+        const fade = Math.pow(1 - rp.u, 2.2) * rp.strength;
         ctx.beginPath();
-        ctx.arc(core.x, core.y, R * (0.08 + rp.u * 1.55), 0, TAU);
+        ctx.arc(core.x, core.y, R * (0.06 + rp.u * 1.45), 0, TAU);
+        ctx.lineWidth = 1.0;
+        ctx.strokeStyle = `rgba(${goldBright.join(", ")}, ${clamp(0.28 * fade * alphaScale, 0, 0.7)})`;
         ctx.stroke();
       }
 
-      // ——— 9. Flowing Photons Along the Connected Node Arms & Horizon Wings (Pre-baked Sprite Stamps) ———
-      const flowSpeedMul = 1 + 0.9 * energy;
-      const pGoldSprite = isLight ? atlas.photonGoldLight : atlas.photonGoldDark;
-      const pHorizonSprite = isLight ? atlas.photonHorizonGoldLight : atlas.photonHorizonGoldDark;
-      const pCrimsonSprite = isLight ? atlas.photonCrimsonLight : atlas.photonCrimsonDark;
+      // Subtle tactile press-point ripple & hold aura on canvas
+      for (const imp of impulses) {
+        const p = clamp(imp.age / imp.duration, 0, 1);
+        const fade = Math.pow(1 - p, 2.1) * imp.strength;
+        ctx.beginPath();
+        ctx.arc(imp.x, imp.y, 10 + easeOutCubic(p) * R * 0.46, 0, TAU);
+        ctx.lineWidth = imp.polarity < 0 ? 1.1 : 0.85;
+        ctx.strokeStyle = `rgba(${goldBright.join(", ")}, ${clamp(0.32 * fade * alphaScale, 0, 0.65)})`;
+        ctx.stroke();
+      }
 
+      if (pointer.holdStrength > 0.02) {
+        radialGlow(ctx, pointer.holdPos, 38 * pointer.holdStrength, [
+          [0, `rgba(${goldBright.join(", ")}, ${0.24 * pointer.holdStrength})`],
+          [0.55, `rgba(${goldMid.join(", ")}, ${0.08 * pointer.holdStrength})`],
+          [1, isLight ? "rgba(255, 255, 255, 0)" : "rgba(7, 7, 9, 0)"],
+        ]);
+      }
+
+      // ——— 9. Serene Venturi Light Pulses Along Occupied Arms ———
+      const speedMul = 1 + 0.7 * energy;
       for (const pt of field.armPhotons) {
-        const level = armLevels[pt.arm] ?? 0.1;
-        if (level < 0.25) continue; // Keep disconnected arms dark
-        const edgeRed = armTrailingEdgeHeat[pt.arm] ?? 0;
-        const armPhase = reduceMotion ? 4 : (armWavePhases[pt.arm] ?? 0);
-        const f = field.armFilaments[pt.filamentIdx]!;
+        if (sockets[pt.arm] !== "occupied") continue;
         const spine = spines[pt.arm]!;
+        if (spine.unfurl < 0.25) continue;
 
         const distFromWaist = Math.abs(pt.u - SOCKET_U);
-        const venturiBoost = 1 + 0.5 * Math.exp(-(distFromWaist * distFromWaist) / 0.025);
-
+        const venturi = 1 + 0.55 * Math.exp(-(distFromWaist * distFromWaist) / 0.02);
         if (!reduceMotion) {
-          pt.u = (pt.u + pt.speed * dt * flowSpeedMul * venturiBoost * (0.45 + 0.75 * level)) % 1;
+          pt.u = (pt.u + pt.speed * dt * speedMul * venturi) % 1;
         }
+        if (pt.u > spine.unfurl) continue;
 
-        const fReach =
-          intro >= 0.999
-            ? 1
-            : clamp(0.84 + 0.16 * singularityUnfurl(intro, f.stagger), 0.84, 1);
-        const uEff = pt.u * fReach;
-        writeArmFilamentPoint(
+        const f = field.armFilaments[pt.filamentIdx]!;
+        evaluateFilamentPoint(
           f,
           spine,
-          uEff,
+          pt.u,
           R,
-          armPhase,
-          level,
-          armWaveHeat[pt.arm] ?? 0,
+          reduceMotion ? 3.2 : (armWavePhases[pt.arm] ?? 0),
+          armLevels[pt.arm] ?? 1,
           0,
-          hasPointer,
-          pointerPosSmooth.x,
-          pointerPosSmooth.y,
-          pointerPresence,
-          pointerVelSmooth.x,
-          pointerVelSmooth.y,
-          invTwoSigmaSq,
-          maxDistSq,
+          pointer,
+          impulses,
           scratchXs,
           scratchYs,
           0,
         );
-
-        const edgeFade = Math.sin(pt.u * Math.PI);
-        const tipFade = intro < 0.999 ? lerp(clamp(1 - smoothstep(0.45, 0.82, pt.u), 0, 1), 1, steadyBlend) : 1;
-        const pAlpha = introEase * pt.alpha * edgeFade * level * tipFade;
-        if (pAlpha <= 0.015) continue;
+        const edgeFade = Math.sin((pt.u / Math.max(0.01, spine.unfurl)) * Math.PI);
+        const pAlpha = clamp(pt.alpha * edgeFade * (isLight ? 0.78 : 0.85), 0, 1);
+        if (pAlpha < 0.02) continue;
 
         const px = scratchXs[0]!;
         const py = scratchYs[0]!;
-        const drawR = pt.size * 2.4;
-        const redT = edgeRed > 0.05 && pt.u > 0.66 ? clamp((pt.u - 0.66) * 2.8 * edgeRed, 0, 1) : 0;
+        ctx.fillStyle = `rgba(${(isLight ? goldDeep : goldCore).join(", ")}, ${pAlpha})`;
+        ctx.beginPath();
+        ctx.arc(px, py, pt.size, 0, TAU);
+        ctx.fill();
+      }
 
-        if (redT < 0.85 && pGoldSprite) {
-          ctx.globalAlpha = pAlpha * (1 - redT);
-          ctx.drawImage(pGoldSprite, px - drawR, py - drawR, drawR * 2, drawR * 2);
-        }
-        if (redT > 0.15 && pCrimsonSprite) {
-          ctx.globalAlpha = pAlpha * redT;
-          ctx.drawImage(pCrimsonSprite, px - drawR, py - drawR, drawR * 2, drawR * 2);
+      // ——— 10. Precision Node Reticles (Apparent Yet Subtle — Drawn Cleanly at Each Optical Waist) ———
+      ctx.globalCompositeOperation = "source-over";
+      for (let i = 0; i < socketCount; i++) {
+        const sp = spines[i]!;
+        const nodeBloom = smoothstep(SOCKET_U * 0.72, SOCKET_U + 0.16, sp.unfurl);
+        if (nodeBloom <= 0.01) continue;
+
+        const s = sockets[i]!;
+        const hover = armHoverHeat[i] ?? 0;
+        const isActive = activeSocket === i;
+        const pt = sp.socketPt;
+        const scale = (0.76 + 0.24 * nodeBloom) * (1 + 0.14 * hover + (isActive ? 0.08 : 0));
+
+        if (s === "occupied") {
+          // Soft ambient halo beneath live node reticle
+          radialGlow(ctx, pt, 34 * scale, [
+            [0, `rgba(${goldBright.join(", ")}, ${(isLight ? 0.26 : 0.22) * nodeBloom * (1 + 0.45 * hover)})`],
+            [0.55, `rgba(${goldMid.join(", ")}, ${(isLight ? 0.09 : 0.07) * nodeBloom})`],
+            [1, isLight ? "rgba(255, 255, 255, 0)" : "rgba(7, 7, 9, 0)"],
+          ]);
+
+          // Subtle rotating outer orbital arc (Apple precision instrument feel)
+          const rot = time * 0.22 + i * 1.25;
+          ctx.save();
+          ctx.translate(pt.x, pt.y);
+          ctx.rotate(rot);
+          ctx.beginPath();
+          ctx.arc(0, 0, 21.5 * scale, -0.75, 1.35);
+          ctx.lineWidth = 1.0;
+          ctx.strokeStyle = `rgba(${(isLight ? goldDeep : goldBright).join(", ")}, ${(0.34 + 0.42 * hover) * nodeBloom})`;
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.arc(0, 0, 21.5 * scale, Math.PI - 0.55, Math.PI + 1.05);
+          ctx.lineWidth = 0.8;
+          ctx.strokeStyle = `rgba(${(isLight ? goldMid : goldMid).join(", ")}, ${(0.22 + 0.3 * hover) * nodeBloom})`;
+          ctx.stroke();
+          ctx.restore();
+
+          // Matte translucent disc + crisp gold hairline ring
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, 14.5 * scale, 0, TAU);
+          ctx.fillStyle = isLight ? "rgba(255, 255, 255, 0.9)" : "rgba(14, 14, 18, 0.86)";
+          ctx.fill();
+          ctx.lineWidth = isActive ? 1.75 : 1.3;
+          ctx.strokeStyle = `rgba(${(isLight ? goldDeep : goldBright).join(", ")}, ${(0.72 + 0.28 * hover) * nodeBloom})`;
+          ctx.stroke();
+        } else if (s === "open") {
+          ctx.save();
+          ctx.setLineDash([3.5, 3.5]);
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, 12.5 * scale, 0, TAU);
+          ctx.fillStyle = isLight ? "rgba(255, 255, 255, 0.74)" : "rgba(14, 14, 18, 0.65)";
+          ctx.fill();
+          ctx.lineWidth = 1.1;
+          ctx.strokeStyle =
+            hover > 0.1
+              ? `rgba(${(isLight ? goldDeep : goldBright).join(", ")}, ${(0.45 + 0.45 * hover) * nodeBloom})`
+              : isLight
+                ? `rgba(14, 15, 18, ${0.26 * nodeBloom})`
+                : `rgba(255, 255, 255, ${0.24 * nodeBloom})`;
+          ctx.stroke();
+          ctx.restore();
+        } else {
+          // Locked Pro socket: quiet subtle architectural dot-ring
+          ctx.save();
+          ctx.setLineDash([2, 3.5]);
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, 10.5 * scale, 0, TAU);
+          ctx.fillStyle = isLight ? "rgba(247, 246, 242, 0.72)" : "rgba(14, 14, 18, 0.52)";
+          ctx.fill();
+          ctx.lineWidth = 1;
+          ctx.strokeStyle = isLight
+            ? `rgba(14, 15, 18, ${(0.18 + 0.22 * hover) * nodeBloom})`
+            : `rgba(255, 255, 255, ${(0.14 + 0.22 * hover) * nodeBloom})`;
+          ctx.stroke();
+          ctx.restore();
         }
       }
 
-      for (const hp of field.horizonPhotons) {
-        if (!reduceMotion) {
-          hp.u = (hp.u + hp.speed * dt * flowSpeedMul) % 1;
-        }
-        const curve = horizonCurves[hp.strandIdx]!;
-        const pos = pointOnHorizonCurve(curve, hp.u);
-        const edgeDist = Math.abs(hp.u - 0.5) * 2;
-        const edgeFade = Math.sin(hp.u * Math.PI);
-        const hpAlpha = introEase * hp.alpha * edgeFade;
-        if (hpAlpha <= 0.015) continue;
+      // ——— 11. Serene Optical Singularity Nucleus ———
+      const breathe = 1 + 0.035 * Math.sin(time * 0.7) + 0.06 * energy;
+      ctx.globalCompositeOperation = blendOp;
+      radialGlow(ctx, core, R * 0.22 * breathe * coreBloom, [
+        [0, `rgba(${(isLight ? LIGHT_GOLD_CORE : DARK_GOLD_CORE).join(", ")}, ${isLight ? 0.96 : 0.95})`],
+        [0.2, `rgba(${goldBright.join(", ")}, ${isLight ? 0.64 : 0.56})`],
+        [0.52, `rgba(${goldMid.join(", ")}, ${isLight ? 0.2 : 0.16})`],
+        [1, isLight ? "rgba(255, 255, 255, 0)" : "rgba(7, 7, 9, 0)"],
+      ]);
 
-        const drawR = hp.size * 2.4;
-        const redT =
-          horizonEdgeRed > 0.05 && edgeDist > 0.64
-            ? clamp((edgeDist - 0.64) * 2.6 * horizonEdgeRed, 0, 1)
-            : 0;
-
-        if (redT < 0.85 && pHorizonSprite) {
-          ctx.globalAlpha = hpAlpha * (1 - redT);
-          ctx.drawImage(pHorizonSprite, pos.x - drawR, pos.y - drawR, drawR * 2, drawR * 2);
-        }
-        if (redT > 0.15 && pCrimsonSprite) {
-          ctx.globalAlpha = hpAlpha * redT;
-          ctx.drawImage(pCrimsonSprite, pos.x - drawR, pos.y - drawR, drawR * 2, drawR * 2);
-        }
-      }
-
-      // ——— 10. Mathematically Engineered Moffat PSF & Anisotropic Caustic Singularity Core ———
-      renderOpticalSingularityCore(
-        ctx,
-        core,
-        R,
-        S,
-        activeTime,
-        energy,
-        coreIntro,
-        globalCallHeat,
-        isLight,
-        atlas,
-        invCache,
-        explosionAfterglow,
-      );
+      // Whisper-fine horizontal optical caustic glint at core
+      ctx.save();
+      ctx.translate(core.x, core.y);
+      ctx.scale(2.8, 0.22);
+      radialGlow(ctx, { x: 0, y: 0 }, R * 0.15 * breathe * coreBloom, [
+        [0, `rgba(${(isLight ? LIGHT_GOLD_BRIGHT : DARK_GOLD_CORE).join(", ")}, ${isLight ? 0.45 : 0.34})`],
+        [0.5, `rgba(${goldMid.join(", ")}, ${isLight ? 0.12 : 0.08})`],
+        [1, isLight ? "rgba(255, 255, 255, 0)" : "rgba(7, 7, 9, 0)"],
+      ]);
+      ctx.restore();
+      ctx.globalAlpha = 1;
     };
 
     const resize = () => {
       const { width, height } = fitCanvas(canvas, ctx);
       layout = computeStageLayout(width, height, socketCount);
-      if (reduceMotion) draw(8, 0);
+      latestSocketPts = layout.sockets;
+      draw(elapsed, 0);
     };
 
     const loop = (now: number) => {
@@ -1693,10 +1248,9 @@ export const NeuralStage = memo(function NeuralStage({
       if (!last) last = now;
       const rawDt = Math.min(0.033, Math.max(0.001, (now - last) / 1000));
       last = now;
-      // Exponentially smoothed delta-time for silky, jitter-free 60-120fps animation
-      smoothDt = lerp(smoothDt, rawDt, 0.16);
-      smoothTime += smoothDt;
-      draw(smoothTime, smoothDt);
+      smoothDt = lerp(smoothDt, rawDt, 0.18);
+      elapsed += smoothDt;
+      draw(elapsed, smoothDt);
       frame = requestAnimationFrame(loop);
     };
 
@@ -1705,11 +1259,6 @@ export const NeuralStage = memo(function NeuralStage({
       if (shouldRun && frame === 0) {
         last = 0;
         smoothDt = 1 / 60;
-        if ((fromExplosion || signalRef.current.fromSetupExplosion) && !explodedStarted) {
-          explodedStarted = true;
-          smoothTime = 0;
-          draw(0, 0);
-        }
         frame = requestAnimationFrame(loop);
       } else if (!shouldRun && frame !== 0) {
         cancelAnimationFrame(frame);
@@ -1719,7 +1268,7 @@ export const NeuralStage = memo(function NeuralStage({
     };
 
     syncLoopRef.current = syncLoop;
-    redrawRef.current = reduceMotion ? () => draw(8, 0) : null;
+    redrawRef.current = reduceMotion ? () => draw(10, 0) : null;
     const stopVisibility = observeCanvasActivity(canvas, (active) => {
       elementActive = active;
       syncLoop();
@@ -1735,11 +1284,84 @@ export const NeuralStage = memo(function NeuralStage({
       observer.disconnect();
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerleave", onPointerLeave);
-      canvas.removeEventListener("click", onClick);
+      window.removeEventListener("pointerup", onPointerUp);
+      canvas.removeEventListener("pointerdown", onPointerDown);
       redrawRef.current = null;
       syncLoopRef.current = null;
     };
   }, [socketCount]);
 
-  return <canvas ref={canvasRef} className={`block h-full w-full ${className}`} aria-hidden />;
+  const labels = signal.socketLabels ?? [];
+
+  return (
+    <div className={`relative h-full w-full ${className}`}>
+      <canvas ref={canvasRef} className="block h-full w-full cursor-crosshair" aria-hidden />
+
+      {/* Accessible Interactive Node Anchors — positioned in real time at each ribbon's optical waist */}
+      <div className="pointer-events-none absolute inset-0 z-10">
+        {signal.sockets.map((status, idx) => {
+          const meta = labels[idx];
+          const name = meta?.name ?? (status === "open" ? "Open socket" : "Pro socket");
+          const monogram = meta?.monogram ?? "";
+          const isOccupied = status === "occupied";
+          const isOpen = status === "open";
+          const isActive = signal.activeSocket === idx;
+
+          return (
+            <button
+              key={idx}
+              ref={(el) => {
+                nodeButtonRefs.current[idx] = el;
+              }}
+              type="button"
+              onMouseEnter={() => {
+                hoveredNodeRef.current = idx;
+              }}
+              onMouseLeave={() => {
+                if (hoveredNodeRef.current === idx) hoveredNodeRef.current = -1;
+              }}
+              onFocus={() => {
+                hoveredNodeRef.current = idx;
+              }}
+              onBlur={() => {
+                if (hoveredNodeRef.current === idx) hoveredNodeRef.current = -1;
+              }}
+              onClick={() => onSelectRef.current?.(idx)}
+              aria-label={
+                isOccupied
+                  ? `Open ${name} node`
+                  : isOpen
+                    ? `Snap a node into free socket ${idx + 1}`
+                    : `Locked Pro socket ${idx + 1}`
+              }
+              className={`neural-node-anchor group pointer-events-auto absolute top-0 left-0 flex h-11 w-11 cursor-pointer items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[color:var(--land-gold)] ${
+                isOccupied
+                  ? "neural-node-anchor--live"
+                  : isOpen
+                    ? "neural-node-anchor--open"
+                    : "neural-node-anchor--locked"
+              } ${isActive ? "neural-node-anchor--active" : ""}`}
+              style={{ opacity: 0 }}
+            >
+              {/* Crisp centered glyph/monogram seated directly inside the canvas reticle */}
+              <span className="neural-node-glyph pointer-events-none flex items-center justify-center">
+                {isOccupied ? (
+                  <span className="text-[10px] font-semibold tracking-[0.02em]">{monogram}</span>
+                ) : isOpen ? (
+                  <Plus className="size-3" strokeWidth={1.85} aria-hidden />
+                ) : (
+                  <Lock className="size-2.5" strokeWidth={1.85} aria-hidden />
+                )}
+              </span>
+
+              {/* Subtle floating architectural caption directly above the node */}
+              <span className="neural-node-tag pointer-events-none">
+                <span className="neural-node-tag-name">{name}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 });

@@ -1,11 +1,11 @@
 "use client";
 
-import { Zap } from "lucide-react";
+import { ArrowUpRight, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import type { ExtensionHubSnapshot, ExtensionId } from "@/lib/extensions";
+import type { ExtensionHubSnapshot, ExtensionId, SlotId } from "@/lib/extensions";
 
 /** Panel view of one wired-in extension, with live Laniakea arm controls. */
 export function ExtensionPanel({
@@ -13,11 +13,13 @@ export function ExtensionPanel({
   id,
   onRelease,
   onTransfer,
+  onOpenNodes,
 }: {
   hub: ExtensionHubSnapshot;
   id: ExtensionId;
   onRelease: (id: ExtensionId) => void;
   onTransfer?: (fromId: ExtensionId, toId?: ExtensionId) => void;
+  onOpenNodes?: (slotId?: SlotId) => void;
 }) {
   const ext = hub.extensions.find((e) => e.manifest.id === id);
   const slot = hub.slots.find((s) => s.occupiedBy === id);
@@ -48,7 +50,7 @@ export function ExtensionPanel({
           {manifest.monogram ?? manifest.name.slice(0, 2)}
         </span>
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+          <div className="flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
             {slot ? (
               <span
                 className="inline-block h-1.5 w-1.5 rounded-full bg-[color:var(--land-gold)]"
@@ -124,9 +126,29 @@ export function ExtensionPanel({
       </dl>
 
       {slot ? (
-        <Button type="button" size="sm" variant="outline" className="self-start" onClick={() => onRelease(id)}>
-          Disconnect
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {onOpenNodes ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="gap-1.5 rounded-full"
+              onClick={() => onOpenNodes(slot.id)}
+            >
+              <span>Inspect in Nodes</span>
+              <ArrowUpRight className="size-3.5" />
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="rounded-full text-muted-foreground hover:text-destructive"
+            onClick={() => onRelease(id)}
+          >
+            Disconnect
+          </Button>
+        </div>
       ) : null}
     </section>
   );

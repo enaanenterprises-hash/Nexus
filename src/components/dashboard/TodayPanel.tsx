@@ -60,8 +60,8 @@ export function TodayPanel({ tasks, threads, touched, organized, onToggle }: Pro
       {focus ? (
         <Card size="sm" className="rounded-2xl border border-border/80 bg-card/60 ring-0 shadow-none">
           <CardHeader className="pb-0">
-            <CardTitle className="font-sans text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-              Focus
+            <CardTitle className="font-sans text-[12px] font-medium text-muted-foreground">
+              Current focus
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-1">

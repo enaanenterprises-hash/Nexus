@@ -5,28 +5,26 @@ export type ArmGeometry = {
   index: number;
   /** Departure angle from the singularity core (radians). */
   coreAngle: number;
-  /** Asymptotic outward angle toward the viewport corner/edge (radians). */
+  /** Asymptotic outward angle toward the viewport periphery (radians). */
   cornerAngle: number;
   /** Curvature inflection control point between core and socket. */
   innerControl: Vec;
-  /** Exact coordinate of the node's focal caustic waist (socket). */
+  /** Exact coordinate of the node's optical waist (socket). */
   socket: Vec;
   /** Outward tangent unit vector at the socket waist. */
   socketTangent: Vec;
-  /** Outer curvature control point between socket and viewport corner. */
+  /** Outer curvature control point between socket and outer periphery. */
   outerControl1: Vec;
-  /** Second outer curvature control point approaching the viewport corner. */
+  /** Second outer curvature control point approaching outer fade. */
   outerControl2: Vec;
-  /** Terminal anchor well past the viewport corner/edge so arms never cut off. */
+  /** Terminal anchor past the viewport periphery so ribbons fade softly with zero abrupt cut-off. */
   cornerTip: Vec;
   /** Total reach distance from core to cornerTip. */
   totalReach: number;
 };
 
 export type HorizonWingGeometry = {
-  /** -1 for left corner wing, +1 for right corner wing. */
   side: -1 | 1;
-  /** Sweeping control points from core out to the lower-lateral corner. */
   c1: Vec;
   c2: Vec;
   tip: Vec;
@@ -38,9 +36,9 @@ export type StageLayout = {
   width: number;
   height: number;
   compact: boolean;
-  /** Primary Singularity Nucleus of the neural network, centered in the middle of the screen. */
+  /** Primary Singularity Nucleus centered in the lower-mid stage with generous room for the voice bar below. */
   core: Vec;
-  /** Characteristic radius from core to the 5 node socket waists. */
+  /** Characteristic orbital radius from core to the 5 node socket waists. */
   radius: number;
   /** Coordinates of each node socket waist (0..4). */
   sockets: Vec[];
@@ -48,7 +46,7 @@ export type StageLayout = {
   socketAngles: number[];
   /** Complete C2-continuous spine geometry for each of the 5 node arms. */
   arms: ArmGeometry[];
-  /** Sweeping lower-lateral horizon wings that extend into the lower corners while keeping center-bottom negative space clear. */
+  /** Sweeping lateral horizon wings framing the periphery while preserving clean negative space. */
   horizonWings: [HorizonWingGeometry, HorizonWingGeometry];
   /** Overall diagonal scale of the viewport. */
   scale: number;
@@ -60,28 +58,28 @@ export const WIDE_MIN_WIDTH = 1100;
 export function computeCoreCenter(width: number, height: number): Vec {
   const compact = width < WIDE_MIN_WIDTH;
   const bottomClearance = compact
-    ? clamp(height * 0.38, 280, 355)
-    : clamp(height * 0.40, 305, 415);
+    ? clamp(height * 0.37, 275, 345)
+    : clamp(height * 0.39, 300, 395);
   return {
     x: width * 0.5,
-    y: clamp(height - bottomClearance, compact ? 275 : 320, height - 280),
+    y: clamp(height - bottomClearance, compact ? 270 : 315, height - 270),
   };
 }
 
 export function computeStageLayout(width: number, height: number, socketCount: number): StageLayout {
   const compact = width < WIDE_MIN_WIDTH;
   const diag = Math.hypot(width, height);
-
-  // Position the singularity core in the lower-mid stage (~58%-62% down), leaving comfortable room below for the greeting, responses, and follow-up chips
   const core = computeCoreCenter(width, height);
 
-  // Vast, commanding radius so the 5 node waists fill the stage without wasted space
+  // Poised orbital radius keeping all 5 nodes comfortably inside safe Apple HIG margins
+  const maxVertRadius = Math.max(150, core.y - 108);
+  const maxHorizRadius = Math.max(150, width * 0.5 - (compact ? 64 : 138));
   const radius = compact
-    ? clamp(Math.min(width * 0.38, height * 0.32), 145, 260)
-    : clamp(Math.min(width * 0.28, height * 0.34), 210, 370);
+    ? clamp(Math.min(width * 0.36, maxVertRadius * 0.88), 140, 250)
+    : clamp(Math.min(width * 0.27, maxVertRadius * 0.88, maxHorizRadius * 0.78), 205, 330);
 
-  // Wide 166-degree arch (-173 deg to -7 deg) so the 5 arms span the full width and height of the viewport
-  const spread = compact ? 0.92 : 0.9;
+  // Balanced 148-degree upper-hemisphere orbital arch (-164 deg to -16 deg) for crisp node legibility & natural S-flow
+  const spread = compact ? 0.84 : 0.82;
   const socketAngles: number[] = [];
   const sockets: Vec[] = [];
   const arms: ArmGeometry[] = [];
@@ -91,30 +89,39 @@ export function computeStageLayout(width: number, height: number, socketCount: n
     const centered = (t - 0.5) * 2; // -1 .. +1
     const baseAngle = -Math.PI / 2 + centered * (Math.PI * 0.5 * spread);
 
-    // Sweeping S-curve inflection guiding each arm into the viewport corners
-    const cornerDeflection = centered * 0.18;
-    const coreAngle = baseAngle - cornerDeflection * 0.32;
-    const cornerAngle = baseAngle + cornerDeflection * 0.85;
+    // Gentle S-curve inflection so ribbons bow organically out from the core and glide gracefully through each node
+    const inflection = centered * 0.14;
+    const coreAngle = baseAngle - inflection * 0.38;
+    const cornerAngle = baseAngle + inflection * 0.62;
 
-    // Wide elliptical horizontal reach so lateral nodes command the left and right wings
-    const socketDist = radius * (1 + 0.26 * Math.abs(centered));
-    const socket = add(core, polar(socketDist, baseAngle));
+    // Subtle elliptical stretch so lateral nodes breathe gracefully across wide displays
+    const socketDist = clamp(
+      radius * (1 + (compact ? 0.14 : 0.24) * Math.abs(centered)),
+      135,
+      Math.hypot(maxHorizRadius, maxVertRadius),
+    );
+    const rawSocket = add(core, polar(socketDist, baseAngle));
+    const socket: Vec = {
+      x: clamp(rawSocket.x, compact ? 52 : 112, width - (compact ? 52 : 112)),
+      y: clamp(rawSocket.y, 92, core.y - 36),
+    };
 
-    const tangentAngle = baseAngle + cornerDeflection * 0.48;
+    const actualAngle = Math.atan2(socket.y - core.y, socket.x - core.x);
+    const actualDist = Math.hypot(socket.x - core.x, socket.y - core.y);
+    const tangentAngle = actualAngle + inflection * 0.32;
     const socketTangent = {
       x: Math.cos(tangentAngle),
       y: Math.sin(tangentAngle),
     };
 
-    // Extend well beyond the viewport corners so the vast plumes sweep off-screen seamlessly
-    const outerReach = Math.max(diag * 0.84, socketDist * 3.3);
+    const outerReach = Math.max(diag * 0.62, actualDist * 2.25);
     const cornerTip = add(socket, polar(outerReach, cornerAngle));
 
-    const innerControl = add(core, polar(socketDist * 0.52, coreAngle));
+    const innerControl = add(core, polar(actualDist * 0.5, coreAngle));
     const outerControl1 = add(socket, polar(outerReach * 0.28, tangentAngle));
-    const outerControl2 = add(socket, polar(outerReach * 0.66, (tangentAngle + cornerAngle) * 0.5));
+    const outerControl2 = add(socket, polar(outerReach * 0.64, (tangentAngle + cornerAngle) * 0.5));
 
-    socketAngles.push(baseAngle);
+    socketAngles.push(actualAngle);
     sockets.push(socket);
     arms.push({
       index: i,
@@ -126,30 +133,30 @@ export function computeStageLayout(width: number, height: number, socketCount: n
       outerControl1,
       outerControl2,
       cornerTip,
-      totalReach: socketDist + outerReach,
+      totalReach: actualDist + outerReach,
     });
   }
 
-  // Two vast lower-lateral horizon wings sweeping into the bottom-left and bottom-right corners
-  const wingReach = diag * 0.72;
-  const leftWingAngle = Math.PI - 0.26;
-  const rightWingAngle = 0.26;
+  // Twin serene lateral horizon currents sweeping gently outward into the flanks
+  const wingReach = diag * 0.64;
+  const leftWingAngle = Math.PI - 0.18;
+  const rightWingAngle = 0.18;
 
   const horizonWings: [HorizonWingGeometry, HorizonWingGeometry] = [
     {
       side: -1,
       angle: leftWingAngle,
       reach: wingReach,
-      c1: add(core, polar(wingReach * 0.26, leftWingAngle + 0.08)),
-      c2: add(core, polar(wingReach * 0.62, leftWingAngle - 0.04)),
+      c1: add(core, polar(wingReach * 0.28, leftWingAngle + 0.06)),
+      c2: add(core, polar(wingReach * 0.64, leftWingAngle - 0.03)),
       tip: add(core, polar(wingReach, leftWingAngle)),
     },
     {
       side: 1,
       angle: rightWingAngle,
       reach: wingReach,
-      c1: add(core, polar(wingReach * 0.26, rightWingAngle - 0.08)),
-      c2: add(core, polar(wingReach * 0.62, rightWingAngle + 0.04)),
+      c1: add(core, polar(wingReach * 0.28, rightWingAngle - 0.06)),
+      c2: add(core, polar(wingReach * 0.64, rightWingAngle + 0.03)),
       tip: add(core, polar(wingReach, rightWingAngle)),
     },
   ];
@@ -164,6 +171,6 @@ export function computeStageLayout(width: number, height: number, socketCount: n
     socketAngles,
     arms,
     horizonWings,
-    scale: diag * 0.74,
+    scale: diag * 0.72,
   };
 }

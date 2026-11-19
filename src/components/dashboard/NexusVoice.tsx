@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { ArrowUp, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -23,12 +23,12 @@ type Props = {
 };
 
 const STATE_LABEL: Record<NexusBrainState, string> = {
-  idle: "Listening",
+  idle: "Ready",
   thinking: "Thinking",
-  responding: "Speaking",
+  responding: "Responding",
 };
 
-/** Nexus speaks in one calm voice in the negative space beneath the core. */
+/** Nexus speaks in one calm editorial voice anchored beneath the neural singularity. */
 export function NexusVoice({
   firstName,
   brain,
@@ -37,17 +37,9 @@ export function NexusVoice({
   revealed,
   history,
   followUps,
-  skipWake = false,
   onAsk,
 }: Props) {
   const [showEarlier, setShowEarlier] = useState(false);
-  const [waking, setWaking] = useState(!skipWake);
-
-  useEffect(() => {
-    if (skipWake) return;
-    const timer = window.setTimeout(() => setWaking(false), 1600);
-    return () => window.clearTimeout(timer);
-  }, [skipWake]);
 
   const prompt = pendingPrompt ?? current?.prompt ?? null;
   const fromExtension = current && current.source !== "nexus" ? current.source : null;
@@ -55,27 +47,29 @@ export function NexusVoice({
 
   return (
     <div className="flex w-full flex-col items-center text-center">
-      <div className="dash-voice-stage flex min-h-[4.5rem] w-full flex-col items-center justify-center sm:min-h-[5.25rem]">
+      <div className="dash-voice-stage flex min-h-[4.25rem] w-full flex-col items-center justify-center sm:min-h-[4.85rem]">
         {!hasConversation ? (
-          waking ? (
-            <p key="waking" className="dash-welcome dash-welcome--waking dash-fade-in" aria-live="polite">
-              Waking up Nexus…
-            </p>
-          ) : (
-            <p key="hello" className="dash-welcome dash-fade-in" aria-live="polite">
+          <div className="dash-fade-in flex flex-col items-center gap-1.5">
+            <p className="dash-welcome font-editorial" aria-live="polite">
               Hello, {firstName}
             </p>
-          )
+            <p className="text-[12.5px] text-[color:var(--land-muted)]">
+              Touch the filaments, click a node, or ask Nexus directly
+            </p>
+          </div>
         ) : (
           <div className="flex w-full flex-col items-center justify-center">
             {prompt ? (
-              <p key={`p-${prompt}`} className="dash-fade-in mb-2.5 max-w-full truncate text-[14px] text-[color:var(--land-muted)]">
-                <span className="text-[color:var(--land-faint)]">You — </span>
+              <p
+                key={`p-${prompt}`}
+                className="dash-fade-in mb-2 max-w-full truncate text-[13.5px] text-[color:var(--land-muted)]"
+              >
+                <span className="text-[color:var(--land-faint)]">You · </span>
                 {prompt}
               </p>
             ) : null}
             {current ? (
-              <p key={current.id} className="dash-utterance text-[color:var(--land-ink)]" aria-live="polite">
+              <p key={current.id} className="dash-utterance font-editorial" aria-live="polite">
                 {current.text.split(/\s+/).map((word, i) => (
                   <span key={i} className={`word ${i < revealed ? "" : "word--hidden"}`}>
                     {word}{" "}
@@ -83,7 +77,7 @@ export function NexusVoice({
                 ))}
               </p>
             ) : (
-              <p className="dash-utterance text-[color:var(--land-faint)]">
+              <p className="dash-utterance font-editorial text-[color:var(--land-faint)]">
                 Working through your network…
               </p>
             )}
@@ -93,8 +87,8 @@ export function NexusVoice({
 
       {followUps.length > 0 ? (
         <div
-          className={`mt-3 flex flex-wrap justify-center gap-2 transition-opacity duration-500 ${
-            brain === "idle" ? "opacity-100" : "pointer-events-none opacity-0"
+          className={`mt-2.5 flex flex-wrap justify-center gap-2 transition-all duration-300 ${
+            brain === "idle" ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-1 opacity-0"
           }`}
         >
           {followUps.map((f) => (
@@ -103,7 +97,7 @@ export function NexusVoice({
               type="button"
               variant="outline"
               size="sm"
-              className="dash-chip h-8 rounded-full px-3.5 text-[13px]"
+              className="dash-chip gal-btn-tactile h-8 rounded-full px-3.5 text-[12.5px]"
               onClick={() => onAsk(f)}
               disabled={brain !== "idle"}
             >
@@ -114,7 +108,7 @@ export function NexusVoice({
       ) : null}
 
       {history.length > 0 ? (
-        <Collapsible open={showEarlier} onOpenChange={setShowEarlier} className="mt-3 w-full">
+        <Collapsible open={showEarlier} onOpenChange={setShowEarlier} className="mt-2.5 w-full">
           <CollapsibleTrigger
             render={
               <Button
@@ -131,12 +125,12 @@ export function NexusVoice({
             <span>{showEarlier ? "Hide earlier" : `Earlier (${history.length})`}</span>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <ScrollArea className="dash-earlier-list mx-auto mt-2.5 max-h-40 max-w-md text-left">
+            <ScrollArea className="dash-earlier-list mx-auto mt-2 max-h-40 max-w-md text-left">
               <ol className="space-y-3 pr-2">
                 {history.map((u) => (
                   <li key={u.id} className="text-[13px] leading-relaxed text-[color:var(--land-muted)]">
                     {u.prompt ? (
-                      <span className="block text-[color:var(--land-faint)]">You — {u.prompt}</span>
+                      <span className="block text-[color:var(--land-faint)]">You · {u.prompt}</span>
                     ) : null}
                     {u.text}
                   </li>
@@ -147,17 +141,15 @@ export function NexusVoice({
         </Collapsible>
       ) : null}
 
-      <p className="dash-eyebrow mt-4 flex items-center gap-2" aria-live="polite">
+      <p className="mt-3 flex items-center gap-2 text-[11.5px] font-medium text-[color:var(--land-muted)]" aria-live="polite">
         <span
-          className={`state-dot ${
-            waking || brain === "thinking" ? "state-dot--thinking" : ""
-          } ${brain === "thinking" || brain === "responding" ? "state-dot--calling" : ""}`}
+          className={`state-dot ${brain === "thinking" ? "state-dot--thinking" : ""} ${
+            brain === "thinking" || brain === "responding" ? "state-dot--calling" : ""
+          }`}
         />
-        {waking
-          ? "Nexus · Waking"
-          : fromExtension
-            ? `${fromExtension} · via Nexus`
-            : `Nexus · ${STATE_LABEL[brain]}`}
+        <span>
+          {fromExtension ? `${fromExtension} · via Nexus` : `Nexus · ${STATE_LABEL[brain]}`}
+        </span>
       </p>
     </div>
   );
@@ -191,7 +183,7 @@ export function NexusInput({
         id="nexus-input"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
-        placeholder={onResearch ? "Ask Nexus, or search the web" : "Ask Nexus"}
+        placeholder={onResearch ? "Ask Nexus, or search the web" : "Ask Nexus anything…"}
         autoComplete="off"
       />
       {onResearch ? (
@@ -221,11 +213,11 @@ export function NexusInput({
           render={
             <button
               type="submit"
-              className="dash-send"
+              className="dash-send gal-btn-tactile"
               disabled={disabled || !draft.trim()}
               aria-label="Send to Nexus"
             >
-              <ArrowUp className="size-4" />
+              <ArrowUp className="size-4" strokeWidth={2} />
             </button>
           }
         />
