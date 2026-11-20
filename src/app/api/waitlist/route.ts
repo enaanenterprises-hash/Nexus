@@ -17,18 +17,23 @@ export async function POST(request: Request) {
 
     const email = rawEmail.toLowerCase();
 
-    // If database is configured, persist the email
-    if (databaseUrl()) {
-      await ensureWaitlistSchema();
-      const sql = getSql();
-      const id = crypto.randomUUID();
-
-      await sql`
-        INSERT INTO "waitlist" ("id", "email")
-        VALUES (${id}, ${email})
-        ON CONFLICT ("email") DO NOTHING
-      `;
+    if (!databaseUrl()) {
+      console.error("Waitlist error: DATABASE_URL is not set, signup not stored.");
+      return NextResponse.json(
+        { ok: false, error: "The waitlist is temporarily unavailable. Please try again soon." },
+        { status: 503 }
+      );
     }
+
+    await ensureWaitlistSchema();
+    const sql = getSql();
+    const id = crypto.randomUUID();
+
+    await sql`
+      INSERT INTO "waitlist" ("id", "email")
+      VALUES (${id}, ${email})
+      ON CONFLICT ("email") DO NOTHING
+    `;
 
     return NextResponse.json({
       ok: true,

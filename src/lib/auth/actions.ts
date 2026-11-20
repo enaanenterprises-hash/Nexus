@@ -6,6 +6,7 @@ import { redirect } from "next/navigation"
 import { signIn, signOut } from "@/auth"
 import { safeCallback, signupErrorPath } from "@/lib/auth/callback"
 import { missingEmailConfig, missingGoogleConfig } from "@/lib/auth/requirements"
+import { isExistingUser, signupsOpen } from "@/lib/auth/signups"
 import { ensureAuthSchema } from "@/lib/db/client"
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -63,6 +64,9 @@ export async function signInWithEmail(formData: FormData) {
     redirect(`${signupErrorPath("MissingConfig", callbackUrl)}&need=${missing.join(",")}`)
   }
   await prepareDatabase(callbackUrl)
+  if (!signupsOpen() && !(await isExistingUser(email))) {
+    redirect(signupErrorPath("SignupsClosed", callbackUrl))
+  }
   await startProvider("resend", callbackUrl, { email })
 }
 

@@ -23,6 +23,7 @@ const MESSAGES: Record<string, string> = {
   Database: "Could not reach the database. Check DATABASE_URL, then run npm run db:setup if the tables are missing.",
   EmailRequired: "Enter the email address that should receive the link.",
   EmailInvalid: "That does not look like an email address.",
+  SignupsClosed: "New signups are closed for now. Join the waitlist on the home page and we will invite you.",
   Default: "Something went wrong signing in. Nothing was sent. Try again.",
 }
 

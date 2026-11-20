@@ -3,6 +3,7 @@ import NextAuth from "next-auth"
 import Google from "next-auth/providers/google"
 import Resend from "next-auth/providers/resend"
 import { createAuthAdapter } from "@/lib/auth/adapter"
+import { isExistingUser, signupsOpen } from "@/lib/auth/signups"
 import { storeGoogleGrant } from "@/lib/command/google-grant"
 import {
   authSecret,
@@ -26,6 +27,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => ({
   trustHost: true,
   secret: authSecret() || undefined,
   callbacks: {
+    // Signups are closed unless SIGNUPS_OPEN=true; existing accounts may still sign in.
+    async signIn({ user }) {
+      if (signupsOpen()) return true
+      if (await isExistingUser(user.email)) return true
+      return "/signup?error=SignupsClosed"
+    },
     // The default callback drops the id; per-user data (Research) needs it.
     session: ({ session, user }) => ({ ...session, user: { ...session.user, id: user.id } }),
   },
