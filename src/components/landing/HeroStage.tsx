@@ -313,7 +313,7 @@ export function HeroStage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={status === "loading"}
-                  placeholder="Enter your email for open beta"
+                  placeholder="Enter your email to be notified"
                   className="min-h-[44px] flex-1 bg-transparent px-4 text-[15px] text-[#0e0f12] placeholder:text-[#636570] focus:outline-none sm:pl-5"
                 />
                 <button

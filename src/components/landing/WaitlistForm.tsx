@@ -82,7 +82,7 @@ export function WaitlistForm({
           inputMode="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="Enter your email for early access"
+          placeholder="Enter your email to be notified"
           disabled={status === "loading"}
           className={
             isLight

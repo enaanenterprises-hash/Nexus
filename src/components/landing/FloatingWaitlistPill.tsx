@@ -168,7 +168,7 @@ export function FloatingWaitlistPill() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={status === "loading"}
-              placeholder={status === "error" && message ? message : "Email for early access"}
+              placeholder={status === "error" && message ? message : "Enter your email to be notified"}
               className={`min-h-[38px] min-w-0 flex-1 bg-transparent px-1.5 text-[14px] focus:outline-none ${
                 overDark
                   ? "text-[#f5f5f7] placeholder:text-[#8e8e95]"
