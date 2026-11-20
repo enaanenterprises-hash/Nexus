@@ -31,7 +31,7 @@ async function WaitlistTable() {
   }
 
   return (
-    <main className="mx-auto max-w-[720px] px-6 py-16 text-[15px] text-[#0e0f12]">
+    <main className="min-h-[100svh] bg-[#faf8f2] px-6 py-16 text-[15px] text-[#0e0f12]"><div className="mx-auto max-w-[720px]">
       <h1 className="font-editorial text-[2rem] tracking-[-0.03em]">Waitlist</h1>
       <p className="mt-2 text-[#636570]">{problem ?? `${rows.length} signup${rows.length === 1 ? "" : "s"}, newest first.`}</p>
       {rows.length > 0 ? (
@@ -54,7 +54,7 @@ async function WaitlistTable() {
           </tbody>
         </table>
       ) : null}
-    </main>
+    </div></main>
   )
 }
 
@@ -65,4 +65,5 @@ export default function WaitlistAdminPage() {
     </Suspense>
   )
 }
+
 
