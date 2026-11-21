@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } f
 import {
   ChevronDown,
   Download,
+  Film,
   FolderPlus,
   Layers,
   Loader2,
@@ -26,10 +27,12 @@ import {
   Trash2,
   Undo2,
   Upload,
+  X,
   Zap,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
+import type { CinemaExtractedAudioTransfer, CinemaVoiceoverRequest } from "@/lib/cinema/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -154,14 +157,20 @@ function deriveLayerMixers(list: StudioTrackV1[]): Record<number, LayerMixerStat
 
 export function StudioView({
   hub,
+  incomingVoiceover,
+  incomingCinemaAudio,
   onClose,
   onReleaseNode,
   onRouteTransfer,
+  onSendToCinema,
 }: {
   hub: ExtensionHubSnapshot;
+  incomingVoiceover?: { request: CinemaVoiceoverRequest; serial: number } | null;
+  incomingCinemaAudio?: { transfer: CinemaExtractedAudioTransfer; serial: number } | null;
   onClose: () => void;
   onReleaseNode: () => void;
   onRouteTransfer?: (fromId: ExtensionId, toId?: ExtensionId) => void;
+  onSendToCinema?: (recording: StudioRecording, mode: "mix" | "stems") => void;
 }) {
   const { theme } = useTheme();
   const [databaseConfigured, setDatabaseConfigured] = useState(false);
@@ -210,6 +219,11 @@ export function StudioView({
   const [exporting, setExporting] = useState<"mix" | "stems" | null>(null);
   const [normalizing, setNormalizing] = useState(false);
   const [statusBanner, setStatusBanner] = useState<string | null>(null);
+  const [linkedCinemaVoiceover, setLinkedCinemaVoiceover] = useState<CinemaVoiceoverRequest | null>(
+    null,
+  );
+  const voiceoverSerialRef = useRef(0);
+  const cinemaAudioSerialRef = useRef(0);
 
   // Undo / Redo Stacks
   const [undoStack, setUndoStack] = useState<HistorySnapshot[]>([]);
@@ -944,6 +958,103 @@ export function StudioView({
     setRoutingOpen(true);
   }
 
+  const handleEditInCinema = useCallback(
+    async (mode: "mix" | "stems" = "mix") => {
+      if (tracksRef.current.length === 0) {
+        showNotice("Record or import an audio layer before sending to Cinema.");
+        return;
+      }
+      const saved = await persistDraft(tracksRef.current, markersRef.current);
+      if (saved) {
+        onSendToCinema?.(saved, mode);
+      }
+    },
+    [onSendToCinema, persistDraft, showNotice],
+  );
+
+  // Sync Cinema voiceover context & timeline markers into Recording Studio
+  useEffect(() => {
+    if (!incomingVoiceover) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled || incomingVoiceover.serial === voiceoverSerialRef.current) return;
+      voiceoverSerialRef.current = incomingVoiceover.serial;
+      const req = incomingVoiceover.request;
+      setLinkedCinemaVoiceover(req);
+      if (req.markers.length > 0) {
+        setMarkers((prev) => {
+          const keys = new Set(prev.map((m) => `${m.atMs}:${m.label}`));
+          const additions: StudioMarkerV1[] = req.markers
+            .filter((m) => !keys.has(`${m.atMs}:${m.label}`))
+            .map((m) => ({
+              id: makeClientId("cmrk"),
+              atMs: m.atMs,
+              label: m.label,
+              kind: "chapter",
+              note: `Synced from Cinema (${req.projectTitle})`,
+            }));
+          if (additions.length === 0) return prev;
+          return [...prev, ...additions].sort((a, b) => a.atMs - b.atMs);
+        });
+      }
+      setStudioPage("record");
+      showNotice(`Voiceover ready for Cinema “${req.projectTitle}” (${req.markers.length} cues synced).`);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [incomingVoiceover, showNotice]);
+
+  // Import extracted audio WAV directly from Cinema into Studio Arrange timeline
+  useEffect(() => {
+    if (!incomingCinemaAudio) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled || incomingCinemaAudio.serial === cinemaAudioSerialRef.current) return;
+      cinemaAudioSerialRef.current = incomingCinemaAudio.serial;
+      const tr = incomingCinemaAudio.transfer;
+      const newTrack: StudioTrackV1 = {
+        id: makeClientId("trk"),
+        name: `${tr.clipName} (Cinema)`.slice(0, 80),
+        role: "voice",
+        layerIndex: 0,
+        offsetMs: 0,
+        trimStartMs: 0,
+        durationMs: Math.max(250, tr.durationMs),
+        sourceDurationMs: Math.max(250, tr.durationMs),
+        inputSource: "Cinema Extract",
+        colorTag: "blue",
+        hpfEnabled: false,
+        compressorEnabled: false,
+        gain: 1,
+        pan: 0,
+        muted: false,
+        solo: false,
+        peaks: tr.peaks,
+        audioRef: {
+          storage: "idb",
+          idbKey: tr.audioKey,
+          url: null,
+          mimeType: tr.mimeType,
+          byteLength: tr.byteLength,
+          sampleRate: tr.sampleRate,
+        },
+        createdAt: tr.extractedAt,
+      };
+      setTracks((prev) => {
+        const next = [...prev, newTrack];
+        void persistDraft(next, markersRef.current);
+        return next;
+      });
+      setSelectedTrackId(newTrack.id);
+      setStudioPage("edit");
+      showNotice("Imported soundtrack from Cinema — polish with EQ & Compressor, then Send to Cinema.");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [incomingCinemaAudio, persistDraft, showNotice]);
+
   const selectedTrack = useMemo(
     () => (selectedTrackId ? tracks.find((t) => t.id === selectedTrackId) ?? null : null),
     [selectedTrackId, tracks],
@@ -1235,6 +1346,16 @@ export function StudioView({
 
                 <button
                   type="button"
+                  disabled={tracks.length === 0}
+                  onClick={() => void handleEditInCinema("mix")}
+                  className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[12.5px] font-medium text-[color:var(--studio-accent)] transition-colors hover:bg-foreground/[0.06] disabled:opacity-45"
+                >
+                  <Film className="size-4 shrink-0" />
+                  <span>Edit in Cinema</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => void openRouting()}
                   className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[12.5px] font-medium text-foreground transition-colors hover:bg-foreground/[0.06]"
                 >
@@ -1278,6 +1399,39 @@ export function StudioView({
       </header>
 
       {/* Sliding Dual-Surface Stage: Record <-> Arrange */}
+      {linkedCinemaVoiceover ? (
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[color:var(--studio-accent)]/30 bg-[color:var(--studio-accent)]/10 px-4 py-1.5 text-[12px]">
+          <div className="flex min-w-0 items-center gap-2">
+            <Film className="size-3.5 shrink-0 text-[color:var(--studio-accent)]" />
+            <span className="truncate font-medium text-foreground">
+              Synced to Cinema · {linkedCinemaVoiceover.projectTitle}
+            </span>
+            <span className="hidden font-mono text-[11px] text-muted-foreground tabular-nums sm:inline">
+              {(linkedCinemaVoiceover.durationMs / 1000).toFixed(1)}s timeline
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              disabled={tracks.length === 0}
+              onClick={() => void handleEditInCinema("mix")}
+              className="h-7 rounded-full bg-foreground px-3 text-[11px] font-medium text-background hover:opacity-90"
+            >
+              Send Take Back to Cinema
+            </Button>
+            <button
+              type="button"
+              onClick={() => setLinkedCinemaVoiceover(null)}
+              aria-label="Dismiss Cinema sync banner"
+              className="rounded-full p-1 text-muted-foreground hover:text-foreground"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="studio-pages-viewport">
         <div className="studio-pages-track" data-page={studioPage}>
           {/* Page 1: Minimal Sculptural Recorder with Scalable Multi-Mic Console */}
@@ -1940,6 +2094,7 @@ export function StudioView({
         hub={hub}
         theme={theme}
         onRouteTransfer={(targetId) => onRouteTransfer?.(STUDIO_NODE_ID, targetId)}
+        onRouteToCinema={onSendToCinema}
       />
     </section>
   );

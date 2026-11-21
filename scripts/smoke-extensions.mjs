@@ -36,6 +36,7 @@ register(
 const ext = await import("../src/lib/extensions/index.ts");
 const { ExtensionBus, ExtensionRegistry, NEXUS_EXTENSION_API_VERSION, setStubPro, validateManifest } = ext;
 const { STUDIO_NODE_ID, studioExtension } = await import("../src/extensions/studio/node.ts");
+const { CINEMA_NODE_ID, cinemaExtension } = await import("../src/extensions/cinema/node.ts");
 
 let failed = 0;
 function assert(cond, msg) {
@@ -305,6 +306,105 @@ studioBus.emit(
 await new Promise((r) => setTimeout(r, 0));
 assert(downstream.video.includes("studio:take-routed"), "studio:take-routed reaches consumers declaring content:studio.recording:read");
 assert(!downstream.blind.includes("studio:take-routed"), "nodes without content:studio.recording:read never see studio takes");
+
+// Cinema extension & Studio <-> Cinema Creative Suite contract
+const suiteBus = new ExtensionBus();
+const suiteReg = new ExtensionRegistry(suiteBus);
+const suiteSeen = { cinema: [], reader: [], blind: [] };
+await suiteReg.register(studioExtension);
+await suiteReg.register({
+  ...cinemaExtension,
+  handlers: {
+    ...cinemaExtension.handlers,
+    onEvent: (e) => void suiteSeen.cinema.push(e.type),
+  },
+});
+await suiteReg.register({
+  manifest: manifest("com.acme.cinema-reader", { capabilities: ["media", "content:cinema.project:read"] }),
+  handlers: { onEvent: (e) => void suiteSeen.reader.push(e.type) },
+});
+await suiteReg.register({
+  manifest: manifest("com.acme.cinema-blind", { capabilities: ["media"] }),
+  handlers: { onEvent: (e) => void suiteSeen.blind.push(e.type) },
+});
+const suiteStAct = await suiteReg.activate(STUDIO_NODE_ID);
+const suiteCnAct = await suiteReg.activate(CINEMA_NODE_ID);
+assert(suiteStAct.ok && suiteCnAct.ok, "Studio and Cinema both snap into the two free Creative Suite sockets");
+setStubPro(true);
+await suiteReg.activate("com.acme.cinema-reader");
+await suiteReg.activate("com.acme.cinema-blind");
+assert(contentKinds.get("cinema.project")?.provider === CINEMA_NODE_ID, "cinema.project content kind registered to Cinema");
+
+suiteBus.emit(
+  "studio:take-routed",
+  {
+    recordingId: "rec-suite",
+    targetNodeId: CINEMA_NODE_ID,
+    intent: "video-studio",
+    title: "Podcast Stem",
+    envelope: {
+      kind: "studio.recording",
+      version: 1,
+      id: "rec-suite",
+      title: "Podcast Stem",
+      collectionId: "col-1",
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      data: {
+        description: null,
+        bpm: 120,
+        countInBars: 1,
+        durationMs: 3000,
+        masterGain: 1,
+        tracks: [],
+        markers: [],
+        tags: [],
+        transcript: null,
+        summary: null,
+        chapters: null,
+      },
+    },
+  },
+  STUDIO_NODE_ID,
+);
+suiteBus.emit(
+  "cinema:project-routed",
+  {
+    projectId: "cin-1",
+    targetNodeId: STUDIO_NODE_ID,
+    title: "Edit 1",
+    envelope: {
+      kind: "cinema.project",
+      version: 1,
+      id: "cin-1",
+      title: "Edit 1",
+      collectionId: "col-c1",
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      data: {
+        description: null,
+        aspectRatio: "16:9",
+        fps: 30,
+        width: 1920,
+        height: 1080,
+        durationMs: 5000,
+        background: { type: "solid", colorA: "#0a0a0c", colorB: "#0a0a0c", angleDeg: 135, grain: 0 },
+        tracks: [],
+        clips: [],
+        transitions: [],
+        markers: [],
+        tags: [],
+        notes: null,
+      },
+    },
+  },
+  CINEMA_NODE_ID,
+);
+await new Promise((r) => setTimeout(r, 0));
+assert(suiteSeen.cinema.includes("studio:take-routed"), "Cinema receives routed Studio takes cleanly");
+assert(suiteSeen.reader.includes("cinema:project-routed"), "cinema:project-routed reaches consumers declaring content:cinema.project:read");
+assert(!suiteSeen.blind.includes("cinema:project-routed"), "nodes without content:cinema.project:read never see cinema projects");
+setStubPro(false);
 
 if (failed > 0) process.exit(1);
 console.log("smoke-extensions passed");

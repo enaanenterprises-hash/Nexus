@@ -2,6 +2,7 @@ import { drizzle } from "drizzle-orm/postgres-js"
 import postgres from "postgres"
 import {
   AUTH_SCHEMA_STATEMENTS,
+  CINEMA_SCHEMA_STATEMENTS,
   COMMAND_SCHEMA_STATEMENTS,
   RESEARCH_SCHEMA_STATEMENTS,
   STUDIO_SCHEMA_STATEMENTS,
@@ -17,6 +18,7 @@ let database: Database | undefined
 let schemaReady: Promise<void> | null = null
 let researchReady: Promise<void> | null = null
 let studioReady: Promise<void> | null = null
+let cinemaReady: Promise<void> | null = null
 let commandReady: Promise<void> | null = null
 let waitlistReady: Promise<void> | null = null
 let userStateReady: Promise<void> | null = null
@@ -123,6 +125,21 @@ export function ensureStudioSchema() {
     throw error
   })
   return studioReady
+}
+
+/** Creates the Cinema video editor tables (after the Auth.js tables they reference). */
+export function ensureCinemaSchema() {
+  cinemaReady ??= (async () => {
+    await ensureAuthSchema()
+    const connection = getSql()
+    for (const statement of CINEMA_SCHEMA_STATEMENTS) {
+      await connection.unsafe(statement)
+    }
+  })().catch((error: unknown) => {
+    cinemaReady = null
+    throw error
+  })
+  return cinemaReady
 }
 
 /** Creates the per-user workspace state table (after the Auth.js tables it references). */

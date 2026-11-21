@@ -217,6 +217,47 @@ export const STUDIO_SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS "studio_recording_collectionId_idx" ON "studio_recording" ("collectionId")`,
 ] as const
 
+/**
+ * Cinema video editor projects and collections, scoped per user. Binary media
+ * payloads reside in client IndexedDB or same-origin media proxies.
+ */
+export const CINEMA_SCHEMA_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS "cinema_collection" (
+    "id" text PRIMARY KEY NOT NULL,
+    "userId" text NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
+    "name" text NOT NULL,
+    "description" text,
+    "createdAt" timestamptz NOT NULL DEFAULT now(),
+    "updatedAt" timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS "cinema_collection_userId_idx" ON "cinema_collection" ("userId")`,
+  `CREATE TABLE IF NOT EXISTS "cinema_project" (
+    "id" text PRIMARY KEY NOT NULL,
+    "userId" text NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
+    "collectionId" text NOT NULL REFERENCES "cinema_collection" ("id") ON DELETE CASCADE,
+    "title" text NOT NULL,
+    "description" text,
+    "aspectRatio" text NOT NULL DEFAULT '16:9',
+    "fps" integer NOT NULL DEFAULT 30,
+    "width" integer NOT NULL DEFAULT 1920,
+    "height" integer NOT NULL DEFAULT 1080,
+    "durationMs" integer NOT NULL DEFAULT 0,
+    "thumbnailUrl" text,
+    "background" jsonb NOT NULL DEFAULT '{}',
+    "tracks" jsonb NOT NULL DEFAULT '[]',
+    "clips" jsonb NOT NULL DEFAULT '[]',
+    "transitions" jsonb NOT NULL DEFAULT '[]',
+    "assets" jsonb NOT NULL DEFAULT '[]',
+    "markers" jsonb NOT NULL DEFAULT '[]',
+    "tags" text[] NOT NULL DEFAULT '{}',
+    "notes" jsonb,
+    "createdAt" timestamptz NOT NULL DEFAULT now(),
+    "updatedAt" timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS "cinema_project_userId_idx" ON "cinema_project" ("userId", "updatedAt" DESC)`,
+  `CREATE INDEX IF NOT EXISTS "cinema_project_collectionId_idx" ON "cinema_project" ("collectionId")`,
+] as const
+
 /** Per-user Nexus workspace preferences & wired node sockets, synced via Postgres. */
 export const USER_STATE_SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS "nexus_user_state" (

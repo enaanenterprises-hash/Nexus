@@ -20,6 +20,7 @@ import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { CINEMA_NODE_ID } from "@/extensions/cinema/node";
 import { STUDIO_NODE_ID } from "@/extensions/studio/node";
 import {
   FREE_ACTIVE_EXTENSION_SLOTS,
@@ -171,6 +172,7 @@ type Props = {
   onTogglePro: () => void;
   onTransfer: (fromId: ExtensionId, toId?: ExtensionId) => void;
   onOpenStudio: () => void;
+  onOpenCinema: () => void;
   onClose: () => void;
 };
 
@@ -186,6 +188,7 @@ export function NodesView({
   onTogglePro,
   onTransfer,
   onOpenStudio,
+  onOpenCinema,
   onClose,
 }: Props) {
   const { entitlement, slots, extensions } = hub;
@@ -756,6 +759,16 @@ export function NodesView({
                           <span>Open Studio</span>
                           <ArrowUpRight className="size-3.5" />
                         </Button>
+                      ) : inspectedExt.manifest.id === CINEMA_NODE_ID ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={onOpenCinema}
+                          className="h-9 gap-1.5 rounded-full bg-foreground px-4 text-[12.5px] text-background hover:bg-foreground/90"
+                        >
+                          <span>Open Cinema</span>
+                          <ArrowUpRight className="size-3.5" />
+                        </Button>
                       ) : null}
 
                       <Button
@@ -991,11 +1004,17 @@ export function NodesView({
                                 onClick={() =>
                                   ext.manifest.id === STUDIO_NODE_ID
                                     ? onOpenStudio()
-                                    : onSelectSlot(boundSlot.id)
+                                    : ext.manifest.id === CINEMA_NODE_ID
+                                      ? onOpenCinema()
+                                      : onSelectSlot(boundSlot.id)
                                 }
                                 className="h-8 rounded-full px-3 text-[12px]"
                               >
-                                {ext.manifest.id === STUDIO_NODE_ID ? "Open Studio" : "Inspect"}
+                                {ext.manifest.id === STUDIO_NODE_ID
+                                  ? "Open Studio"
+                                  : ext.manifest.id === CINEMA_NODE_ID
+                                    ? "Open Cinema"
+                                    : "Inspect"}
                               </Button>
                               <Button
                                 type="button"

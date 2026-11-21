@@ -4,6 +4,11 @@
  * the network bus, and share context with the central Nexus brain.
  */
 
+import type {
+  CinemaExtractedAudioTransfer,
+  CinemaProjectContentV1,
+  CinemaVoiceoverRequest,
+} from "@/lib/cinema/types";
 import type { AutomationRun, FocusSession } from "@/lib/command/automation/types";
 import type { CommandItem, CommandKind } from "@/lib/command/kinds";
 import type { StudioRecordingContentV1, StudioRoutingIntent } from "@/lib/studio/types";
@@ -95,6 +100,23 @@ export type NexusEventMap = {
     title: string;
     envelope: StudioRecordingContentV1;
   };
+  /** Delivered only with `content:cinema.project:read`. */
+  "cinema:project-saved": {
+    projectId: string;
+    collectionId: string;
+    title: string;
+    durationMs: number;
+    clipCount: number;
+  };
+  /** Delivered only with `content:cinema.project:read`. */
+  "cinema:project-routed": {
+    projectId: string;
+    targetNodeId?: ExtensionId;
+    title: string;
+    envelope: CinemaProjectContentV1;
+  };
+  "cinema:voiceover-requested": CinemaVoiceoverRequest;
+  "cinema:audio-extracted": CinemaExtractedAudioTransfer;
   /** A new Command item reached the network. Delivered only with `content:<kind>:read`. */
   "command:item-published": { kind: CommandKind; item: CommandItem };
   /** An automation ran. Delivered only with the `automations` capability. */

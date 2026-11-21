@@ -16,6 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import type { ExtensionHubSnapshot, ExtensionId } from "@/lib/extensions";
 import { emitStudioTakeRouted } from "@/lib/studio/studio-client";
 import type { StudioRecording, StudioRoutingIntent } from "@/lib/studio/types";
+import { CINEMA_NODE_ID } from "@/extensions/cinema/node";
 import { STUDIO_NODE_ID } from "@/extensions/studio/node";
 
 const FUTURE_NODE_TARGETS: Array<{
@@ -27,9 +28,9 @@ const FUTURE_NODE_TARGETS: Array<{
 }> = [
   {
     intent: "video-studio",
-    label: "Video Studio",
+    label: "Cinema",
     subtitle: "Send multi-track audio, markers & timecode envelope to align with video cuts.",
-    badge: "Future node · Bus ready",
+    badge: "Creative Suite · Live",
     icon: Film,
   },
   {
@@ -62,6 +63,7 @@ export function StudioRoutingSheet({
   hub,
   theme,
   onRouteTransfer,
+  onRouteToCinema,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -69,6 +71,7 @@ export function StudioRoutingSheet({
   hub: ExtensionHubSnapshot;
   theme: "dark" | "light";
   onRouteTransfer?: (targetId?: ExtensionId) => void;
+  onRouteToCinema?: (recording: StudioRecording, mode: "mix" | "stems") => void;
 }) {
   const [routedKey, setRoutedKey] = useState<string | null>(null);
 
@@ -145,6 +148,8 @@ export function StudioRoutingSheet({
                 {FUTURE_NODE_TARGETS.map((target) => {
                   const Icon = target.icon;
                   const sent = routedKey === target.intent;
+                  const isCinema = target.intent === "video-studio";
+                  const cinemaLive = hub.slots.some((s) => s.occupiedBy === CINEMA_NODE_ID);
                   return (
                     <Card key={target.intent} size="sm" className="rounded-xl border border-border/80 bg-card/50 shadow-none">
                       <CardHeader className="pb-2">
@@ -154,7 +159,7 @@ export function StudioRoutingSheet({
                             <span>{target.label}</span>
                           </CardTitle>
                           <Badge variant="outline" className="text-[10px] font-normal">
-                            {target.badge}
+                            {isCinema ? (cinemaLive ? "Live · Creative Suite" : "Creative Suite") : target.badge}
                           </Badge>
                         </div>
                         <CardDescription className="text-[11.5px] leading-snug">
@@ -162,16 +167,47 @@ export function StudioRoutingSheet({
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="pt-0">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={sent ? "secondary" : "outline"}
-                          onClick={() => sendTo(target.intent, undefined, target.intent)}
-                          className="w-full justify-between rounded-lg text-[12px]"
-                        >
-                          <span>{sent ? "Envelope emitted on bus" : `Push to ${target.label}`}</span>
-                          {sent ? <Check className="size-3.5" /> : <ArrowRight className="size-3.5" />}
-                        </Button>
+                        {isCinema ? (
+                          <div className="flex gap-1.5">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={sent ? "secondary" : "outline"}
+                              onClick={() => {
+                                onRouteToCinema?.(recording, "mix");
+                                onOpenChange(false);
+                              }}
+                              className="flex-1 justify-between rounded-lg text-[11.5px]"
+                            >
+                              <span>Send Mix</span>
+                              <ArrowRight className="size-3" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                onRouteToCinema?.(recording, "stems");
+                                onOpenChange(false);
+                              }}
+                              className="flex-1 justify-between rounded-lg text-[11.5px]"
+                            >
+                              <span>Stems</span>
+                              <ArrowRight className="size-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={sent ? "secondary" : "outline"}
+                            onClick={() => sendTo(target.intent, undefined, target.intent)}
+                            className="w-full justify-between rounded-lg text-[12px]"
+                          >
+                            <span>{sent ? "Envelope emitted on bus" : `Push to ${target.label}`}</span>
+                            {sent ? <Check className="size-3.5" /> : <ArrowRight className="size-3.5" />}
+                          </Button>
+                        )}
                       </CardContent>
                     </Card>
                   );

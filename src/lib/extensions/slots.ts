@@ -20,7 +20,7 @@ export const EXTENSION_SLOT_BLUEPRINT: Omit<ExtensionSlot, "occupiedBy">[] = [
     label: "Free socket",
     tier: "free",
     placeholderKey: "study",
-    description: "Free socket — Study, the learning companion, will live here",
+    description: "Free socket — Cinema, the video workspace, lives here alongside Studio",
   },
   {
     id: "slot-pro-1",

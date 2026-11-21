@@ -41,6 +41,7 @@ import { Kbd } from "@/components/ui/kbd";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CINEMA_NODE_ID, cinemaExtension } from "@/extensions/cinema/node";
 import { SAMPLE_EXTENSIONS } from "@/extensions/samples";
 import { STUDIO_NODE_ID, studioExtension } from "@/extensions/studio/node";
 import { connectGoogleServices } from "@/lib/command/google-connect";
@@ -146,7 +147,7 @@ const OTHER_APP_ORDER: readonly string[] = [
 
 const DEFAULT_SAMPLE_NODES: ExtensionId[] = [
   STUDIO_NODE_ID,
-  "dev.nexus.sample.daily-brief",
+  CINEMA_NODE_ID,
 ];
 
 function computeSuggestedWidgets(connectedConnectorIds: Set<string>): string[] {
@@ -1664,14 +1665,15 @@ function SetupNodesStep({
   return (
     <div className="space-y-4 py-1">
       <div className="setup-section-head flex items-center justify-between gap-2 pb-2">
-        <span className="setup-label">Functional Studio &amp; starter nodes</span>
+        <span className="setup-label">Creative Studio Suite &amp; starter nodes</span>
         <span className="setup-count-meta">
           {selectedNodes.length} of {FREE_ACTIVE_EXTENSION_SLOTS} active
         </span>
       </div>
 
-      <div className="setup-node-matrix !grid-cols-1">
-        {renderNodeOption(studioExtension, "!border-r-0 !border-b-0")}
+      <div className="setup-node-matrix !grid-cols-1 sm:!grid-cols-2">
+        {renderNodeOption(studioExtension)}
+        {renderNodeOption(cinemaExtension, "!border-r-0")}
       </div>
 
       <div className="setup-node-matrix">
@@ -1679,7 +1681,7 @@ function SetupNodesStep({
       </div>
 
       <p className="setup-footer-note">
-        Recording Studio is live with voice-reactive audio and cross-node routing; sample nodes remain available for network previews.
+        Recording Studio and Cinema form the Creative Suite with shared audio stems, markers, and timeline routing; sample nodes remain available for network previews.
       </p>
     </div>
   );

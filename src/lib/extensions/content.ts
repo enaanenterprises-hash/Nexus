@@ -1,4 +1,9 @@
 import type {
+  CinemaProjectAnnotationV1,
+  CinemaProjectContentV1,
+  CinemaProjectListItemV1,
+} from "@/lib/cinema/types";
+import type {
   ResearchSourceAnnotationV1,
   ResearchSourceContentV1,
   ResearchSourceListItemV1,
@@ -85,6 +90,12 @@ export interface ContentKindMap extends CommandKindEntries {
     item: StudioRecordingContentV1;
     annotation: StudioRecordingAnnotationV1;
   };
+  "cinema.project": {
+    version: 1;
+    listItem: CinemaProjectListItemV1;
+    item: CinemaProjectContentV1;
+    annotation: CinemaProjectAnnotationV1;
+  };
 }
 
 export type KnownContentKind = keyof ContentKindMap;
@@ -93,6 +104,7 @@ export type KnownContentKind = keyof ContentKindMap;
 export const CONTENT_KIND_VERSIONS: { [K in KnownContentKind]: ContentKindMap[K]["version"] } = {
   "research.source": 1,
   "studio.recording": 1,
+  "cinema.project": 1,
   "command.event": 1,
   "command.task": 1,
   "command.deadline": 1,

@@ -1724,6 +1724,7 @@ button.landing-signup {
 .command-screen,
 .nodes-fullscreen,
 .studio-fullscreen,
+.cinema-fullscreen,
 .node-full {
   transition: filter 680ms cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -1734,6 +1735,7 @@ button.landing-signup {
 .dash[data-menu-modal="true"] .command-screen,
 .dash[data-menu-modal="true"] .nodes-fullscreen,
 .dash[data-menu-modal="true"] .studio-fullscreen,
+.dash[data-menu-modal="true"] .cinema-fullscreen,
 .dash[data-menu-modal="true"] .node-full,
 .dash[data-menu-modal="true"] .node-panel {
   filter: blur(10px) brightness(0.62);
@@ -1746,6 +1748,7 @@ button.landing-signup {
 .dash[data-theme="light"][data-menu-modal="true"] .command-screen,
 .dash[data-theme="light"][data-menu-modal="true"] .nodes-fullscreen,
 .dash[data-theme="light"][data-menu-modal="true"] .studio-fullscreen,
+.dash[data-theme="light"][data-menu-modal="true"] .cinema-fullscreen,
 .dash[data-theme="light"][data-menu-modal="true"] .node-full,
 .dash[data-theme="light"][data-menu-modal="true"] .node-panel {
   filter: blur(10px) brightness(0.72);
@@ -2183,7 +2186,8 @@ button.landing-signup {
 .dash[data-theme="dark"] .node-full,
 .dash[data-theme="dark"] .command-screen,
 .dash[data-theme="dark"] .nodes-fullscreen,
-.dash[data-theme="dark"] .studio-fullscreen {
+.dash[data-theme="dark"] .studio-fullscreen,
+.dash[data-theme="dark"] .cinema-fullscreen {
   --land-faint: #8e8c86;
   --land-line: rgba(255, 255, 255, 0.14);
   --land-hair: rgba(255, 255, 255, 0.085);
@@ -8643,13 +8647,178 @@ html[data-dash-theme="light"] {
   animation: nodes-pulse-ring 1.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
 }
 
+/* ─── Nexus Cinema (Apple HIG Pro Video Editor + Studio Integration) ─── */
+:root {
+  --cinema-playhead: #ef4444;
+  --cinema-select: #38bdf8;
+  --cinema-select-soft: rgba(56, 189, 248, 0.14);
+  --cinema-studio-link: #5b9cf6;
+  --cinema-bg: #08080a;
+  --cinema-chrome: #0e0e11;
+  --cinema-surface: #131317;
+  --cinema-elevated: #18181d;
+  --cinema-thumb: #e4e4e7;
+}
+
+.dash[data-theme="light"],
+html[data-dash-theme="light"] {
+  --cinema-playhead: #dc2626;
+  --cinema-select: #0284c7;
+  --cinema-select-soft: rgba(2, 132, 199, 0.12);
+  --cinema-studio-link: #2563eb;
+  --cinema-bg: #ebe9e4;
+  --cinema-chrome: #ffffff;
+  --cinema-surface: #f7f6f2;
+  --cinema-elevated: #ffffff;
+  --cinema-thumb: #18181b;
+}
+
+.cinema-fullscreen {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  padding: 0;
+  background: var(--cinema-bg);
+  --ring: rgba(56, 189, 248, 0.48);
+  --accent: var(--cinema-select-soft);
+}
+
+.cinema-fullscreen[hidden] {
+  display: none !important;
+}
+
+.cinema-fullscreen input,
+.cinema-fullscreen textarea {
+  caret-color: var(--cinema-select);
+}
+
+.cinema-header {
+  min-height: 3.35rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.085);
+  background: rgba(14, 14, 17, 0.84);
+  backdrop-filter: blur(22px) saturate(1.35);
+  -webkit-backdrop-filter: blur(22px) saturate(1.35);
+}
+
+.dash[data-theme="light"] .cinema-header,
+html[data-dash-theme="light"] .cinema-header {
+  border-bottom-color: rgba(14, 15, 18, 0.08);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+/* Liquid Glass reserved strictly for floating chrome & canvas toolbars */
+.cinema-glass-bar {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(20, 20, 25, 0.82);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 16px 40px -14px rgba(0, 0, 0, 0.72);
+}
+
+.dash[data-theme="light"] .cinema-glass-bar,
+html[data-dash-theme="light"] .cinema-glass-bar {
+  border-color: rgba(14, 15, 18, 0.12);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 14px 32px -12px rgba(14, 15, 18, 0.16);
+}
+
+.cinema-chrome-surface {
+  background: var(--cinema-chrome);
+}
+
+.cinema-panel-surface {
+  background: var(--cinema-surface);
+}
+
+.cinema-stage-well {
+  background:
+    radial-gradient(65% 65% at 50% 46%, rgba(255, 255, 255, 0.025), transparent 76%),
+    var(--cinema-bg);
+}
+
+.dash[data-theme="light"] .cinema-stage-well,
+html[data-dash-theme="light"] .cinema-stage-well {
+  background:
+    radial-gradient(65% 65% at 50% 46%, rgba(255, 255, 255, 0.42), transparent 76%),
+    var(--cinema-bg);
+}
+
+.cinema-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  outline: none;
+  cursor: pointer;
+}
+
+.dash[data-theme="light"] .cinema-range,
+html[data-dash-theme="light"] .cinema-range {
+  background: rgba(14, 15, 18, 0.16);
+}
+
+.cinema-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--cinema-thumb, #e4e4e7);
+  border: 1.5px solid #09090b;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.dash[data-theme="light"] .cinema-range::-webkit-slider-thumb,
+html[data-dash-theme="light"] .cinema-range::-webkit-slider-thumb {
+  border-color: #ffffff;
+}
+
+.cinema-range::-webkit-slider-thumb:hover {
+  transform: scale(1.16);
+}
+
+.cinema-range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--cinema-thumb, #e4e4e7);
+  border: 1.5px solid #09090b;
+}
+
+.cinema-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.cinema-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cinema-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.dash[data-theme="light"] .cinema-scroll::-webkit-scrollbar-thumb,
+html[data-dash-theme="light"] .cinema-scroll::-webkit-scrollbar-thumb {
+  background: rgba(14, 15, 18, 0.16);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cmd-quickbar-backdrop,
   .cmd-quickbar,
   .cmd-flow-connector--live::after,
   .nodes-conduit-active,
-  .nodes-signal-ring {
+  .nodes-signal-ring,
+  .cinema-range::-webkit-slider-thumb {
     animation: none;
+    transition-duration: 0.01ms !important;
   }
 }
 

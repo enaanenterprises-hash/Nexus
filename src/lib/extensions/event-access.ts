@@ -15,6 +15,9 @@ export function requiredCapability(event: NexusEvent): ExtensionCapability | nul
     case "studio:recording-saved":
     case "studio:take-routed":
       return contentCapability("studio.recording", "read");
+    case "cinema:project-saved":
+    case "cinema:project-routed":
+      return contentCapability("cinema.project", "read");
     default:
       return null;
   }

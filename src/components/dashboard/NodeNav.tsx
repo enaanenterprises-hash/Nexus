@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { CINEMA_NODE_ID } from "@/extensions/cinema/node";
 import { STUDIO_NODE_ID } from "@/extensions/studio/node";
 import { signOutAction } from "@/lib/auth/actions";
 import {
@@ -30,7 +31,7 @@ import { CommandIcon, LockIcon, MoonIcon, NetworkIcon, NodesIcon, PlusIcon, SunI
 
 export type PanelId = "today" | "nodes" | "settings" | { extension: ExtensionId };
 
-export type Surface = { view: "home" | "research" | "command" | "studio" | "nodes"; panel: PanelId | null };
+export type Surface = { view: "home" | "research" | "command" | "studio" | "cinema" | "nodes"; panel: PanelId | null };
 
 const isPanel = (panel: PanelId | null, id: PanelId) =>
   typeof id === "string" ? panel === id : typeof panel === "object" && panel?.extension === id.extension;
@@ -167,7 +168,8 @@ export const NodeMenu = memo(function NodeMenu({
           tooltip={ext.manifest.name}
           active={
             isPanel(surface.panel, { extension: ext.manifest.id }) ||
-            (ext.manifest.id === STUDIO_NODE_ID && surface.view === "studio")
+            (ext.manifest.id === STUDIO_NODE_ID && surface.view === "studio") ||
+            (ext.manifest.id === CINEMA_NODE_ID && surface.view === "cinema")
           }
           onClick={() => onPanel({ extension: ext.manifest.id })}
         >
@@ -472,7 +474,8 @@ export const NodeRail = memo(function NodeRail({
           const selected =
             ext &&
             (isPanel(surface.panel, { extension: ext.manifest.id }) ||
-              (ext.manifest.id === STUDIO_NODE_ID && surface.view === "studio"));
+              (ext.manifest.id === STUDIO_NODE_ID && surface.view === "studio") ||
+              (ext.manifest.id === CINEMA_NODE_ID && surface.view === "cinema"));
           const tip = ext
             ? `${name} · live`
             : openSlot
