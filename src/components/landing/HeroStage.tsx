@@ -10,7 +10,7 @@ import { NexusMark } from "./NexusLogo";
 const NAV_LINKS = [
   { id: "workspace", href: "#workspace", label: "Workspace" },
   { id: "integrations", href: "#integrations", label: "Integrations" },
-  { id: "roadmap", href: "#roadmap", label: "Roadmap" },
+  { id: "workflows", href: "#workflows", label: "Workflows" },
   { id: "security", href: "#security", label: "Security" },
 ] as const;
 

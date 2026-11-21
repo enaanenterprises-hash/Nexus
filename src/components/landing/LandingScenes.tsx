@@ -1,8 +1,11 @@
-import { IntegrationsAtlas, SecurityAndWaitlist } from "./EcosystemAtlas";
+import { ArchitecturePrinciple } from "./ArchitecturePrinciple";
+import { IntegrationsAtlas } from "./EcosystemAtlas";
 import { EditorialManifesto } from "./EditorialManifesto";
 import { LightfallTransition } from "./LightfallTransition";
+import { NodePlatformSection } from "./NodePlatformSection";
+import { SecurityAndBetaClose } from "./SecurityAndBetaClose";
 import { SingularityStage } from "./SingularityStage";
-import { SystemArchitecture } from "./SystemArchitecture";
+import { WorkflowsShowcase } from "./WorkflowsShowcase";
 
 export function LandingScenes() {
   return (
@@ -12,8 +15,10 @@ export function LandingScenes() {
       <div id="dark-realm" data-obsidian-band="true" className="landing-obsidian">
         <SingularityStage />
         <IntegrationsAtlas />
-        <SystemArchitecture />
-        <SecurityAndWaitlist />
+        <WorkflowsShowcase />
+        <ArchitecturePrinciple />
+        <NodePlatformSection />
+        <SecurityAndBetaClose />
       </div>
     </>
   );
