@@ -618,10 +618,10 @@ export function CinemaTimeline({
       >
         <div style={{ width: TRACK_HEADER_W + trackWidthPx }} className="relative min-h-full">
           {/* Ruler Row */}
-          <div className="sticky top-0 z-20 flex h-[30px] border-b border-border/75 bg-card/95 backdrop-blur-md">
+          <div className="sticky top-0 z-20 flex h-[30px] border-b border-white/[0.07] bg-[#060609]/95 backdrop-blur-md">
             <div
               style={{ width: TRACK_HEADER_W }}
-              className="sticky left-0 z-30 flex shrink-0 items-center justify-between border-r border-border/75 bg-card px-3 font-mono text-[10.5px] text-muted-foreground"
+              className="sticky left-0 z-30 flex shrink-0 items-center justify-between border-r border-white/[0.07] bg-[#08080c] px-3 font-mono text-[10.5px] text-muted-foreground"
             >
               <span>Tracks</span>
               <span className="tabular-nums">{project.tracks.length}</span>
@@ -796,12 +796,12 @@ export function CinemaTimeline({
               <div
                 key={track.id}
                 style={{ height: TRACK_H }}
-                className="flex border-b border-border/60"
+                className="flex border-b border-white/[0.06]"
               >
                 {/* Sticky Track Header */}
                 <div
                   style={{ width: TRACK_HEADER_W }}
-                  className="sticky left-0 z-10 flex shrink-0 items-center justify-between gap-1 border-r border-border/75 bg-card px-2.5"
+                  className="sticky left-0 z-10 flex shrink-0 items-center justify-between gap-1 border-r border-white/[0.07] bg-[#08080c] px-2.5"
                 >
                   <div className="flex min-w-0 items-center gap-1.5">
                     <Icon className="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.6} />
@@ -876,7 +876,7 @@ export function CinemaTimeline({
                     }
                   }}
                   className={`relative h-full ${
-                    isDropTarget ? "bg-[color:var(--cinema-select-soft)]" : "bg-foreground/[0.015]"
+                    isDropTarget ? "bg-[color:var(--cinema-select-soft)]" : "bg-[#030305]"
                   } ${track.hidden ? "opacity-45" : ""}`}
                 >
                   {/* Subtle Gold Vertical Beat Lines inside Lanes */}
@@ -919,10 +919,10 @@ export function CinemaTimeline({
                           style={{ left: leftPx, width: widthPx }}
                           className={`group absolute top-1.5 bottom-1.5 flex cursor-grab items-center overflow-hidden rounded-lg border transition-colors active:cursor-grabbing ${
                             isSelected
-                              ? "z-10 border-[color:var(--cinema-select)] bg-card shadow-[0_0_0_1px_var(--cinema-select)]"
+                              ? "z-10 border-[color:var(--cinema-select)] bg-[#111118] shadow-[0_0_0_1px_var(--cinema-select)]"
                               : isStudioLinked
                                 ? "border-[color:var(--nexus-link-border)] bg-[color:var(--nexus-link-soft)] hover:border-[color:var(--nexus-link)]"
-                                : "border-border/90 bg-card/85 hover:border-foreground/35"
+                                : "border-white/[0.09] bg-[#0c0c12] hover:border-white/30"
                           }`}
                         >
                           {/* Video & Photo Filmstrip Thumbnails */}

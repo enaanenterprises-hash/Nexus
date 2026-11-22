@@ -140,12 +140,12 @@ export function StudioInspectorContent({
         <div
           role="tablist"
           aria-label="Studio inspector section"
-          className="inline-grid flex-1 grid-cols-3 rounded-lg border border-border/75 bg-foreground/[0.04] p-0.5"
+          className="inline-grid flex-1 grid-cols-3 rounded-lg border border-white/[0.08] bg-white/[0.04] p-0.5"
         >
           {(
             [
-              { id: "clip", label: "Clip & Mix" },
-              { id: "markers", label: `Markers (${markers.length})` },
+              { id: "clip", label: "Clip" },
+              { id: "markers", label: "Markers" },
               { id: "session", label: "Session" },
             ] as const
           ).map((item) => {
@@ -157,7 +157,7 @@ export function StudioInspectorContent({
                 role="tab"
                 aria-selected={active}
                 onClick={() => onChangeTab(item.id)}
-                className={`h-7 truncate rounded-md px-1.5 text-[11.5px] font-medium transition-colors ${
+                className={`h-7 rounded-md px-2 text-[11.5px] font-medium transition-colors ${
                   active
                     ? "bg-foreground text-background"
                     : "text-muted-foreground hover:text-foreground"

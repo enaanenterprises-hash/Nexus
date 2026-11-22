@@ -11,6 +11,7 @@ import {
   Loader2,
   Mic,
   MonitorPlay,
+  MoreHorizontal,
   PanelLeftClose,
   Plus,
   Scissors,
@@ -23,6 +24,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { searchStockMedia } from "@/lib/cinema/cinema-client";
@@ -61,7 +63,7 @@ export type CinemaSidebarTab =
 const PRIMARY_TABS: Array<{ id: "media" | "text" | "elements" | "canvas"; label: string }> = [
   { id: "media", label: "Media" },
   { id: "text", label: "Text" },
-  { id: "elements", label: "Elements" },
+  { id: "elements", label: "Visuals" },
   { id: "canvas", label: "Canvas" },
 ];
 
@@ -269,89 +271,57 @@ export function CinemaSidebar({
       onDrop={(e) => {
         if (activeTab === "media") handleDrop(e);
       }}
-      className="cinema-scroll flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-3"
+      className="cinema-scroll flex min-h-0 flex-1 flex-col overflow-y-auto px-3.5 py-3"
     >
       {isMediaGroup ? (
-        <div
-          className="mb-3 grid grid-cols-3 gap-0.5 rounded-lg border border-border/75 bg-foreground/[0.04] p-0.5"
-          role="tablist"
-          aria-label="Media source"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "media"}
-            onClick={() => onSelectTab("media")}
-            className={`h-7 rounded-md px-1.5 text-[11px] font-medium transition-colors ${
-              activeTab === "media"
-                ? "bg-card text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Project
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "nodes"}
-            onClick={() => onSelectTab("nodes")}
-            className={`inline-flex h-7 items-center justify-center gap-1.5 rounded-md px-1.5 text-[11px] font-medium transition-colors ${
-              activeTab === "nodes"
-                ? "bg-card text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <span className="size-1.5 shrink-0 rounded-full bg-[color:var(--nexus-link)]" aria-hidden />
-            <span>Studio</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "stock"}
-            onClick={() => onSelectTab("stock")}
-            className={`h-7 rounded-md px-1.5 text-[11px] font-medium transition-colors ${
-              activeTab === "stock"
-                ? "bg-card text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Stock
-          </button>
-        </div>
-      ) : null}
-
-      {isElementsGroup ? (
-        <div
-          className="mb-3 grid grid-cols-2 gap-0.5 rounded-lg border border-border/75 bg-foreground/[0.04] p-0.5"
-          role="tablist"
-          aria-label="Elements category"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "elements"}
-            onClick={() => onSelectTab("elements")}
-            className={`h-7 rounded-md px-2 text-[11px] font-medium transition-colors ${
-              activeTab === "elements"
-                ? "bg-card text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Elements &amp; FX
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "templates"}
-            onClick={() => onSelectTab("templates")}
-            className={`h-7 rounded-md px-2 text-[11px] font-medium transition-colors ${
-              activeTab === "templates"
-                ? "bg-card text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Templates
-          </button>
+        <div className="mb-3 flex items-center justify-between border-b border-white/[0.07] pb-2">
+          <div className="flex items-center gap-3" role="tablist" aria-label="Media source">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "media"}
+              onClick={() => onSelectTab("media")}
+              className={`text-[12px] font-medium transition-colors ${
+                activeTab === "media"
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Project
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "nodes"}
+              onClick={() => onSelectTab("nodes")}
+              className={`inline-flex items-center gap-1.5 text-[12px] font-medium transition-colors ${
+                activeTab === "nodes"
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <span className="size-1.5 shrink-0 rounded-full bg-[color:var(--nexus-link)]" aria-hidden />
+              <span>Studio</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "stock"}
+              onClick={() => onSelectTab("stock")}
+              className={`text-[12px] font-medium transition-colors ${
+                activeTab === "stock"
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Stock
+            </button>
+          </div>
+          {activeTab === "media" && project.assets.length > 0 ? (
+            <span className="font-mono text-[10.5px] text-muted-foreground tabular-nums">
+              {project.assets.length}
+            </span>
+          ) : null}
         </div>
       ) : null}
 
@@ -360,7 +330,7 @@ export function CinemaSidebar({
           <div className="flex items-center gap-1.5">
             <label className="inline-flex h-8 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-foreground px-3 text-[12px] font-medium text-background transition-opacity hover:opacity-90">
               <Plus className="size-3.5" strokeWidth={1.75} />
-              <span>Import Media</span>
+              <span>Import</span>
               <input
                 type="file"
                 accept={ACCEPTED_MEDIA_TYPES}
@@ -386,7 +356,7 @@ export function CinemaSidebar({
               className={`rounded-xl border border-dashed px-3 py-6 text-center transition-colors ${
                 dragOverMedia
                   ? "border-[color:var(--cinema-playhead)] bg-[color:var(--studio-accent-soft)]"
-                  : "border-border/80 bg-card/35"
+                  : "border-white/10 bg-[#0b0b10]"
               }`}
             >
               <Upload className="mx-auto size-4 text-muted-foreground" strokeWidth={1.6} />
@@ -394,104 +364,63 @@ export function CinemaSidebar({
                 Drop MP4, MOV, WebM, images, or WAV
               </p>
               <p className="mt-0.5 text-[11px] text-muted-foreground">
-                Click an item below to place on the timeline
+                Or click Import above to add media
               </p>
             </div>
           ) : null}
 
           {project.assets.length > 0 ? (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                <span>Project Bin</span>
-                <span className="font-mono tabular-nums">{project.assets.length}</span>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {project.assets.map((asset) => {
-                  const isStudioAsset = asset.source === "studio" || Boolean(asset.studioRef);
-                  return (
-                    <button
-                      key={asset.id}
-                      type="button"
-                      onClick={() => onAddAssetToTimeline(asset)}
-                      className="group overflow-hidden rounded-lg border border-border/80 bg-card/65 text-left transition-colors hover:border-foreground/45"
-                    >
-                      <div className="relative aspect-video w-full overflow-hidden bg-black/50">
-                        {asset.thumbnails[0] ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={asset.thumbnails[0]}
-                            alt={asset.name}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center">
-                            {asset.kind === "audio" ? (
-                              <AudioLines
-                                className={`size-4 ${
-                                  isStudioAsset
-                                    ? "text-[color:var(--nexus-link)]"
-                                    : "text-muted-foreground"
-                                }`}
-                              />
-                            ) : (
-                              <ImageIcon className="size-4 text-muted-foreground" />
-                            )}
-                          </div>
-                        )}
-                        {isStudioAsset ? (
-                          <span
-                            title="Synced via Nexus Link"
-                            className="absolute top-1.5 left-1.5 size-1.5 rounded-full bg-[color:var(--nexus-link)]"
-                          />
-                        ) : null}
-                        <span className="absolute right-1 bottom-1 rounded bg-black/75 px-1.5 py-0.5 font-mono text-[9.5px] text-white tabular-nums">
-                          {(asset.durationMs / 1000).toFixed(1)}s
-                        </span>
-                      </div>
-                      <div className="px-2 py-1.5">
-                        <div className="truncate text-[11px] font-medium text-foreground">
-                          {asset.name}
+            <div className="grid grid-cols-2 gap-2">
+              {project.assets.map((asset) => {
+                const isStudioAsset = asset.source === "studio" || Boolean(asset.studioRef);
+                return (
+                  <button
+                    key={asset.id}
+                    type="button"
+                    onClick={() => onAddAssetToTimeline(asset)}
+                    className="group overflow-hidden rounded-lg border border-white/[0.08] bg-[#0c0c12] text-left transition-colors hover:border-white/30"
+                  >
+                    <div className="relative aspect-video w-full overflow-hidden bg-[#050508]">
+                      {asset.thumbnails[0] ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={asset.thumbnails[0]}
+                          alt={asset.name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center">
+                          {asset.kind === "audio" ? (
+                            <AudioLines
+                              className={`size-4 ${
+                                isStudioAsset
+                                  ? "text-[color:var(--nexus-link)]"
+                                  : "text-muted-foreground"
+                              }`}
+                            />
+                          ) : (
+                            <ImageIcon className="size-4 text-muted-foreground" />
+                          )}
                         </div>
-                        <div className="mt-0.5 flex items-center justify-between text-[10px] text-muted-foreground">
-                          <span className="capitalize">{asset.kind}</span>
-                          <span className="text-foreground opacity-0 transition-opacity group-hover:opacity-100">
-                            + Add
-                          </span>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+                      )}
+                      {isStudioAsset ? (
+                        <span
+                          title="Synced via Nexus Link"
+                          className="absolute top-1.5 left-1.5 size-1.5 rounded-full bg-[color:var(--nexus-link)]"
+                        />
+                      ) : null}
+                      <span className="absolute right-1 bottom-1 rounded bg-black/80 px-1.5 py-0.5 font-mono text-[9.5px] text-white tabular-nums">
+                        {(asset.durationMs / 1000).toFixed(1)}s
+                      </span>
+                    </div>
+                    <div className="truncate px-2 py-1.5 text-[11.5px] font-medium text-foreground">
+                      {asset.name}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           ) : null}
-        </div>
-      ) : null}
-
-      {activeTab === "templates" ? (
-        <div className="space-y-1.5">
-          {CINEMA_TEMPLATES.map((tpl) => (
-            <button
-              key={tpl.id}
-              type="button"
-              onClick={() => onApplyTemplate(tpl.id)}
-              className="group flex w-full items-center gap-2.5 rounded-lg border border-border/75 bg-card/55 p-2.5 text-left transition-colors hover:border-foreground/40 hover:bg-card"
-            >
-              <span
-                className="grid size-8 shrink-0 place-items-center rounded-md border border-white/15 font-mono text-[10px] font-medium text-white shadow-inner"
-                style={{
-                  background: tpl.accentSwatch,
-                  color: tpl.accentSwatch === "#f4f4f5" || tpl.accentSwatch === "#f7f6f2" || tpl.accentSwatch === "#d4d4d8" ? "#09090b" : "#ffffff",
-                }}
-              >
-                {tpl.defaultAspect}
-              </span>
-              <div className="min-w-0">
-                <div className="truncate text-[12px] font-medium text-foreground">{tpl.name}</div>
-                <div className="truncate text-[10.5px] text-muted-foreground">{tpl.subtitle}</div>
-              </div>
-            </button>
-          ))}
         </div>
       ) : null}
 
@@ -502,7 +431,7 @@ export function CinemaSidebar({
               key={preset.id}
               type="button"
               onClick={() => onAddTextPreset(preset)}
-              className="flex w-full flex-col items-start gap-0.5 rounded-lg border border-border/75 bg-card/55 px-3 py-2.5 text-left transition-colors hover:border-foreground/40 hover:bg-card"
+              className="flex w-full flex-col items-start gap-0.5 rounded-lg border border-white/[0.08] bg-[#0c0c12] px-3 py-2.5 text-left transition-colors hover:border-white/30"
             >
               <span
                 style={{ fontFamily: preset.fontFamily, fontWeight: preset.fontWeight }}
@@ -516,54 +445,63 @@ export function CinemaSidebar({
         </div>
       ) : null}
 
-      {activeTab === "elements" ? (
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <div className="text-[11px] font-medium text-muted-foreground">Audio Reactive</div>
+      {isElementsGroup ? (
+        <div className="space-y-5">
+          <div className="space-y-2">
+            <div className="text-[11.5px] font-medium text-muted-foreground">Audio Reactive</div>
             <div className="grid grid-cols-2 gap-1.5">
               {ELEMENT_PRESETS.filter((e) => e.category === "visualizer").map((preset) => (
                 <button
                   key={preset.id}
                   type="button"
                   onClick={() => onAddElementPreset(preset)}
-                  className="flex flex-col items-start gap-1.5 rounded-lg border border-border/75 bg-card/55 p-2.5 text-left transition-colors hover:border-foreground/40 hover:bg-card"
+                  className="flex flex-col items-start gap-1.5 rounded-lg border border-white/[0.08] bg-[#0c0c12] p-2.5 text-left transition-colors hover:border-white/30"
                 >
                   <AudioLines className="size-4 text-[color:var(--cinema-playhead)]" strokeWidth={1.6} />
-                  <span className="text-[11px] font-medium text-foreground">{preset.name}</span>
+                  <span className="text-[11.5px] font-medium text-foreground">{preset.name}</span>
                 </button>
               ))}
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <div className="text-[11px] font-medium text-muted-foreground">Frames &amp; HUD</div>
+          <div className="space-y-2">
+            <div className="text-[11.5px] font-medium text-muted-foreground">Frames &amp; Shapes</div>
             <div className="grid grid-cols-2 gap-1.5">
-              {ELEMENT_PRESETS.filter((e) => e.category === "frame").map((preset) => (
+              {ELEMENT_PRESETS.filter((e) => e.category === "frame" || e.category === "shape").map((preset) => (
                 <button
                   key={preset.id}
                   type="button"
                   onClick={() => onAddElementPreset(preset)}
-                  className="flex flex-col items-start gap-1.5 rounded-lg border border-border/75 bg-card/55 p-2.5 text-left transition-colors hover:border-foreground/40 hover:bg-card"
+                  className="flex flex-col items-start gap-1.5 rounded-lg border border-white/[0.08] bg-[#0c0c12] p-2.5 text-left transition-colors hover:border-white/30"
                 >
-                  <Sparkles className="size-4 text-foreground/85" strokeWidth={1.6} />
-                  <span className="text-[11px] font-medium text-foreground">{preset.name}</span>
+                  {preset.category === "frame" ? (
+                    <Sparkles className="size-4 text-foreground/85" strokeWidth={1.6} />
+                  ) : (
+                    <Shapes className="size-4 text-muted-foreground" strokeWidth={1.6} />
+                  )}
+                  <span className="text-[11.5px] font-medium text-foreground">{preset.name}</span>
                 </button>
               ))}
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <div className="text-[11px] font-medium text-muted-foreground">Shapes</div>
-            <div className="grid grid-cols-2 gap-1.5">
-              {ELEMENT_PRESETS.filter((e) => e.category === "shape").map((preset) => (
+          <div className="space-y-2">
+            <div className="text-[11.5px] font-medium text-muted-foreground">Starter Sequences</div>
+            <div className="space-y-1.5">
+              {CINEMA_TEMPLATES.map((tpl) => (
                 <button
-                  key={preset.id}
+                  key={tpl.id}
                   type="button"
-                  onClick={() => onAddElementPreset(preset)}
-                  className="flex flex-col items-start gap-1.5 rounded-lg border border-border/75 bg-card/55 p-2.5 text-left transition-colors hover:border-foreground/40 hover:bg-card"
+                  onClick={() => onApplyTemplate(tpl.id)}
+                  className="flex w-full items-center justify-between gap-2 rounded-lg border border-white/[0.08] bg-[#0c0c12] px-3 py-2 text-left transition-colors hover:border-white/30"
                 >
-                  <Shapes className="size-4 text-muted-foreground" strokeWidth={1.6} />
-                  <span className="text-[11px] font-medium text-foreground">{preset.name}</span>
+                  <div className="min-w-0">
+                    <div className="truncate text-[12px] font-medium text-foreground">{tpl.name}</div>
+                    <div className="truncate text-[10.5px] text-muted-foreground">{tpl.subtitle}</div>
+                  </div>
+                  <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+                    {tpl.defaultAspect}
+                  </span>
                 </button>
               ))}
             </div>
@@ -807,51 +745,20 @@ export function CinemaSidebar({
 
       {activeTab === "nodes" ? (
         <div className="space-y-3">
-          {/* Extensible Nexus Node Bridge Header Card (subtle Gold marks cross-node links only) */}
-          <div className="rounded-xl border border-[color:var(--nexus-link-border)] bg-[color:var(--nexus-link-soft)] p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5 text-[12px] font-medium text-foreground">
-                <span className="size-1.5 rounded-full bg-[color:var(--nexus-link)]" />
-                <Waves className="size-3.5 text-[color:var(--nexus-link)]" />
-                <span>Recording Studio</span>
-              </div>
-              <button
-                type="button"
-                onClick={onOpenStudioView}
-                className="text-[11px] font-medium text-[color:var(--nexus-link)] hover:underline"
-              >
-                Open
-              </button>
-            </div>
-
-            <div className="mt-2.5 space-y-1.5">
-              <Button
-                type="button"
-                size="sm"
-                onClick={onRequestVoiceoverInStudio}
-                className="h-8 w-full justify-start gap-2 rounded-lg bg-foreground px-2.5 text-[11.5px] font-medium text-background hover:opacity-90"
-              >
-                <MonitorPlay className="size-3.5 shrink-0" />
-                <span className="truncate">Score w/ Live Video Monitor</span>
-              </Button>
-
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={project.markers.length === 0}
-                onClick={onMarkersToLowerThirds}
-                className="h-7 w-full justify-start gap-2 rounded-lg border-border/80 bg-background/50 px-2.5 text-[11px]"
-              >
-                <Mic className="size-3 shrink-0 text-[color:var(--nexus-link)]" />
-                <span className="truncate">
-                  Markers → Lower-Thirds ({project.markers.length})
-                </span>
-              </Button>
-            </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11.5px] font-medium text-muted-foreground">
+              Studio sessions
+            </span>
+            <button
+              type="button"
+              onClick={onOpenStudioView}
+              className="text-[11.5px] font-medium text-[color:var(--nexus-link)] hover:underline"
+            >
+              Open Studio
+            </button>
           </div>
 
-          {studioCols.length > 0 ? (
+          {studioCols.length > 1 ? (
             <Select
               value={studioColId}
               onValueChange={(val) => {
@@ -878,12 +785,12 @@ export function CinemaSidebar({
           {loadingStudio ? (
             <div className="flex items-center justify-center py-6 text-[11.5px] text-muted-foreground">
               <Loader2 className="mr-2 size-3.5 animate-spin" />
-              Loading linked sessions…
+              Loading sessions…
             </div>
           ) : studioRecs.length === 0 ? (
-            <div className="rounded-lg border border-border/70 bg-card/40 p-3 text-center">
+            <div className="rounded-lg border border-white/[0.07] bg-[#0b0b10] p-4 text-center">
               <p className="text-[11.5px] text-muted-foreground">
-                No Recording Studio sessions found yet.
+                No Recording Studio sessions found yet
               </p>
             </div>
           ) : (
@@ -891,132 +798,141 @@ export function CinemaSidebar({
               {studioRecs.map((rec) => (
                 <div
                   key={rec.id}
-                  className="rounded-xl border border-border/80 bg-card/60 p-2.5 transition-colors hover:border-[color:var(--nexus-link-border)]"
+                  className="rounded-xl border border-white/[0.08] bg-[#0c0c12] p-2.5 transition-colors hover:border-[color:var(--nexus-link-border)]"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-[12px] font-medium text-foreground">
-                      {rec.title}
-                    </span>
-                    <span className="shrink-0 font-mono text-[10px] text-muted-foreground tabular-nums">
-                      {(rec.durationMs / 1000).toFixed(1)}s
-                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[12px] font-medium text-foreground">
+                        {rec.title}
+                      </div>
+                      <div className="font-mono text-[10px] text-muted-foreground tabular-nums">
+                        {(rec.durationMs / 1000).toFixed(1)}s · {rec.trackCount}{" "}
+                        {rec.trackCount === 1 ? "track" : "tracks"}
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={importingRecKey !== null}
+                        onClick={() => void triggerStudioAction(rec, "mix")}
+                        className="h-7 gap-1 rounded-lg px-2 text-[11px]"
+                      >
+                        {importingRecKey === `${rec.id}-mix` ? (
+                          <Loader2 className="size-3 animate-spin" />
+                        ) : (
+                          <Plus className="size-3" />
+                        )}
+                        <span>Add</span>
+                      </Button>
+
+                      <Popover>
+                        <PopoverTrigger
+                          render={
+                            <button
+                              type="button"
+                              aria-label={`Studio link options for ${rec.title}`}
+                              className="flex size-7 items-center justify-center rounded-lg border border-white/[0.08] text-muted-foreground transition-colors hover:border-white/25 hover:text-foreground"
+                            >
+                              <MoreHorizontal className="size-3.5" />
+                            </button>
+                          }
+                        />
+                        <PopoverContent
+                          align="end"
+                          className="dark w-52 space-y-0.5 rounded-xl border-white/10 bg-[#0d0d13] p-1.5 text-[#f4f4f6]"
+                        >
+                          <button
+                            type="button"
+                            disabled={importingRecKey !== null}
+                            onClick={() => void triggerStudioAction(rec, "stems")}
+                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11.5px] text-foreground hover:bg-white/[0.06]"
+                          >
+                            <Layers className="size-3.5 text-[color:var(--nexus-link)]" />
+                            <span>Import isolated stems</span>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={importingRecKey !== null}
+                            onClick={() => void triggerStudioAction(rec, "smart-cut")}
+                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11.5px] text-foreground hover:bg-white/[0.06]"
+                          >
+                            <Scissors className="size-3.5 text-[color:var(--nexus-link)]" />
+                            <span>Smart-cut silences</span>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={importingRecKey !== null}
+                            onClick={() => void triggerStudioAction(rec, "beat-grid")}
+                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11.5px] text-foreground hover:bg-white/[0.06]"
+                          >
+                            <Waves className="size-3.5 text-[color:var(--nexus-link)]" />
+                            <span>Import beat grid</span>
+                          </button>
+                          {rec.markerCount > 0 ? (
+                            <button
+                              type="button"
+                              disabled={importingRecKey !== null}
+                              onClick={() => void triggerStudioAction(rec, "markers")}
+                              className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11.5px] text-foreground hover:bg-white/[0.06]"
+                            >
+                              <Mic className="size-3.5 text-[color:var(--nexus-link)]" />
+                              <span>Sync chapter cues</span>
+                            </button>
+                          ) : null}
+                          {rec.hasTranscript ? (
+                            <button
+                              type="button"
+                              disabled={importingRecKey !== null}
+                              onClick={() => void triggerStudioAction(rec, "captions")}
+                              className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11.5px] text-foreground hover:bg-white/[0.06]"
+                            >
+                              <Captions className="size-3.5 text-[color:var(--nexus-link)]" />
+                              <span>Import captions</span>
+                            </button>
+                          ) : null}
+                        </PopoverContent>
+                      </Popover>
+                    </div>
                   </div>
 
                   {rec.peaks.length > 0 ? (
-                    <div className="mt-1.5 flex h-5 items-end gap-[2px] overflow-hidden rounded-md bg-foreground/[0.04] px-1.5 py-0.5">
-                      {rec.peaks.slice(0, 32).map((pk, idx) => (
+                    <div className="mt-2 flex h-3.5 items-end gap-[2px] overflow-hidden rounded bg-white/[0.03] px-1">
+                      {rec.peaks.slice(0, 36).map((pk, idx) => (
                         <span
                           key={idx}
-                          className="flex-1 rounded-full bg-[color:var(--nexus-link)]/75"
-                          style={{ height: `${Math.max(16, Math.round(pk * 100))}%` }}
+                          className="flex-1 rounded-full bg-[color:var(--nexus-link)]/70"
+                          style={{ height: `${Math.max(18, Math.round(pk * 100))}%` }}
                         />
                       ))}
                     </div>
                   ) : null}
-
-                  <div className="mt-2 grid grid-cols-2 gap-1">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={importingRecKey !== null}
-                      onClick={() => void triggerStudioAction(rec, "mix")}
-                      className="h-6 justify-center gap-1 rounded-md px-1.5 text-[10.5px]"
-                    >
-                      {importingRecKey === `${rec.id}-mix` ? (
-                        <Loader2 className="size-3 animate-spin" />
-                      ) : (
-                        <Plus className="size-3" />
-                      )}
-                      <span>Mix</span>
-                    </Button>
-
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={importingRecKey !== null}
-                      onClick={() => void triggerStudioAction(rec, "stems")}
-                      className="h-6 justify-center gap-1 rounded-md px-1.5 text-[10.5px]"
-                    >
-                      <Layers className="size-3 text-[color:var(--nexus-link)]" />
-                      <span>Stems</span>
-                    </Button>
-
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      disabled={importingRecKey !== null}
-                      onClick={() => void triggerStudioAction(rec, "smart-cut")}
-                      className="h-6 justify-center gap-1 rounded-md px-1.5 text-[10.5px] text-[color:var(--nexus-link)] hover:bg-[color:var(--nexus-link-soft)]"
-                    >
-                      {importingRecKey === `${rec.id}-smart-cut` ? (
-                        <Loader2 className="size-3 animate-spin" />
-                      ) : (
-                        <Scissors className="size-3" />
-                      )}
-                      <span>Smart Cut</span>
-                    </Button>
-
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      disabled={importingRecKey !== null}
-                      onClick={() => void triggerStudioAction(rec, "beat-grid")}
-                      className="h-6 justify-center gap-1 rounded-md px-1.5 text-[10.5px] text-[color:var(--nexus-link)] hover:bg-[color:var(--nexus-link-soft)]"
-                    >
-                      {importingRecKey === `${rec.id}-beat-grid` ? (
-                        <Loader2 className="size-3 animate-spin" />
-                      ) : (
-                        <Waves className="size-3" />
-                      )}
-                      <span>Beat Grid</span>
-                    </Button>
-
-                    {rec.markerCount > 0 ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        disabled={importingRecKey !== null}
-                        onClick={() => void triggerStudioAction(rec, "markers")}
-                        className="h-6 justify-center rounded-md px-1.5 text-[10.5px]"
-                      >
-                        Sync Cues
-                      </Button>
-                    ) : null}
-
-                    {rec.hasTranscript ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        disabled={importingRecKey !== null}
-                        onClick={() => void triggerStudioAction(rec, "captions")}
-                        className="h-6 justify-center gap-1 rounded-md px-1.5 text-[10.5px]"
-                      >
-                        <Captions className="size-3" />
-                        <span>Captions</span>
-                      </Button>
-                    ) : null}
-                  </div>
                 </div>
               ))}
             </div>
           )}
 
-          {/* Quiet Extensible Slot Roster for Future Node Links */}
-          <div className="space-y-1 border-t border-border/60 pt-2.5 text-[10.5px] text-muted-foreground">
-            <div className="flex items-center justify-between px-1">
-              <span>Command Context</span>
-              <span className="font-mono">Bus Ready</span>
-            </div>
-            <div className="flex items-center justify-between px-1">
-              <span>Study Space · Research</span>
-              <span className="font-mono">Content API</span>
-            </div>
+          <div className="flex flex-col gap-1 border-t border-white/[0.07] pt-2.5">
+            <button
+              type="button"
+              onClick={onRequestVoiceoverInStudio}
+              className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11.5px] text-muted-foreground transition-colors hover:bg-white/[0.04] hover:text-foreground"
+            >
+              <MonitorPlay className="size-3.5 text-[color:var(--nexus-link)]" />
+              <span>Score with live video monitor</span>
+            </button>
+            {project.markers.length > 0 ? (
+              <button
+                type="button"
+                onClick={onMarkersToLowerThirds}
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11.5px] text-muted-foreground transition-colors hover:bg-white/[0.04] hover:text-foreground"
+              >
+                <Mic className="size-3.5 text-[color:var(--nexus-link)]" />
+                <span>Markers to lower-thirds ({project.markers.length})</span>
+              </button>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -1084,8 +1000,11 @@ export function CinemaSidebar({
 
       {/* Tablet / Mobile Drawer Fallback (< lg) */}
       <Sheet open={mobileOpen} onOpenChange={onMobileOpenChange}>
-        <SheetContent side="left" className="flex w-[304px] flex-col p-0 sm:max-w-[336px]">
-          <SheetHeader className="border-b border-border/60 px-3 py-2.5">
+        <SheetContent
+          side="left"
+          className="dark flex w-[304px] flex-col border-white/10 bg-[#08080c] p-0 text-[#f4f4f6] sm:max-w-[336px]"
+        >
+          <SheetHeader className="border-b border-white/10 px-3 py-2.5">
             <SheetTitle className="sr-only">Cinema Browser</SheetTitle>
             <div className="flex items-center gap-2 pr-6">{segmentedHeader}</div>
           </SheetHeader>

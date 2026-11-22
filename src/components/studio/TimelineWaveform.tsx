@@ -744,10 +744,10 @@ export function TimelineWaveform({
     >
       <div className="flex min-h-full items-stretch">
         {/* Left Track Headers & Quiet Mixer Gutter */}
-        <div className="studio-gutter sticky left-0 z-10 flex w-[160px] shrink-0 flex-col border-r border-border/75 sm:w-[200px]">
+        <div className="studio-gutter sticky left-0 z-10 flex w-[196px] shrink-0 flex-col border-r border-white/[0.07] sm:w-[228px]">
           <div
             style={{ height: `${RULER_HEIGHT}px` }}
-            className="flex items-center justify-between border-b border-border/75 px-3 text-[11.5px] font-medium text-muted-foreground"
+            className="flex items-center justify-between border-b border-white/[0.07] px-3 text-[11.5px] font-medium text-muted-foreground"
           >
             <span>Tracks</span>
             <Tooltip>
@@ -779,7 +779,6 @@ export function TimelineWaveform({
               };
               const layerClips = displayTracks.filter((t) => (t.layerIndex ?? 0) === idx);
               const colorKey = normalizeStudioColor(mixer.colorTag ?? layerClips[0]?.colorTag, idx);
-              const inputHint = mixer.inputHint ?? layerClips[0]?.inputSource;
               const isTarget = idx === activeLayerIndex;
               const isExtraGhost = drag?.kind === "move" && idx >= layerCount && drag.previewLayerIndex === idx;
               const canDeleteLayer = idx >= 2 && layerClips.length === 0 && !isExtraGhost;
@@ -789,39 +788,34 @@ export function TimelineWaveform({
                   key={`layer-${idx}`}
                   style={{ height: `${LANE_HEIGHT}px` }}
                   onClick={() => onSelectLayer(idx)}
-                  className={`flex flex-col justify-between border-b border-border/65 px-3 py-2.5 transition-colors ${
+                  className={`flex flex-col justify-center gap-2.5 border-b border-white/[0.06] px-3 py-2.5 transition-colors ${
                     isExtraGhost
                       ? "bg-[color:var(--studio-accent)]/12"
                       : isTarget
-                        ? "bg-foreground/[0.035]"
-                        : "hover:bg-foreground/[0.02]"
+                        ? "bg-white/[0.035]"
+                        : "hover:bg-white/[0.02]"
                   }`}
                 >
-                  {/* Top Row: Quiet 6px Status Dot + Editable Track Name + M / S */}
-                  <div className="flex items-start justify-between gap-1.5">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${STUDIO_STEM_COLORS[colorKey].dotClass} ${
-                            isTarget ? "opacity-100" : "opacity-60"
-                          }`}
-                          aria-hidden
-                        />
-                        <input
-                          type="text"
-                          value={mixer.name ?? `Track ${idx + 1}`}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => onRenameLayer(idx, e.target.value)}
-                          aria-label={`Track ${idx + 1} name`}
-                          className="w-full truncate rounded bg-transparent py-0.5 text-[12px] font-medium text-foreground transition-colors hover:bg-foreground/[0.04] focus:bg-foreground/[0.07] focus:outline-none"
-                        />
-                      </div>
-                      <div className="truncate pl-3 font-mono text-[10px] text-muted-foreground/80">
-                        {inputHint || (layerClips.length > 0 ? `${layerClips.length} ${layerClips.length === 1 ? "clip" : "clips"}` : "Empty")}
-                      </div>
+                  {/* Top Row: Quiet 6px Status Dot + Full-Width Track Name + M / S */}
+                  <div className="flex items-center justify-between gap-1.5">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <span
+                        className={`h-1.5 w-1.5 shrink-0 rounded-full ${STUDIO_STEM_COLORS[colorKey].dotClass} ${
+                          isTarget ? "opacity-100" : "opacity-60"
+                        }`}
+                        aria-hidden
+                      />
+                      <input
+                        type="text"
+                        value={mixer.name ?? `Track ${idx + 1}`}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => onRenameLayer(idx, e.target.value)}
+                        aria-label={`Track ${idx + 1} name`}
+                        className="w-full min-w-0 truncate rounded bg-transparent py-0.5 text-[12.5px] font-medium text-foreground transition-colors hover:bg-white/[0.04] focus:bg-white/[0.07] focus:outline-none"
+                      />
                     </div>
 
-                    <div className="flex shrink-0 items-center gap-1 pt-0.5">
+                    <div className="flex shrink-0 items-center gap-1">
                       <button
                         type="button"
                         onClick={(e) => {
@@ -830,10 +824,10 @@ export function TimelineWaveform({
                         }}
                         aria-pressed={mixer.muted}
                         aria-label={`Mute ${mixer.name ?? `Track ${idx + 1}`}`}
-                        className={`h-6 w-6 rounded-md font-mono text-[10px] font-medium transition-colors ${
+                        className={`h-5 w-5 rounded font-mono text-[10px] font-medium transition-colors ${
                           mixer.muted
                             ? "bg-destructive/90 text-white"
-                            : "text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground"
+                            : "text-muted-foreground hover:bg-white/[0.06] hover:text-foreground"
                         }`}
                       >
                         M
@@ -846,10 +840,10 @@ export function TimelineWaveform({
                         }}
                         aria-pressed={mixer.solo}
                         aria-label={`Solo ${mixer.name ?? `Track ${idx + 1}`}`}
-                        className={`h-6 w-6 rounded-md font-mono text-[10px] font-medium transition-colors ${
+                        className={`h-5 w-5 rounded font-mono text-[10px] font-medium transition-colors ${
                           mixer.solo
                             ? "bg-[color:var(--studio-accent-strong)] text-white"
-                            : "text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground"
+                            : "text-muted-foreground hover:bg-white/[0.06] hover:text-foreground"
                         }`}
                       >
                         S
@@ -862,7 +856,7 @@ export function TimelineWaveform({
                             onRemoveLayer(idx);
                           }}
                           aria-label={`Remove empty Track ${idx + 1}`}
-                          className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-destructive"
+                          className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:text-destructive"
                         >
                           <Trash2 className="size-3" />
                         </button>
@@ -871,7 +865,7 @@ export function TimelineWaveform({
                   </div>
 
                   {/* Bottom Row: Clean Hairline Volume Fader + Tabular dB Readout */}
-                  <div className="flex items-center gap-2 pl-3">
+                  <div className="flex items-center gap-2 pl-3.5">
                     <input
                       type="range"
                       min={0}
@@ -887,7 +881,7 @@ export function TimelineWaveform({
                       aria-label={`${mixer.name ?? `Track ${idx + 1}`} volume`}
                       className="studio-range min-w-0 flex-1"
                     />
-                    <span className="w-[42px] shrink-0 text-right font-mono text-[10px] text-muted-foreground tabular-nums">
+                    <span className="w-[40px] shrink-0 text-right font-mono text-[10px] text-muted-foreground tabular-nums">
                       {formatGainDb(mixer.gain)}
                     </span>
                   </div>

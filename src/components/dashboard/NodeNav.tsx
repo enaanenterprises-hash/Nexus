@@ -54,7 +54,6 @@ function MenuItem({
       type="button"
       onClick={onClick}
       aria-current={active ? "page" : undefined}
-      title={tooltip}
       className={`node-menu-item ${active ? "node-menu-item--on" : ""}`}
     >
       <span className="node-menu-icon">{children}</span>
@@ -66,7 +65,7 @@ function MenuItem({
   return (
     <Tooltip>
       <TooltipTrigger render={btn} />
-      <TooltipContent side="right" sideOffset={10} className="sm:hidden">
+      <TooltipContent side="right" sideOffset={10}>
         {tooltip}
       </TooltipContent>
     </Tooltip>
@@ -135,7 +134,7 @@ export const NodeMenu = memo(function NodeMenu({
         active={surface.view === "home" && !surface.panel}
         onClick={onHome}
       >
-        <NetworkIcon size={16} />
+        <NetworkIcon />
       </MenuItem>
       <MenuItem
         label="Command"
@@ -143,7 +142,7 @@ export const NodeMenu = memo(function NodeMenu({
         active={surface.view === "command"}
         onClick={onCommand}
       >
-        <CommandIcon size={16} />
+        <CommandIcon />
       </MenuItem>
       <MenuItem
         label="Today"
@@ -151,7 +150,7 @@ export const NodeMenu = memo(function NodeMenu({
         active={isPanel(surface.panel, "today")}
         onClick={() => onPanel("today")}
       >
-        <TodayIcon size={16} />
+        <TodayIcon />
       </MenuItem>
       <MenuItem
         label="Nodes"
@@ -159,43 +158,32 @@ export const NodeMenu = memo(function NodeMenu({
         active={surface.view === "nodes" || isPanel(surface.panel, "nodes")}
         onClick={onNodes}
       >
-        <NodesIcon size={16} />
+        <NodesIcon />
       </MenuItem>
       {live.length > 0 ? <span className="node-menu-divider" aria-hidden /> : null}
-      {live.map((ext) => {
-        const isExtActive =
-          isPanel(surface.panel, { extension: ext.manifest.id }) ||
-          (ext.manifest.id === STUDIO_NODE_ID && surface.view === "studio") ||
-          (ext.manifest.id === CINEMA_NODE_ID && surface.view === "cinema");
-        const monogram = ext.manifest.monogram ?? ext.manifest.name.slice(0, 2);
-        return (
-          <MenuItem
-            key={ext.manifest.id}
-            label={ext.manifest.name}
-            tooltip={ext.manifest.name}
-            active={isExtActive}
-            onClick={() => onPanel({ extension: ext.manifest.id })}
-          >
-            <span
-              className={`grid size-5 place-items-center rounded-md border font-mono text-[10px] font-semibold leading-none ${
-                isExtActive
-                  ? "border-[color:var(--land-gold)]/45 bg-[color:var(--land-gold)]/15 text-[color:var(--land-gold-soft)]"
-                  : "border-white/12 bg-white/[0.06] text-foreground/85"
-              }`}
-            >
-              {monogram}
-            </span>
-          </MenuItem>
-        );
-      })}
+      {live.map((ext) => (
+        <MenuItem
+          key={ext.manifest.id}
+          label={ext.manifest.name}
+          tooltip={ext.manifest.name}
+          active={
+            isPanel(surface.panel, { extension: ext.manifest.id }) ||
+            (ext.manifest.id === STUDIO_NODE_ID && surface.view === "studio") ||
+            (ext.manifest.id === CINEMA_NODE_ID && surface.view === "cinema")
+          }
+          onClick={() => onPanel({ extension: ext.manifest.id })}
+        >
+          <span className="text-[11px] font-semibold">{ext.manifest.monogram ?? ext.manifest.name.slice(0, 2)}</span>
+        </MenuItem>
+      ))}
       {floating ? <span className="node-menu-divider" aria-hidden /> : <div className="flex-1" />}
       <MenuItem
-        label={theme === "dark" ? "Light appearance" : "Dark appearance"}
+        label={theme === "dark" ? "Light" : "Dark"}
         tooltip={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
         active={false}
         onClick={toggleTheme}
       >
-        {theme === "dark" ? <SunIcon size={16} /> : <MoonIcon size={16} />}
+        {theme === "dark" ? <SunIcon /> : <MoonIcon />}
       </MenuItem>
 
       <TierMenu
@@ -255,22 +243,17 @@ function TierMenu({
                     className={`node-menu-plan ${showTierMenu ? "node-menu-plan--on" : ""}`}
                     aria-label={`Plan & account menu (${used} of ${cap} sockets used)`}
                   >
-                    <span className="node-menu-plan-title">{hub.entitlement.isPro ? "Nexus Pro" : "Free tier"}</span>
-                    <span className="flex items-center gap-2">
-                      <span className="font-mono text-[10.5px] opacity-75 tabular-nums">
-                        {used}/{cap}
-                      </span>
-                      <span className="flex gap-[3px]" aria-hidden>
-                        {Array.from({ length: cap }, (_, i) => (
-                          <span
-                            key={i}
-                            className={`h-1.5 w-1.5 rounded-full ${
-                              i < used ? "bg-[color:var(--land-gold)]" : "bg-white/20"
-                            }`}
-                          />
-                        ))}
-                      </span>
+                    <span className="flex gap-[3px]" aria-hidden>
+                      {Array.from({ length: cap }, (_, i) => (
+                        <span
+                          key={i}
+                          className={`h-1 w-1.5 rounded-full ${
+                            i < used ? "bg-[color:var(--land-gold)]" : "bg-[color:var(--land-line)]"
+                          }`}
+                        />
+                      ))}
                     </span>
+                    <span>{hub.entitlement.isPro ? "Pro" : "Free"}</span>
                   </button>
                 )}
               />

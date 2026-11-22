@@ -94,7 +94,6 @@ import { loadAudioBlob, saveAudioBlob } from "@/lib/studio/audio-db";
 import { getStudioRecording, fetchStudioStatus } from "@/lib/studio/studio-client";
 import type { StudioRecording, StudioRecordingContentV1 } from "@/lib/studio/types";
 import { computePeaksFromBuffer, encodeWavFromBuffer, mixTracksOffline } from "@/lib/studio/wav";
-import { useTheme } from "@/lib/theme";
 import { CinemaCaptureModal } from "./CinemaCaptureModal";
 import { CinemaExportDialog } from "./CinemaExportDialog";
 import { CinemaInspectorContent, type CinemaInspectorTab } from "./CinemaInspector";
@@ -183,7 +182,6 @@ export function CinemaView({
   onOpenStudio: () => void;
   onRouteTransfer?: (fromId: ExtensionId, toId?: ExtensionId) => void;
 }) {
-  const { theme } = useTheme();
   const [databaseConfigured, setDatabaseConfigured] = useState(false);
   const [pexelsConfigured, setPexelsConfigured] = useState(false);
   const [collections, setCollections] = useState<CinemaCollection[]>([]);
@@ -2410,7 +2408,10 @@ export function CinemaView({
 
       {/* Tablet / Mobile Inspector Fallback (< xl) */}
       <Sheet open={mobileInspectorOpen} onOpenChange={setMobileInspectorOpen}>
-        <SheetContent side="right" className="flex w-[320px] flex-col p-0 sm:max-w-[360px]">
+        <SheetContent
+          side="right"
+          className="dark flex w-[320px] flex-col border-white/10 bg-[#08080c] p-0 text-[#f4f4f6] sm:max-w-[360px]"
+        >
           <SheetHeader className="sr-only">
             <SheetTitle>Cinema Inspector</SheetTitle>
           </SheetHeader>
@@ -2449,9 +2450,12 @@ export function CinemaView({
 
       {/* Saved Cinema Projects & Folders Drawer */}
       <Sheet open={projectsDrawerOpen} onOpenChange={setProjectsDrawerOpen}>
-        <SheetContent side="left" className="w-[304px] p-0 sm:max-w-[340px]">
-          <SheetHeader className="border-b border-border/60 px-4 py-3">
-            <SheetTitle className="flex items-center gap-2 text-[14px] font-medium">
+        <SheetContent
+          side="left"
+          className="dark w-[304px] border-white/10 bg-[#08080c] p-0 text-[#f4f4f6] sm:max-w-[340px]"
+        >
+          <SheetHeader className="border-b border-white/10 px-4 py-3">
+            <SheetTitle className="flex items-center gap-2 text-[14px] font-medium text-[#f4f4f6]">
               <Layers className="size-4 text-[color:var(--cinema-select)]" />
               <span>Projects · {activeFolderName}</span>
             </SheetTitle>
@@ -2600,7 +2604,7 @@ export function CinemaView({
         onOpenChange={setExportOpen}
         project={project}
         playheadMs={playheadMs}
-        theme={theme}
+        theme="dark"
         mediaElementsRef={mediaElementsRef}
         audioBuffersRef={audioBuffersRef}
         onSendMasterWavToStudio={handleSendMasterWavToStudio}
@@ -2609,7 +2613,7 @@ export function CinemaView({
       <CinemaCaptureModal
         open={captureOpen}
         onOpenChange={setCaptureOpen}
-        theme={theme}
+        theme="dark"
         onCaptured={handleCapturedMedia}
       />
     </section>
