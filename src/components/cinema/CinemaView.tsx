@@ -149,6 +149,16 @@ function studioEnvelopeToRecording(env: StudioRecordingContentV1): StudioRecordi
   };
 }
 
+function pauseAllCinemaVideos(
+  mediaElements: Map<string, HTMLVideoElement | HTMLImageElement>,
+): void {
+  for (const el of mediaElements.values()) {
+    if (el instanceof HTMLVideoElement && !el.paused) {
+      el.pause();
+    }
+  }
+}
+
 function syncCinemaVideoElements(
   project: CinemaProject,
   mediaElements: Map<string, HTMLVideoElement | HTMLImageElement>,
@@ -195,15 +205,15 @@ function syncCinemaVideoElements(
           }
         } else if (!vid.seeking && vid.readyState >= 2) {
           const drift = targetSec - vid.currentTime;
-          if (Math.abs(drift) > 0.55) {
+          if (Math.abs(drift) > 0.65) {
             // Hard resync only on major drift (e.g. tab switch or clip jump)
             vid.playbackRate = rate;
             vid.currentTime = targetSec;
-          } else if (Math.abs(drift) > 0.09) {
-            // Gentle playbackRate phase-lock eliminates mid-playback GOP seek stutters
+          } else if (Math.abs(drift) > 0.22) {
+            // Very gentle playbackRate phase-lock only if noticeably drifted (no micro-judder)
             const nudged = Math.max(
               0.25,
-              Math.min(4, rate * (1 + Math.max(-0.06, Math.min(0.06, drift * 0.45)))),
+              Math.min(4, rate * (1 + Math.max(-0.04, Math.min(0.04, drift * 0.25)))),
             );
             if (Math.abs(vid.playbackRate - nudged) > 0.008) {
               vid.playbackRate = nudged;
@@ -574,10 +584,15 @@ export function CinemaView({
             vid.muted = true;
             vid.playsInline = true;
             vid.preload = "auto";
+            vid.style.position = "absolute";
+            vid.style.left = "0";
+            vid.style.top = "0";
             vid.style.width = "2px";
             vid.style.height = "2px";
+            vid.style.opacity = "0";
+            vid.style.pointerEvents = "none";
             vid.setAttribute("aria-hidden", "true");
-            // Mount in live DOM so Chromium's VideoFrameCompositor decodes at full 30/60fps
+            // Mount directly inside CinemaStage's GPU hardware video layer (never reparented!)
             videoHostRef.current?.appendChild(vid);
             vid.src = url;
             vid.addEventListener("seeked", () => {
@@ -707,7 +722,36 @@ export function CinemaView({
       const clamped = Math.max(0, Math.min(dur, Math.round(nextMs)));
       playheadRef.current = clamped;
       notifyPlayhead(clamped);
-      syncVideoElements(clamped, false, true);
+
+      // Zero-thrash Canva-style scrubbing: when GPU ImageBitmap proxy frames are warmed,
+      // skip hammering <video>.currentTime during active drags and debounce exact seek to cursor pause!
+      const cache = scrubCacheRef.current;
+      let hasActiveVideo = false;
+      let allActiveVideosCached = Boolean(cache);
+      if (cache) {
+        for (const clip of projectRef.current.clips) {
+          if (clip.kind !== "video" || clip.hidden) continue;
+          if (clamped >= clip.startMs && clamped <= clip.startMs + clip.durationMs) {
+            hasActiveVideo = true;
+            if (!cache.hasAsset(clip.assetId)) {
+              allActiveVideosCached = false;
+              break;
+            }
+          }
+        }
+      }
+
+      if (hasActiveVideo && allActiveVideosCached) {
+        pauseAllCinemaVideos(mediaElementsRef.current);
+        window.clearTimeout(scrubSeekTimerRef.current);
+        scrubSeekTimerRef.current = window.setTimeout(() => {
+          if (!playingRef.current) {
+            syncVideoElements(playheadRef.current, false, false);
+          }
+        }, 115);
+      } else {
+        syncVideoElements(clamped, false, true);
+      }
     },
     [notifyPlayhead, syncVideoElements],
   );
@@ -2083,12 +2127,6 @@ export function CinemaView({
       data-cinema-ready="true"
       className="cinema-screen flex h-full w-full flex-col overflow-hidden"
     >
-      {/* Hidden DOM host for active HTMLVideoElements so Chromium runs hardware decoding at full 30/60fps */}
-      <div
-        ref={videoHostRef}
-        aria-hidden
-        className="pointer-events-none fixed top-0 left-0 h-[2px] w-[2px] overflow-hidden opacity-[0.001]"
-      />
       {/* Apple Liquid Glass Header (h-12 & pl-[68px] align seamlessly beside top-left Nexus Orb & w-[68px] rail) */}
       <header className="cinema-header flex h-12 shrink-0 items-center justify-between gap-2 pl-[68px] pr-3 sm:pr-4">
         <div className="flex min-w-0 items-center gap-1">
@@ -2438,6 +2476,7 @@ export function CinemaView({
             canvasZoom={canvasZoom}
             stageExpanded={stageExpanded}
             mediaElementsRef={mediaElementsRef}
+            videoHostRef={videoHostRef}
             scrubCacheRef={scrubCacheRef}
             isScrubbingRef={isScrubbingRef}
             audioEngineRef={audioEngineRef}

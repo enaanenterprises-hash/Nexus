@@ -68,8 +68,20 @@ export function CinemaExportDialog({
   audioBuffersRef: React.RefObject<Map<string, AudioBuffer>>;
   onSendMasterWavToStudio: (blob: Blob) => Promise<void>;
 }) {
+  const defaultResolution: CinemaExportResolution = useMemo(() => {
+    const primaryVideo = project.assets.find((a) => a.kind === "video");
+    if (primaryVideo) {
+      const longEdge = Math.max(primaryVideo.width || 0, primaryVideo.height || 0);
+      if (longEdge >= 3200) return "4k";
+      if (longEdge >= 1600) return "1080p";
+      if (longEdge > 0) return "720p";
+    }
+    return "1080p";
+  }, [project.assets]);
+
   const [format, setFormat] = useState<CinemaExportFormat>("mp4");
-  const [resolution, setResolution] = useState<CinemaExportResolution>("1080p");
+  const [resolutionOverride, setResolutionOverride] = useState<CinemaExportResolution | null>(null);
+  const resolution = resolutionOverride ?? defaultResolution;
   const [fps, setFps] = useState<24 | 30 | 60>(project.fps);
   const [quality, setQuality] = useState<"high" | "balanced">("high");
 
@@ -202,7 +214,7 @@ export function CinemaExportDialog({
                         key={r}
                         type="button"
                         disabled={exporting}
-                        onClick={() => setResolution(r)}
+                        onClick={() => setResolutionOverride(r)}
                         className={`flex-1 rounded-lg py-1 font-mono text-[10.5px] uppercase transition-colors ${
                           resolution === r
                             ? "bg-foreground font-medium text-background"

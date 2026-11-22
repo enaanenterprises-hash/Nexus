@@ -4,7 +4,6 @@ import {
   AudioSampleSource,
   BlobSource,
   BufferTarget,
-  CanvasSource,
   Conversion,
   ConversionCanceledError,
   Input,
@@ -13,12 +12,14 @@ import {
   Quality,
   VideoSample,
   VideoSampleSink,
+  VideoSampleSource,
   WebMOutputFormat,
   canEncodeVideo,
   getFirstEncodableAudioCodec,
   getFirstEncodableVideoCodec,
 } from "mediabunny";
 import {
+  inspectDirectExportVideoClip,
   isCinemaFrameStaticSince,
   renderCinemaFrame,
   type Cinema2DContext,
@@ -735,14 +736,14 @@ async function runCompositorPass(
     target,
   });
 
-  const canvasSource = new CanvasSource(exportCanvas, {
+  const videoSource = new VideoSampleSource({
     codec: encodeChoice.codec,
     quality: videoQuality,
     keyFrameInterval: 2,
     latencyMode: "quality",
     hardwareAcceleration: encodeChoice.hardwareAcceleration,
   });
-  output.addVideoTrack(canvasSource, { frameRate: fps });
+  output.addVideoTrack(videoSource, { frameRate: fps });
 
   let audioSource: AudioSampleSource | null = null;
   if (audioMix && audioMix.length > 0 && audioMix.channels.length > 0) {
@@ -792,28 +793,62 @@ async function runCompositorPass(
       }
 
       const timeMs = f * frameDurMs;
-      const canReuseStaticCanvas =
-        !samplePool.hasVideoClips &&
-        isCinemaFrameStaticSince(project, lastRenderedTimeMs, timeMs);
+      const clipMediaOverrides = samplePool.hasVideoClips
+        ? await samplePool.getSamplesForTime(timeMs)
+        : undefined;
 
-      if (!canReuseStaticCanvas) {
-        const clipMediaOverrides = samplePool.hasVideoClips
-          ? await samplePool.getSamplesForTime(timeMs)
-          : undefined;
+      // Direct GPU NV12 VideoSample bypass: when a frame has only 1 full-bleed unfiltered video
+      // matching output dimensions, skip OffscreenCanvas + NV12<->RGBA conversion completely!
+      const directClip =
+        clipMediaOverrides && clipMediaOverrides.size === 1
+          ? inspectDirectExportVideoClip(project, timeMs)
+          : null;
+      const directDrawable = directClip ? clipMediaOverrides?.get(directClip.id) : undefined;
+      const canDirectGpuPass =
+        directDrawable instanceof VideoSample &&
+        directDrawable.codedWidth === project.width &&
+        directDrawable.codedHeight === project.height &&
+        directDrawable.displayWidth === project.width &&
+        directDrawable.displayHeight === project.height &&
+        directDrawable.rotation === 0 &&
+        !directDrawable.flip;
 
-        renderCinemaFrame(ctx, project, timeMs, {
-          mediaElements: mediaMap,
-          clipMediaOverrides,
-          frequencyBins: frameBins[f],
-          showSafeGuides: false,
-          isExport: true,
+      if (canDirectGpuPass) {
+        const directSample = directDrawable.clone();
+        directSample.setTimestamp(f / fps);
+        directSample.setDuration(frameDurSec);
+        try {
+          await videoSource.add(directSample);
+        } finally {
+          directSample.close();
+        }
+        lastRenderedTimeMs = -1;
+      } else {
+        const canReuseStaticCanvas =
+          !samplePool.hasVideoClips &&
+          isCinemaFrameStaticSince(project, lastRenderedTimeMs, timeMs);
+
+        if (!canReuseStaticCanvas) {
+          renderCinemaFrame(ctx, project, timeMs, {
+            mediaElements: mediaMap,
+            clipMediaOverrides,
+            frequencyBins: frameBins[f],
+            showSafeGuides: false,
+            isExport: true,
+          });
+          lastRenderedTimeMs = timeMs;
+        }
+
+        const canvasSample = new VideoSample(exportCanvas, {
+          timestamp: f / fps,
+          duration: frameDurSec,
         });
-        lastRenderedTimeMs = timeMs;
+        try {
+          await videoSource.add(canvasSample);
+        } finally {
+          canvasSample.close();
+        }
       }
-
-      // Snapshots OffscreenCanvas synchronously & awaits encoder backpressure cleanly (0 dropped frames).
-      // Mediabunny's internal VideoSampleSink.samples() pump pre-decodes 4 frames ahead concurrently!
-      await canvasSource.add(f / fps, frameDurSec);
 
       // Only yield when running on the main thread fallback; inside the Web Worker run full speed
       const now = performance.now();
@@ -844,7 +879,7 @@ async function runCompositorPass(
 
     // Release all remaining decoded video samples before muxing audio & finalizing container
     samplePool.dispose();
-    canvasSource.close();
+    videoSource.close();
 
     if (audioSource && audioMix && audioMix.length > 0) {
       onProgress({

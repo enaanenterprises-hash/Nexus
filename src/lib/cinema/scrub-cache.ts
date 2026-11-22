@@ -154,6 +154,11 @@ export class CinemaScrubCache {
       });
   }
 
+  hasAsset(assetId: string): boolean {
+    const entry = this.entries.get(assetId);
+    return Boolean(entry && entry.bitmaps.length > 0);
+  }
+
   /**
    * Binary-searches the nearest cached GPU `ImageBitmap` for `targetSec` in O(log N) (< 0.01ms).
    */

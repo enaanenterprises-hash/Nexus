@@ -36,6 +36,22 @@ export interface CinemaRenderRuntime {
   showSafeGuides?: boolean;
   isExport?: boolean;
   isPlaying?: boolean;
+  /** Skip painting project background (e.g. when transparent overlay sits over native GPU <video>). */
+  skipBackground?: boolean;
+  /** Skip drawing specific clip IDs (e.g. clip currently rendered by native GPU <video> layer). */
+  skipClipIds?: ReadonlySet<string>;
+}
+
+export interface NativeVideoStagePlan {
+  clip: CinemaVideoClip;
+  opacity: number;
+  dxPct: number;
+  dyPct: number;
+  scale: number;
+  filterCss: string;
+  isFullBleedOpaque: boolean;
+  hasOverlaysAbove: boolean;
+  overlaysAnimated: boolean;
 }
 
 function clamp(n: number, min: number, max: number): number {
@@ -834,6 +850,213 @@ function getPreparedProjectIndex(project: CinemaProject): {
   return entry;
 }
 
+function isClipFilterDefaultForFastPath(filter: CinemaFilter): boolean {
+  return (
+    Math.abs(filter.brightness - 1) <= 0.01 &&
+    Math.abs(filter.contrast - 1) <= 0.01 &&
+    Math.abs(filter.saturate - 1) <= 0.01 &&
+    Math.abs(filter.temperature) <= 0.02 &&
+    filter.blur <= 0.1 &&
+    filter.vignette <= 0.02
+  );
+}
+
+function isClipFullBleedOpaque(
+  clip: CinemaVisualClip,
+  opacity: number,
+  dx: number,
+  dy: number,
+  scale: number,
+  wipeX: number | undefined,
+): boolean {
+  const tf = clip.transform;
+  return (
+    opacity >= 0.995 &&
+    tf.blendMode === "source-over" &&
+    tf.borderRadius <= 0 &&
+    Math.abs(tf.rotation) <= 0.05 &&
+    Math.abs(tf.x - 50) <= 0.15 &&
+    Math.abs(tf.y - 50) <= 0.15 &&
+    tf.width * scale >= 99.8 &&
+    tf.height * scale >= 99.8 &&
+    Math.abs(dx) <= 0.5 &&
+    Math.abs(dy) <= 0.5 &&
+    wipeX === undefined &&
+    (clip.kind === "video" || clip.kind === "image") &&
+    clip.fit === "cover"
+  );
+}
+
+/**
+ * Determines whether the bottom-most visible visual clip at `timeMs` can be presented
+ * directly via a hardware-composited DOM `<video>` element (Canva-style zero-copy GPU video
+ * playback) while `<canvas>` renders only overlays above it.
+ */
+export function inspectNativeVideoStagePlan(
+  project: CinemaProject,
+  timeMs: number,
+): NativeVideoStagePlan | null {
+  const { width, height } = project;
+  const { prepared } = getPreparedProjectIndex(project);
+
+  let bottomClip: CinemaVisualClip | null = null;
+  let bottomTrackClips: CinemaVisualClip[] = [];
+  let hasOverlaysAbove = false;
+  let overlaysAnimated = false;
+
+  for (const { sortedClips: trackClips } of prepared) {
+    for (const clip of trackClips) {
+      if (clip.hidden || timeMs < clip.startMs || timeMs > clip.startMs + clip.durationMs) {
+        continue;
+      }
+      if (!bottomClip) {
+        bottomClip = clip;
+        bottomTrackClips = trackClips;
+      } else {
+        hasOverlaysAbove = true;
+        if (
+          clip.kind === "video" ||
+          clip.kind === "visualizer" ||
+          (clip.kind === "shape" && clip.shapeKind === "progress-bar") ||
+          (clip.kind === "image" && clip.kenBurns !== "none") ||
+          ("reactiveAudioClipId" in clip && Boolean(clip.reactiveAudioClipId))
+        ) {
+          overlaysAnimated = true;
+        } else {
+          const local = timeMs - clip.startMs;
+          if (
+            (clip.animation.inType !== "none" && local <= clip.animation.inDurationMs) ||
+            (clip.animation.outType !== "none" && local >= clip.durationMs - clip.animation.outDurationMs)
+          ) {
+            overlaysAnimated = true;
+          }
+          if (project.transitions.length > 0) {
+            const tr = computeClipTransitionEffect(clip, trackClips, project.transitions, timeMs, width);
+            if (tr.opacityMul < 0.999 || tr.dx !== 0 || tr.scale !== 1 || tr.wipeX !== undefined || tr.dipColor) {
+              overlaysAnimated = true;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (!bottomClip || bottomClip.kind !== "video") return null;
+  if (bottomClip.transform.blendMode !== "source-over") return null;
+  if (bottomClip.filter.vignette > 0.02) return null;
+
+  const localMs = timeMs - bottomClip.startMs;
+  const motion = computeMotionState(bottomClip.animation, localMs, bottomClip.durationMs, width, height);
+  const trans = computeClipTransitionEffect(
+    bottomClip,
+    bottomTrackClips,
+    project.transitions,
+    timeMs,
+    width,
+  );
+  if (trans.wipeX !== undefined || trans.dipColor) return null;
+
+  const scale = motion.scale * trans.scale;
+  const opacity = clamp(bottomClip.transform.opacity * motion.opacityMul * trans.opacityMul, 0, 1);
+  const totalDx = motion.dx + trans.dx;
+  const totalDy = motion.dy;
+  const filterCss = buildFilterString(bottomClip.filter, motion.blurPx);
+  const isFullBleedOpaque = isClipFullBleedOpaque(
+    bottomClip,
+    opacity,
+    totalDx,
+    totalDy,
+    scale,
+    trans.wipeX,
+  );
+
+  return {
+    clip: bottomClip,
+    opacity,
+    dxPct: (totalDx / Math.max(1, width)) * 100,
+    dyPct: (totalDy / Math.max(1, height)) * 100,
+    scale,
+    filterCss,
+    isFullBleedOpaque,
+    hasOverlaysAbove,
+    overlaysAnimated,
+  };
+}
+
+/**
+ * Checks whether the frame at `timeMs` consists solely of ONE full-bleed, unfiltered,
+ * un-animated video clip with no overlays or transitions — allowing the export worker
+ * to bypass 2D `OffscreenCanvas` completely and pass the GPU NV12 `VideoSample` straight
+ * into `VideoSampleSource` (zero RGBA conversion, 3×-5× faster).
+ */
+export function inspectDirectExportVideoClip(
+  project: CinemaProject,
+  timeMs: number,
+): CinemaVideoClip | null {
+  const { width, height } = project;
+  const { prepared } = getPreparedProjectIndex(project);
+  let onlyClip: CinemaVisualClip | null = null;
+  let onlyTrackClips: CinemaVisualClip[] = [];
+
+  for (const { sortedClips: trackClips } of prepared) {
+    for (const clip of trackClips) {
+      if (clip.hidden || timeMs < clip.startMs || timeMs > clip.startMs + clip.durationMs) {
+        continue;
+      }
+      if (onlyClip) return null;
+      onlyClip = clip;
+      onlyTrackClips = trackClips;
+    }
+  }
+
+  if (!onlyClip || onlyClip.kind !== "video") return null;
+  if (!isClipFilterDefaultForFastPath(onlyClip.filter)) return null;
+
+  const tf = onlyClip.transform;
+  if (
+    tf.blendMode !== "source-over" ||
+    tf.opacity < 0.995 ||
+    tf.borderRadius > 0 ||
+    Math.abs(tf.rotation) > 0.05 ||
+    Math.abs(tf.x - 50) > 0.15 ||
+    Math.abs(tf.y - 50) > 0.15 ||
+    Math.abs(tf.width - 100) > 0.15 ||
+    Math.abs(tf.height - 100) > 0.15 ||
+    tf.flipH ||
+    tf.flipV ||
+    tf.shadow
+  ) {
+    return null;
+  }
+
+  const localMs = timeMs - onlyClip.startMs;
+  const motion = computeMotionState(onlyClip.animation, localMs, onlyClip.durationMs, width, height);
+  if (
+    motion.opacityMul < 0.999 ||
+    Math.abs(motion.dx) > 0.25 ||
+    Math.abs(motion.dy) > 0.25 ||
+    Math.abs(motion.scale - 1) > 0.001 ||
+    motion.blurPx > 0.05
+  ) {
+    return null;
+  }
+
+  if (project.transitions.length > 0) {
+    const trans = computeClipTransitionEffect(onlyClip, onlyTrackClips, project.transitions, timeMs, width);
+    if (
+      trans.opacityMul < 0.999 ||
+      Math.abs(trans.dx) > 0.25 ||
+      Math.abs(trans.scale - 1) > 0.001 ||
+      trans.wipeX !== undefined ||
+      trans.dipColor
+    ) {
+      return null;
+    }
+  }
+
+  return onlyClip;
+}
+
 export function renderCinemaFrame(
   ctx: Cinema2DContext,
   project: CinemaProject,
@@ -842,8 +1065,7 @@ export function renderCinemaFrame(
 ): void {
   const { width, height } = project;
   ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = runtime.isPlaying ? "medium" : "high";
-  drawBackground(ctx, project.background, width, height);
+  ctx.imageSmoothingQuality = runtime.isPlaying || runtime.isExport ? "medium" : "high";
 
   const projectDurationMs = computeProjectDurationMs(project);
   const projectProgress = projectDurationMs > 0 ? timeMs / projectDurationMs : 0;
@@ -851,11 +1073,60 @@ export function renderCinemaFrame(
   // Pre-indexed bottom track -> top track so upper tracks overlay lower tracks with zero per-frame sorting
   const { prepared, audioById } = getPreparedProjectIndex(project);
 
+  // Skip drawing the background when caller requests transparency OR an opaque full-bleed clip covers 100%
+  let backgroundCovered = Boolean(runtime.skipBackground);
+  if (!backgroundCovered) {
+    outer: for (const { sortedClips: trackClips } of prepared) {
+      for (const clip of trackClips) {
+        if (clip.hidden || timeMs < clip.startMs || timeMs > clip.startMs + clip.durationMs) {
+          continue;
+        }
+        if (runtime.skipClipIds?.has(clip.id)) {
+          break outer;
+        }
+        if (clip.kind === "video" || clip.kind === "image") {
+          const localMs = timeMs - clip.startMs;
+          const motion = computeMotionState(clip.animation, localMs, clip.durationMs, width, height);
+          const trans = computeClipTransitionEffect(
+            clip,
+            trackClips,
+            project.transitions,
+            timeMs,
+            width,
+          );
+          const opacity = clamp(clip.transform.opacity * motion.opacityMul * trans.opacityMul, 0, 1);
+          if (
+            isClipFullBleedOpaque(
+              clip,
+              opacity,
+              motion.dx + trans.dx,
+              motion.dy,
+              motion.scale * trans.scale,
+              trans.wipeX,
+            ) &&
+            (runtime.clipMediaOverrides?.has(clip.id) || runtime.mediaElements.has(clip.assetId))
+          ) {
+            backgroundCovered = true;
+          }
+        }
+        break outer;
+      }
+    }
+  }
+  if (!backgroundCovered) {
+    drawBackground(ctx, project.background, width, height);
+  }
+
   let activeDip: { color: string; alpha: number } | null = null;
 
   for (const { sortedClips: trackClips } of prepared) {
     for (const clip of trackClips) {
-      if (clip.hidden || timeMs < clip.startMs || timeMs > clip.startMs + clip.durationMs) {
+      if (
+        clip.hidden ||
+        runtime.skipClipIds?.has(clip.id) ||
+        timeMs < clip.startMs ||
+        timeMs > clip.startMs + clip.durationMs
+      ) {
         continue;
       }
       const localMs = timeMs - clip.startMs;

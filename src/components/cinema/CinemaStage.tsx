@@ -27,13 +27,13 @@ import {
   Trash2,
   Waves,
 } from "lucide-react";
-import GlassSurface from "@/components/landing/GlassSurface";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { CinemaAudioEngine } from "@/lib/cinema/audio-engine";
 import {
   computeProjectDurationMs,
   hitTestVisualClip,
+  inspectNativeVideoStagePlan,
   renderCinemaFrame,
   visualBoxPx,
   type CinemaDrawableMedia,
@@ -97,6 +97,52 @@ function snapPercent(val: number, targets: number[], threshold = 1.6): { value: 
   return { value: val, snapped: null };
 }
 
+function parkStageVideoEl(vid: HTMLVideoElement): void {
+  vid.style.position = "absolute";
+  vid.style.left = "0";
+  vid.style.top = "0";
+  vid.style.width = "2px";
+  vid.style.height = "2px";
+  vid.style.opacity = "0";
+  vid.style.transform = "none";
+  vid.style.filter = "none";
+  vid.style.borderRadius = "0";
+  vid.style.boxShadow = "none";
+  vid.style.pointerEvents = "none";
+}
+
+function applyStageVideoStyle(
+  vid: HTMLVideoElement,
+  params: {
+    leftPct: number;
+    topPct: number;
+    wPct: number;
+    hPct: number;
+    rotation: number;
+    scaleX: number;
+    scaleY: number;
+    opacity: number;
+    filterCss: string;
+    fit: "cover" | "contain";
+    radiusPx: number;
+    shadow: boolean;
+  },
+): void {
+  vid.style.position = "absolute";
+  vid.style.left = `${params.leftPct}%`;
+  vid.style.top = `${params.topPct}%`;
+  vid.style.width = `${params.wPct}%`;
+  vid.style.height = `${params.hPct}%`;
+  vid.style.objectFit = params.fit;
+  vid.style.opacity = String(params.opacity);
+  vid.style.filter = params.filterCss === "none" ? "" : params.filterCss;
+  vid.style.borderRadius = params.radiusPx > 0 ? `${params.radiusPx}px` : "0";
+  vid.style.boxShadow = params.shadow ? "0 14px 36px rgba(0, 0, 0, 0.48)" : "none";
+  vid.style.transform = `translate3d(0, 0, 0) rotate(${params.rotation}deg) scale(${params.scaleX}, ${params.scaleY})`;
+  vid.style.transformOrigin = "center center";
+  vid.style.pointerEvents = "none";
+}
+
 export const CinemaStage = memo(function CinemaStage({
   project,
   playheadMs,
@@ -109,6 +155,7 @@ export const CinemaStage = memo(function CinemaStage({
   canvasZoom,
   stageExpanded,
   mediaElementsRef,
+  videoHostRef,
   scrubCacheRef,
   isScrubbingRef,
   audioEngineRef,
@@ -142,6 +189,7 @@ export const CinemaStage = memo(function CinemaStage({
   canvasZoom: "fit" | 0.5 | 0.75 | 1;
   stageExpanded: boolean;
   mediaElementsRef: React.RefObject<Map<string, HTMLVideoElement | HTMLImageElement>>;
+  videoHostRef: React.RefObject<HTMLDivElement | null>;
   scrubCacheRef: React.RefObject<CinemaScrubCache | null>;
   isScrubbingRef: React.RefObject<boolean>;
   audioEngineRef: React.RefObject<CinemaAudioEngine | null>;
@@ -176,6 +224,10 @@ export const CinemaStage = memo(function CinemaStage({
   const [inlineEditClipId, setInlineEditClipId] = useState<string | null>(null);
   const binsRef = useRef<Float32Array>(new Float32Array(32));
   const pendingPaintRafRef = useRef<number | null>(null);
+  const activeNativeVideoRef = useRef<HTMLVideoElement | null>(null);
+  const lastNativeStyleKeyRef = useRef<string>("");
+  const overlayCanvasDirtyRef = useRef<boolean>(true);
+  const lastStaticOverlayKeyRef = useRef<string>("");
   const drawStateRef = useRef({ project, drag, showSafeGuides, playing, displayW: 800, displayH: 450 });
 
   useEffect(() => {
@@ -241,17 +293,23 @@ export const CinemaStage = memo(function CinemaStage({
       const targetW = Math.max(2, Math.round(st.project.width * scale));
       const targetH = Math.max(2, Math.round(st.project.height * scale));
 
-      if (canvas.width !== targetW) canvas.width = targetW;
-      if (canvas.height !== targetH) canvas.height = targetH;
-      const ctx = canvas.getContext("2d", { alpha: false }) ?? canvas.getContext("2d");
-      if (!ctx) return;
-
-      const engine = audioEngineRef.current;
-      if (st.playing && engine) {
-        engine.getFrequencyBins(binsRef.current);
-      } else {
-        binsRef.current.fill(0);
+      let resized = false;
+      if (canvas.width !== targetW) {
+        canvas.width = targetW;
+        resized = true;
       }
+      if (canvas.height !== targetH) {
+        canvas.height = targetH;
+        resized = true;
+      }
+      if (resized) {
+        overlayCanvasDirtyRef.current = true;
+        lastStaticOverlayKeyRef.current = "";
+      }
+
+      // Alpha-enabled overlay canvas sits transparently above the hardware-composited <video> layer
+      const ctx = canvas.getContext("2d", { alpha: true }) ?? canvas.getContext("2d");
+      if (!ctx) return;
 
       const activeProject = st.drag
         ? {
@@ -262,7 +320,125 @@ export const CinemaStage = memo(function CinemaStage({
           }
         : st.project;
 
-      // While actively scrubbing, use instant GPU ImageBitmap proxy frames whenever <video> is seeking/catching up
+      // Canva-style Direct Hardware <video> Stage Layer:
+      // Presents the primary video directly via DirectComposition/CoreAnimation (0ms JS/frame, native VSync!)
+      const allowNative = !isScrubbingRef.current && !st.drag;
+      const nativePlan = allowNative ? inspectNativeVideoStagePlan(activeProject, targetMs) : null;
+      const candidateVid = nativePlan ? mediaElementsRef.current.get(nativePlan.clip.assetId) : null;
+      const bgCompatible =
+        nativePlan !== null &&
+        (nativePlan.isFullBleedOpaque ||
+          (activeProject.background.type === "solid" && activeProject.background.grain <= 0.005));
+
+      if (
+        nativePlan &&
+        bgCompatible &&
+        candidateVid instanceof HTMLVideoElement &&
+        candidateVid.readyState >= 2
+      ) {
+        if (activeNativeVideoRef.current && activeNativeVideoRef.current !== candidateVid) {
+          parkStageVideoEl(activeNativeVideoRef.current);
+          lastNativeStyleKeyRef.current = "";
+        }
+        activeNativeVideoRef.current = candidateVid;
+
+        const tf = nativePlan.clip.transform;
+        const wPct = tf.width;
+        const hPct = tf.height;
+        const leftPct = tf.x - wPct / 2 + nativePlan.dxPct;
+        const topPct = tf.y - hPct / 2 + nativePlan.dyPct;
+        const scaleX = nativePlan.scale * (tf.flipH ? -1 : 1);
+        const scaleY = nativePlan.scale * (tf.flipV ? -1 : 1);
+        const radiusPx =
+          tf.borderRadius > 0 ? (tf.borderRadius / 1080) * st.displayH * (hPct / 100) * 1.4 : 0;
+        const styleKey = `${nativePlan.clip.id}|${leftPct.toFixed(2)}|${topPct.toFixed(2)}|${wPct.toFixed(2)}|${hPct.toFixed(2)}|${tf.rotation}|${scaleX.toFixed(3)}|${scaleY.toFixed(3)}|${nativePlan.opacity.toFixed(3)}|${nativePlan.filterCss}|${nativePlan.clip.fit}|${radiusPx.toFixed(1)}|${tf.shadow ? 1 : 0}`;
+
+        if (styleKey !== lastNativeStyleKeyRef.current) {
+          lastNativeStyleKeyRef.current = styleKey;
+          applyStageVideoStyle(candidateVid, {
+            leftPct,
+            topPct,
+            wPct,
+            hPct,
+            rotation: tf.rotation,
+            scaleX,
+            scaleY,
+            opacity: nativePlan.opacity,
+            filterCss: nativePlan.filterCss,
+            fit: nativePlan.clip.fit,
+            radiusPx,
+            shadow: tf.shadow,
+          });
+        }
+
+        // Pure video with no overlays above: skip canvas compositing completely (0ms JS/frame!)
+        if (!nativePlan.hasOverlaysAbove && !st.showSafeGuides) {
+          if (overlayCanvasDirtyRef.current) {
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.clearRect(0, 0, targetW, targetH);
+            overlayCanvasDirtyRef.current = false;
+            lastStaticOverlayKeyRef.current = "";
+          }
+          return;
+        }
+
+        // Static text/logo overlay over playing video: paint once, then 0ms JS/frame until overlays change!
+        const activeOverlayIds = activeProject.clips
+          .filter(
+            (c) =>
+              c.kind !== "audio" &&
+              !c.hidden &&
+              c.id !== nativePlan.clip.id &&
+              targetMs >= c.startMs &&
+              targetMs <= c.startMs + c.durationMs,
+          )
+          .map((c) => c.id)
+          .join(",");
+        const staticKey = `${activeProject.updatedAt}|${st.showSafeGuides ? 1 : 0}|${activeOverlayIds}|${targetW}x${targetH}`;
+        if (st.playing && !nativePlan.overlaysAnimated && lastStaticOverlayKeyRef.current === staticKey) {
+          return;
+        }
+
+        const engine = audioEngineRef.current;
+        if (st.playing && engine) {
+          engine.getFrequencyBins(binsRef.current);
+        } else {
+          binsRef.current.fill(0);
+        }
+
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, targetW, targetH);
+        ctx.setTransform(targetW / st.project.width, 0, 0, targetH / st.project.height, 0, 0);
+        renderCinemaFrame(ctx, activeProject, targetMs, {
+          mediaElements: mediaElementsRef.current,
+          frequencyBins: st.playing && engine ? binsRef.current : undefined,
+          showSafeGuides: st.showSafeGuides,
+          isPlaying: st.playing,
+          skipBackground: true,
+          skipClipIds: new Set([nativePlan.clip.id]),
+        });
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        overlayCanvasDirtyRef.current = true;
+        lastStaticOverlayKeyRef.current = nativePlan.overlaysAnimated ? "" : staticKey;
+        return;
+      }
+
+      // Canvas path (scrubbing with 120fps ImageBitmap cache, drag transforms, complex blends/transitions)
+      if (activeNativeVideoRef.current) {
+        parkStageVideoEl(activeNativeVideoRef.current);
+        activeNativeVideoRef.current = null;
+        lastNativeStyleKeyRef.current = "";
+      }
+      lastStaticOverlayKeyRef.current = "";
+      overlayCanvasDirtyRef.current = true;
+
+      const engine = audioEngineRef.current;
+      if (st.playing && engine) {
+        engine.getFrequencyBins(binsRef.current);
+      } else {
+        binsRef.current.fill(0);
+      }
+
       let scrubOverrides: Map<string, CinemaDrawableMedia> | undefined;
       if (!st.playing && isScrubbingRef.current && scrubCacheRef.current) {
         const cache = scrubCacheRef.current;
@@ -289,7 +465,6 @@ export const CinemaStage = memo(function CinemaStage({
         }
       }
 
-      // Scale preview canvas to display pixel grid (4x-6x fewer pixels than 1080p full-frame raster)
       ctx.setTransform(targetW / st.project.width, 0, 0, targetH / st.project.height, 0, 0);
       renderCinemaFrame(ctx, activeProject, targetMs, {
         mediaElements: mediaElementsRef.current,
@@ -599,9 +774,16 @@ export const CinemaStage = memo(function CinemaStage({
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
         >
+          {/* Direct Hardware-Composited <video> Stage Layer (Canva-style zero-copy playback) */}
+          <div
+            ref={videoHostRef}
+            aria-hidden
+            style={{ backgroundColor: project.background.colorA }}
+            className="pointer-events-none absolute inset-0 overflow-hidden rounded-[10px]"
+          />
           <canvas
             ref={renderCanvasRef}
-            className="block h-full w-full rounded-[10px] select-none"
+            className="relative z-[1] block h-full w-full rounded-[10px] select-none"
           />
 
           {/* Live Magnetic Snap Guides */}
@@ -840,98 +1022,50 @@ export const CinemaStage = memo(function CinemaStage({
 
       {/* Calm Apple Pro Transport & Peak Meter Bar */}
       <div className="cinema-chrome-surface flex h-11 shrink-0 items-center justify-between gap-2 border-t border-border/75 px-3 sm:px-4">
-        {/* Left: Liquid Glass Transport Controls (Rewind, Step Back, Play/Pause Hero Orb, Step Forward, Loop) */}
+        {/* Left: Crisp Zero-Filter CSS Darkroom Glass Transport Controls */}
         <div className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={() => onSeek(0)}
             aria-label="Rewind to start"
-            className="rounded-full"
+            className="inline-flex size-8 items-center justify-center rounded-full border border-white/[0.11] bg-white/[0.06] text-foreground/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] transition-colors hover:bg-white/[0.12] hover:text-foreground"
           >
-            <GlassSurface
-              width={32}
-              height={32}
-              borderRadius={16}
-              distortionScale={-180}
-              displace={0.5}
-              backgroundOpacity={0.1}
-              className="glass-control"
-            >
-              <span className="flex h-full w-full items-center justify-center text-foreground/85 hover:text-foreground">
-                <SkipBack className="size-3.5" strokeWidth={1.6} />
-              </span>
-            </GlassSurface>
+            <SkipBack className="size-3.5" strokeWidth={1.6} />
           </button>
 
           <button
             type="button"
             onClick={() => onStepFrame(-1)}
             aria-label="Previous frame"
-            className="hidden rounded-full sm:inline-flex"
+            className="hidden size-8 items-center justify-center rounded-full border border-white/[0.11] bg-white/[0.06] text-foreground/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] transition-colors hover:bg-white/[0.12] hover:text-foreground sm:inline-flex"
           >
-            <GlassSurface
-              width={32}
-              height={32}
-              borderRadius={16}
-              distortionScale={-180}
-              displace={0.5}
-              backgroundOpacity={0.1}
-              className="glass-control"
-            >
-              <span className="flex h-full w-full items-center justify-center text-foreground/85 hover:text-foreground">
-                <StepBack className="size-3.5" strokeWidth={1.6} />
-              </span>
-            </GlassSurface>
+            <StepBack className="size-3.5" strokeWidth={1.6} />
           </button>
 
           <button
             type="button"
             onClick={onTogglePlay}
             aria-label={playing ? "Pause (Space)" : "Play (Space)"}
-            className="mx-0.5 rounded-full"
+            className={`mx-0.5 inline-flex size-9 items-center justify-center rounded-full border shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] transition-colors ${
+              playing
+                ? "border-[color:var(--cinema-playhead)]/45 bg-[color:var(--cinema-playhead)]/15 text-[color:var(--cinema-playhead)] hover:bg-[color:var(--cinema-playhead)]/22"
+                : "border-white/[0.16] bg-white/[0.11] text-foreground hover:bg-white/[0.18]"
+            }`}
           >
-            <GlassSurface
-              width={36}
-              height={36}
-              borderRadius={18}
-              distortionScale={-180}
-              displace={0.5}
-              backgroundOpacity={0.16}
-              className={`glass-control ${playing ? "glass-control--active" : ""}`}
-            >
-              <span
-                className={`flex h-full w-full items-center justify-center ${
-                  playing ? "text-[color:var(--cinema-playhead)]" : "text-foreground"
-                }`}
-              >
-                {playing ? (
-                  <Pause className="size-3.5 fill-current" />
-                ) : (
-                  <Play className="size-3.5 translate-x-[0.5px] fill-current" />
-                )}
-              </span>
-            </GlassSurface>
+            {playing ? (
+              <Pause className="size-3.5 fill-current" />
+            ) : (
+              <Play className="size-3.5 translate-x-[0.5px] fill-current" />
+            )}
           </button>
 
           <button
             type="button"
             onClick={() => onStepFrame(1)}
             aria-label="Next frame"
-            className="hidden rounded-full sm:inline-flex"
+            className="hidden size-8 items-center justify-center rounded-full border border-white/[0.11] bg-white/[0.06] text-foreground/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] transition-colors hover:bg-white/[0.12] hover:text-foreground sm:inline-flex"
           >
-            <GlassSurface
-              width={32}
-              height={32}
-              borderRadius={16}
-              distortionScale={-180}
-              displace={0.5}
-              backgroundOpacity={0.1}
-              className="glass-control"
-            >
-              <span className="flex h-full w-full items-center justify-center text-foreground/85 hover:text-foreground">
-                <StepForward className="size-3.5" strokeWidth={1.6} />
-              </span>
-            </GlassSurface>
+            <StepForward className="size-3.5" strokeWidth={1.6} />
           </button>
 
           <button
@@ -939,25 +1073,13 @@ export const CinemaStage = memo(function CinemaStage({
             onClick={onToggleLoop}
             aria-pressed={loopEnabled}
             aria-label="Loop playback (L)"
-            className="rounded-full"
+            className={`inline-flex size-8 items-center justify-center rounded-full border shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] transition-colors ${
+              loopEnabled
+                ? "border-white/25 bg-white/[0.14] text-foreground"
+                : "border-white/[0.10] bg-white/[0.05] text-muted-foreground hover:bg-white/[0.11] hover:text-foreground"
+            }`}
           >
-            <GlassSurface
-              width={32}
-              height={32}
-              borderRadius={16}
-              distortionScale={-180}
-              displace={0.5}
-              backgroundOpacity={loopEnabled ? 0.18 : 0.08}
-              className={`glass-control ${loopEnabled ? "glass-control--active" : ""}`}
-            >
-              <span
-                className={`flex h-full w-full items-center justify-center ${
-                  loopEnabled ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <Repeat className="size-3.5" strokeWidth={1.6} />
-              </span>
-            </GlassSurface>
+            <Repeat className="size-3.5" strokeWidth={1.6} />
           </button>
         </div>
 
