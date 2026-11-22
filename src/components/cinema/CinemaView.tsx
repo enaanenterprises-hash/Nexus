@@ -2081,7 +2081,10 @@ export function CinemaView({
           <Button
             type="button"
             size="sm"
-            onClick={() => setExportOpen(true)}
+            onClick={() => {
+              if (playing) setPlaying(false);
+              setExportOpen(true);
+            }}
             className="h-7 gap-1.5 rounded-lg bg-foreground px-3 text-[11.5px] font-medium text-background hover:opacity-90"
           >
             {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}

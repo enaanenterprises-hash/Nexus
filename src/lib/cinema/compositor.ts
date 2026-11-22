@@ -904,9 +904,14 @@ function drawVisualAssetClip(
     else if (clip.kenBurns === "pan-right") kb = { scale: 1.08, panX: -0.45 + p * 0.9 };
   }
 
-  ctx.filter = buildFilterString(clip.filter, extraBlurPx);
-  drawMediaBox(ctx, el, w, h, clip.fit, kb);
-  ctx.filter = "none";
+      const filterStr = buildFilterString(clip.filter, extraBlurPx);
+      if (filterStr !== "none") {
+        ctx.filter = filterStr;
+        drawMediaBox(ctx, el, w, h, clip.fit, kb);
+        ctx.filter = "none";
+      } else {
+        drawMediaBox(ctx, el, w, h, clip.fit, kb);
+      }
 
   if (clip.filter.vignette > 0.02) {
     const vig = ctx.createRadialGradient(0, 0, Math.min(w, h) * 0.25, 0, 0, Math.max(w, h) * 0.72);
