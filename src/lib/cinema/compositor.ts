@@ -16,7 +16,11 @@ import type {
   CinemaVisualizerClip,
 } from "./types";
 
-export type CinemaDrawableMedia = HTMLVideoElement | HTMLImageElement | HTMLCanvasElement;
+export type CinemaDrawableMedia =
+  | HTMLVideoElement
+  | HTMLImageElement
+  | HTMLCanvasElement
+  | OffscreenCanvas;
 
 export interface CinemaRenderRuntime {
   mediaElements: ReadonlyMap<string, CinemaDrawableMedia>;
