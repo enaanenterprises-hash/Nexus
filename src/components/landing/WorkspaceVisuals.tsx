@@ -6,8 +6,9 @@ import {
   BranchingNetworkCanvas,
   type BranchNodeMeta,
 } from "@/components/dashboard/BranchingNetworkCanvas";
+import { NexusMenuButton } from "@/components/dashboard/NexusMenuButton";
+import { CommandIcon, NetworkIcon, NodesIcon } from "@/components/dashboard/icons";
 import { TOTAL_EXTENSION_SLOTS, type ExtensionLink } from "@/lib/extensions";
-import { NexusMark } from "./NexusLogo";
 
 export type EcosystemLayer = "network" | "command" | "nodes";
 
@@ -97,10 +98,17 @@ const PREVIEW_LINKS: ExtensionLink[] = [
  * renders the GoldenNetwork-inspired procedural branching engine, live inter-node bridges,
  * uncluttered node jewels, single hover inspection pill, and working voice prompt bar.
  */
-export function NeuralNetworkPreview({ theme }: { theme: "dark" | "light" }) {
+export function NeuralNetworkPreview({
+  theme,
+  onSelectLayer,
+}: {
+  theme: "dark" | "light";
+  onSelectLayer?: (layer: EcosystemLayer) => void;
+}) {
   const isLight = theme === "light";
   const stageRef = useRef<HTMLDivElement>(null);
   const [compactWidth, setCompactWidth] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
   const [brainState, setBrainState] = useState<"idle" | "thinking" | "responding">("idle");
   const [draft, setDraft] = useState("");
@@ -116,6 +124,15 @@ export function NeuralNetworkPreview({ theme }: { theme: "dark" | "light" }) {
     serial: number;
   } | null>(null);
   const timersRef = useRef<number[]>([]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [menuOpen]);
 
   useEffect(() => {
     const el = stageRef.current;
@@ -227,169 +244,270 @@ export function NeuralNetworkPreview({ theme }: { theme: "dark" | "light" }) {
       className="relative h-[585px] w-full overflow-hidden sm:h-[590px]"
       style={{ background: isLight ? "#faf8f2" : "#070709" }}
     >
-      <BranchingNetworkCanvas
-        theme={theme}
-        nodes={PREVIEW_BRANCH_NODES}
-        links={PREVIEW_LINKS}
-        energy={energy}
-        activeNodeIndex={activeIdx}
-        transfer={transfer}
-        mode="embedded"
-        bottomClearance={compactWidth ? 334 : 278}
-        showcaseAll
-        onSelectNode={handleNodeClick}
-      />
-
-      {/* Subtle bottom scrim keeping the conversational prompt crystal clear */}
+      {/* Blurring backdrop + canvas layer matching Dashboard's floating orb menu transition */}
       <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background: isLight
-            ? "linear-gradient(0deg, rgba(250,248,242,0.95) 0%, rgba(250,248,242,0.58) 20%, rgba(250,248,242,0) 42%)"
-            : "linear-gradient(0deg, rgba(7,7,9,0.95) 0%, rgba(7,7,9,0.58) 20%, rgba(7,7,9,0) 42%)",
-        }}
-      />
+        className={`relative h-full w-full transition-[filter] duration-500 ${
+          menuOpen ? "pointer-events-none blur-[8px] brightness-[0.65]" : ""
+        }`}
+      >
+        <BranchingNetworkCanvas
+          theme={theme}
+          nodes={PREVIEW_BRANCH_NODES}
+          links={PREVIEW_LINKS}
+          energy={energy}
+          activeNodeIndex={activeIdx}
+          transfer={transfer}
+          mode="embedded"
+          bottomClearance={compactWidth ? 334 : 278}
+          showcaseAll
+          onSelectNode={handleNodeClick}
+        />
 
-      {/* Authentic top-left flat 2D Nexus rotor button */}
-      <div className="pointer-events-none absolute top-4 left-4 z-20 flex items-center gap-2.5 sm:top-5 sm:left-5">
-        <span
-          className={`flex h-9 w-9 items-center justify-center rounded-full border backdrop-blur-md ${
+        {/* Subtle bottom scrim keeping the conversational prompt crystal clear */}
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background: isLight
+              ? "linear-gradient(0deg, rgba(250,248,242,0.95) 0%, rgba(250,248,242,0.58) 20%, rgba(250,248,242,0) 42%)"
+              : "linear-gradient(0deg, rgba(7,7,9,0.95) 0%, rgba(7,7,9,0.58) 20%, rgba(7,7,9,0) 42%)",
+          }}
+        />
+
+        {/* Compact right-edge active branch indicator pill */}
+        <div
+          className={`pointer-events-none absolute top-1/2 right-3.5 z-20 hidden -translate-y-1/2 flex-col items-center gap-2 rounded-full border px-1.5 py-2.5 backdrop-blur-md sm:flex ${
             isLight
-              ? "border-[#0e0f12]/[0.1] bg-white/80 shadow-xs"
+              ? "border-[#0e0f12]/[0.1] bg-white/80"
               : "border-white/[0.1] bg-[#121216]/75"
           }`}
           aria-hidden="true"
         >
-          <NexusMark className="h-[18px] w-[18px]" />
-        </span>
-      </div>
-
-      {/* Compact right-edge active branch indicator pill */}
-      <div
-        className={`pointer-events-none absolute top-1/2 right-3.5 z-20 hidden -translate-y-1/2 flex-col items-center gap-2 rounded-full border px-1.5 py-2.5 backdrop-blur-md sm:flex ${
-          isLight
-            ? "border-[#0e0f12]/[0.1] bg-white/80"
-            : "border-white/[0.1] bg-[#121216]/75"
-        }`}
-        aria-hidden="true"
-      >
-        {[0, 1, 2, 3, 4].map((idx) => (
-          <span
-            key={idx}
-            className={`h-1.5 w-1.5 rounded-full transition-colors ${
-              isLight ? "bg-[#c88d18]" : "bg-[#f0b54a]"
-            }`}
-          />
-        ))}
-      </div>
-
-      {/* Bottom Conversational Assistant Voice Stage */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-5 z-20 flex flex-col items-center px-4 text-center sm:bottom-6">
-        <div className="pointer-events-auto flex w-full max-w-[580px] flex-col items-center gap-3">
-          {!conversation ? (
-            <div className="flex flex-col items-center gap-1">
-              <p
-                className={`font-editorial text-[clamp(1.7rem,2.8vw,2.35rem)] leading-[1.1] font-normal tracking-[-0.025em] ${
-                  isLight ? "text-[#0e0f12]" : "text-[#f5f5f7]"
-                }`}
-              >
-                Hello, Elena
-              </p>
-              <p className={`text-[12.5px] ${isLight ? "text-[#52545e]" : "text-[#9d9da6]"}`}>
-                Hover a branch node or ask Nexus
-              </p>
-            </div>
-          ) : (
-            <div className="lp-stage-panel flex max-w-full flex-col items-center gap-1">
-              <p
-                className={`max-w-full truncate px-2 text-[12px] ${
-                  isLight ? "text-[#636570]" : "text-[#8e8e95]"
-                }`}
-              >
-                {conversation.sourceLabel} · {conversation.prompt}
-              </p>
-              <p
-                className={`font-editorial max-w-[52ch] text-[clamp(1.05rem,1.5vw,1.25rem)] leading-[1.38] ${
-                  isLight ? "text-[#0e0f12]" : "text-[#f5f5f7]"
-                }`}
-              >
-                {conversation.response || "Routing across linked branches…"}
-              </p>
-            </div>
-          )}
-
-          {/* Status indicator */}
-          <div className="inline-flex items-center gap-2 text-[11.5px] font-medium">
+          {[0, 1, 2, 3, 4].map((idx) => (
             <span
-              className={`h-1.5 w-1.5 rounded-full ${
-                brainState === "idle"
-                  ? isLight
-                    ? "bg-[#0e0f12]/70"
-                    : "bg-white/75"
-                  : isLight
-                    ? "animate-pulse bg-[#0e0f12]"
-                    : "animate-pulse bg-white"
+              key={idx}
+              className={`h-1.5 w-1.5 rounded-full transition-colors ${
+                isLight ? "bg-[#c88d18]" : "bg-[#f0b54a]"
               }`}
-              aria-hidden="true"
             />
-            <span className={isLight ? "text-[#52545e]" : "text-[#a1a1a6]"}>
-              Nexus · {brainState === "thinking" ? "Thinking" : brainState === "responding" ? "Responding" : "Ready"}
-            </span>
-          </div>
+          ))}
+        </div>
 
-          {/* Interactive quick-ask prompt pills */}
-          <div className="flex flex-wrap items-center justify-center gap-1.5">
-            {NETWORK_PROMPTS.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => triggerPrompt(item)}
-                className={`cursor-pointer rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors sm:px-3 sm:text-[11.5px] ${
-                  isLight
-                    ? "border-[#0e0f12]/[0.12] bg-white/85 text-[#22242c] hover:border-[#0e0f12]/35 hover:bg-white"
-                    : "border-white/[0.13] bg-[#121217]/75 text-[#d1d1d6] hover:border-white/35 hover:text-white"
+        {/* Bottom Conversational Assistant Voice Stage */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-5 z-20 flex flex-col items-center px-4 text-center sm:bottom-6">
+          <div className="pointer-events-auto flex w-full max-w-[580px] flex-col items-center gap-3">
+            {!conversation ? (
+              <div className="flex flex-col items-center gap-1">
+                <p
+                  className={`font-editorial text-[clamp(1.7rem,2.8vw,2.35rem)] leading-[1.1] font-normal tracking-[-0.025em] ${
+                    isLight ? "text-[#0e0f12]" : "text-[#f5f5f7]"
+                  }`}
+                >
+                  Hello, Elena
+                </p>
+                <p className={`text-[12.5px] ${isLight ? "text-[#52545e]" : "text-[#9d9da6]"}`}>
+                  Hover a branch node or ask Nexus
+                </p>
+              </div>
+            ) : (
+              <div className="lp-stage-panel flex max-w-full flex-col items-center gap-1">
+                <p
+                  className={`max-w-full truncate px-2 text-[12px] ${
+                    isLight ? "text-[#636570]" : "text-[#8e8e95]"
+                  }`}
+                >
+                  {conversation.sourceLabel} · {conversation.prompt}
+                </p>
+                <p
+                  className={`font-editorial max-w-[52ch] text-[clamp(1.05rem,1.5vw,1.25rem)] leading-[1.38] ${
+                    isLight ? "text-[#0e0f12]" : "text-[#f5f5f7]"
+                  }`}
+                >
+                  {conversation.response || "Routing across linked branches…"}
+                </p>
+              </div>
+            )}
+
+            {/* Status indicator */}
+            <div className="inline-flex items-center gap-2 text-[11.5px] font-medium">
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  brainState === "idle"
+                    ? isLight
+                      ? "bg-[#0e0f12]/70"
+                      : "bg-white/75"
+                    : isLight
+                      ? "animate-pulse bg-[#0e0f12]"
+                      : "animate-pulse bg-white"
                 }`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
+                aria-hidden="true"
+              />
+              <span className={isLight ? "text-[#52545e]" : "text-[#a1a1a6]"}>
+                Nexus · {brainState === "thinking" ? "Thinking" : brainState === "responding" ? "Responding" : "Ready"}
+              </span>
+            </div>
 
-          {/* Interactive frosted Ask Nexus prompt bar */}
-          <form
-            onSubmit={handleSubmit}
-            className={`flex h-12 w-full items-center gap-2 rounded-full border pr-1.5 pl-4 backdrop-blur-xl transition-colors ${
-              isLight
-                ? "border-[#0e0f12]/[0.12] bg-white/88 shadow-[0_14px_34px_-12px_rgba(14,15,18,0.16)] focus-within:border-[#0e0f12]/40"
-                : "border-white/[0.14] bg-[#111116]/82 shadow-[0_14px_36px_-12px_rgba(0,0,0,0.7)] focus-within:border-white/40"
-            }`}
-          >
-            <input
-              type="text"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder="Ask Nexus anything…"
-              aria-label="Try asking Nexus in the interactive preview"
-              className={`min-w-0 flex-1 bg-transparent text-[14px] outline-none ${
+            {/* Interactive quick-ask prompt pills */}
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
+              {NETWORK_PROMPTS.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => triggerPrompt(item)}
+                  className={`cursor-pointer rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors sm:px-3 sm:text-[11.5px] ${
+                    isLight
+                      ? "border-[#0e0f12]/[0.12] bg-white/85 text-[#22242c] hover:border-[#0e0f12]/35 hover:bg-white"
+                      : "border-white/[0.13] bg-[#121217]/75 text-[#d1d1d6] hover:border-white/35 hover:text-white"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Interactive frosted Ask Nexus prompt bar */}
+            <form
+              onSubmit={handleSubmit}
+              className={`flex h-12 w-full items-center gap-2 rounded-full border pr-1.5 pl-4 backdrop-blur-xl transition-colors ${
                 isLight
-                  ? "text-[#0e0f12] placeholder:text-[#686a73]"
-                  : "text-[#f5f5f7] placeholder:text-[#8e8e95]"
-              }`}
-            />
-            <button
-              type="submit"
-              aria-label="Send preview message"
-              className={`flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors ${
-                isLight
-                  ? "bg-[#0e0f12] text-white hover:bg-[#23252c]"
-                  : "bg-white/[0.16] text-[#f5f5f7] hover:bg-[#f5f5f7] hover:text-[#09090b]"
+                  ? "border-[#0e0f12]/[0.12] bg-white/88 shadow-[0_14px_34px_-12px_rgba(14,15,18,0.16)] focus-within:border-[#0e0f12]/40"
+                  : "border-white/[0.14] bg-[#111116]/82 shadow-[0_14px_36px_-12px_rgba(0,0,0,0.7)] focus-within:border-white/40"
               }`}
             >
-              <ArrowUp className="size-4" strokeWidth={1.85} aria-hidden="true" />
-            </button>
-          </form>
+              <input
+                type="text"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder="Ask Nexus anything…"
+                aria-label="Try asking Nexus in the interactive preview"
+                className={`min-w-0 flex-1 bg-transparent text-[14px] outline-none ${
+                  isLight
+                    ? "text-[#0e0f12] placeholder:text-[#686a73]"
+                    : "text-[#f5f5f7] placeholder:text-[#8e8e95]"
+                }`}
+              />
+              <button
+                type="submit"
+                aria-label="Send preview message"
+                className={`flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors ${
+                  isLight
+                    ? "bg-[#0e0f12] text-white hover:bg-[#23252c]"
+                    : "bg-white/[0.16] text-[#f5f5f7] hover:bg-[#f5f5f7] hover:text-[#09090b]"
+                }`}
+              >
+                <ArrowUp className="size-4" strokeWidth={1.85} aria-hidden="true" />
+              </button>
+            </form>
+          </div>
         </div>
       </div>
+
+      {/* Scoped backdrop to dismiss the preview orb menu */}
+      <div
+        onClick={() => setMenuOpen(false)}
+        className={`dash-menu-backdrop ${menuOpen ? "dash-menu-backdrop--open" : ""}`}
+        aria-hidden="true"
+      />
+
+      {/* Interactive WebGL CrystalizedBall orb menu button matching the live dashboard */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-[46] flex h-16 items-center">
+        <div className="pointer-events-auto ml-[14px] inline-flex w-[74px] shrink-0 justify-center">
+          <NexusMenuButton
+            open={menuOpen}
+            controlsId="preview-network-menu"
+            onClick={() => setMenuOpen((prev) => !prev)}
+          />
+        </div>
+      </div>
+
+      {/* Floating dark nebula-glass menu melted from the top-left orb */}
+      <nav
+        id="preview-network-menu"
+        aria-label="Preview navigation"
+        aria-hidden={!menuOpen ? true : undefined}
+        className={`node-menu node-menu--floating ${menuOpen ? "node-menu--open" : "node-menu--collapsed"}`}
+      >
+        <button
+          type="button"
+          tabIndex={menuOpen ? 0 : -1}
+          onClick={() => setMenuOpen(false)}
+          aria-current="page"
+          className="node-menu-item node-menu-item--on text-[#ffd479]"
+        >
+          <span className="node-menu-icon">
+            <NetworkIcon />
+          </span>
+          <span className="node-menu-label">Network</span>
+        </button>
+
+        <button
+          type="button"
+          tabIndex={menuOpen ? 0 : -1}
+          onClick={() => {
+            setMenuOpen(false);
+            onSelectLayer?.("command");
+          }}
+          className="node-menu-item text-[#b8b9c2] hover:text-white"
+        >
+          <span className="node-menu-icon">
+            <CommandIcon />
+          </span>
+          <span className="node-menu-label">Command</span>
+        </button>
+
+        <button
+          type="button"
+          tabIndex={menuOpen ? 0 : -1}
+          onClick={() => {
+            setMenuOpen(false);
+            onSelectLayer?.("nodes");
+          }}
+          className="node-menu-item text-[#b8b9c2] hover:text-white"
+        >
+          <span className="node-menu-icon">
+            <NodesIcon />
+          </span>
+          <span className="node-menu-label">Nodes</span>
+        </button>
+
+        <span className="node-menu-divider bg-white/15" aria-hidden="true" />
+
+        <button
+          type="button"
+          tabIndex={menuOpen ? 0 : -1}
+          onClick={() => {
+            setMenuOpen(false);
+            triggerPrompt(NETWORK_PROMPTS[1]!);
+          }}
+          className="node-menu-item text-[#b8b9c2] hover:text-white"
+        >
+          <span className="node-menu-icon">
+            <span className="text-[11px] font-semibold">St</span>
+          </span>
+          <span className="node-menu-label">Studio</span>
+        </button>
+
+        <button
+          type="button"
+          tabIndex={menuOpen ? 0 : -1}
+          onClick={() => {
+            setMenuOpen(false);
+            triggerPrompt({
+              prompt: "Inspect Cinema ↔ Studio bridge",
+              response:
+                "Cinema reads live stems, beat markers, and smart-cuts directly from Studio over the scoped studio.recording branch bridge.",
+              fromSocket: 1,
+              toSocket: 0,
+              sourceLabel: "Cinema ↔ Studio",
+            });
+          }}
+          className="node-menu-item text-[#b8b9c2] hover:text-white"
+        >
+          <span className="node-menu-icon">
+            <span className="text-[11px] font-semibold">Cn</span>
+          </span>
+          <span className="node-menu-label">Cinema</span>
+        </button>
+      </nav>
     </div>
   );
 }

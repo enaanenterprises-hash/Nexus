@@ -1767,7 +1767,9 @@ export function SingularityStage() {
 
           {/* Active Live Surface Preview */}
           <div key={activeLayer} className="lp-stage-panel">
-            {activeLayer === "network" ? <NeuralNetworkPreview theme={previewTheme} /> : null}
+            {activeLayer === "network" ? (
+              <NeuralNetworkPreview theme={previewTheme} onSelectLayer={setActiveLayer} />
+            ) : null}
             {activeLayer === "command" ? <CommandPreview theme={previewTheme} /> : null}
             {activeLayer === "nodes" ? <NodesPreview theme={previewTheme} /> : null}
           </div>

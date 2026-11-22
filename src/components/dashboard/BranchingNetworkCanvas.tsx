@@ -267,6 +267,271 @@ function buildCometSegments(
   return segments.length > 0 ? segments : null;
 }
 
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  if (edge1 <= edge0) return x >= edge1 ? 1 : 0;
+  const t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+/** Subdivides a cubic Bézier over [0, u] using De Casteljau's algorithm; q3 is the exact wavefront tip. */
+function splitBezier(
+  p0: Vec,
+  c1: Vec,
+  c2: Vec,
+  p3: Vec,
+  u: number,
+): [Vec, Vec, Vec, Vec] {
+  const t = clamp(u, 0, 1);
+  const lerp = (a: Vec, b: Vec): Vec => ({
+    x: a.x + (b.x - a.x) * t,
+    y: a.y + (b.y - a.y) * t,
+  });
+  const m0 = lerp(p0, c1);
+  const m1 = lerp(c1, c2);
+  const m2 = lerp(c2, p3);
+  const n0 = lerp(m0, m1);
+  const n1 = lerp(m1, m2);
+  const q3 = lerp(n0, n1);
+  return [p0, m0, n0, q3];
+}
+
+interface CascadeTimings {
+  edgeTiming: Array<[number, number]>;
+  nodeArrival: number[];
+  bridgeTiming: Array<[number, number]>;
+}
+
+const TRUNK_STAGGER = [0.055, 0.025, 0.0, 0.025, 0.055] as const;
+
+function computeCascadeTimings(layout: BranchNetworkLayout): CascadeTimings {
+  const nodeCount = layout.nodes.length;
+  const edgeTiming: Array<[number, number]> = Array.from({ length: layout.edges.length }, () => [0, 0.25]);
+  const nodeArrival: number[] = Array(nodeCount).fill(0.5);
+
+  for (let pass = 1; pass <= 3; pass++) {
+    for (let eIdx = 0; eIdx < layout.edges.length; eIdx++) {
+      const edge = layout.edges[eIdx]!;
+      if (edge.tier !== pass) continue;
+      if (edge.tier === 1) {
+        const stagger = TRUNK_STAGGER[edge.branchIndex % TRUNK_STAGGER.length] ?? 0.03;
+        const start = 0.03 + stagger;
+        const end = start + 0.28;
+        edgeTiming[eIdx] = [start, end];
+        nodeArrival[edge.toIndex] = end;
+      } else if (edge.tier === 2) {
+        const parentArr =
+          typeof edge.fromIndex === "number" ? (nodeArrival[edge.fromIndex] ?? 0.34) : 0.34;
+        const sibOffset = (edge.toIndex % 3) * 0.018;
+        const start = parentArr - 0.03 + sibOffset;
+        const end = start + 0.25;
+        edgeTiming[eIdx] = [start, end];
+        nodeArrival[edge.toIndex] = end;
+      } else {
+        const parentArr =
+          typeof edge.fromIndex === "number" ? (nodeArrival[edge.fromIndex] ?? 0.6) : 0.6;
+        const forkOffset = (edge.toIndex % 2) * 0.028;
+        const start = parentArr - 0.03 + forkOffset;
+        const end = Math.min(0.92, start + 0.24);
+        edgeTiming[eIdx] = [start, end];
+        nodeArrival[edge.toIndex] = end;
+      }
+    }
+  }
+
+  const bridgeTiming: Array<[number, number]> = layout.bridges.map((br, idx) => {
+    const aArr = nodeArrival[br.fromIndex] ?? 0.5;
+    const bArr = nodeArrival[br.toIndex] ?? 0.5;
+    const start = clamp(Math.max(aArr, bArr) - 0.03 + (idx % 3) * 0.015, 0.28, 0.85);
+    const end = Math.min(0.995, start + 0.14);
+    return [start, end];
+  });
+
+  return { edgeTiming, nodeArrival, bridgeTiming };
+}
+
+function traceFluidOrbPath(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  baseR: number,
+  time: number,
+  energy: number,
+  phaseShift: number,
+  ampMul: number,
+) {
+  const steps = 44;
+  const pts: Vec[] = [];
+  const amp1 = (0.044 + energy * 0.022) * ampMul;
+  const amp2 = 0.028 * ampMul;
+  const amp3 = 0.018 * ampMul;
+
+  for (let i = 0; i < steps; i++) {
+    const theta = (i / steps) * Math.PI * 2;
+    const wobble =
+      amp1 * Math.sin(theta * 3 - time * 1.55 + phaseShift) +
+      amp2 * Math.sin(theta * 5 + time * 2.25 - phaseShift * 0.7) +
+      amp3 * Math.cos(theta * 2 - time * 0.92 + phaseShift * 1.3);
+    const r = baseR * (1 + wobble);
+    pts.push({ x: cx + Math.cos(theta) * r, y: cy + Math.sin(theta) * r });
+  }
+
+  const firstMid = {
+    x: (pts[steps - 1]!.x + pts[0]!.x) * 0.5,
+    y: (pts[steps - 1]!.y + pts[0]!.y) * 0.5,
+  };
+  ctx.beginPath();
+  ctx.moveTo(firstMid.x, firstMid.y);
+  for (let i = 0; i < steps; i++) {
+    const cur = pts[i]!;
+    const next = pts[(i + 1) % steps]!;
+    ctx.quadraticCurveTo(cur.x, cur.y, (cur.x + next.x) * 0.5, (cur.y + next.y) * 0.5);
+  }
+  ctx.closePath();
+}
+
+/**
+ * Draws the central Singularity as a living, fluid golden orb (without any emblem/logo)
+ * with harmonic organic contour morphing, swirling molten-gold internal currents, and rim filigree.
+ */
+function drawGoldenFluidCore(
+  ctx: CanvasRenderingContext2D,
+  core: Vec,
+  baseR: number,
+  time: number,
+  energy: number,
+  ignitionPulse: number,
+  isLight: boolean,
+) {
+  ctx.save();
+  const R = baseR * (1 + ignitionPulse * 0.18 + 0.025 * Math.sin(time * 1.8));
+  const breathe = 1 + 0.055 * Math.sin(time * 0.95) + energy * 0.14 + ignitionPulse * 0.28;
+
+  // 1. Soft atmospheric halo behind the fluid golden sphere
+  ctx.globalCompositeOperation = isLight ? "source-over" : "lighter";
+  radialGlow(ctx, core, R * 3.6 * breathe, [
+    [0, isLight ? "rgba(255, 214, 82, 0.55)" : "rgba(255, 214, 110, 0.52)"],
+    [0.36, isLight ? "rgba(240, 178, 34, 0.24)" : "rgba(240, 172, 48, 0.24)"],
+    [1, "rgba(0, 0, 0, 0)"],
+  ]);
+
+  // Outer undulating molten aura membrane
+  traceFluidOrbPath(ctx, core.x, core.y, R * 1.32, time * 0.85, energy, 1.4, 1.35);
+  ctx.fillStyle = isLight ? "rgba(245, 186, 40, 0.14)" : "rgba(248, 186, 62, 0.16)";
+  ctx.fill();
+
+  // 2. Deep molten golden sphere body (source-over keeps dark/light tones rich and dimensional)
+  ctx.globalCompositeOperation = "source-over";
+  traceFluidOrbPath(ctx, core.x, core.y, R, time, energy, 0, 1);
+
+  const fx = core.x - R * 0.22 + Math.cos(time * 0.72) * R * 0.13;
+  const fy = core.y - R * 0.24 + Math.sin(time * 0.64) * R * 0.13;
+  const bodyGrad = ctx.createRadialGradient(fx, fy, R * 0.06, core.x, core.y, R * 1.12);
+  if (isLight) {
+    bodyGrad.addColorStop(0, "#fffdf2");
+    bodyGrad.addColorStop(0.28, "#ffe27a");
+    bodyGrad.addColorStop(0.62, "#e09412");
+    bodyGrad.addColorStop(0.88, "#a66206");
+    bodyGrad.addColorStop(1, "#703e03");
+  } else {
+    bodyGrad.addColorStop(0, "#fff9e2");
+    bodyGrad.addColorStop(0.25, "#ffd769");
+    bodyGrad.addColorStop(0.58, "#e39519");
+    bodyGrad.addColorStop(0.86, "#9a5707");
+    bodyGrad.addColorStop(1, "#4e2804");
+  }
+  ctx.fillStyle = bodyGrad;
+  ctx.fill();
+
+  // 3. Swirling internal liquid currents, caustic ribbons, and orbiting golden particles
+  ctx.save();
+  ctx.clip();
+
+  ctx.globalCompositeOperation = isLight ? "source-over" : "lighter";
+  const lobe1 = {
+    x: core.x + Math.cos(time * 0.95) * R * 0.34,
+    y: core.y + Math.sin(time * 1.15) * R * 0.28,
+  };
+  const lobe2 = {
+    x: core.x + Math.cos(-time * 0.8 + 2.2) * R * 0.38,
+    y: core.y + Math.sin(-time * 1.05 + 2.2) * R * 0.32,
+  };
+  radialGlow(ctx, lobe1, R * 0.76, [
+    [0, isLight ? "rgba(255, 250, 224, 0.56)" : "rgba(255, 246, 206, 0.54)"],
+    [1, "rgba(255, 200, 72, 0)"],
+  ]);
+  radialGlow(ctx, lobe2, R * 0.68, [
+    [0, isLight ? "rgba(255, 226, 118, 0.42)" : "rgba(246, 178, 56, 0.44)"],
+    [1, "rgba(240, 165, 36, 0)"],
+  ]);
+
+  // Counter-flowing internal golden caustic ribbons
+  for (let b = 0; b < 3; b++) {
+    const dir = b % 2 === 0 ? 1 : -1;
+    const ang = time * (0.52 + b * 0.16) * dir + b * 1.05;
+    const cAng = Math.cos(ang);
+    const sAng = Math.sin(ang);
+    const rot = (lx: number, ly: number): Vec => ({
+      x: core.x + lx * cAng - ly * sAng,
+      y: core.y + lx * sAng + ly * cAng,
+    });
+    const yShift = (b - 1) * R * 0.28;
+    const p0 = rot(-R * 1.1, yShift);
+    const c1 = rot(-R * 0.36, yShift + Math.sin(time * 1.6 + b * 1.9) * R * 0.44);
+    const c2 = rot(R * 0.36, yShift - Math.cos(time * 1.45 + b * 1.3) * R * 0.44);
+    const p3 = rot(R * 1.1, -yShift * 0.4);
+    ctx.beginPath();
+    ctx.moveTo(p0.x, p0.y);
+    ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, p3.x, p3.y);
+    ctx.lineWidth = b === 1 ? 1.55 : 0.95;
+    ctx.strokeStyle =
+      b === 1
+        ? isLight
+          ? "rgba(255, 252, 232, 0.62)"
+          : "rgba(255, 250, 225, 0.72)"
+        : isLight
+          ? "rgba(255, 238, 170, 0.45)"
+          : "rgba(255, 214, 120, 0.48)";
+    ctx.stroke();
+  }
+
+  // Orbiting internal golden dust motes echoing the crystal orb's motion
+  for (let m = 0; m < 12; m++) {
+    const orbitR = R * (0.24 + ((m * 37) % 100) / 170);
+    const theta = time * (0.85 + (m % 4) * 0.24) * (m % 2 === 0 ? 1 : -1) + m * 1.17;
+    const tilt = 0.58 + (m % 3) * 0.14;
+    const mx = core.x + Math.cos(theta) * orbitR;
+    const my = core.y + Math.sin(theta) * orbitR * tilt;
+    ctx.globalAlpha = 0.42 + 0.52 * Math.abs(Math.sin(time * 1.9 + m * 0.8));
+    ctx.fillStyle = isLight ? "#fffceb" : "#fff7de";
+    ctx.beginPath();
+    ctx.arc(mx, my, m % 3 === 0 ? 1.25 : 0.85, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+
+  // 4. Shimmering golden rim + orbital filigree crescents
+  ctx.globalCompositeOperation = "source-over";
+  traceFluidOrbPath(ctx, core.x, core.y, R, time, energy, 0, 1);
+  ctx.lineWidth = isLight ? 1.35 : 1.25;
+  ctx.strokeStyle = isLight ? "rgba(146, 88, 6, 0.82)" : "rgba(255, 228, 152, 0.88)";
+  ctx.stroke();
+
+  ctx.globalCompositeOperation = isLight ? "source-over" : "lighter";
+  for (let c = 0; c < 2; c++) {
+    const startA = time * (c === 0 ? 0.68 : -0.54) + c * Math.PI * 1.05;
+    const arcR = R * (1.1 + c * 0.08);
+    ctx.beginPath();
+    ctx.arc(core.x, core.y, arcR, startA, startA + 0.92);
+    ctx.lineWidth = c === 0 ? 1.15 : 0.85;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = isLight ? "rgba(180, 118, 12, 0.52)" : "rgba(255, 232, 168, 0.58)";
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 /**
  * High-DPI Procedural Branching Filament Engine modeled on Welcome page's GoldenNetwork:
  * 50-slot fractal branching trunks, capability-linked inter-node synapse bridges,
@@ -337,7 +602,12 @@ export function BranchingNetworkCanvas({
     return { occupiedEdgeSet: edgeSet, occupiedNodeSet: nodeSet, bridgeChannelsByNode: peerMap };
   }, [nodes, layout]);
 
+  const cascade = useMemo(() => computeCascadeTimings(layout), [layout]);
+
   const cometsRef = useRef<CometPulse[]>([]);
+  const revealProgressRef = useRef<number>(showcaseAll ? 1 : 0);
+  const reduceMotionRef = useRef(false);
+  const elapsedRef = useRef(0);
   const lastSnapSerialRef = useRef<number>(snap?.serial ?? 0);
   const lastTransferSerialRef = useRef<number>(transfer?.serial ?? 0);
 
@@ -351,6 +621,7 @@ export function BranchingNetworkCanvas({
     paused,
     showcaseAll,
     layout,
+    cascade,
     occupiedEdgeSet,
     occupiedNodeSet,
   });
@@ -366,6 +637,7 @@ export function BranchingNetworkCanvas({
       paused,
       showcaseAll,
       layout,
+      cascade,
       occupiedEdgeSet,
       occupiedNodeSet,
     };
@@ -441,7 +713,23 @@ export function BranchingNetworkCanvas({
       const focusPeers =
         focusIdx !== null && focusIdx !== undefined ? lyt.adjacency.get(focusIdx) : undefined;
 
-      const breathe = 1 + 0.045 * Math.sin(time * 0.65) + 0.12 * cur.energy;
+      // Advance or retract the progressive topological showcase wavefront
+      const targetReveal = cur.showcaseAll ? 1 : 0;
+      if (reduceMotionRef.current) {
+        revealProgressRef.current = targetReveal;
+      } else if (dt > 0) {
+        if (targetReveal > revealProgressRef.current) {
+          revealProgressRef.current = Math.min(1, revealProgressRef.current + dt / 2.5);
+        } else if (targetReveal < revealProgressRef.current) {
+          revealProgressRef.current = Math.max(0, revealProgressRef.current - dt / 0.75);
+        }
+      }
+      const reveal = revealProgressRef.current;
+      const isCascading = reveal > 0.002;
+      const ignitionPulse =
+        cur.showcaseAll && reveal < 0.34 ? Math.sin(clamp(reveal / 0.34, 0, 1) * Math.PI) : 0;
+
+      const breathe = 1 + 0.045 * Math.sin(time * 0.65) + 0.12 * cur.energy + ignitionPulse * 0.12;
 
       ctx.globalCompositeOperation = "source-over";
       ctx.globalAlpha = 1;
@@ -495,7 +783,9 @@ export function BranchingNetworkCanvas({
 
       // 1. GoldenNetwork basal & upward Core filigree sweeps (batched by 6 buckets)
       const sweepScale = Math.max(W * 0.54, H * 0.48);
-      const sweepStrength = cur.showcaseAll ? (isLight ? 0.62 : 0.52) : isLight ? 0.42 : 0.34;
+      const baseSweep = isLight ? 0.42 : 0.34;
+      const litSweep = isLight ? 0.62 : 0.52;
+      const sweepStrength = baseSweep + (litSweep - baseSweep) * smoothstep(0, 0.45, reveal);
       for (let bIdx = 0; bIdx < buckets.length; bIdx++) {
         strokeBatched(bIdx, sweepStrength, () => {
           for (const sw of strands.sweeps) {
@@ -516,53 +806,40 @@ export function BranchingNetworkCanvas({
         });
       }
 
-      // 2. Branch edges + feathered outer tails (split cleanly into ambient vs highlighted passes)
+      // 2. Branch edges + feathered outer tails
       const hasFocus = focusIdx !== null && focusIdx !== undefined;
-      const ambientEdgeAlpha = cur.showcaseAll
-        ? hasFocus
-          ? isLight
-            ? 0.78
-            : 0.72
-          : isLight
-            ? 1.05
-            : 1.18
-        : hasFocus
-          ? isLight
-            ? 0.34
-            : 0.26
-          : isLight
-            ? 0.56
-            : 0.48;
-      const activeEdgeAlpha = cur.showcaseAll
+      const ambientEdgeAlpha = hasFocus
         ? isLight
-          ? 1.32
-          : 1.55
+          ? 0.34
+          : 0.26
         : isLight
-          ? 1.15
-          : 1.35;
+          ? 0.56
+          : 0.48;
+      const activeEdgeAlpha = isLight ? 1.15 : 1.35;
 
-      for (const isActivePass of [false, true]) {
-        for (let bIdx = 0; bIdx < buckets.length; bIdx++) {
-          strokeBatched(
-            bIdx,
-            isActivePass ? activeEdgeAlpha : ambientEdgeAlpha,
-            () => {
-              for (let eIdx = 0; eIdx < lyt.edges.length; eIdx++) {
-                const edge = lyt.edges[eIdx]!;
-                const isAnc = Boolean(focusEdges?.has(eIdx));
-                const isLivePath = cur.occupiedEdgeSet.has(eIdx);
-                const highlighted = cur.showcaseAll ? (!hasFocus || isAnc) : isLivePath || isAnc;
-                if (highlighted !== isActivePass) continue;
+      // Base ambient + live occupied paths (remains anchored beneath any expanding preview wave)
+      if (reveal < 0.995) {
+        const baseFade = 1 - reveal * 0.35;
+        for (const isActivePass of [false, true]) {
+          for (let bIdx = 0; bIdx < buckets.length; bIdx++) {
+            strokeBatched(
+              bIdx,
+              (isActivePass ? activeEdgeAlpha : ambientEdgeAlpha) * baseFade,
+              () => {
+                for (let eIdx = 0; eIdx < lyt.edges.length; eIdx++) {
+                  const edge = lyt.edges[eIdx]!;
+                  const isAnc = Boolean(focusEdges?.has(eIdx));
+                  const isLivePath = cur.occupiedEdgeSet.has(eIdx);
+                  const highlighted = isLivePath || isAnc;
+                  if (highlighted !== isActivePass) continue;
 
-                const tierBundle = strands.trunkStrands[edge.tier - 1]!;
-                for (const st of tierBundle) {
-                  if (st.bucket !== bIdx) continue;
-                  const [c1, c2] = swayControlPoints(edge.p0, edge.c1, edge.c2, edge.p3, st, time, 1.0);
-                  ctx.moveTo(edge.p0.x, edge.p0.y);
-                  ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, edge.p3.x, edge.p3.y);
+                  const tierBundle = strands.trunkStrands[edge.tier - 1]!;
+                  for (const st of tierBundle) {
+                    if (st.bucket !== bIdx) continue;
+                    const [c1, c2] = swayControlPoints(edge.p0, edge.c1, edge.c2, edge.p3, st, time, 1.0);
+                    ctx.moveTo(edge.p0.x, edge.p0.y);
+                    ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, edge.p3.x, edge.p3.y);
 
-                  // Soft outward atmospheric continuation curling beyond leaf nodes
-                  if (st.bucket === bIdx) {
                     const destNode = lyt.nodes[edge.toIndex];
                     if (destNode?.tailTip && Math.abs(st.offsetScale) < 0.08) {
                       const t0 = destNode.pos;
@@ -579,22 +856,141 @@ export function BranchingNetworkCanvas({
                     }
                   }
                 }
-              }
-            },
-            isActivePass ? 1.12 : 0.92,
-          );
+              },
+              isActivePass ? 1.12 : 0.92,
+            );
+          }
         }
       }
 
-      // 3. Inter-Node Bridges (latent branch mesh vs live capability links + hover focus)
+      // Progressive golden cascade wave pass (grows progressively outward from Core -> Tier 1 -> Tier 2 -> Tier 3)
+      const tipSparks: Vec[] = [];
+      if (isCascading) {
+        const cascadePasses = hasFocus ? [false, true] : [true];
+        for (const isFocusPass of cascadePasses) {
+          const passAlpha = isFocusPass
+            ? hasFocus
+              ? isLight
+                ? 1.32
+                : 1.55
+              : isLight
+                ? 1.18
+                : 1.36
+            : isLight
+              ? 0.74
+              : 0.68;
+
+          for (let bIdx = 0; bIdx < buckets.length; bIdx++) {
+            strokeBatched(
+              bIdx,
+              passAlpha,
+              () => {
+                for (let eIdx = 0; eIdx < lyt.edges.length; eIdx++) {
+                  const edge = lyt.edges[eIdx]!;
+                  const isAnc = Boolean(focusEdges?.has(eIdx));
+                  const highlighted = !hasFocus || isAnc;
+                  if (highlighted !== isFocusPass) continue;
+
+                  const [t0, t1] = cur.cascade.edgeTiming[eIdx] ?? [0, 0.25];
+                  const edgeFlow = smoothstep(t0, t1, reveal);
+                  if (edgeFlow <= 0.005) continue;
+
+                  const isAnimatingEdge = edgeFlow > 0.02 && edgeFlow < 0.985;
+                  if (bIdx === 0 && isAnimatingEdge) {
+                    tipSparks.push(bezier(edge.p0, edge.c1, edge.c2, edge.p3, edgeFlow));
+                  }
+
+                  const tierBundle = strands.trunkStrands[edge.tier - 1]!;
+                  for (const st of tierBundle) {
+                    if (st.bucket !== bIdx) continue;
+                    const [c1, c2] = swayControlPoints(edge.p0, edge.c1, edge.c2, edge.p3, st, time, 1.0);
+                    if (edgeFlow >= 0.995) {
+                      ctx.moveTo(edge.p0.x, edge.p0.y);
+                      ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, edge.p3.x, edge.p3.y);
+                    } else {
+                      const [sp0, sc1, sc2, sp3] = splitBezier(edge.p0, c1, c2, edge.p3, edgeFlow);
+                      ctx.moveTo(sp0.x, sp0.y);
+                      ctx.bezierCurveTo(sc1.x, sc1.y, sc2.x, sc2.y, sp3.x, sp3.y);
+                    }
+
+                    // Feathered outer leaf tails unfurl immediately after each branch node ignites
+                    if (edgeFlow >= 0.96) {
+                      const destNode = lyt.nodes[edge.toIndex];
+                      if (destNode?.tailTip && Math.abs(st.offsetScale) < 0.08) {
+                        const tailFlow = smoothstep(t1 - 0.02, Math.min(0.99, t1 + 0.13), reveal);
+                        if (tailFlow > 0.01) {
+                          const tail0 = destNode.pos;
+                          const tail3 = destNode.tailTip;
+                          const tc1 = add(
+                            tail0,
+                            polar(
+                              Math.hypot(tail3.x - tail0.x, tail3.y - tail0.y) * 0.42,
+                              destNode.angle + st.offsetScale,
+                            ),
+                          );
+                          const tc2 = add(
+                            tail0,
+                            polar(
+                              Math.hypot(tail3.x - tail0.x, tail3.y - tail0.y) * 0.78,
+                              destNode.angle - st.offsetScale,
+                            ),
+                          );
+                          if (tailFlow >= 0.995) {
+                            ctx.bezierCurveTo(tc1.x, tc1.y, tc2.x, tc2.y, tail3.x, tail3.y);
+                          } else {
+                            const [tp0, tpc1, tpc2, tp3] = splitBezier(tail0, tc1, tc2, tail3, tailFlow);
+                            ctx.moveTo(tp0.x, tp0.y);
+                            ctx.bezierCurveTo(tpc1.x, tpc1.y, tpc2.x, tpc2.y, tp3.x, tp3.y);
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              isFocusPass ? 1.15 : 0.96,
+            );
+          }
+        }
+      }
+
+      // 3. Inter-Node Bridges (latent branch mesh vs live capability links + hover focus + cascade reveal)
       const bridgeIsHighlighted = (b: SynapseBridge) =>
         b.isLive ||
         b.fromIndex === focusIdx ||
         b.toIndex === focusIdx;
 
-      for (const isHigh of [false, true]) {
-        const bridgeAlpha = cur.showcaseAll
-          ? isHigh
+      if (reveal < 0.995) {
+        const baseFade = 1 - reveal * 0.35;
+        for (const isHigh of [false, true]) {
+          const bridgeAlpha =
+            (isHigh ? (isLight ? 1.25 : 1.45) : hasFocus ? 0.14 : isLight ? 0.24 : 0.2) * baseFade;
+
+          for (let bIdx = 0; bIdx < buckets.length; bIdx++) {
+            strokeBatched(
+              bIdx,
+              bridgeAlpha,
+              () => {
+                for (const br of lyt.bridges) {
+                  if (bridgeIsHighlighted(br) !== isHigh) continue;
+                  const list = br.isLive ? strands.bridgeStrands.slice(0, 5) : strands.bridgeStrands.slice(0, 2);
+                  for (const st of list) {
+                    if (st.bucket !== bIdx) continue;
+                    const [c1, c2] = swayControlPoints(br.p0, br.c1, br.c2, br.p3, st, time, 0.85);
+                    ctx.moveTo(br.p0.x, br.p0.y);
+                    ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, br.p3.x, br.p3.y);
+                  }
+                }
+              },
+              isHigh ? 1.12 : 0.8,
+            );
+          }
+        }
+      }
+
+      if (isCascading) {
+        for (const isHigh of [false, true]) {
+          const bridgeAlpha = isHigh
             ? isLight
               ? 1.28
               : 1.48
@@ -604,38 +1000,59 @@ export function BranchingNetworkCanvas({
                 : 0.66
               : isLight
                 ? 0.92
-                : 1.05
-          : isHigh
-            ? isLight
-              ? 1.25
-              : 1.45
-            : hasFocus
-              ? 0.14
-              : isLight
-                ? 0.24
-                : 0.2;
+                : 1.05;
 
-        for (let bIdx = 0; bIdx < buckets.length; bIdx++) {
-          strokeBatched(
-            bIdx,
-            bridgeAlpha,
-            () => {
-              for (const br of lyt.bridges) {
-                if (bridgeIsHighlighted(br) !== isHigh) continue;
-                const list =
-                  br.isLive || cur.showcaseAll
-                    ? strands.bridgeStrands.slice(0, br.isLive ? 5 : 3)
-                    : strands.bridgeStrands.slice(0, 2);
-                for (const st of list) {
-                  if (st.bucket !== bIdx) continue;
-                  const [c1, c2] = swayControlPoints(br.p0, br.c1, br.c2, br.p3, st, time, 0.85);
-                  ctx.moveTo(br.p0.x, br.p0.y);
-                  ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, br.p3.x, br.p3.y);
+          for (let bIdx = 0; bIdx < buckets.length; bIdx++) {
+            strokeBatched(
+              bIdx,
+              bridgeAlpha,
+              () => {
+                for (let brIdx = 0; brIdx < lyt.bridges.length; brIdx++) {
+                  const br = lyt.bridges[brIdx]!;
+                  if (bridgeIsHighlighted(br) !== isHigh) continue;
+                  const [b0, b1] = cur.cascade.bridgeTiming[brIdx] ?? [0.4, 0.7];
+                  const bridgeFlow = smoothstep(b0, b1, reveal);
+                  if (bridgeFlow <= 0.005) continue;
+
+                  if (bIdx === 0 && bridgeFlow > 0.02 && bridgeFlow < 0.985) {
+                    tipSparks.push(bezier(br.p0, br.c1, br.c2, br.p3, bridgeFlow));
+                  }
+
+                  const list = strands.bridgeStrands.slice(0, br.isLive ? 5 : 3);
+                  for (const st of list) {
+                    if (st.bucket !== bIdx) continue;
+                    const [c1, c2] = swayControlPoints(br.p0, br.c1, br.c2, br.p3, st, time, 0.85);
+                    if (bridgeFlow >= 0.995) {
+                      ctx.moveTo(br.p0.x, br.p0.y);
+                      ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, br.p3.x, br.p3.y);
+                    } else {
+                      const [sp0, sc1, sc2, sp3] = splitBezier(br.p0, c1, c2, br.p3, bridgeFlow);
+                      ctx.moveTo(sp0.x, sp0.y);
+                      ctx.bezierCurveTo(sc1.x, sc1.y, sc2.x, sc2.y, sp3.x, sp3.y);
+                    }
+                  }
                 }
-              }
-            },
-            isHigh || cur.showcaseAll ? 1.12 : 0.8,
-          );
+              },
+              1.12,
+            );
+          }
+        }
+      }
+
+      // Glowing molten-gold leading sparks racing at the advancing wavefront along active branches & bridges
+      if (tipSparks.length > 0) {
+        ctx.globalCompositeOperation = isLight ? "source-over" : "lighter";
+        for (const spark of tipSparks) {
+          ctx.globalAlpha = 0.92;
+          radialGlow(ctx, spark, 12, [
+            [0, isLight ? "rgba(255, 248, 212, 0.95)" : "rgba(255, 250, 232, 0.98)"],
+            [0.38, isLight ? "rgba(228, 162, 22, 0.55)" : "rgba(248, 194, 72, 0.55)"],
+            [1, "rgba(0, 0, 0, 0)"],
+          ]);
+          ctx.fillStyle = isLight ? "#c8820a" : "#fff9e2";
+          ctx.beginPath();
+          ctx.arc(spark.x, spark.y, 1.9, 0, Math.PI * 2);
+          ctx.fill();
         }
       }
 
@@ -643,11 +1060,17 @@ export function BranchingNetworkCanvas({
       if (lyt.edges.length > 0) {
         ctx.fillStyle = isLight ? "rgb(212, 146, 16)" : "rgb(255, 214, 140)";
         for (const d of strands.dust) {
-          const edge = lyt.edges[d.edgeIdx % lyt.edges.length]!;
+          const eIdx = d.edgeIdx % lyt.edges.length;
+          const edge = lyt.edges[eIdx]!;
           const pt = bezier(edge.p0, edge.c1, edge.c2, edge.p3, d.t);
           const twinkle = 0.45 + 0.55 * Math.sin(time * 1.4 + d.phase);
+          const [t0, t1] = cur.cascade.edgeTiming[eIdx] ?? [0, 0.25];
+          const edgeFlow = isCascading ? smoothstep(t0, t1, reveal) : 0;
+          const cascadeBoost = isCascading && d.t <= edgeFlow ? edgeFlow : 0;
           const activeBoost =
-            cur.showcaseAll || cur.occupiedEdgeSet.has(d.edgeIdx % lyt.edges.length) ? 1.12 : 0.65;
+            cur.occupiedEdgeSet.has(eIdx) || cascadeBoost > 0.35
+              ? Math.max(cur.occupiedEdgeSet.has(eIdx) ? 1.12 : 0.65, 0.65 + cascadeBoost * 0.48)
+              : 0.65;
           ctx.globalAlpha = d.alpha * twinkle * activeBoost * (isLight ? 0.68 : 0.9);
           ctx.fillRect(pt.x + d.ox, pt.y + d.oy, d.size, d.size);
         }
@@ -659,25 +1082,37 @@ export function BranchingNetworkCanvas({
         const rawU = (bead.u + time * bead.speed * speedMul * bead.dir) % 1;
         const beadU = rawU < 0 ? rawU + 1 : rawU;
         let pos: Vec | null = null;
+        let flowGate = 1;
         if (bead.kind === "bridge" && lyt.bridges.length > 0) {
           const liveBridges = lyt.bridges.filter((b) => b.isLive);
-          const pool =
-            !cur.showcaseAll && liveBridges.length > 0 && bead.idx % 2 === 0
-              ? liveBridges
-              : lyt.bridges;
-          const br = pool[bead.idx % pool.length]!;
+          const useAllBridges = reveal > 0.45;
+          const pool = !useAllBridges && liveBridges.length > 0 && bead.idx % 2 === 0 ? liveBridges : lyt.bridges;
+          const chosenIdx = bead.idx % pool.length;
+          const br = pool[chosenIdx]!;
+          if (isCascading && !br.isLive) {
+            const origIdx = lyt.bridges.indexOf(br);
+            const [b0, b1] = cur.cascade.bridgeTiming[origIdx] ?? [0.4, 0.7];
+            flowGate = smoothstep(b0, b1, reveal);
+          }
           pos = bezier(br.p0, br.c1, br.c2, br.p3, beadU);
         } else if (lyt.edges.length > 0) {
           const liveIdxList = Array.from(cur.occupiedEdgeSet);
+          const useAllEdges = reveal > 0.25;
           const eIdx =
-            !cur.showcaseAll && liveIdxList.length > 0 && bead.idx % 3 !== 0
+            !useAllEdges && liveIdxList.length > 0 && bead.idx % 3 !== 0
               ? liveIdxList[bead.idx % liveIdxList.length]!
               : bead.idx % lyt.edges.length;
           const edge = lyt.edges[eIdx]!;
+          if (isCascading && !cur.occupiedEdgeSet.has(eIdx)) {
+            const [t0, t1] = cur.cascade.edgeTiming[eIdx] ?? [0, 0.25];
+            flowGate = smoothstep(t0, t1, reveal);
+          }
           pos = bezier(edge.p0, edge.c1, edge.c2, edge.p3, beadU);
         }
-        if (!pos) continue;
-        ctx.globalAlpha = bead.alpha * (cur.showcaseAll ? (isLight ? 0.86 : 0.96) : isLight ? 0.78 : 0.92);
+        if (!pos || flowGate <= 0.05) continue;
+        const baseBeadAlpha =
+          bead.alpha * flowGate * (reveal > 0.5 ? (isLight ? 0.86 : 0.96) : isLight ? 0.78 : 0.92);
+        ctx.globalAlpha = baseBeadAlpha;
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, bead.size, 0, Math.PI * 2);
         ctx.fill();
@@ -713,55 +1148,24 @@ export function BranchingNetworkCanvas({
         cometsRef.current = remaining;
       }
 
-      // 6. Central Singularity Core Jewel
+      // 6. Central Fluid Golden Singularity Orb (no Nexus logo) + expanding wavefront ring
       ctx.globalAlpha = 1;
-      if (isLight) {
-        radialGlow(ctx, core, S * 0.13 * breathe, [
-          [0, "rgba(255, 253, 242, 0.98)"],
-          [0.24, "rgba(255, 214, 86, 0.72)"],
-          [0.58, "rgba(242, 178, 30, 0.25)"],
-          [1, "rgba(255, 255, 255, 0)"],
-        ]);
-      } else {
-        radialGlow(ctx, core, S * 0.1 * breathe, [
-          [0, "rgba(255, 252, 240, 1)"],
-          [0.2, "rgba(255, 228, 165, 0.75)"],
-          [0.52, "rgba(250, 176, 70, 0.2)"],
-          [1, "rgba(0, 0, 0, 0)"],
-        ]);
-      }
-
-      // Core emblem disk
-      ctx.globalCompositeOperation = "source-over";
-      const coreR = lyt.compact ? 12 : 14;
-      ctx.beginPath();
-      ctx.arc(core.x, core.y, coreR, 0, Math.PI * 2);
-      ctx.fillStyle = isLight ? "rgba(255, 253, 246, 0.96)" : "rgba(10, 10, 14, 0.92)";
-      ctx.fill();
-      ctx.lineWidth = 1.4;
-      ctx.strokeStyle = isLight ? "rgba(192, 128, 12, 0.85)" : "rgba(240, 181, 74, 0.9)";
-      ctx.stroke();
-
-      // Tiny inner specular Nexus triad mark centered in Core
-      ctx.save();
-      ctx.translate(core.x, core.y);
-      ctx.scale(lyt.compact ? 0.13 : 0.15, lyt.compact ? 0.13 : 0.15);
-      ctx.fillStyle = isLight ? "#b4780d" : "#f0b54a";
-      for (let p = 0; p < 3; p++) {
+      drawGoldenFluidCore(ctx, core, lyt.compact ? 15.5 : 19, time, cur.energy, ignitionPulse, isLight);
+      if (cur.showcaseAll && reveal > 0.01 && reveal < 0.58) {
+        const waveT = smoothstep(0.01, 0.58, reveal);
+        const waveR = 18 + S * 0.62 * waveT;
         ctx.save();
-        ctx.rotate((p * Math.PI * 2) / 3);
+        ctx.globalCompositeOperation = isLight ? "source-over" : "lighter";
+        ctx.globalAlpha = (1 - waveT) * 0.48;
         ctx.beginPath();
-        ctx.moveTo(8.5, -44.5);
-        ctx.lineTo(35.5, -29);
-        ctx.lineTo(35.5, 0);
-        ctx.lineTo(8.5, 0);
-        ctx.closePath();
-        ctx.fill();
+        ctx.arc(core.x, core.y, waveR, 0, Math.PI * 2);
+        ctx.lineWidth = 1.6 * (1 - waveT * 0.55);
+        ctx.strokeStyle = isLight ? "rgba(202, 134, 14, 0.85)" : "rgba(255, 224, 136, 0.9)";
+        ctx.stroke();
         ctx.restore();
       }
-      ctx.restore();
 
-      // 7. Uncluttered 50 Node Jewels (live monogram disks, hollow open rings, serene branch pinpoints)
+      // 7. Uncluttered 50 Node Jewels with smooth localized wavefront ignition ripples
       const goldHex = isLight ? "#b4780d" : "#f0b54a";
       const dormantInk = isLight ? "rgba(110, 92, 54, 0.55)" : "rgba(218, 198, 152, 0.52)";
 
@@ -779,9 +1183,87 @@ export function BranchingNetworkCanvas({
         const isPeer = Boolean(focusPeers?.has(i));
         const emphasized = isOcc || isHov || isAct || isPeer;
 
-        if (cur.showcaseAll) {
-          // Showcase mode (landing page preview): every node glows cleanly as a highlighted golden dot without names/monograms
-          const r =
+        const arrival = cur.cascade.nodeArrival[i] ?? 0.5;
+        const nodeLit = isCascading ? smoothstep(arrival - 0.035, arrival + 0.085, reveal) : 0;
+
+        // Draw underlying occupied / open / dormant node until the golden preview wave overtakes it
+        if (nodeLit < 0.98) {
+          ctx.globalAlpha = 1 - nodeLit;
+          if (isOcc) {
+            const r = bNode.tier === 1 ? (lyt.compact ? 11 : 13) : lyt.compact ? 9.5 : 11;
+            radialGlow(ctx, bNode.pos, r * (isHov || isAct ? 2.8 : 2.1), [
+              [0, isLight ? "rgba(248, 192, 46, 0.34)" : "rgba(240, 181, 74, 0.36)"],
+              [1, "rgba(0, 0, 0, 0)"],
+            ]);
+
+            if (isHov || isAct || isPeer) {
+              ctx.beginPath();
+              ctx.arc(bNode.pos.x, bNode.pos.y, r + 4.5, 0, Math.PI * 2);
+              ctx.strokeStyle = isLight ? "rgba(180, 120, 13, 0.48)" : "rgba(255, 224, 152, 0.55)";
+              ctx.lineWidth = 1;
+              ctx.stroke();
+            }
+
+            ctx.beginPath();
+            ctx.arc(bNode.pos.x, bNode.pos.y, r, 0, Math.PI * 2);
+            ctx.fillStyle = isLight ? "rgba(255, 255, 255, 0.94)" : "rgba(11, 11, 16, 0.92)";
+            ctx.fill();
+            ctx.lineWidth = isHov || isAct ? 1.7 : 1.35;
+            ctx.strokeStyle = goldHex;
+            ctx.stroke();
+
+            if (meta.monogram) {
+              ctx.fillStyle = isLight ? "#14151a" : "#f5f5f7";
+              ctx.font = `600 ${bNode.tier === 1 ? 10 : 9}px var(--font-sans, sans-serif)`;
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+              ctx.fillText(meta.monogram.slice(0, 2), bNode.pos.x, bNode.pos.y + 0.5);
+            }
+          } else if (isOpen) {
+            const r = isHov || isAct ? 8.5 : 6.2;
+            ctx.beginPath();
+            ctx.arc(bNode.pos.x, bNode.pos.y, r, 0, Math.PI * 2);
+            ctx.fillStyle = isLight ? "rgba(255, 252, 244, 0.92)" : "rgba(12, 12, 16, 0.86)";
+            ctx.fill();
+            ctx.lineWidth = isHov || isAct ? 1.45 : 1.1;
+            ctx.strokeStyle = isHov || isPeer ? goldHex : isLight ? "rgba(180, 120, 13, 0.65)" : "rgba(240, 181, 74, 0.62)";
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(bNode.pos.x, bNode.pos.y, 1.8, 0, Math.PI * 2);
+            ctx.fillStyle = goldHex;
+            ctx.fill();
+          } else {
+            const r = isHov || isAct ? 6.5 : isPeer ? 4.8 : bNode.tier === 1 ? 4.2 : bNode.tier === 2 ? 3.5 : 2.9;
+            if (emphasized) {
+              ctx.beginPath();
+              ctx.arc(bNode.pos.x, bNode.pos.y, r + 4, 0, Math.PI * 2);
+              ctx.strokeStyle = isLight ? "rgba(180, 120, 13, 0.35)" : "rgba(240, 181, 74, 0.38)";
+              ctx.lineWidth = 1;
+              ctx.stroke();
+            }
+            ctx.beginPath();
+            ctx.arc(bNode.pos.x, bNode.pos.y, r, 0, Math.PI * 2);
+            ctx.fillStyle =
+              isHov || isAct
+                ? goldHex
+                : isPeer
+                  ? isLight
+                    ? "rgba(210, 148, 22, 0.85)"
+                    : "rgba(240, 181, 74, 0.85)"
+                  : isLight
+                    ? "rgba(255, 252, 244, 0.9)"
+                    : "rgba(14, 14, 19, 0.88)";
+            ctx.fill();
+            ctx.lineWidth = isHov || isAct ? 1.4 : 1.05;
+            ctx.strokeStyle = isHov || isPeer ? goldHex : dormantInk;
+            ctx.stroke();
+          }
+        }
+
+        // Illuminated golden preview dot + localized ignition ripple ring as the wave reaches this node
+        if (nodeLit > 0.01) {
+          const baseR =
             bNode.tier === 1
               ? isHov || isAct
                 ? 7.8
@@ -793,10 +1275,26 @@ export function BranchingNetworkCanvas({
                 : isHov || isAct
                   ? 6.0
                   : 3.9;
+          const bloom = 1 + 0.32 * Math.sin(nodeLit * Math.PI);
+          const r = baseR * (0.58 + 0.42 * nodeLit) * bloom;
+
+          ctx.globalAlpha = nodeLit;
           radialGlow(ctx, bNode.pos, r * (isHov || isAct || isPeer ? 3.8 : 2.6), [
-            [0, isLight ? "rgba(248, 186, 36, 0.42)" : "rgba(255, 224, 130, 0.45)"],
+            [0, isLight ? "rgba(248, 186, 36, 0.44)" : "rgba(255, 224, 130, 0.48)"],
             [1, "rgba(0, 0, 0, 0)"],
           ]);
+
+          if (nodeLit < 0.99) {
+            ctx.save();
+            ctx.globalAlpha = (1 - nodeLit) * 0.78;
+            ctx.beginPath();
+            ctx.arc(bNode.pos.x, bNode.pos.y, baseR + 3 + nodeLit * 13, 0, Math.PI * 2);
+            ctx.strokeStyle = isLight ? "rgba(180, 118, 12, 0.85)" : "rgba(255, 232, 166, 0.9)";
+            ctx.lineWidth = 1.15;
+            ctx.stroke();
+            ctx.restore();
+          }
+
           if (isHov || isAct || isPeer) {
             ctx.beginPath();
             ctx.arc(bNode.pos.x, bNode.pos.y, r + 4, 0, Math.PI * 2);
@@ -804,6 +1302,7 @@ export function BranchingNetworkCanvas({
             ctx.lineWidth = 1;
             ctx.stroke();
           }
+
           ctx.beginPath();
           ctx.arc(bNode.pos.x, bNode.pos.y, r, 0, Math.PI * 2);
           ctx.fillStyle = isLight
@@ -817,79 +1316,6 @@ export function BranchingNetworkCanvas({
           ctx.lineWidth = isHov || isAct ? 1.6 : 1.15;
           ctx.strokeStyle = isLight ? "#9a6910" : "#f0b54a";
           ctx.stroke();
-          continue;
-        }
-
-        if (isOcc) {
-          const r = bNode.tier === 1 ? (lyt.compact ? 11 : 13) : lyt.compact ? 9.5 : 11;
-          radialGlow(ctx, bNode.pos, r * (isHov || isAct ? 2.8 : 2.1), [
-            [0, isLight ? "rgba(248, 192, 46, 0.34)" : "rgba(240, 181, 74, 0.36)"],
-            [1, "rgba(0, 0, 0, 0)"],
-          ]);
-
-          if (isHov || isAct || isPeer) {
-            ctx.beginPath();
-            ctx.arc(bNode.pos.x, bNode.pos.y, r + 4.5, 0, Math.PI * 2);
-            ctx.strokeStyle = isLight ? "rgba(180, 120, 13, 0.48)" : "rgba(255, 224, 152, 0.55)";
-            ctx.lineWidth = 1;
-            ctx.stroke();
-          }
-
-          ctx.beginPath();
-          ctx.arc(bNode.pos.x, bNode.pos.y, r, 0, Math.PI * 2);
-          ctx.fillStyle = isLight ? "rgba(255, 255, 255, 0.94)" : "rgba(11, 11, 16, 0.92)";
-          ctx.fill();
-          ctx.lineWidth = isHov || isAct ? 1.7 : 1.35;
-          ctx.strokeStyle = goldHex;
-          ctx.stroke();
-
-          if (meta.monogram) {
-            ctx.fillStyle = isLight ? "#14151a" : "#f5f5f7";
-            ctx.font = `600 ${bNode.tier === 1 ? 10 : 9}px var(--font-sans, sans-serif)`;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText(meta.monogram.slice(0, 2), bNode.pos.x, bNode.pos.y + 0.5);
-          }
-        } else if (isOpen) {
-          const r = isHov || isAct ? 8.5 : 6.2;
-          ctx.beginPath();
-          ctx.arc(bNode.pos.x, bNode.pos.y, r, 0, Math.PI * 2);
-          ctx.fillStyle = isLight ? "rgba(255, 252, 244, 0.92)" : "rgba(12, 12, 16, 0.86)";
-          ctx.fill();
-          ctx.lineWidth = isHov || isAct ? 1.45 : 1.1;
-          ctx.strokeStyle = isHov || isPeer ? goldHex : isLight ? "rgba(180, 120, 13, 0.65)" : "rgba(240, 181, 74, 0.62)";
-          ctx.stroke();
-
-          ctx.beginPath();
-          ctx.arc(bNode.pos.x, bNode.pos.y, 1.8, 0, Math.PI * 2);
-          ctx.fillStyle = goldHex;
-          ctx.fill();
-        } else {
-          // Dormant / Pro branch node: sleek small jewel pinpoint (expands smoothly on hover/peer focus)
-          const r = isHov || isAct ? 6.5 : isPeer ? 4.8 : bNode.tier === 1 ? 4.2 : bNode.tier === 2 ? 3.5 : 2.9;
-          if (emphasized) {
-            ctx.beginPath();
-            ctx.arc(bNode.pos.x, bNode.pos.y, r + 4, 0, Math.PI * 2);
-            ctx.strokeStyle = isLight ? "rgba(180, 120, 13, 0.35)" : "rgba(240, 181, 74, 0.38)";
-            ctx.lineWidth = 1;
-            ctx.stroke();
-          }
-          ctx.beginPath();
-          ctx.arc(bNode.pos.x, bNode.pos.y, r, 0, Math.PI * 2);
-          ctx.fillStyle =
-            isHov || isAct
-              ? goldHex
-              : isPeer
-                ? isLight
-                  ? "rgba(210, 148, 22, 0.85)"
-                  : "rgba(240, 181, 74, 0.85)"
-                : isLight
-                  ? "rgba(255, 252, 244, 0.9)"
-                  : "rgba(14, 14, 19, 0.88)";
-          ctx.fill();
-          ctx.lineWidth = isHov || isAct ? 1.4 : 1.05;
-          ctx.strokeStyle = isHov || isPeer ? goldHex : dormantInk;
-          ctx.stroke();
         }
       }
       ctx.globalAlpha = 1;
@@ -902,14 +1328,14 @@ export function BranchingNetworkCanvas({
     if (!canvas || !ctx) return;
 
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    reduceMotionRef.current = reduceMotion;
     let frame = 0;
     let last = 0;
-    let elapsed = 0;
     let active = !paused;
 
     const resize = () => {
       fitCanvas(canvas, ctx);
-      drawFrameRef.current(ctx, elapsed, 0);
+      drawFrameRef.current(ctx, elapsedRef.current, 0);
     };
 
     const tick = (now: number) => {
@@ -921,8 +1347,8 @@ export function BranchingNetworkCanvas({
       if (!last) last = now;
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
-      elapsed += dt;
-      drawFrameRef.current(ctx, elapsed, dt);
+      elapsedRef.current += dt;
+      drawFrameRef.current(ctx, elapsedRef.current, dt);
       frame = requestAnimationFrame(tick);
     };
 
@@ -957,8 +1383,12 @@ export function BranchingNetworkCanvas({
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      reduceMotionRef.current = true;
+      revealProgressRef.current = showcaseAll ? 1 : 0;
+    }
     fitCanvas(canvas, ctx);
-    drawFrameRef.current(ctx, 0, 0);
+    drawFrameRef.current(ctx, elapsedRef.current, 0);
   }, [layout, theme, hoveredIdx, activeNodeIndex, nodes, showcaseAll]);
 
   const hitTest = (clientX: number, clientY: number): number | null => {

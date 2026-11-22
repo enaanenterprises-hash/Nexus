@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { Sparkles, X } from "lucide-react";
+import { X } from "lucide-react";
 import { NexusMark } from "@/components/landing/NexusLogo";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -188,8 +188,13 @@ export function Dashboard({
   const [previewAllNodes, setPreviewAllNodes] = useState(false);
 
   const togglePreviewAllNodes = useCallback(() => {
-    setPreviewAllNodes((prev) => !prev);
-  }, []);
+    setMenuOpen(false);
+    const next = !previewAllNodes;
+    setPreviewAllNodes(next);
+    if (next) {
+      setSurface((s) => (s.view === "home" && s.panel ? { view: "home", panel: null } : s));
+    }
+  }, [previewAllNodes]);
 
   const noticeTimer = useRef<number | undefined>(undefined);
   const bootedRef = useRef(false);
@@ -962,34 +967,6 @@ export function Dashboard({
                 <NexusMark className="dash-brand-mark h-7 w-auto" />
               </Link>
             )}
-
-            {surface.view === "home" && !panel ? (
-              <div className="pointer-events-auto ml-auto mr-4 sm:mr-5">
-                <button
-                  type="button"
-                  onClick={togglePreviewAllNodes}
-                  aria-pressed={previewAllNodes}
-                  title="Temporary preview: light up all 50 nodes"
-                  className={`inline-flex h-9 items-center gap-2 rounded-full border px-3.5 text-[12.5px] font-medium tracking-[-0.01em] backdrop-blur-xl transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--land-gold)] ${
-                    previewAllNodes
-                      ? theme === "light"
-                        ? "border-[#b4780d]/60 bg-[#f0b54a]/22 text-[#14151a] shadow-[0_8px_24px_-10px_rgba(180,120,13,0.35)] hover:bg-[#f0b54a]/30"
-                        : "border-[#f0b54a]/65 bg-[#f0b54a]/18 text-[#fff6df] shadow-[0_8px_28px_-10px_rgba(240,181,74,0.35)] hover:bg-[#f0b54a]/26"
-                      : theme === "light"
-                        ? "border-[#0e0f12]/12 bg-white/82 text-[#14151a] shadow-[0_8px_24px_-12px_rgba(14,15,18,0.14)] hover:border-[#b4780d]/45 hover:bg-white/95"
-                        : "border-white/14 bg-[#101116]/78 text-[#f5f5f7] shadow-[0_10px_28px_-12px_rgba(0,0,0,0.65)] hover:border-[#f0b54a]/45 hover:bg-[#16171f]/90"
-                  }`}
-                >
-                  <Sparkles
-                    className={`size-3.5 shrink-0 ${
-                      theme === "light" ? "text-[#b4780d]" : "text-[#f0b54a]"
-                    }`}
-                    aria-hidden="true"
-                  />
-                  <span>{previewAllNodes ? "All nodes lit" : "Preview all nodes"}</span>
-                </button>
-              </div>
-            ) : null}
           </header>
 
           <NodeMenu
