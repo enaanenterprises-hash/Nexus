@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ChangeEvent, type DragEvent } from "react";
+import { memo, useEffect, useState, type ChangeEvent, type DragEvent } from "react";
 import {
   AudioLines,
   Captions,
@@ -72,7 +72,7 @@ const TOPIC_CHIPS = ["Architecture", "Minimal", "Nature", "Studio", "City", "Lig
 const ACCEPTED_MEDIA_TYPES =
   ".mp4,.mov,.webm,.m4v,.mkv,.png,.jpg,.jpeg,.webp,.gif,.wav,.mp3,.m4a,.ogg,.flac,.aac,video/mp4,video/webm,video/quicktime,video/*,image/*,audio/*";
 
-export function CinemaSidebar({
+export const CinemaSidebar = memo(function CinemaSidebar({
   open,
   activeTab,
   onSelectTab,
@@ -993,4 +993,4 @@ export function CinemaSidebar({
       </Sheet>
     </>
   );
-}
+});

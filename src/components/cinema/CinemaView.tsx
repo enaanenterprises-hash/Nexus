@@ -64,6 +64,7 @@ import {
   buildTemplateProject,
   type TextStylePreset,
 } from "@/lib/cinema/presets";
+import { CinemaScrubCache } from "@/lib/cinema/scrub-cache";
 import type {
   CinemaAspectRatio,
   CinemaAsset,
@@ -374,6 +375,8 @@ export function CinemaView({
   const stageRedrawRef = useRef<(() => void) | null>(null);
   const videoHostRef = useRef<HTMLDivElement | null>(null);
   const audioEngineRef = useRef<CinemaAudioEngine | null>(null);
+  const scrubCacheRef = useRef<CinemaScrubCache | null>(null);
+  const isScrubbingRef = useRef<boolean>(false);
   const mediaElementsRef = useRef<Map<string, HTMLVideoElement | HTMLImageElement>>(new Map());
   const pendingVideoSeekRef = useRef<Map<string, { timeSec: number; fast: boolean }>>(new Map());
   const videoPlayPendingRef = useRef<Set<string>>(new Set());
@@ -401,7 +404,9 @@ export function CinemaView({
 
   useEffect(() => {
     const engine = new CinemaAudioEngine();
+    const scrubCache = new CinemaScrubCache();
     audioEngineRef.current = engine;
+    scrubCacheRef.current = scrubCache;
     const urls = blobUrlsRef.current;
     const mediaEls = mediaElementsRef.current;
     return () => {
@@ -409,8 +414,12 @@ export function CinemaView({
       window.clearTimeout(autosaveTimerRef.current);
       window.clearTimeout(scrubSeekTimerRef.current);
       engine.dispose();
+      scrubCache.dispose();
       if (audioEngineRef.current === engine) {
         audioEngineRef.current = null;
+      }
+      if (scrubCacheRef.current === scrubCache) {
+        scrubCacheRef.current = null;
       }
       for (const el of mediaEls.values()) {
         if (el instanceof HTMLVideoElement) {
@@ -612,15 +621,19 @@ export function CinemaView({
               }
             }
             mediaElementsRef.current.set(asset.id, vid);
+            // Immediately show the video frame on stage without blocking on background audio/scrub decoding
+            setMediaVersion((v) => v + 1);
 
-            // Universal audio decode (Web Audio + Mediabunny fallback) for MP4/MOV/WebM/MKV
+            // Warm off-main-thread GPU ImageBitmap scrub cache (instant 120fps playhead bar scrubbing)
+            scrubCacheRef.current?.warmAsset(asset.id, blob);
+
+            // Decode audio in parallel (Web Audio + Mediabunny AudioBufferSink fallback for MP4/MOV/WebM/MKV)
             try {
               const decoded = await decodeAudioBufferUniversal(blob);
               if (decoded) audioBuffersRef.current.set(asset.id, decoded);
             } catch {
               // Video may intentionally lack an audio track
             }
-            setMediaVersion((v) => v + 1);
           } else if (asset.kind === "audio") {
             const decoded = await decodeAudioBufferUniversal(blob);
             if (decoded) audioBuffersRef.current.set(asset.id, decoded);
@@ -680,6 +693,7 @@ export function CinemaView({
 
   const handleScrub = useCallback(
     (nextMs: number) => {
+      isScrubbingRef.current = true;
       if (playingRef.current) {
         playingRef.current = false;
         audioEngineRef.current?.stop();
@@ -696,6 +710,7 @@ export function CinemaView({
 
   const handleSeek = useCallback(
     (nextMs: number) => {
+      isScrubbingRef.current = false;
       window.clearTimeout(scrubSeekTimerRef.current);
       const dur = computeProjectDurationMs(projectRef.current);
       const clamped = Math.max(0, Math.min(dur, Math.round(nextMs)));
@@ -723,6 +738,7 @@ export function CinemaView({
       return;
     }
 
+    isScrubbingRef.current = false;
     window.clearTimeout(scrubSeekTimerRef.current);
     const startOriginMs = playheadRef.current;
     playbackClockRef.current = { startWall: performance.now(), startOriginMs };
@@ -2418,6 +2434,8 @@ export function CinemaView({
             canvasZoom={canvasZoom}
             stageExpanded={stageExpanded}
             mediaElementsRef={mediaElementsRef}
+            scrubCacheRef={scrubCacheRef}
+            isScrubbingRef={isScrubbingRef}
             audioEngineRef={audioEngineRef}
             redrawRef={stageRedrawRef}
             mediaVersion={mediaVersion}

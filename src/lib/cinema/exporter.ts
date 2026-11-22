@@ -1,33 +1,26 @@
 import {
   ALL_FORMATS,
-  AudioBufferSource,
   BlobSource,
-  BufferTarget,
-  CanvasSource,
-  Conversion,
-  ConversionCanceledError,
   Input,
-  Mp4OutputFormat,
-  Output,
-  Quality,
   VideoSample,
   VideoSampleSink,
-  WebMOutputFormat,
-  canEncodeVideo,
-  getFirstEncodableAudioCodec,
-  getFirstEncodableVideoCodec,
 } from "mediabunny";
 import { encodeWavFromBuffer } from "@/lib/studio/wav";
 import { renderCinemaAudioOffline } from "./audio-engine";
 import {
   computeProjectDurationMs,
-  isCinemaFrameStaticSince,
   renderCinemaFrame,
-  type Cinema2DContext,
   type CinemaDrawableMedia,
   type CinemaRenderRuntime,
 } from "./compositor";
+import type { ExportWorkerRequest, ExportWorkerResponse } from "./export.worker";
 import { loadCinemaBlob } from "./media-db";
+import {
+  runMediabunnyCompositorCore,
+  runMediabunnyConversionCore,
+  type CoreBinaryOutput,
+  type TransferableAudioMix,
+} from "./mediabunny-core";
 import { resolutionForAspectRatio } from "./presets";
 import type {
   CinemaExportOptions,
@@ -62,17 +55,6 @@ function safeFileSlug(title: string): string {
 
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
-}
-
-function yieldToEventLoop(): Promise<void> {
-  if (typeof MessageChannel !== "undefined") {
-    return new Promise<void>((resolve) => {
-      const ch = new MessageChannel();
-      ch.port1.onmessage = () => resolve();
-      ch.port2.postMessage(null);
-    });
-  }
-  return new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
 
 function normalizeQuarterTurn(deg: number): 0 | 90 | 180 | 270 | null {
@@ -184,13 +166,13 @@ export function predictCinemaExportMode(
       };
     }
     return {
-      label: "Mediabunny Smart Remux / Conversion",
-      detail: "Direct packet copy & hardware pipeline (no 2D canvas overhead)",
+      label: "Mediabunny Worker Remux / HW Conversion",
+      detail: "Off-main-thread packet copy & hardware WebCodecs",
     };
   }
   return {
-    label: "Mediabunny GPU Compositor",
-    detail: "Zero-copy VideoSample decode + overlapped WebCodecs encode",
+    label: "Mediabunny Worker GPU Compositor",
+    detail: "OffscreenCanvas Web Worker · prefer-hardware WebCodecs",
   };
 }
 
@@ -206,7 +188,11 @@ async function resolveAssetBlob(
   }
   const base = baseMedia?.get(assetId);
   const url =
-    (base instanceof HTMLVideoElement ? base.currentSrc || base.src : undefined) || asset?.url;
+    (typeof HTMLVideoElement !== "undefined" && base instanceof HTMLVideoElement
+      ? base.currentSrc || base.src
+      : typeof HTMLImageElement !== "undefined" && base instanceof HTMLImageElement
+        ? base.currentSrc || base.src
+        : undefined) || asset?.url;
   if (!url) return null;
   try {
     const res = await fetch(url);
@@ -217,243 +203,121 @@ async function resolveAssetBlob(
   return null;
 }
 
-interface ClipSampleStream {
-  clip: CinemaVideoClip;
-  input: Input;
-  iterator: AsyncGenerator<VideoSample | null, void, unknown>;
-  frameIndices: number[];
-  cursor: number;
-  heldSample: VideoSample | null;
+function audioBufferToTransferable(buffer: AudioBuffer | null): {
+  mix: TransferableAudioMix | null;
+  transfer: Transferable[];
+} {
+  if (!buffer || buffer.length === 0) {
+    return { mix: null, transfer: [] };
+  }
+  const channels: Float32Array[] = [];
+  const transfer: Transferable[] = [];
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const copy = new Float32Array(buffer.length);
+    buffer.copyFromChannel(copy, ch);
+    channels.push(copy);
+    transfer.push(copy.buffer);
+  }
+  return {
+    mix: {
+      sampleRate: buffer.sampleRate,
+      numberOfChannels: buffer.numberOfChannels,
+      length: buffer.length,
+      channels,
+    },
+    transfer,
+  };
 }
 
 /**
- * Decodes every visible `<video>` clip using `mediabunny`'s `VideoSampleSink.samplesAtTimestamps`.
- *
- * Unlike `CanvasSink`, `VideoSample` wraps the GPU `VideoFrame` directly (no intermediate 4K/1080p
- * canvas copy) and draws via `sample.draw(ctx, ...)` in a single GPU blit. Keyed by `clip.id` so
- * split/PiP clips of the same video asset never collide.
+ * Runs a Mediabunny export job inside our dedicated ES-Module Web Worker (`export.worker.ts`)
+ * so `Input`, `Conversion`, `VideoSampleSink`, `OffscreenCanvas`, `CanvasSource`, and `Output`
+ * never block the main UI thread. Returns `null` if the worker requests fallback or cannot start.
  */
-class MediabunnySamplePool {
-  private readonly project: CinemaProject;
-  private readonly videoClips: CinemaVideoClip[];
-  private readonly baseMedia: ReadonlyMap<string, CinemaDrawableMedia>;
-  private readonly clipStreams: ClipSampleStream[] = [];
-  private readonly fallbackClips: CinemaVideoClip[] = [];
-
-  constructor(
-    project: CinemaProject,
-    baseMedia: ReadonlyMap<string, CinemaDrawableMedia>,
-  ) {
-    this.project = project;
-    this.baseMedia = baseMedia;
-    const activeTrackIds = new Set(
-      project.tracks.filter((t) => t.kind !== "audio" && !t.hidden).map((t) => t.id),
-    );
-    this.videoClips = project.clips.filter(
-      (c): c is CinemaVideoClip =>
-        c.kind === "video" && !c.hidden && activeTrackIds.has(c.trackId),
-    );
+async function runInExportWorker(
+  request: Exclude<ExportWorkerRequest, { type: "cancel" }>,
+  transfer: Transferable[],
+  onProgress: (p: CinemaExportProgress) => void,
+  signal?: AbortSignal,
+): Promise<CoreBinaryOutput | null> {
+  if (typeof Worker === "undefined" || typeof OffscreenCanvas === "undefined") {
+    return null;
+  }
+  if (signal?.aborted) {
+    throw new DOMException("Export cancelled", "AbortError");
   }
 
-  get hasVideoClips(): boolean {
-    return this.videoClips.length > 0;
+  let worker: Worker;
+  try {
+    worker = new Worker(new URL("./export.worker.ts", import.meta.url), {
+      type: "module",
+    });
+  } catch {
+    return null;
   }
 
-  async initForTimeline(fps: number, totalFrames: number): Promise<void> {
-    if (this.videoClips.length === 0) return;
+  return new Promise<CoreBinaryOutput | null>((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => {
+      signal?.removeEventListener("abort", onAbort);
+      worker.onmessage = null;
+      worker.onerror = null;
+      worker.terminate();
+    };
+    const finishResolve = (val: CoreBinaryOutput | null) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(val);
+    };
+    const finishReject = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(err);
+    };
 
-    // Pause stage preview <video> elements so CinemaView's "seeked" stage redraw listener stays quiet
-    for (const v of this.baseMedia.values()) {
-      if (v instanceof HTMLVideoElement && !v.paused) {
-        v.pause();
-      }
-    }
-
-    const blobCache = new Map<string, Blob | null>();
-    const frameDurMs = 1000 / fps;
-
-    for (const clip of this.videoClips) {
-      if (!blobCache.has(clip.assetId)) {
-        blobCache.set(clip.assetId, await resolveAssetBlob(this.project, clip.assetId, this.baseMedia));
-      }
-      const blob = blobCache.get(clip.assetId) ?? null;
-      if (!blob) {
-        this.fallbackClips.push(clip);
-        continue;
-      }
-
-      let input: Input | null = null;
+    const onAbort = () => {
       try {
-        input = new Input({
-          source: new BlobSource(blob),
-          formats: ALL_FORMATS,
-        });
-        const videoTrack = await input.getPrimaryVideoTrack();
-        if (!videoTrack || !(await videoTrack.canDecode())) {
-          input.dispose();
-          this.fallbackClips.push(clip);
-          continue;
-        }
-
-        const firstTs = Math.max(0, await videoTrack.getFirstTimestamp());
-        const speed = clamp(clip.speed || 1, 0.25, 4);
-        const frameIndices: number[] = [];
-        const timestampsSec: number[] = [];
-
-        for (let f = 0; f < totalFrames; f++) {
-          const timeMs = f * frameDurMs;
-          if (timeMs >= clip.startMs && timeMs <= clip.startMs + clip.durationMs) {
-            const relSec = Math.max(0, (clip.trimStartMs + (timeMs - clip.startMs) * speed) / 1000);
-            frameIndices.push(f);
-            // Tiny +0.5ms epsilon ensures frame 0 is never missed due to float precision against firstTs
-            timestampsSec.push(firstTs + relSec + 0.0005);
-          }
-        }
-
-        if (frameIndices.length === 0) {
-          input.dispose();
-          continue;
-        }
-
-        const sink = new VideoSampleSink(videoTrack, {
-          optimizeForLatency: true,
-        });
-        const iterator = sink.samplesAtTimestamps(timestampsSec);
-
-        this.clipStreams.push({
-          clip,
-          input,
-          iterator,
-          frameIndices,
-          cursor: 0,
-          heldSample: null,
-        });
-      } catch {
-        if (input) {
-          try {
-            input.dispose();
-          } catch {
-            // Ignore
-          }
-        }
-        this.fallbackClips.push(clip);
-      }
-    }
-  }
-
-  /**
-   * Pulls the exact `VideoSample` (keyed by `clip.id`) for `frameIndex`.
-   * Designed to be called concurrently while `CanvasSource.add` encodes the previous frame.
-   */
-  async pullFrame(
-    frameIndex: number,
-    timeMs: number,
-  ): Promise<Map<string, CinemaDrawableMedia>> {
-    const overrides = new Map<string, CinemaDrawableMedia>();
-    if (this.videoClips.length === 0) return overrides;
-
-    const activeStreams: ClipSampleStream[] = [];
-    for (const stream of this.clipStreams) {
-      if (stream.cursor < stream.frameIndices.length && stream.frameIndices[stream.cursor] === frameIndex) {
-        activeStreams.push(stream);
-      } else if (stream.heldSample && stream.cursor >= stream.frameIndices.length) {
-        // Clip has finished its timeline span: close its last held sample immediately
-        stream.heldSample.close();
-        stream.heldSample = null;
-      }
-    }
-
-    if (activeStreams.length > 0) {
-      await Promise.all(
-        activeStreams.map(async (stream) => {
-          stream.cursor++;
-          try {
-            const res = await stream.iterator.next();
-            if (!res.done && res.value) {
-              if (stream.heldSample) {
-                stream.heldSample.close();
-              }
-              stream.heldSample = res.value;
-            }
-          } catch {
-            // Retain last decoded sample if EOF encounters a trailing packet quirk
-          }
-          if (stream.heldSample) {
-            overrides.set(stream.clip.id, stream.heldSample);
-          }
-        }),
-      );
-    }
-
-    if (this.fallbackClips.length > 0) {
-      const activeFallbacks = this.fallbackClips.filter(
-        (c) => timeMs >= c.startMs && timeMs <= c.startMs + c.durationMs,
-      );
-      await Promise.all(
-        activeFallbacks.map(async (clip) => {
-          const el = this.baseMedia.get(clip.assetId);
-          if (!(el instanceof HTMLVideoElement) || el.readyState < 1) return;
-          const speed = clamp(clip.speed || 1, 0.25, 4);
-          const targetSec = Math.max(0, (clip.trimStartMs + (timeMs - clip.startMs) * speed) / 1000);
-          const finiteDur =
-            Number.isFinite(el.duration) && el.duration > 0
-              ? Math.max(0, el.duration - 0.025)
-              : targetSec;
-          const clamped = Math.min(finiteDur, targetSec);
-          if (Math.abs(el.currentTime - clamped) > 0.025) {
-            await new Promise<void>((resolve) => {
-              let done = false;
-              const finish = () => {
-                if (done) return;
-                done = true;
-                el.removeEventListener("seeked", onSeeked);
-                resolve();
-              };
-              const onSeeked = () => {
-                window.clearTimeout(timer);
-                finish();
-              };
-              const timer = window.setTimeout(finish, 250);
-              el.addEventListener("seeked", onSeeked, { once: true });
-              try {
-                el.currentTime = clamped;
-              } catch {
-                window.clearTimeout(timer);
-                finish();
-              }
-            });
-          }
-          overrides.set(clip.id, el);
-        }),
-      );
-    }
-
-    return overrides;
-  }
-
-  dispose(): void {
-    for (const stream of this.clipStreams) {
-      if (stream.heldSample) {
-        try {
-          stream.heldSample.close();
-        } catch {
-          // Ignore
-        }
-        stream.heldSample = null;
-      }
-      try {
-        void stream.iterator.return();
+        worker.postMessage({ type: "cancel" } satisfies ExportWorkerRequest);
       } catch {
         // Ignore
       }
-      try {
-        stream.input.dispose();
-      } catch {
-        // Ignore
+      finishReject(new DOMException("Export cancelled", "AbortError"));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+
+    worker.onmessage = (event: MessageEvent<ExportWorkerResponse>) => {
+      const msg = event.data;
+      if (msg.type === "progress") {
+        onProgress(msg.progress);
+      } else if (msg.type === "done") {
+        finishResolve({
+          buffer: msg.buffer,
+          mimeType: msg.mimeType,
+          ext: msg.ext,
+          elapsedMs: msg.elapsedMs,
+        });
+      } else if (msg.type === "fallback") {
+        finishResolve(null);
+      } else if (msg.type === "aborted") {
+        finishReject(new DOMException("Export cancelled", "AbortError"));
+      } else if (msg.type === "error") {
+        // Let caller fall back cleanly to main thread core on worker-specific runtime errors
+        finishResolve(null);
       }
+    };
+
+    worker.onerror = () => {
+      finishResolve(null);
+    };
+
+    try {
+      worker.postMessage(request, transfer);
+    } catch {
+      finishResolve(null);
     }
-    this.clipStreams.length = 0;
-  }
+  });
 }
 
 export async function exportCurrentFramePng(
@@ -555,7 +419,6 @@ async function tryDirectVideoPassthrough(
   const targetMimePrefix = options.format === "mp4" ? "video/mp4" : "video/webm";
   if (!asset.mimeType.toLowerCase().startsWith(targetMimePrefix)) return null;
 
-  // Only bypass conversion when source dimensions match requested export tier
   if (
     asset.width > 0 &&
     asset.height > 0 &&
@@ -577,9 +440,8 @@ async function tryDirectVideoPassthrough(
 }
 
 /**
- * Tier 0B: Mediabunny `Conversion` fast path for single-clip trims, mutes, 90° rotations,
- * horizontal flips, container remuxes (MOV/WebM -> MP4), and direct GPU resizes without 2D canvas.
- * Copies compressed packets without decoding/re-encoding whenever possible (`copy: preferred`).
+ * Tier 0B: Mediabunny `Conversion` running in `export.worker.ts` (with main-thread fallback)
+ * for single-clip trims, mutes, 90° rotations, horizontal flips, remuxes, and hardware resizes.
  */
 async function tryFastMediabunnyConversion(params: {
   project: CinemaProject;
@@ -603,145 +465,53 @@ async function tryFastMediabunnyConversion(params: {
   const blob = await resolveAssetBlob(project, candidate.clip.assetId, baseMedia);
   if (!blob || blob.size === 0) return null;
 
-  const startedPerf = performance.now();
-  const isWebm = options.format === "webm";
-  let input: Input | null = null;
-  let conversion: Conversion | null = null;
-
-  const onAbort = () => {
-    if (conversion) {
-      void conversion.cancel();
-    }
+  const workerRequest: Extract<ExportWorkerRequest, { type: "conversion" }> = {
+    type: "conversion",
+    blob,
+    format: options.format,
+    width,
+    height,
+    fps,
+    videoBitrate,
+    totalFrames,
+    trimStartMs: candidate.clip.trimStartMs,
+    durationMs: candidate.clip.durationMs,
+    fit: candidate.clip.fit,
+    rotation90: candidate.rotation90,
+    flipH: candidate.clip.transform.flipH,
+    audioMutedOrDetached: candidate.audioMutedOrDetached,
   };
-  signal?.addEventListener("abort", onAbort, { once: true });
 
-  try {
-    input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS });
-    const videoTrack = await input.getPrimaryVideoTrack();
-    if (!videoTrack) return null;
-
-    const firstTs = Math.max(0, await videoTrack.getFirstTimestamp());
-    const srcDur = await input.computeDuration();
-    const trimStart = firstTs + candidate.clip.trimStartMs / 1000;
-    const trimEnd = Math.min(
-      firstTs + Math.max(0.25, srcDur),
-      trimStart + candidate.clip.durationMs / 1000,
-    );
-    const isTrimmed =
-      candidate.clip.trimStartMs > 40 || trimEnd < firstTs + srcDur - 0.18;
-
-    const srcW = videoTrack.displayWidth || videoTrack.codedWidth || width;
-    const srcH = videoTrack.displayHeight || videoTrack.codedHeight || height;
-    const needsResize = Math.abs(srcW - width) > 2 || Math.abs(srcH - height) > 2;
-
-    const target = new BufferTarget();
-    const outputFormat = isWebm
-      ? new WebMOutputFormat()
-      : new Mp4OutputFormat({ fastStart: "in-memory" });
-    const output = new Output({ format: outputFormat, target });
-
-    const sourceVideoCodec = await videoTrack.getCodec();
-    const canCopyVideoCodec =
-      sourceVideoCodec !== null && outputFormat.getSupportedVideoCodecs().includes(sourceVideoCodec);
-    const willTranscodeVideo = needsResize || !canCopyVideoCodec;
-
-    const videoQuality = new Quality({
-      bitrate: videoBitrate,
-      bitrateMode: "variable",
-    });
-
-    conversion = await Conversion.init({
-      input,
-      output,
-      ...(isTrimmed ? { trim: { start: trimStart, end: trimEnd } } : {}),
-      copy: {
-        mode: "preferred",
-        shiftTolerance: 0.15,
-        boundaryPolicy: "expand",
-      },
-      video: {
-        ...(needsResize ? { width, height, fit: candidate.clip.fit, frameRate: fps } : {}),
-        ...(candidate.rotation90 !== 0 ? { rotate: candidate.rotation90 } : {}),
-        ...(candidate.clip.transform.flipH ? { flip: true } : {}),
-        // Omit `quality` when stream-copy is possible because Mediabunny treats explicit `quality` as force-transcode
-        ...(willTranscodeVideo ? { quality: videoQuality } : {}),
-      },
-      audio: candidate.audioMutedOrDetached ? { discard: true } : {},
-      showWarnings: false,
-    });
-
-    if (!conversion.isValid) {
-      return null;
-    }
-
-    let lastProgressPerf = startedPerf;
-    conversion.onProgress = (p) => {
-      const now = performance.now();
-      if (p < 0.99 && now - lastProgressPerf < 80) return;
-      lastProgressPerf = now;
-      const elapsedSec = Math.max(0.05, (now - startedPerf) / 1000);
-      const doneSec = p * (candidate.clip.durationMs / 1000);
-      const speedMul = doneSec / elapsedSec;
-      const speedTag = speedMul >= 1.2 ? ` · ${speedMul.toFixed(1)}× speed` : "";
-      onProgress({
-        phase: p >= 0.96 ? "muxing" : "rendering",
-        progress: 0.06 + p * 0.92,
-        currentFrame: Math.min(totalFrames, Math.round(p * totalFrames)),
-        totalFrames,
-        speedMul,
-        message: willTranscodeVideo
-          ? `Hardware converting (${Math.round(p * 100)}%)${speedTag}…`
-          : `Fast remuxing stream (${Math.round(p * 100)}%)${speedTag}…`,
-      });
-    };
-
-    onProgress({
-      phase: "rendering",
-      progress: 0.06,
-      currentFrame: 0,
+  // Run off the main thread first; seamlessly fall back to main-thread core if worker unavailable
+  let result = await runInExportWorker(workerRequest, [], onProgress, signal);
+  if (!result) {
+    result = await runMediabunnyConversionCore({
+      blob,
+      format: options.format,
+      width,
+      height,
+      fps,
+      videoBitrate,
       totalFrames,
-      message: willTranscodeVideo
-        ? "Starting Mediabunny direct hardware conversion…"
-        : "Starting Mediabunny zero-re-encode remux…",
+      trimStartMs: candidate.clip.trimStartMs,
+      durationMs: candidate.clip.durationMs,
+      fit: candidate.clip.fit,
+      rotation90: candidate.rotation90,
+      flipH: candidate.clip.transform.flipH,
+      audioMutedOrDetached: candidate.audioMutedOrDetached,
+      onProgress,
+      signal,
     });
-
-    await conversion.execute();
-    if (!target.buffer || target.buffer.byteLength === 0) return null;
-
-    const mimeType = isWebm ? "video/webm" : "video/mp4";
-    const ext = isWebm ? "webm" : "mp4";
-    const outBlob = new Blob([target.buffer], { type: mimeType });
-    const elapsedMs = Math.round(performance.now() - startedPerf);
-
-    onProgress({
-      phase: "done",
-      progress: 1,
-      currentFrame: totalFrames,
-      totalFrames,
-      message: `${ext.toUpperCase()} ready in ${(elapsedMs / 1000).toFixed(1)}s.`,
-    });
-
-    return {
-      blob: outBlob,
-      filename: `${safeFileSlug(project.title)}.${ext}`,
-      mimeType,
-      elapsedMs,
-      engine: "mediabunny-conversion",
-    };
-  } catch (err) {
-    if (
-      signal?.aborted ||
-      err instanceof ConversionCanceledError ||
-      (err as DOMException)?.name === "AbortError"
-    ) {
-      throw new DOMException("Export cancelled", "AbortError");
-    }
-    // Fall through cleanly to Tier 1 full compositor
-    return null;
-  } finally {
-    signal?.removeEventListener("abort", onAbort);
-    input?.dispose();
   }
+  if (!result) return null;
+
+  return {
+    blob: new Blob([result.buffer], { type: result.mimeType }),
+    filename: `${safeFileSlug(project.title)}.${result.ext}`,
+    mimeType: result.mimeType,
+    elapsedMs: result.elapsedMs,
+    engine: "mediabunny-conversion",
+  };
 }
 
 function resolveVideoBitrate(options: CinemaExportOptions): number {
@@ -770,6 +540,13 @@ export async function exportCinemaVideo(
   const { width, height } = resolutionForAspectRatio(project.aspectRatio, options.resolution);
   const videoBitrate = resolveVideoBitrate(options);
 
+  // Pause live stage <video> elements so background preview decoding doesn't contend with export
+  for (const el of helpers.mediaElements.values()) {
+    if (typeof HTMLVideoElement !== "undefined" && el instanceof HTMLVideoElement && !el.paused) {
+      el.pause();
+    }
+  }
+
   // Tier 0A: Instant zero-re-encode container passthrough (< 30ms)
   const passthrough = await tryDirectVideoPassthrough(
     project,
@@ -789,7 +566,7 @@ export async function exportCinemaVideo(
     return passthrough;
   }
 
-  // Tier 0B: Mediabunny Conversion (direct packet-copy trim/remux or canvas-free hardware transcode)
+  // Tier 0B: Off-main-thread Mediabunny Conversion (packet copy trim/remux or HW canvas-free transcode)
   const fastConversion = await tryFastMediabunnyConversion({
     project,
     options,
@@ -852,78 +629,81 @@ export async function exportCinemaVideo(
     };
   }
 
-  // Prefer OffscreenCanvas for GPU WebCodecs export to bypass DOM layout/paint attachment
-  const isWebm = options.format === "webm";
-  const outputFormat = isWebm
-    ? new WebMOutputFormat()
-    : new Mp4OutputFormat({ fastStart: "in-memory" });
-  const videoQuality = new Quality({
-    bitrate: videoBitrate,
-    bitrateMode: "variable",
-  });
-
-  let videoCodec: Awaited<ReturnType<typeof getFirstEncodableVideoCodec>> = null;
-  try {
-    videoCodec = await getFirstEncodableVideoCodec(outputFormat.getSupportedVideoCodecs(), {
-      width,
-      height,
-      quality: videoQuality,
-      frameRate: fps,
-    });
-  } catch {
-    videoCodec = null;
-  }
-
-  if (videoCodec) {
-    let latencyMode: "realtime" | "quality" = "quality";
-    try {
-      const realtimeOk = await canEncodeVideo(videoCodec, {
-        width,
-        height,
-        quality: videoQuality,
-        frameRate: fps,
-        latencyMode: "realtime",
-      });
-      if (realtimeOk) latencyMode = "realtime";
-    } catch {
-      latencyMode = "quality";
+  // Resolve all active video & image asset Blobs once (zero-copy structured-cloned into Worker)
+  const activeTrackIds = new Set(
+    renderProject.tracks.filter((t) => t.kind !== "audio" && !t.hidden).map((t) => t.id),
+  );
+  const neededAssetIds = new Set<string>();
+  for (const clip of renderProject.clips) {
+    if ((clip.kind === "video" || clip.kind === "image") && !clip.hidden && activeTrackIds.has(clip.trackId)) {
+      neededAssetIds.add(clip.assetId);
     }
+  }
+  const assetBlobs = new Map<string, Blob>();
+  await Promise.all(
+    Array.from(neededAssetIds).map(async (assetId) => {
+      const blob = await resolveAssetBlob(renderProject, assetId, helpers.mediaElements);
+      if (blob) assetBlobs.set(assetId, blob);
+    }),
+  );
 
-    const useOffscreen = typeof OffscreenCanvas !== "undefined";
-    const exportCanvas: HTMLCanvasElement | OffscreenCanvas = useOffscreen
-      ? new OffscreenCanvas(width, height)
-      : (() => {
-          const el = document.createElement("canvas");
-          el.width = width;
-          el.height = height;
-          return el;
-        })();
+  const exportFormat: "mp4" | "webm" = options.format === "webm" ? "webm" : "mp4";
 
-    const ctx = (exportCanvas.getContext("2d", {
-      alpha: false,
-      willReadFrequently: false,
-    }) ?? exportCanvas.getContext("2d")) as Cinema2DContext | null;
-    if (!ctx) throw new Error("Could not initialize 2D render context.");
+  // Tier 1A: Off-main-thread Web Worker Mediabunny GPU Compositor (OffscreenCanvas + prefer-hardware)
+  const workerAudio = audioBufferToTransferable(mixedAudio);
+  const workerBinsCopy = frameBins.map((b) => new Float32Array(b));
+  const workerTransfer: Transferable[] = [
+    ...workerAudio.transfer,
+    ...workerBinsCopy.map((b) => b.buffer),
+  ];
 
-    return exportViaMediabunnyCompositor({
+  let compositorResult = await runInExportWorker(
+    {
+      type: "compositor",
       project: renderProject,
-      isWebm,
-      outputFormat,
-      videoCodec,
-      videoQuality,
-      latencyMode,
+      format: exportFormat,
       fps,
       totalFrames,
-      canvas: exportCanvas,
-      ctx,
-      mixedAudio,
+      videoBitrate,
+      assetEntries: Array.from(assetBlobs.entries()),
+      audioMix: workerAudio.mix,
+      frameBins: workerBinsCopy,
+    },
+    workerTransfer,
+    onProgress,
+    signal,
+  );
+
+  // Tier 1B: Main-thread Mediabunny Compositor fallback (if Worker unavailable or exotic codec needs <video>)
+  if (!compositorResult) {
+    const fallbackAudio = audioBufferToTransferable(mixedAudio).mix;
+    compositorResult = await runMediabunnyCompositorCore({
+      project: renderProject,
+      format: exportFormat,
+      fps,
+      totalFrames,
+      videoBitrate,
+      assetBlobs,
+      audioMix: fallbackAudio,
       frameBins,
-      mediaElements: helpers.mediaElements,
+      fallbackMediaElements: helpers.mediaElements,
+      inWorker: false,
       onProgress,
       signal,
     });
   }
 
+  if (compositorResult) {
+    return {
+      blob: new Blob([compositorResult.buffer], { type: compositorResult.mimeType }),
+      filename: `${safeFileSlug(project.title)}.${compositorResult.ext}`,
+      mimeType: compositorResult.mimeType,
+      elapsedMs: compositorResult.elapsedMs,
+      engine: "mediabunny-compositor",
+    };
+  }
+
+  // Tier 2: Legacy real-time MediaRecorder fallback when WebCodecs isn't supported
   const domCanvas = document.createElement("canvas");
   domCanvas.width = width;
   domCanvas.height = height;
@@ -950,214 +730,6 @@ export async function exportCinemaVideo(
   });
 }
 
-async function exportViaMediabunnyCompositor(params: {
-  project: CinemaProject;
-  isWebm: boolean;
-  outputFormat: Mp4OutputFormat | WebMOutputFormat;
-  videoCodec: NonNullable<Awaited<ReturnType<typeof getFirstEncodableVideoCodec>>>;
-  videoQuality: Quality;
-  latencyMode: "realtime" | "quality";
-  fps: 24 | 30 | 60;
-  totalFrames: number;
-  canvas: HTMLCanvasElement | OffscreenCanvas;
-  ctx: Cinema2DContext;
-  mixedAudio: AudioBuffer | null;
-  frameBins: Float32Array[];
-  mediaElements: ReadonlyMap<string, HTMLVideoElement | HTMLImageElement>;
-  onProgress: (p: CinemaExportProgress) => void;
-  signal?: AbortSignal;
-}): Promise<CinemaExportResult> {
-  const {
-    project,
-    isWebm,
-    outputFormat,
-    videoCodec,
-    videoQuality,
-    latencyMode,
-    fps,
-    totalFrames,
-    canvas,
-    ctx,
-    mixedAudio,
-    frameBins,
-    mediaElements,
-    onProgress,
-    signal,
-  } = params;
-
-  const target = new BufferTarget();
-  const output = new Output({
-    format: outputFormat,
-    target,
-  });
-
-  const canvasSource = new CanvasSource(canvas, {
-    codec: videoCodec,
-    quality: videoQuality,
-    keyFrameInterval: 2,
-    latencyMode,
-  });
-  output.addVideoTrack(canvasSource, { frameRate: fps });
-
-  let audioSource: AudioBufferSource | null = null;
-  if (mixedAudio) {
-    const audioQuality = new Quality({ bitrate: 128_000 });
-    try {
-      const audioCodec = await getFirstEncodableAudioCodec(
-        outputFormat.getSupportedAudioCodecs(),
-        {
-          numberOfChannels: mixedAudio.numberOfChannels,
-          sampleRate: mixedAudio.sampleRate,
-          quality: audioQuality,
-        },
-      );
-      if (audioCodec) {
-        audioSource = new AudioBufferSource({
-          codec: audioCodec,
-          quality: audioQuality,
-        });
-        output.addAudioTrack(audioSource);
-      }
-    } catch {
-      audioSource = null;
-    }
-  }
-
-  const samplePool = new MediabunnySamplePool(project, mediaElements);
-
-  try {
-    await samplePool.initForTimeline(fps, totalFrames);
-    await output.start();
-
-    const frameDurMs = 1000 / fps;
-    const frameDurSec = 1 / fps;
-    const exportStartPerf = performance.now();
-    let lastProgressPerf = exportStartPerf;
-    let lastYieldPerf = exportStartPerf;
-    let lastRenderedTimeMs = -1;
-
-    // Pre-pull Frame 0 before the loop so decode(f+1) overlaps with encode(f) on every iteration
-    let currentOverrides = samplePool.hasVideoClips
-      ? await samplePool.pullFrame(0, 0)
-      : new Map<string, CinemaDrawableMedia>();
-
-    for (let f = 0; f < totalFrames; f++) {
-      if (signal?.aborted) {
-        await output.cancel();
-        throw new DOMException("Export cancelled", "AbortError");
-      }
-
-      const timeMs = f * frameDurMs;
-      const canReuseStaticCanvas =
-        !samplePool.hasVideoClips &&
-        isCinemaFrameStaticSince(project, lastRenderedTimeMs, timeMs);
-
-      if (!canReuseStaticCanvas) {
-        renderCinemaFrame(ctx, project, timeMs, {
-          mediaElements,
-          clipMediaOverrides: currentOverrides,
-          frequencyBins: frameBins[f],
-          showSafeGuides: false,
-          isExport: true,
-        });
-        lastRenderedTimeMs = timeMs;
-      }
-
-      // CanvasSource.add captures the canvas into a VideoSample synchronously before awaiting backpressure,
-      // allowing us to decode Frame f+1 on the GPU decoder at the exact same time Frame f encodes!
-      const encodePromise = canvasSource.add(f * frameDurSec, frameDurSec);
-      const nextPrefetchPromise =
-        samplePool.hasVideoClips && f + 1 < totalFrames
-          ? samplePool.pullFrame(f + 1, (f + 1) * frameDurMs)
-          : Promise.resolve(currentOverrides);
-
-      const [, nextOverrides] = await Promise.all([encodePromise, nextPrefetchPromise]);
-      currentOverrides = nextOverrides;
-
-      const now = performance.now();
-      if (now - lastYieldPerf >= 28) {
-        lastYieldPerf = now;
-        await yieldToEventLoop();
-      }
-
-      if (f === 0 || f === totalFrames - 1 || now - lastProgressPerf >= 90) {
-        lastProgressPerf = now;
-        const elapsedSec = Math.max(0.05, (now - exportStartPerf) / 1000);
-        const exportedVideoSec = (f + 1) / fps;
-        const speedMul = exportedVideoSec / elapsedSec;
-        const currentFps = Math.round((f + 1) / elapsedSec);
-        const speedTag = speedMul >= 1.1 ? ` · ${speedMul.toFixed(1)}× (${currentFps} fps)` : "";
-        onProgress({
-          phase: "rendering",
-          progress: 0.08 + 0.8 * ((f + 1) / totalFrames),
-          currentFrame: f + 1,
-          totalFrames,
-          fps: currentFps,
-          speedMul,
-          message: `Encoding frame ${f + 1} of ${totalFrames}${speedTag}…`,
-        });
-      }
-    }
-
-    canvasSource.close();
-
-    if (audioSource && mixedAudio) {
-      onProgress({
-        phase: "muxing",
-        progress: 0.9,
-        currentFrame: totalFrames,
-        totalFrames,
-        message: "Encoding stereo audio mix…",
-      });
-      await audioSource.add(mixedAudio);
-      audioSource.close();
-    }
-
-    onProgress({
-      phase: "muxing",
-      progress: 0.96,
-      currentFrame: totalFrames,
-      totalFrames,
-      message: `Finalizing ${isWebm ? "WebM" : "MP4"} container…`,
-    });
-
-    await output.finalize();
-    if (!target.buffer) {
-      throw new Error("Mediabunny output buffer was empty after finalization.");
-    }
-
-    const mimeType = isWebm ? "video/webm" : "video/mp4";
-    const ext = isWebm ? "webm" : "mp4";
-    const blob = new Blob([target.buffer], { type: mimeType });
-    const elapsedMs = Math.round(performance.now() - exportStartPerf);
-
-    onProgress({
-      phase: "done",
-      progress: 1,
-      currentFrame: totalFrames,
-      totalFrames,
-      message: `${ext.toUpperCase()} ready in ${(elapsedMs / 1000).toFixed(1)}s.`,
-    });
-
-    return {
-      blob,
-      filename: `${safeFileSlug(project.title)}.${ext}`,
-      mimeType,
-      elapsedMs,
-      engine: "mediabunny-compositor",
-    };
-  } finally {
-    samplePool.dispose();
-    if (output.state === "started") {
-      try {
-        await output.cancel();
-      } catch {
-        // Ignore
-      }
-    }
-  }
-}
-
 async function exportViaMediaRecorder(params: {
   project: CinemaProject;
   preferMp4: boolean;
@@ -1172,8 +744,20 @@ async function exportViaMediaRecorder(params: {
   onProgress: (p: CinemaExportProgress) => void;
   signal?: AbortSignal;
 }): Promise<CinemaExportResult> {
-  const { project, preferMp4, fps, totalFrames, bitrate, canvas, ctx, mixedAudio, frameBins, mediaElements, onProgress, signal } =
-    params;
+  const {
+    project,
+    preferMp4,
+    fps,
+    totalFrames,
+    bitrate,
+    canvas,
+    ctx,
+    mixedAudio,
+    frameBins,
+    mediaElements,
+    onProgress,
+    signal,
+  } = params;
 
   const mimeCandidates = preferMp4
     ? ["video/mp4;codecs=avc1,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"]

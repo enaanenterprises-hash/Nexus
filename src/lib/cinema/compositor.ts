@@ -24,7 +24,10 @@ export type CinemaDrawableMedia =
   | HTMLImageElement
   | HTMLCanvasElement
   | OffscreenCanvas
+  | ImageBitmap
   | VideoSample;
+
+const synthVisualizerBins = new Float32Array(32);
 
 export interface CinemaRenderRuntime {
   mediaElements: ReadonlyMap<string, CinemaDrawableMedia>;
@@ -374,18 +377,20 @@ function drawMediaBox(
   kenBurnsFactor = { scale: 1, panX: 0 },
 ): void {
   const isVideoSample = el instanceof VideoSample;
+  const isHtmlVideo = typeof HTMLVideoElement !== "undefined" && el instanceof HTMLVideoElement;
+  const isHtmlImage = typeof HTMLImageElement !== "undefined" && el instanceof HTMLImageElement;
   const natW = isVideoSample
     ? el.displayWidth || el.codedWidth || w
-    : el instanceof HTMLVideoElement
+    : isHtmlVideo
       ? el.videoWidth || w
-      : el instanceof HTMLImageElement
+      : isHtmlImage
         ? el.naturalWidth || w
         : el.width || w;
   const natH = isVideoSample
     ? el.displayHeight || el.codedHeight || h
-    : el instanceof HTMLVideoElement
+    : isHtmlVideo
       ? el.videoHeight || h
-      : el instanceof HTMLImageElement
+      : isHtmlImage
         ? el.naturalHeight || h
         : el.height || h;
   if (natW <= 0 || natH <= 0) return;
@@ -915,13 +920,12 @@ export function renderCinemaFrame(
         if (clip.reactiveAudioClipId) {
           const targetAud = audioById.get(clip.reactiveAudioClipId);
           if (targetAud && targetAud.peaks.length > 0) {
-            const synth = new Float32Array(32);
             const energy = sampleClipEnvelopeAt(targetAud.peaks, targetAud, timeMs);
             for (let b = 0; b < 32; b++) {
               const harmonic = 0.62 + 0.38 * Math.sin(timeMs * 0.014 + b * 0.65);
-              synth[b] = clamp(energy * harmonic * 1.15, 0.04, 1);
+              synthVisualizerBins[b] = clamp(energy * harmonic * 1.15, 0.04, 1);
             }
-            boundBins = synth;
+            boundBins = synthVisualizerBins;
           }
         }
         drawVisualizerClip(ctx, clip, w, h, boundBins, timeMs);
@@ -965,10 +969,20 @@ function drawVisualAssetClip(
   const el = runtime.clipMediaOverrides?.get(clip.id) ?? runtime.mediaElements.get(clip.assetId);
   const radius = clip.transform.borderRadius > 0 ? (clip.transform.borderRadius / 1080) * h * 1.4 : 0;
 
+  let kb = { scale: 1, panX: 0 };
+  if (clip.kind === "image" && clip.kenBurns !== "none") {
+    const p = clamp(localMs / Math.max(1, clip.durationMs), 0, 1);
+    if (clip.kenBurns === "zoom-in") kb = { scale: 1 + p * 0.12, panX: 0 };
+    else if (clip.kenBurns === "zoom-out") kb = { scale: 1.12 - p * 0.12, panX: 0 };
+    else if (clip.kenBurns === "pan-left") kb = { scale: 1.08, panX: 0.45 - p * 0.9 };
+    else if (clip.kenBurns === "pan-right") kb = { scale: 1.08, panX: -0.45 + p * 0.9 };
+  }
+
+  // Skip unnecessary rectangular clip mask on contain-fit unzoomed layers
   if (radius > 0) {
     roundRectPath(ctx, -w / 2, -h / 2, w, h, radius);
     ctx.clip();
-  } else {
+  } else if (clip.fit === "cover" || kb.scale > 1.001) {
     ctx.beginPath();
     ctx.rect(-w / 2, -h / 2, w, h);
     ctx.clip();
@@ -978,15 +992,6 @@ function drawVisualAssetClip(
     ctx.fillStyle = "rgba(255,255,255,0.05)";
     ctx.fillRect(-w / 2, -h / 2, w, h);
     return;
-  }
-
-  let kb = { scale: 1, panX: 0 };
-  if (clip.kind === "image" && clip.kenBurns !== "none") {
-    const p = clamp(localMs / Math.max(1, clip.durationMs), 0, 1);
-    if (clip.kenBurns === "zoom-in") kb = { scale: 1 + p * 0.12, panX: 0 };
-    else if (clip.kenBurns === "zoom-out") kb = { scale: 1.12 - p * 0.12, panX: 0 };
-    else if (clip.kenBurns === "pan-left") kb = { scale: 1.08, panX: 0.45 - p * 0.9 };
-    else if (clip.kenBurns === "pan-right") kb = { scale: 1.08, panX: -0.45 + p * 0.9 };
   }
 
       const filterStr = buildFilterString(clip.filter, extraBlurPx);

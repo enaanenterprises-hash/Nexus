@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -67,7 +67,7 @@ const COLOR_CHIPS = [
   "transparent",
 ] as const;
 
-export function CinemaInspectorContent({
+export const CinemaInspectorContent = memo(function CinemaInspectorContent({
   tab,
   onChangeTab,
   project,
@@ -1156,4 +1156,4 @@ export function CinemaInspectorContent({
       </div>
     </div>
   );
-}
+});

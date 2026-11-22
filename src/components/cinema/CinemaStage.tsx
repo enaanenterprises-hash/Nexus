@@ -36,7 +36,9 @@ import {
   hitTestVisualClip,
   renderCinemaFrame,
   visualBoxPx,
+  type CinemaDrawableMedia,
 } from "@/lib/cinema/compositor";
+import type { CinemaScrubCache } from "@/lib/cinema/scrub-cache";
 import type {
   CinemaClip,
   CinemaProject,
@@ -107,6 +109,8 @@ export const CinemaStage = memo(function CinemaStage({
   canvasZoom,
   stageExpanded,
   mediaElementsRef,
+  scrubCacheRef,
+  isScrubbingRef,
   audioEngineRef,
   redrawRef,
   mediaVersion,
@@ -138,6 +142,8 @@ export const CinemaStage = memo(function CinemaStage({
   canvasZoom: "fit" | 0.5 | 0.75 | 1;
   stageExpanded: boolean;
   mediaElementsRef: React.RefObject<Map<string, HTMLVideoElement | HTMLImageElement>>;
+  scrubCacheRef: React.RefObject<CinemaScrubCache | null>;
+  isScrubbingRef: React.RefObject<boolean>;
   audioEngineRef: React.RefObject<CinemaAudioEngine | null>;
   redrawRef: React.RefObject<(() => void) | null>;
   mediaVersion: number;
@@ -256,17 +262,45 @@ export const CinemaStage = memo(function CinemaStage({
           }
         : st.project;
 
+      // While actively scrubbing, use instant GPU ImageBitmap proxy frames whenever <video> is seeking/catching up
+      let scrubOverrides: Map<string, CinemaDrawableMedia> | undefined;
+      if (!st.playing && isScrubbingRef.current && scrubCacheRef.current) {
+        const cache = scrubCacheRef.current;
+        for (const clip of activeProject.clips) {
+          if (clip.kind !== "video" || clip.hidden) continue;
+          if (targetMs < clip.startMs || targetMs > clip.startMs + clip.durationMs) continue;
+          const targetSec = Math.max(
+            0,
+            (clip.trimStartMs + (targetMs - clip.startMs) * (clip.speed || 1)) / 1000,
+          );
+          const vid = mediaElementsRef.current.get(clip.assetId);
+          const vidReadyExact =
+            vid instanceof HTMLVideoElement &&
+            !vid.seeking &&
+            vid.readyState >= 2 &&
+            Math.abs(vid.currentTime - targetSec) <= 0.12;
+          if (!vidReadyExact) {
+            const proxyBmp = cache.getNearestFrame(clip.assetId, targetSec);
+            if (proxyBmp) {
+              if (!scrubOverrides) scrubOverrides = new Map();
+              scrubOverrides.set(clip.id, proxyBmp);
+            }
+          }
+        }
+      }
+
       // Scale preview canvas to display pixel grid (4x-6x fewer pixels than 1080p full-frame raster)
       ctx.setTransform(targetW / st.project.width, 0, 0, targetH / st.project.height, 0, 0);
       renderCinemaFrame(ctx, activeProject, targetMs, {
         mediaElements: mediaElementsRef.current,
+        clipMediaOverrides: scrubOverrides,
         frequencyBins: st.playing && engine ? binsRef.current : undefined,
         showSafeGuides: st.showSafeGuides,
         isPlaying: st.playing,
       });
       ctx.setTransform(1, 0, 0, 1, 0, 0);
     },
-    [audioEngineRef, mediaElementsRef, renderCanvasRef],
+    [audioEngineRef, isScrubbingRef, mediaElementsRef, renderCanvasRef, scrubCacheRef],
   );
 
   useEffect(() => {

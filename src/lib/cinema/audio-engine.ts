@@ -352,6 +352,13 @@ export async function renderCinemaAudioOffline(
   }
 
   const buffer = await offline.startRendering();
+  const hasVisualizer = project.clips.some(
+    (c) => c.kind === "visualizer" && !c.hidden && !trackMap.get(c.trackId)?.hidden,
+  );
+  if (!hasVisualizer) {
+    return { buffer, frameBins: [] };
+  }
+
   const ch0 = buffer.getChannelData(0);
   const samplesPerFrame = Math.max(1, Math.floor(sampleRate / Math.max(1, fps)));
 

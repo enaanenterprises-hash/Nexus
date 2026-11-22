@@ -7,6 +7,7 @@ import {
 } from "mediabunny";
 import { saveAudioBlob } from "@/lib/studio/audio-db";
 import { computePeaksFromBuffer, encodeWavFromBuffer } from "@/lib/studio/wav";
+import { extractVideoMetaInWorker } from "./scrub-cache";
 import type { CinemaAsset, CinemaAssetSource, CinemaCollection, CinemaProject } from "./types";
 
 const DB_NAME = "nexus-cinema-v1";
@@ -380,6 +381,8 @@ async function extractVideoMeta(blob: Blob): Promise<{
   durationMs: number;
   thumbnails: string[];
 }> {
+  const workerMeta = await extractVideoMetaInWorker(blob);
+  if (workerMeta) return workerMeta;
   const fastMeta = await extractVideoMetaViaMediabunny(blob);
   if (fastMeta) return fastMeta;
   return extractVideoMetaFallbackDom(blob);
