@@ -29,7 +29,7 @@ import type {
 
 export type CinemaBackendStatus = {
   databaseConfigured: boolean;
-  pexelsConfigured: boolean;
+  unsplashConfigured: boolean;
 };
 
 function makeLocalId(prefix: string): string {
@@ -64,17 +64,17 @@ function summarizeLocal(p: CinemaProject): CinemaProjectSummary {
 export async function fetchCinemaStatus(): Promise<CinemaBackendStatus> {
   try {
     const res = await fetch("/api/cinema/status", { cache: "no-store" });
-    if (!res.ok) return { databaseConfigured: false, pexelsConfigured: false };
+    if (!res.ok) return { databaseConfigured: false, unsplashConfigured: false };
     const body = (await res.json()) as {
       database?: { configured?: boolean };
-      pexels?: { configured?: boolean };
+      unsplash?: { configured?: boolean };
     };
     return {
       databaseConfigured: Boolean(body.database?.configured),
-      pexelsConfigured: Boolean(body.pexels?.configured),
+      unsplashConfigured: Boolean(body.unsplash?.configured),
     };
   } catch {
-    return { databaseConfigured: false, pexelsConfigured: false };
+    return { databaseConfigured: false, unsplashConfigured: false };
   }
 }
 
@@ -265,11 +265,9 @@ export async function deleteCinemaProject(useDatabase: boolean, id: string): Pro
 
 export async function searchStockMedia(
   query: string,
-  type: "videos" | "photos",
   page = 1,
 ): Promise<{ configured: boolean; items: StockMediaItem[]; hasMore: boolean }> {
   const qs = new URLSearchParams({
-    type,
     query: query.trim(),
     page: String(page),
   });

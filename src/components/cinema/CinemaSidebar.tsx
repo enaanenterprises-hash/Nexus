@@ -80,7 +80,7 @@ export function CinemaSidebar({
   mobileOpen,
   onMobileOpenChange,
   project,
-  pexelsConfigured,
+  unsplashConfigured,
   onApplyTemplate,
   onUploadFiles,
   onAddAssetToTimeline,
@@ -105,7 +105,7 @@ export function CinemaSidebar({
   mobileOpen: boolean;
   onMobileOpenChange: (open: boolean) => void;
   project: CinemaProject;
-  pexelsConfigured: boolean;
+  unsplashConfigured: boolean;
   onApplyTemplate: (templateId: string) => void;
   onUploadFiles: (files: FileList | File[]) => Promise<void>;
   onAddAssetToTimeline: (asset: CinemaAsset) => void;
@@ -134,13 +134,12 @@ export function CinemaSidebar({
   const [loadingStudio, setLoadingStudio] = useState(false);
   const [importingRecKey, setImportingRecKey] = useState<string | null>(null);
 
-  // Stock Pexels State
-  const [stockType, setStockType] = useState<"videos" | "photos">("videos");
+  // Stock Unsplash State
   const [stockQuery, setStockQuery] = useState("");
   const [stockItems, setStockItems] = useState<StockMediaItem[]>([]);
   const [stockLoading, setStockLoading] = useState(false);
   const [stockConfigOverride, setStockConfigOverride] = useState<boolean | null>(null);
-  const stockServerConfigured = stockConfigOverride ?? pexelsConfigured;
+  const stockServerConfigured = stockConfigOverride ?? unsplashConfigured;
   const [addingStockId, setAddingStockId] = useState<string | null>(null);
   const [dragOverMedia, setDragOverMedia] = useState(false);
 
@@ -174,10 +173,10 @@ export function CinemaSidebar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
-  async function runStockSearch(q = stockQuery, t = stockType) {
+  async function runStockSearch(q = stockQuery) {
     setStockLoading(true);
     try {
-      const res = await searchStockMedia(q, t, 1);
+      const res = await searchStockMedia(q, 1);
       setStockConfigOverride(res.configured);
       setStockItems(res.items);
     } catch {
@@ -195,7 +194,7 @@ export function CinemaSidebar({
       if (cancelled) return;
       setStockLoading(true);
       try {
-        const res = await searchStockMedia("", stockType, 1);
+        const res = await searchStockMedia("", 1);
         if (cancelled) return;
         setStockConfigOverride(res.configured);
         setStockItems(res.items);
@@ -512,23 +511,24 @@ export function CinemaSidebar({
       {activeTab === "stock" ? (
         <div className="space-y-3">
           {!stockServerConfigured ? (
-            <div className="rounded-xl border border-border/80 bg-card/65 p-3.5 text-left">
+            <div className="rounded-xl border border-white/[0.08] bg-[#0c0c12] p-3.5 text-left">
               <div className="flex items-center gap-2 text-[12.5px] font-medium text-foreground">
                 <Film className="size-4 text-[color:var(--cinema-playhead)]" />
-                <span>Pexels Stock Library</span>
+                <span>Unsplash Stock Library</span>
               </div>
               <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                Add a free key from <span className="text-foreground">pexels.com/api</span> to{" "}
+                Add a free Access Key from{" "}
+                <span className="text-foreground">unsplash.com/oauth/applications</span> to{" "}
                 <code className="dash-code">.env.local</code>:
               </p>
-              <pre className="dash-code mt-2 rounded-lg border border-border/75 bg-background/70 p-2 text-[10.5px]">
-                PEXELS_API_KEY=your_key
+              <pre className="dash-code mt-2 rounded-lg border border-white/[0.08] bg-[#060609] p-2 text-[10.5px]">
+                UNSPLASH_ACCESS_KEY=your_access_key
               </pre>
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={() => void runStockSearch(stockQuery, stockType)}
+                onClick={() => void runStockSearch(stockQuery)}
                 className="mt-2.5 h-7 rounded-lg text-[11px]"
               >
                 Re-check environment
@@ -539,40 +539,20 @@ export function CinemaSidebar({
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
-                  void runStockSearch(stockQuery, stockType);
+                  void runStockSearch(stockQuery);
                 }}
                 className="flex gap-1.5"
               >
                 <Input
                   value={stockQuery}
                   onChange={(e) => setStockQuery(e.target.value)}
-                  placeholder="Search Pexels…"
+                  placeholder="Search Unsplash…"
                   className="h-8 rounded-lg text-[12px]"
                 />
                 <Button type="submit" size="icon-sm" variant="outline" className="size-8 shrink-0 rounded-lg">
                   <Search className="size-3.5" />
                 </Button>
               </form>
-
-              <div className="grid grid-cols-2 gap-1 rounded-lg border border-border/80 bg-card/50 p-0.5">
-                {(["videos", "photos"] as const).map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => {
-                      setStockType(t);
-                      void runStockSearch(stockQuery, t);
-                    }}
-                    className={`h-6 rounded-md text-[11px] capitalize transition-colors ${
-                      stockType === t
-                        ? "bg-foreground font-medium text-background"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
 
               <div className="flex flex-wrap gap-1">
                 {TOPIC_CHIPS.map((topic) => (
@@ -581,9 +561,9 @@ export function CinemaSidebar({
                     type="button"
                     onClick={() => {
                       setStockQuery(topic);
-                      void runStockSearch(topic, stockType);
+                      void runStockSearch(topic);
                     }}
-                    className="rounded-md border border-border/75 px-2 py-0.5 text-[10.5px] text-muted-foreground transition-colors hover:border-foreground/35 hover:text-foreground"
+                    className="rounded-md border border-white/[0.08] bg-[#0c0c12] px-2 py-0.5 text-[10.5px] text-muted-foreground transition-colors hover:border-white/30 hover:text-foreground"
                   >
                     {topic}
                   </button>

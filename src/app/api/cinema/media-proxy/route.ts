@@ -3,8 +3,18 @@ import { Agent, fetch as undiciFetch } from "undici";
 import { BlockedUrlError, assertFetchableUrl, guardedLookup } from "@/lib/research/net-guard";
 import { jsonError, requireUser } from "@/lib/research/route-helpers";
 
-const ALLOWED_ORIGIN_HOSTS = new Set(["images.pexels.com", "videos.pexels.com"]);
-const ALLOWED_REDIRECT_SUFFIXES = [".pexels.com", ".vimeocdn.com", ".akamaized.net"];
+const ALLOWED_ORIGIN_HOSTS = new Set([
+  "images.unsplash.com",
+  "plus.unsplash.com",
+  "images.pexels.com",
+  "videos.pexels.com",
+]);
+const ALLOWED_REDIRECT_SUFFIXES = [
+  ".unsplash.com",
+  ".pexels.com",
+  ".vimeocdn.com",
+  ".akamaized.net",
+];
 const MAX_REDIRECTS = 3;
 
 const proxyAgent = new Agent({
@@ -26,7 +36,7 @@ function validateProxyUrl(raw: string, allowCdnSuffixes: boolean): URL {
     throw new BlockedUrlError("Only HTTPS stock media is allowed.");
   }
   if (!isAllowedHost(parsed.hostname, allowCdnSuffixes)) {
-    throw new BlockedUrlError("Only approved Pexels stock media hosts are allowed.");
+    throw new BlockedUrlError("Only approved Unsplash stock media hosts are allowed.");
   }
   return parsed;
 }

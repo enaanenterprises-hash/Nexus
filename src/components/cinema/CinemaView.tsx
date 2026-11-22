@@ -183,7 +183,7 @@ export function CinemaView({
   onRouteTransfer?: (fromId: ExtensionId, toId?: ExtensionId) => void;
 }) {
   const [databaseConfigured, setDatabaseConfigured] = useState(false);
-  const [pexelsConfigured, setPexelsConfigured] = useState(false);
+  const [unsplashConfigured, setUnsplashConfigured] = useState(false);
   const [collections, setCollections] = useState<CinemaCollection[]>([]);
   const [activeCollectionId, setActiveCollectionId] = useState("");
   const [summaries, setSummaries] = useState<CinemaProjectSummary[]>([]);
@@ -345,7 +345,7 @@ export function CinemaView({
       const st = await fetchCinemaStatus();
       if (!alive) return;
       setDatabaseConfigured(st.databaseConfigured);
-      setPexelsConfigured(st.pexelsConfigured);
+      setUnsplashConfigured(st.unsplashConfigured);
       const cols = await listCinemaCollections(st.databaseConfigured);
       if (!alive) return;
       setCollections(cols);
@@ -1240,7 +1240,7 @@ export function CinemaView({
       showNotice(`Caching “${item.title}” for frame-exact export…`);
       const res = await fetch(item.mediaUrl);
       if (!res.ok) {
-        showNotice("Could not download stock item from Pexels proxy.");
+        showNotice("Could not download stock image from Unsplash proxy.");
         return;
       }
       const blob = await res.blob();
@@ -2184,7 +2184,7 @@ export function CinemaView({
             mobileOpen={mobileSidebarOpen}
             onMobileOpenChange={setMobileSidebarOpen}
             project={project}
-            pexelsConfigured={pexelsConfigured}
+            unsplashConfigured={unsplashConfigured}
             onApplyTemplate={(tplId) => {
               const tpl = buildTemplateProject(tplId, project.collectionId || activeCollectionId, project.aspectRatio);
               setProject(tpl);
