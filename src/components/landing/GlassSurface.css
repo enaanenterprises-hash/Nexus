@@ -216,20 +216,54 @@
   filter: drop-shadow(0 1px 8px rgba(0, 0, 0, 0.72));
 }
 
-/* Recording Studio Liquid Glass capsules: refractive SDF bevels + darkroom specular sheen */
+/* React Bits <GlassSurface /> interactive controls & capsules in Dark Mode */
+.studio-liquid-glass,
+.glass-control {
+  color-scheme: dark;
+}
+
+.studio-liquid-glass .glass-surface__content,
+.glass-control .glass-surface__content {
+  padding: 0;
+}
+
+.glass-control {
+  cursor: pointer;
+  user-select: none;
+  transition:
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 200ms ease,
+    box-shadow 220ms ease;
+}
+
+.glass-control:hover {
+  transform: translateY(-0.5px);
+}
+
+.glass-control:active {
+  transform: scale(0.95);
+}
+
 .studio-liquid-glass.glass-surface--svg,
-.studio-liquid-glass.glass-surface--fallback {
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.085) 0%,
-    rgba(14, 14, 20, 0.54) 46%,
-    rgba(255, 255, 255, 0.045) 100%
-  );
+.glass-control.glass-surface--svg {
+  background: light-dark(hsl(0 0% 100% / var(--glass-frost, 0)), hsl(0 0% 0% / var(--glass-frost, 0)));
   box-shadow:
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.32),
-    inset 0 -1px 0 0 rgba(255, 255, 255, 0.09),
-    0 0 2px 1px rgba(255, 255, 255, 0.24) inset,
-    0 0 14px 3px rgba(255, 255, 255, 0.08) inset,
-    0 14px 36px -10px rgba(0, 0, 0, 0.78),
-    0 2px 8px rgba(0, 0, 0, 0.45);
+    0 0 2px 1px light-dark(color-mix(in oklch, black, transparent 85%), color-mix(in oklch, white, transparent 65%))
+      inset,
+    0 0 10px 4px light-dark(color-mix(in oklch, black, transparent 90%), color-mix(in oklch, white, transparent 85%))
+      inset,
+    0px 4px 16px rgba(17, 17, 26, 0.05),
+    0px 8px 24px rgba(17, 17, 26, 0.05),
+    0px 16px 56px rgba(17, 17, 26, 0.05),
+    0px 4px 16px rgba(17, 17, 26, 0.05) inset,
+    0px 8px 24px rgba(17, 17, 26, 0.05) inset,
+    0px 16px 56px rgba(17, 17, 26, 0.05) inset;
+}
+
+.glass-control--active.glass-surface--svg,
+.glass-control--active.glass-surface--fallback {
+  box-shadow:
+    0 0 2px 1px color-mix(in oklch, white, transparent 42%) inset,
+    0 0 14px 4px color-mix(in oklch, white, transparent 74%) inset,
+    0 6px 20px -4px rgba(0, 0, 0, 0.55);
 }

@@ -1315,20 +1315,10 @@ export function StudioView({
           width="100%"
           height="auto"
           borderRadius={23}
-          borderWidth={0.28}
-          brightness={50}
-          opacity={0.86}
-          blur={7}
-          displace={2.6}
-          distortionScale={-195}
-          redOffset={0}
-          greenOffset={12}
-          blueOffset={26}
-          xChannel="R"
-          yChannel="G"
-          backgroundOpacity={0.22}
-          saturation={1.4}
-          className="landing-glass-nav landing-glass-nav--dark studio-liquid-glass w-full"
+          distortionScale={-180}
+          displace={0.5}
+          backgroundOpacity={0.1}
+          className="studio-liquid-glass w-full"
         >
           <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 px-3 py-1.5 md:h-[44px] md:grid-cols-[1fr_auto_1fr] md:gap-y-0 md:py-0">
             {/* Left: Quiet Session Title + Sessions Chevron */}
@@ -1761,134 +1751,193 @@ export function StudioView({
                 width="100%"
                 height="auto"
                 borderRadius={20}
-                borderWidth={0.28}
-                brightness={50}
-                opacity={0.86}
-                blur={7}
-                displace={2.6}
-                distortionScale={-195}
-                redOffset={0}
-                greenOffset={12}
-                blueOffset={26}
-                xChannel="R"
-                yChannel="G"
-                backgroundOpacity={0.22}
-                saturation={1.4}
-                className="landing-glass-nav landing-glass-nav--dark studio-liquid-glass w-full shrink-0"
+                distortionScale={-180}
+                displace={0.5}
+                backgroundOpacity={0.1}
+                className="studio-liquid-glass w-full shrink-0"
               >
                 <div className="flex w-full flex-wrap items-center justify-between gap-2 px-3 py-2">
-                  {/* Left: Transport + Monospace Timecode */}
+                  {/* Left: Liquid Glass Transport Orbs (Rewind, Play/Pause Hero, Punch-In, Loop, Metronome) + Timecode */}
                   <div className="flex items-center gap-1.5">
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <Button
-                          type="button"
-                          size="icon-sm"
-                          variant="ghost"
-                          onClick={() => audio.seek(0)}
-                          aria-label="Rewind to start"
-                          className="h-8 w-8 rounded-full"
-                        >
-                          <SkipBack className="size-3.5" />
-                        </Button>
-                      }
-                    />
-                    <TooltipContent side="bottom">Rewind to 00:00</TooltipContent>
-                  </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <button
+                            type="button"
+                            onClick={() => audio.seek(0)}
+                            aria-label="Rewind to start"
+                            className="rounded-full"
+                          >
+                            <GlassSurface
+                              width={34}
+                              height={34}
+                              borderRadius={17}
+                              distortionScale={-180}
+                              displace={0.5}
+                              backgroundOpacity={0.1}
+                              className="glass-control"
+                            >
+                              <span className="flex h-full w-full items-center justify-center text-foreground/85 hover:text-foreground">
+                                <SkipBack className="size-3.5" />
+                              </span>
+                            </GlassSurface>
+                          </button>
+                        }
+                      />
+                      <TooltipContent side="bottom">Rewind to 00:00</TooltipContent>
+                    </Tooltip>
 
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    onClick={() => {
-                      if (audio.transport === "playing") audio.pausePlayback();
-                      else void audio.play();
-                    }}
-                    disabled={isCaptureLive}
-                    aria-label={audio.transport === "playing" ? "Pause playback (Space)" : "Play timeline (Space)"}
-                    className="h-9 w-9 rounded-full bg-foreground text-background hover:opacity-90"
-                  >
-                    {audio.transport === "playing" ? (
-                      <Pause className="size-4 fill-current" />
-                    ) : (
-                      <Play className="size-4 translate-x-[0.5px] fill-current" />
-                    )}
-                  </Button>
-
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <Button
-                          type="button"
-                          size="icon-sm"
-                          variant={isCaptureLive ? "destructive" : "outline"}
-                          onClick={() => {
-                            if (isCaptureLive) audio.stopRecording();
-                            else {
-                              const baseLane = audio.captureMode === "solo" ? activeLayerIndex : 0;
-                              void audio.startRecording("overdub", baseLane);
-                            }
-                          }}
-                          aria-label={isCaptureLive ? "Stop punch-in recording" : "Punch-in record at playhead"}
-                          className="h-8 w-8 rounded-full"
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (audio.transport === "playing") audio.pausePlayback();
+                        else void audio.play();
+                      }}
+                      disabled={isCaptureLive}
+                      aria-label={audio.transport === "playing" ? "Pause playback (Space)" : "Play timeline (Space)"}
+                      className="rounded-full disabled:opacity-45"
+                    >
+                      <GlassSurface
+                        width={40}
+                        height={40}
+                        borderRadius={20}
+                        distortionScale={-180}
+                        displace={0.5}
+                        backgroundOpacity={0.16}
+                        className={`glass-control ${
+                          audio.transport === "playing" ? "glass-control--active" : ""
+                        }`}
+                      >
+                        <span
+                          className={`flex h-full w-full items-center justify-center ${
+                            audio.transport === "playing"
+                              ? "text-[color:var(--studio-accent)]"
+                              : "text-foreground"
+                          }`}
                         >
-                          {isCaptureLive ? (
-                            <Square className="size-3 fill-current" />
+                          {audio.transport === "playing" ? (
+                            <Pause className="size-4 fill-current" />
                           ) : (
-                            <span className="h-2.5 w-2.5 rounded-full bg-[#fc3a34]" aria-hidden />
+                            <Play className="size-4 translate-x-[0.5px] fill-current" />
                           )}
-                        </Button>
-                      }
-                    />
-                    <TooltipContent side="bottom">
-                      {isCaptureLive ? "Stop capture & commit stems" : "Punch-in record at playhead (R)"}
-                    </TooltipContent>
-                  </Tooltip>
+                        </span>
+                      </GlassSurface>
+                    </button>
 
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <Button
-                          type="button"
-                          size="icon-sm"
-                          variant={loopEnabled ? "secondary" : "ghost"}
-                          onClick={() => setLoopEnabled((v) => !v)}
-                          aria-pressed={loopEnabled}
-                          aria-label="Toggle loop playback (L)"
-                          className="h-8 w-8 rounded-full"
-                        >
-                          <Repeat className="size-3.5" />
-                        </Button>
-                      }
-                    />
-                    <TooltipContent side="bottom">Loop playback (L)</TooltipContent>
-                  </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (isCaptureLive) audio.stopRecording();
+                              else {
+                                const baseLane = audio.captureMode === "solo" ? activeLayerIndex : 0;
+                                void audio.startRecording("overdub", baseLane);
+                              }
+                            }}
+                            aria-label={isCaptureLive ? "Stop punch-in recording" : "Punch-in record at playhead"}
+                            className="rounded-full"
+                          >
+                            <GlassSurface
+                              width={34}
+                              height={34}
+                              borderRadius={17}
+                              distortionScale={-180}
+                              displace={0.5}
+                              backgroundOpacity={0.1}
+                              className={`glass-control ${isCaptureLive ? "glass-control--active" : ""}`}
+                            >
+                              <span className="flex h-full w-full items-center justify-center text-[#fc3a34]">
+                                {isCaptureLive ? (
+                                  <Square className="size-3 fill-current" />
+                                ) : (
+                                  <span className="h-2.5 w-2.5 rounded-full bg-[#fc3a34]" aria-hidden />
+                                )}
+                              </span>
+                            </GlassSurface>
+                          </button>
+                        }
+                      />
+                      <TooltipContent side="bottom">
+                        {isCaptureLive ? "Stop capture & commit stems" : "Punch-in record at playhead (R)"}
+                      </TooltipContent>
+                    </Tooltip>
 
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <Button
-                          type="button"
-                          size="icon-sm"
-                          variant={metronomeEnabled ? "secondary" : "ghost"}
-                          onClick={() => setMetronomeEnabled((v) => !v)}
-                          aria-pressed={metronomeEnabled}
-                          aria-label="Toggle metronome click"
-                          className="h-8 w-8 rounded-full"
-                        >
-                          <Metronome className="size-3.5" />
-                        </Button>
-                      }
-                    />
-                    <TooltipContent side="bottom">Click metronome ({bpm} BPM)</TooltipContent>
-                  </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <button
+                            type="button"
+                            onClick={() => setLoopEnabled((v) => !v)}
+                            aria-pressed={loopEnabled}
+                            aria-label="Toggle loop playback (L)"
+                            className="rounded-full"
+                          >
+                            <GlassSurface
+                              width={34}
+                              height={34}
+                              borderRadius={17}
+                              distortionScale={-180}
+                              displace={0.5}
+                              backgroundOpacity={loopEnabled ? 0.18 : 0.08}
+                              className={`glass-control ${loopEnabled ? "glass-control--active" : ""}`}
+                            >
+                              <span
+                                className={`flex h-full w-full items-center justify-center ${
+                                  loopEnabled ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                                }`}
+                              >
+                                <Repeat className="size-3.5" />
+                              </span>
+                            </GlassSurface>
+                          </button>
+                        }
+                      />
+                      <TooltipContent side="bottom">Loop playback (L)</TooltipContent>
+                    </Tooltip>
 
-                  <div className="ml-1 flex items-center gap-1 rounded-lg border border-border/70 bg-foreground/[0.03] px-2.5 py-1 font-mono text-[12px] tabular-nums">
-                    <span className="font-medium text-foreground">{fmtTimecode(audio.playheadMs)}</span>
-                    <span className="text-muted-foreground">/</span>
-                    <span className="text-muted-foreground">{fmtTimecode(totalTimelineMs)}</span>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <button
+                            type="button"
+                            onClick={() => setMetronomeEnabled((v) => !v)}
+                            aria-pressed={metronomeEnabled}
+                            aria-label="Toggle metronome click"
+                            className="rounded-full"
+                          >
+                            <GlassSurface
+                              width={34}
+                              height={34}
+                              borderRadius={17}
+                              distortionScale={-180}
+                              displace={0.5}
+                              backgroundOpacity={metronomeEnabled ? 0.18 : 0.08}
+                              className={`glass-control ${metronomeEnabled ? "glass-control--active" : ""}`}
+                            >
+                              <span
+                                className={`flex h-full w-full items-center justify-center ${
+                                  metronomeEnabled
+                                    ? "text-foreground"
+                                    : "text-muted-foreground hover:text-foreground"
+                                }`}
+                              >
+                                <Metronome className="size-3.5" />
+                              </span>
+                            </GlassSurface>
+                          </button>
+                        }
+                      />
+                      <TooltipContent side="bottom">Click metronome ({bpm} BPM)</TooltipContent>
+                    </Tooltip>
+
+                    <div className="ml-1 flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 font-mono text-[12px] tabular-nums">
+                      <span className="font-medium text-foreground">{fmtTimecode(audio.playheadMs)}</span>
+                      <span className="text-muted-foreground">/</span>
+                      <span className="text-muted-foreground">{fmtTimecode(totalTimelineMs)}</span>
+                    </div>
                   </div>
-                </div>
 
                 {/* Center: Edit Tools (Split / Split All / Snap / Undo / Redo) */}
                 <div className="flex flex-wrap items-center gap-1.5">

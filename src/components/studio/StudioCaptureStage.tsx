@@ -672,20 +672,10 @@ export function StudioCaptureStage({
             width="auto"
             height={36}
             borderRadius={18}
-            borderWidth={0.28}
-            brightness={50}
-            opacity={0.86}
-            blur={7}
-            displace={2.6}
-            distortionScale={-195}
-            redOffset={0}
-            greenOffset={12}
-            blueOffset={26}
-            xChannel="R"
-            yChannel="G"
-            backgroundOpacity={0.22}
-            saturation={1.4}
-            className="landing-glass-nav landing-glass-nav--dark studio-liquid-glass"
+            distortionScale={-180}
+            displace={0.5}
+            backgroundOpacity={0.1}
+            className="studio-liquid-glass"
           >
             <button
               type="button"
@@ -759,20 +749,10 @@ export function StudioCaptureStage({
                 width={84}
                 height={84}
                 borderRadius={42}
-                borderWidth={0.28}
-                brightness={50}
-                opacity={0.86}
-                blur={7}
-                displace={2.6}
-                distortionScale={-195}
-                redOffset={0}
-                greenOffset={12}
-                blueOffset={26}
-                xChannel="R"
-                yChannel="G"
-                backgroundOpacity={0.22}
-                saturation={1.4}
-                className="landing-glass-nav landing-glass-nav--dark studio-liquid-glass"
+                distortionScale={-180}
+                displace={0.5}
+                backgroundOpacity={0.1}
+                className="studio-liquid-glass"
               >
                 <div className="flex h-full w-full items-center justify-center">
                   <span className="font-mono text-[2rem] font-light text-foreground tabular-nums">
@@ -784,7 +764,7 @@ export function StudioCaptureStage({
           ) : null}
         </div>
 
-        {/* Sculptural Light-Weight Tabular Clock + Tactile Machined Shutter */}
+        {/* Sculptural Light-Weight Tabular Clock + Liquid Glass Transport & Record Shutter */}
         <div className="flex flex-col items-center gap-6">
           <div className="flex flex-col items-center gap-1">
             <div
@@ -809,20 +789,35 @@ export function StudioCaptureStage({
           </div>
 
           <div className="flex items-center justify-center gap-6">
-            <div className="flex w-11 justify-center">
+            <div className="flex w-12 justify-center">
               {isRecording || isPaused ? (
                 <Tooltip>
                   <TooltipTrigger
                     render={
-                      <Button
+                      <button
                         type="button"
-                        variant="outline"
                         onClick={isRecording ? onPauseRecord : onResumeRecord}
                         aria-label={isRecording ? "Pause recording" : "Resume recording"}
-                        className="h-11 w-11 rounded-full p-0"
+                        className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[color:var(--studio-accent)]"
                       >
-                        {isRecording ? <Pause className="size-4" /> : <Play className="size-4 translate-x-[0.5px]" />}
-                      </Button>
+                        <GlassSurface
+                          width={46}
+                          height={46}
+                          borderRadius={23}
+                          distortionScale={-180}
+                          displace={0.5}
+                          backgroundOpacity={0.12}
+                          className="glass-control"
+                        >
+                          <span className="flex h-full w-full items-center justify-center text-foreground">
+                            {isRecording ? (
+                              <Pause className="size-4 fill-current" />
+                            ) : (
+                              <Play className="size-4 translate-x-[0.5px] fill-current" />
+                            )}
+                          </span>
+                        </GlassSurface>
+                      </button>
                     }
                   />
                   <TooltipContent side="top">{isRecording ? "Pause" : "Resume"}</TooltipContent>
@@ -838,25 +833,51 @@ export function StudioCaptureStage({
               }}
               data-recording={isActiveTake ? "true" : "false"}
               aria-label={isActiveTake ? "Stop and keep take" : "Start recording (R)"}
-              className="studio-shutter-ring flex h-[68px] w-[68px] items-center justify-center rounded-full transition-transform active:scale-[0.96] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[color:var(--studio-accent)]"
+              className="group rounded-full focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[color:var(--studio-accent)]"
             >
-              <span className="studio-shutter-core" aria-hidden />
+              <GlassSurface
+                width={72}
+                height={72}
+                borderRadius={36}
+                distortionScale={-180}
+                displace={0.5}
+                backgroundOpacity={0.12}
+                className={`glass-control ${isActiveTake ? "glass-control--active" : ""}`}
+              >
+                <span
+                  data-recording={isActiveTake ? "true" : "false"}
+                  className="studio-shutter-ring flex h-full w-full items-center justify-center rounded-full border-0 bg-transparent"
+                >
+                  <span className="studio-shutter-core" aria-hidden />
+                </span>
+              </GlassSurface>
             </button>
 
-            <div className="flex w-11 justify-center">
+            <div className="flex w-12 justify-center">
               {isRecording ? (
                 <Tooltip>
                   <TooltipTrigger
                     render={
-                      <Button
+                      <button
                         type="button"
-                        variant="outline"
                         onClick={onDropMarker}
                         aria-label="Drop marker (M)"
-                        className="h-11 w-11 rounded-full p-0"
+                        className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[color:var(--studio-accent)]"
                       >
-                        <BookmarkPlus className="size-4 text-[color:var(--studio-accent)]" />
-                      </Button>
+                        <GlassSurface
+                          width={46}
+                          height={46}
+                          borderRadius={23}
+                          distortionScale={-180}
+                          displace={0.5}
+                          backgroundOpacity={0.12}
+                          className="glass-control"
+                        >
+                          <span className="flex h-full w-full items-center justify-center">
+                            <BookmarkPlus className="size-4 text-[color:var(--studio-accent)]" />
+                          </span>
+                        </GlassSurface>
+                      </button>
                     }
                   />
                   <TooltipContent side="top">Drop marker (M)</TooltipContent>
@@ -865,15 +886,26 @@ export function StudioCaptureStage({
                 <Tooltip>
                   <TooltipTrigger
                     render={
-                      <Button
+                      <button
                         type="button"
-                        variant="ghost"
                         onClick={onDiscardRecord}
                         aria-label="Discard paused take"
-                        className="h-11 w-11 rounded-full p-0 text-muted-foreground hover:text-destructive"
+                        className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[color:var(--studio-accent)]"
                       >
-                        <RotateCcw className="size-4" />
-                      </Button>
+                        <GlassSurface
+                          width={46}
+                          height={46}
+                          borderRadius={23}
+                          distortionScale={-180}
+                          displace={0.5}
+                          backgroundOpacity={0.12}
+                          className="glass-control"
+                        >
+                          <span className="flex h-full w-full items-center justify-center text-muted-foreground transition-colors hover:text-destructive">
+                            <RotateCcw className="size-4" />
+                          </span>
+                        </GlassSurface>
+                      </button>
                     }
                   />
                   <TooltipContent side="top">Discard take</TooltipContent>
@@ -953,20 +985,10 @@ export function StudioCaptureStage({
           width="auto"
           height={42}
           borderRadius={21}
-          borderWidth={0.28}
-          brightness={50}
-          opacity={0.86}
-          blur={7}
-          displace={2.6}
-          distortionScale={-195}
-          redOffset={0}
-          greenOffset={12}
-          blueOffset={26}
-          xChannel="R"
-          yChannel="G"
-          backgroundOpacity={0.22}
-          saturation={1.4}
-          className="landing-glass-nav landing-glass-nav--dark studio-liquid-glass"
+          distortionScale={-180}
+          displace={0.5}
+          backgroundOpacity={0.1}
+          className="studio-liquid-glass"
         >
           <div className="flex flex-wrap items-center justify-center gap-1 px-1.5 text-[12px] text-muted-foreground">
             <button

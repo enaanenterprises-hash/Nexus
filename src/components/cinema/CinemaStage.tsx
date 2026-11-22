@@ -26,6 +26,7 @@ import {
   Trash2,
   Waves,
 } from "lucide-react";
+import GlassSurface from "@/components/landing/GlassSurface";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { CinemaAudioEngine } from "@/lib/cinema/audio-engine";
@@ -725,62 +726,125 @@ export function CinemaStage({
 
       {/* Calm Apple Pro Transport & Peak Meter Bar */}
       <div className="cinema-chrome-surface flex h-11 shrink-0 items-center justify-between gap-2 border-t border-border/75 px-3 sm:px-4">
-        {/* Left: Transport Controls */}
-        <div className="flex items-center gap-1">
-          <Button
+        {/* Left: Liquid Glass Transport Controls (Rewind, Step Back, Play/Pause Hero Orb, Step Forward, Loop) */}
+        <div className="flex items-center gap-1.5">
+          <button
             type="button"
-            variant="ghost"
-            size="icon-sm"
             onClick={() => onSeek(0)}
             aria-label="Rewind to start"
-            className="size-8 rounded-full"
+            className="rounded-full"
           >
-            <SkipBack className="size-3.5" strokeWidth={1.6} />
-          </Button>
-          <Button
+            <GlassSurface
+              width={32}
+              height={32}
+              borderRadius={16}
+              distortionScale={-180}
+              displace={0.5}
+              backgroundOpacity={0.1}
+              className="glass-control"
+            >
+              <span className="flex h-full w-full items-center justify-center text-foreground/85 hover:text-foreground">
+                <SkipBack className="size-3.5" strokeWidth={1.6} />
+              </span>
+            </GlassSurface>
+          </button>
+
+          <button
             type="button"
-            variant="ghost"
-            size="icon-sm"
             onClick={() => onStepFrame(-1)}
             aria-label="Previous frame"
-            className="hidden size-8 rounded-full sm:inline-flex"
+            className="hidden rounded-full sm:inline-flex"
           >
-            <StepBack className="size-3.5" strokeWidth={1.6} />
-          </Button>
-          <Button
+            <GlassSurface
+              width={32}
+              height={32}
+              borderRadius={16}
+              distortionScale={-180}
+              displace={0.5}
+              backgroundOpacity={0.1}
+              className="glass-control"
+            >
+              <span className="flex h-full w-full items-center justify-center text-foreground/85 hover:text-foreground">
+                <StepBack className="size-3.5" strokeWidth={1.6} />
+              </span>
+            </GlassSurface>
+          </button>
+
+          <button
             type="button"
-            size="icon-sm"
             onClick={onTogglePlay}
             aria-label={playing ? "Pause (Space)" : "Play (Space)"}
-            className="mx-0.5 size-8 rounded-full bg-foreground text-background hover:opacity-90"
+            className="mx-0.5 rounded-full"
           >
-            {playing ? (
-              <Pause className="size-3.5 fill-current" />
-            ) : (
-              <Play className="size-3.5 translate-x-[0.5px] fill-current" />
-            )}
-          </Button>
-          <Button
+            <GlassSurface
+              width={36}
+              height={36}
+              borderRadius={18}
+              distortionScale={-180}
+              displace={0.5}
+              backgroundOpacity={0.16}
+              className={`glass-control ${playing ? "glass-control--active" : ""}`}
+            >
+              <span
+                className={`flex h-full w-full items-center justify-center ${
+                  playing ? "text-[color:var(--cinema-playhead)]" : "text-foreground"
+                }`}
+              >
+                {playing ? (
+                  <Pause className="size-3.5 fill-current" />
+                ) : (
+                  <Play className="size-3.5 translate-x-[0.5px] fill-current" />
+                )}
+              </span>
+            </GlassSurface>
+          </button>
+
+          <button
             type="button"
-            variant="ghost"
-            size="icon-sm"
             onClick={() => onStepFrame(1)}
             aria-label="Next frame"
-            className="hidden size-8 rounded-full sm:inline-flex"
+            className="hidden rounded-full sm:inline-flex"
           >
-            <StepForward className="size-3.5" strokeWidth={1.6} />
-          </Button>
-          <Button
+            <GlassSurface
+              width={32}
+              height={32}
+              borderRadius={16}
+              distortionScale={-180}
+              displace={0.5}
+              backgroundOpacity={0.1}
+              className="glass-control"
+            >
+              <span className="flex h-full w-full items-center justify-center text-foreground/85 hover:text-foreground">
+                <StepForward className="size-3.5" strokeWidth={1.6} />
+              </span>
+            </GlassSurface>
+          </button>
+
+          <button
             type="button"
-            variant={loopEnabled ? "secondary" : "ghost"}
-            size="icon-sm"
             onClick={onToggleLoop}
             aria-pressed={loopEnabled}
             aria-label="Loop playback (L)"
-            className="size-8 rounded-full"
+            className="rounded-full"
           >
-            <Repeat className="size-3.5" strokeWidth={1.6} />
-          </Button>
+            <GlassSurface
+              width={32}
+              height={32}
+              borderRadius={16}
+              distortionScale={-180}
+              displace={0.5}
+              backgroundOpacity={loopEnabled ? 0.18 : 0.08}
+              className={`glass-control ${loopEnabled ? "glass-control--active" : ""}`}
+            >
+              <span
+                className={`flex h-full w-full items-center justify-center ${
+                  loopEnabled ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Repeat className="size-3.5" strokeWidth={1.6} />
+              </span>
+            </GlassSurface>
+          </button>
         </div>
 
         {/* Center: Tabular Timecode Readout */}
