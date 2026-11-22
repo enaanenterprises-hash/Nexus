@@ -21,7 +21,6 @@ import {
   FREE_ACTIVE_EXTENSION_SLOTS,
   canUseSlot,
   placeholderName,
-  setStubPro,
   type ExtensionHubSnapshot,
   type ExtensionId,
   type SlotId,
@@ -88,24 +87,28 @@ export const NodeMenu = memo(function NodeMenu({
   surface,
   floating = false,
   open = true,
+  previewAllNodes = false,
   navRef,
   onHome,
   onCommand,
   onNodes,
   onPanel,
   onReplaySetup,
+  onTogglePreviewAllNodes,
 }: {
   id?: string;
   hub: ExtensionHubSnapshot;
   surface: Surface;
   floating?: boolean;
   open?: boolean;
+  previewAllNodes?: boolean;
   navRef?: RefObject<HTMLElement | null>;
   onHome: () => void;
   onCommand: () => void;
   onNodes: () => void;
   onPanel: (panel: PanelId) => void;
   onReplaySetup?: () => void;
+  onTogglePreviewAllNodes?: () => void;
 }) {
   const { theme, toggleTheme } = useTheme();
 
@@ -192,9 +195,11 @@ export const NodeMenu = memo(function NodeMenu({
         used={used}
         cap={cap}
         disabled={floating && !open}
+        previewAllNodes={previewAllNodes}
         onNodes={onNodes}
         onPanel={onPanel}
         onReplaySetup={onReplaySetup}
+        onTogglePreviewAllNodes={onTogglePreviewAllNodes}
       />
     </nav>
   );
@@ -205,17 +210,21 @@ function TierMenu({
   used,
   cap,
   disabled,
+  previewAllNodes = false,
   onNodes,
   onPanel,
   onReplaySetup,
+  onTogglePreviewAllNodes,
 }: {
   hub: ExtensionHubSnapshot;
   used: number;
   cap: number;
   disabled: boolean;
+  previewAllNodes?: boolean;
   onNodes: () => void;
   onPanel: (panel: PanelId) => void;
   onReplaySetup?: () => void;
+  onTogglePreviewAllNodes?: () => void;
 }) {
   const [tierMenuOpen, setTierMenuOpen] = useState(false);
   const showTierMenu = tierMenuOpen && !disabled;
@@ -309,13 +318,18 @@ function TierMenu({
               <span>Manage nodes</span>
             </DropdownMenuItem>
 
-            <DropdownMenuItem
-              className="cursor-pointer rounded-xl px-2.5 py-2 text-[13px]"
-              onClick={() => setStubPro(!hub.entitlement.isPro)}
-            >
-              <Sparkles className="size-4 text-[color:var(--land-gold)]" />
-              <span>{hub.entitlement.isPro ? "Back to Free tier" : "Preview Pro"}</span>
-            </DropdownMenuItem>
+            {onTogglePreviewAllNodes ? (
+              <DropdownMenuItem
+                className="cursor-pointer rounded-xl px-2.5 py-2 text-[13px]"
+                onClick={() => {
+                  onTogglePreviewAllNodes();
+                  setTierMenuOpen(false);
+                }}
+              >
+                <Sparkles className="size-4 text-[color:var(--land-gold)]" />
+                <span>{previewAllNodes ? "Exit all-nodes preview" : "Preview all nodes"}</span>
+              </DropdownMenuItem>
+            ) : null}
 
             {onReplaySetup ? (
               <DropdownMenuItem
@@ -522,7 +536,7 @@ export const NodeRail = memo(function NodeRail({
             <TooltipContent side="left" sideOffset={10}>
               {firstOpenSlot
                 ? `Add node · ${hub.slots.length} total slots`
-                : `Preview Pro · ${hub.slots.length} branch slots`}
+                : `Explore all ${hub.slots.length} branch slots`}
             </TooltipContent>
           </Tooltip>
         ) : null}

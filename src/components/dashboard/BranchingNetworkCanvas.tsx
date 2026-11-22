@@ -952,14 +952,14 @@ export function BranchingNetworkCanvas({
     };
   }, [paused]);
 
-  // Redraw immediately when reduced-motion is set and layout/theme/hover changes
+  // Redraw immediately when reduced-motion is set and layout/theme/hover/preview changes
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
     fitCanvas(canvas, ctx);
     drawFrameRef.current(ctx, 0, 0);
-  }, [layout, theme, hoveredIdx, activeNodeIndex, nodes]);
+  }, [layout, theme, hoveredIdx, activeNodeIndex, nodes, showcaseAll]);
 
   const hitTest = (clientX: number, clientY: number): number | null => {
     const rect = containerRef.current?.getBoundingClientRect();

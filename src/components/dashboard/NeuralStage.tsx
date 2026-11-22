@@ -29,6 +29,8 @@ export type StageSignal = {
   paused?: boolean;
   /** Skip opening bloom delay and continue the singularity explosion straight into node unfurl. */
   fromSetupExplosion?: boolean;
+  /** Temporary preview mode that illuminates all 50 branch nodes. */
+  showcaseAll?: boolean;
 };
 
 const BRAIN_ENERGY: Record<NexusBrainState, number> = {
@@ -82,6 +84,7 @@ export const NeuralStage = memo(function NeuralStage({
         snap={signal.snap}
         transfer={signal.transfer ?? null}
         paused={signal.paused}
+        showcaseAll={Boolean(signal.showcaseAll)}
         mode="stage"
         onSelectNode={onSelectSocket}
       />

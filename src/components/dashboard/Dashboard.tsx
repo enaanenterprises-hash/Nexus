@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { X } from "lucide-react";
+import { Sparkles, X } from "lucide-react";
 import { NexusMark } from "@/components/landing/NexusLogo";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -32,7 +32,6 @@ import {
   computeExtensionLinks,
   extensionRegistry,
   nexusBus,
-  setStubPro,
   type ExtensionId,
   type SlotId,
 } from "@/lib/extensions";
@@ -185,6 +184,12 @@ export function Dashboard({
   const [notice, setNotice] = useState<string | null>(null);
   const [transfer, setTransfer] = useState<StageTransfer | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Temporary dashboard preview toggle that lights up all 50 network nodes (replaces Preview Pro)
+  const [previewAllNodes, setPreviewAllNodes] = useState(false);
+
+  const togglePreviewAllNodes = useCallback(() => {
+    setPreviewAllNodes((prev) => !prev);
+  }, []);
 
   const noticeTimer = useRef<number | undefined>(undefined);
   const bootedRef = useRef(false);
@@ -293,7 +298,7 @@ export function Dashboard({
       flash(
         canUseSlot(slot, currentHub.entitlement)
           ? "Socket selected. Choose a module to snap into it."
-          : "Pro sockets unlock with Nexus Pro. Try “Preview Pro” to open them.",
+          : "Pro sockets unlock with Nexus Pro. Use “Preview all nodes” to illuminate all 50 branch slots.",
       );
     },
     [openNodes, openPanel, flash],
@@ -685,6 +690,7 @@ export function Dashboard({
       activeSocket: activeSocketIdx >= 0 ? activeSocketIdx : null,
       paused: surface.view !== "home",
       fromSetupExplosion: setupReveal,
+      showcaseAll: previewAllNodes,
     };
   }, [
     session.brain,
@@ -700,6 +706,7 @@ export function Dashboard({
     surface.panel,
     selected,
     setupReveal,
+    previewAllNodes,
   ]);
 
   const firstName = useMemo(() => {
@@ -955,6 +962,34 @@ export function Dashboard({
                 <NexusMark className="dash-brand-mark h-7 w-auto" />
               </Link>
             )}
+
+            {surface.view === "home" && !panel ? (
+              <div className="pointer-events-auto ml-auto mr-4 sm:mr-5">
+                <button
+                  type="button"
+                  onClick={togglePreviewAllNodes}
+                  aria-pressed={previewAllNodes}
+                  title="Temporary preview: light up all 50 nodes"
+                  className={`inline-flex h-9 items-center gap-2 rounded-full border px-3.5 text-[12.5px] font-medium tracking-[-0.01em] backdrop-blur-xl transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--land-gold)] ${
+                    previewAllNodes
+                      ? theme === "light"
+                        ? "border-[#b4780d]/60 bg-[#f0b54a]/22 text-[#14151a] shadow-[0_8px_24px_-10px_rgba(180,120,13,0.35)] hover:bg-[#f0b54a]/30"
+                        : "border-[#f0b54a]/65 bg-[#f0b54a]/18 text-[#fff6df] shadow-[0_8px_28px_-10px_rgba(240,181,74,0.35)] hover:bg-[#f0b54a]/26"
+                      : theme === "light"
+                        ? "border-[#0e0f12]/12 bg-white/82 text-[#14151a] shadow-[0_8px_24px_-12px_rgba(14,15,18,0.14)] hover:border-[#b4780d]/45 hover:bg-white/95"
+                        : "border-white/14 bg-[#101116]/78 text-[#f5f5f7] shadow-[0_10px_28px_-12px_rgba(0,0,0,0.65)] hover:border-[#f0b54a]/45 hover:bg-[#16171f]/90"
+                  }`}
+                >
+                  <Sparkles
+                    className={`size-3.5 shrink-0 ${
+                      theme === "light" ? "text-[#b4780d]" : "text-[#f0b54a]"
+                    }`}
+                    aria-hidden="true"
+                  />
+                  <span>{previewAllNodes ? "All nodes lit" : "Preview all nodes"}</span>
+                </button>
+              </div>
+            ) : null}
           </header>
 
           <NodeMenu
@@ -964,11 +999,13 @@ export function Dashboard({
             surface={surface}
             floating={usesFloatingMenu}
             open={usesFloatingMenu ? menuOpen : true}
+            previewAllNodes={previewAllNodes}
             onHome={goHome}
             onCommand={handleOpenCommand}
             onNodes={() => openNodes()}
             onPanel={openPanel}
             onReplaySetup={replaySetup}
+            onTogglePreviewAllNodes={togglePreviewAllNodes}
           />
           {isNetworkHome ? (
             <NodeRail hub={hub} surface={surface} onCommand={handleOpenCommand} onSlot={selectSlot} />
@@ -1025,7 +1062,8 @@ export function Dashboard({
                 onSelectSlot={(slotId) => setSelected(slotId)}
                 onSnap={(id, slotId) => void snap(id, slotId)}
                 onRelease={(id) => void release(id)}
-                onTogglePro={() => setStubPro(!hub.entitlement.isPro)}
+                previewAllNodes={previewAllNodes}
+                onTogglePreviewAllNodes={togglePreviewAllNodes}
                 onTransfer={(fromId, toId) => triggerNodeTransfer(fromId, toId)}
                 onOpenStudio={openStudio}
                 onOpenCinema={openCinema}
@@ -1106,15 +1144,17 @@ export function Dashboard({
                       hub={hub}
                       selected={selected}
                       notice={notice}
+                      previewAllNodes={previewAllNodes}
                       onSnap={snap}
                       onRelease={release}
-                      onTogglePro={() => setStubPro(!hub.entitlement.isPro)}
+                      onTogglePreviewAllNodes={togglePreviewAllNodes}
                     />
                   ) : panel === "settings" ? (
                     <SettingsPanel
                       viewer={{ ...viewer, name: viewerName }}
                       isPro={hub.entitlement.isPro}
-                      onTogglePro={() => setStubPro(!hub.entitlement.isPro)}
+                      previewAllNodes={previewAllNodes}
+                      onTogglePreviewAllNodes={togglePreviewAllNodes}
                       onOpenCommandConnections={() => openCommand({ tab: "connections", service: null, notice: null })}
                       onReplaySetup={() => void replaySetup()}
                     />

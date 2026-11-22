@@ -116,7 +116,7 @@ function summarizeEvent(event: NexusEvent): string {
     }
     case "entitlement:changed": {
       const p = event.payload as NexusEventMap["entitlement:changed"];
-      return p.isPro ? "Unlocked Nexus Pro preview sockets" : "Returned to Free tier (2 sockets)";
+      return p.isPro ? "Unlocked Nexus Pro sockets" : "Returned to Free tier (2 sockets)";
     }
     case "command:focus-changed": {
       const p = event.payload as NexusEventMap["command:focus-changed"];
@@ -151,11 +151,12 @@ type Props = {
   hub: ExtensionHubSnapshot;
   selectedSlotId: SlotId | null;
   notice: string | null;
+  previewAllNodes: boolean;
   onDismissNotice: () => void;
   onSelectSlot: (slotId: SlotId | null) => void;
   onSnap: (id: ExtensionId, slotId?: SlotId) => void;
   onRelease: (id: ExtensionId) => void;
-  onTogglePro: () => void;
+  onTogglePreviewAllNodes: () => void;
   onTransfer: (fromId: ExtensionId, toId?: ExtensionId) => void;
   onOpenStudio: () => void;
   onOpenCinema: () => void;
@@ -167,11 +168,12 @@ export function NodesView({
   hub,
   selectedSlotId,
   notice,
+  previewAllNodes,
   onDismissNotice,
   onSelectSlot,
   onSnap,
   onRelease,
-  onTogglePro,
+  onTogglePreviewAllNodes,
   onTransfer,
   onOpenStudio,
   onOpenCinema,
@@ -372,16 +374,17 @@ export function NodesView({
           <Button
             type="button"
             size="sm"
-            variant={entitlement.isPro ? "outline" : "default"}
-            onClick={onTogglePro}
+            variant={previewAllNodes ? "default" : "outline"}
+            aria-pressed={previewAllNodes}
+            onClick={onTogglePreviewAllNodes}
             className={
-              entitlement.isPro
-                ? "h-8 gap-1.5 rounded-full px-3 text-[12px]"
-                : "h-8 gap-1.5 rounded-full border border-[color:var(--land-gold)]/55 bg-[color:var(--land-gold)]/15 px-3 text-[12px] text-foreground hover:bg-[color:var(--land-gold)]/25"
+              previewAllNodes
+                ? "h-8 gap-1.5 rounded-full border border-[color:var(--land-gold)]/70 bg-[color:var(--land-gold)]/20 px-3 text-[12px] text-foreground hover:bg-[color:var(--land-gold)]/30"
+                : "h-8 gap-1.5 rounded-full border border-[color:var(--land-gold)]/45 bg-[color:var(--land-gold)]/10 px-3 text-[12px] text-foreground hover:bg-[color:var(--land-gold)]/20"
             }
           >
             <Sparkles className="size-3.5 text-[color:var(--land-gold)]" />
-            <span>{entitlement.isPro ? "Pro preview active" : "Preview Pro"}</span>
+            <span>{previewAllNodes ? "All nodes lit" : "Preview all nodes"}</span>
           </Button>
 
           <Tooltip>
@@ -466,6 +469,7 @@ export function NodesView({
                       : null
                   }
                   transfer={routeTransfer}
+                  showcaseAll={previewAllNodes}
                   mode="embedded"
                   bottomClearance={44}
                   onSelectNode={(idx) => {
@@ -699,18 +703,19 @@ export function NodesView({
                       </h3>
                       <p className="text-[13.5px] leading-relaxed text-muted-foreground">
                         {inspectedSlot.description}. Nexus Free includes {FREE_ACTIVE_EXTENSION_SLOTS}{" "}
-                        concurrent live sockets. Toggle Preview Pro to unlock all {slots.length}{" "}
-                        sockets right now and experiment with a full constellation.
+                        concurrent live sockets. Use Preview all nodes to illuminate all{" "}
+                        {slots.length} branch nodes across the network right now.
                       </p>
                     </div>
 
                     <Button
                       type="button"
-                      onClick={onTogglePro}
+                      aria-pressed={previewAllNodes}
+                      onClick={onTogglePreviewAllNodes}
                       className="h-10 gap-2 rounded-full bg-foreground px-5 text-[13px] text-background hover:bg-foreground/90"
                     >
                       <Sparkles className="size-4 text-[color:var(--land-gold)]" />
-                      <span>Preview Pro sockets</span>
+                      <span>{previewAllNodes ? "Exit all-nodes preview" : "Preview all nodes"}</span>
                     </Button>
                   </div>
                 )

@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, LogOut, Moon, RotateCcw, ShieldAlert, Sun } from "lucide-react";
+import { ArrowRight, LogOut, Moon, RotateCcw, ShieldAlert, Sparkles, Sun } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -27,7 +27,8 @@ import { useTheme } from "@/lib/theme";
 type Props = {
   viewer: Viewer;
   isPro: boolean;
-  onTogglePro: () => void;
+  previewAllNodes: boolean;
+  onTogglePreviewAllNodes: () => void;
   onOpenCommandConnections: () => void;
   onReplaySetup: () => void;
 };
@@ -36,7 +37,8 @@ type Props = {
 export function SettingsPanel({
   viewer,
   isPro,
-  onTogglePro,
+  previewAllNodes,
+  onTogglePreviewAllNodes,
   onOpenCommandConnections,
   onReplaySetup,
 }: Props) {
@@ -118,15 +120,17 @@ export function SettingsPanel({
             <Button
               type="button"
               size="sm"
-              variant={isPro ? "outline" : "default"}
-              onClick={onTogglePro}
+              variant={previewAllNodes ? "outline" : "default"}
+              aria-pressed={previewAllNodes}
+              onClick={onTogglePreviewAllNodes}
               className={
-                !isPro
-                  ? "border border-[color:var(--land-gold)]/55 bg-[color:var(--land-gold)]/18 text-[color:var(--land-ink)] hover:bg-[color:var(--land-gold)]/28"
-                  : undefined
+                previewAllNodes
+                  ? "gap-1.5 border-[color:var(--land-gold)]/65 bg-[color:var(--land-gold)]/16 text-foreground hover:bg-[color:var(--land-gold)]/24"
+                  : "gap-1.5 border border-[color:var(--land-gold)]/55 bg-[color:var(--land-gold)]/18 text-[color:var(--land-ink)] hover:bg-[color:var(--land-gold)]/28"
               }
             >
-              {isPro ? "Back to Free tier" : "Preview Pro"}
+              <Sparkles className="size-3.5 text-[color:var(--land-gold)]" />
+              <span>{previewAllNodes ? "Exit all-nodes preview" : "Preview all nodes"}</span>
             </Button>
             <form action={signOutAction}>
               <Button type="submit" size="sm" variant="outline" className="gap-1.5">
