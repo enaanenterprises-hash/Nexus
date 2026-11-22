@@ -219,6 +219,7 @@ function TierMenu({
 }) {
   const [tierMenuOpen, setTierMenuOpen] = useState(false);
   const showTierMenu = tierMenuOpen && !disabled;
+  const filledPips = used > 0 ? Math.max(1, Math.min(5, Math.round((used / Math.max(cap, 1)) * 5))) : 0;
 
   return (
     <div className="relative flex w-full justify-center">
@@ -244,11 +245,11 @@ function TierMenu({
                     aria-label={`Plan & account menu (${used} of ${cap} sockets used)`}
                   >
                     <span className="flex gap-[3px]" aria-hidden>
-                      {Array.from({ length: cap }, (_, i) => (
+                      {Array.from({ length: 5 }, (_, i) => (
                         <span
                           key={i}
                           className={`h-1 w-1.5 rounded-full ${
-                            i < used ? "bg-[color:var(--land-gold)]" : "bg-[color:var(--land-line)]"
+                            i < filledPips ? "bg-[color:var(--land-gold)]" : "bg-[color:var(--land-line)]"
                           }`}
                         />
                       ))}
@@ -285,19 +286,11 @@ function TierMenu({
                   ? `${used} of ${hub.slots.length} sockets in use`
                   : `${used} of ${FREE_ACTIVE_EXTENSION_SLOTS} free sockets in use`}
               </p>
-              <div className="mt-2.5 flex gap-1" aria-hidden>
-                {hub.slots.map((s) => (
-                  <span
-                    key={s.id}
-                    className={`h-1 flex-1 rounded-full ${
-                      s.occupiedBy
-                        ? "bg-[color:var(--land-gold)]"
-                        : canUseSlot(s, hub.entitlement)
-                          ? "bg-foreground/20"
-                          : "bg-foreground/10"
-                    }`}
-                  />
-                ))}
+              <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-foreground/10" aria-hidden>
+                <div
+                  className="h-full rounded-full bg-[color:var(--land-gold)] transition-all duration-300"
+                  style={{ width: `${Math.min(100, (used / Math.max(cap, 1)) * 100)}%` }}
+                />
               </div>
             </DropdownMenuLabel>
           </DropdownMenuGroup>
@@ -414,6 +407,11 @@ export const NodeRail = memo(function NodeRail({
     };
   }, [open]);
 
+  const occupiedSlots = hub.slots.filter((slot) => Boolean(slot.occupiedBy));
+  const firstOpenSlot = hub.slots.find((slot) => !slot.occupiedBy && canUseSlot(slot, hub.entitlement));
+  const firstLockedSlot = hub.slots.find((slot) => !slot.occupiedBy && !canUseSlot(slot, hub.entitlement));
+  const actionSlot = firstOpenSlot ?? firstLockedSlot ?? null;
+
   return (
     <div
       ref={dockRef}
@@ -437,10 +435,14 @@ export const NodeRail = memo(function NodeRail({
       >
         <span className="node-rail-pill" aria-hidden>
           <span className="node-rail-pip node-rail-pip--core" />
-          {hub.slots.map((slot) => {
-            const state = slot.occupiedBy ? "live" : canUseSlot(slot, hub.entitlement) ? "open" : "locked";
-            return <span key={slot.id} className={`node-rail-pip node-rail-pip--${state}`} />;
-          })}
+          {occupiedSlots.slice(0, 8).map((slot) => (
+            <span key={slot.id} className="node-rail-pip node-rail-pip--live" />
+          ))}
+          {actionSlot ? (
+            <span
+              className={`node-rail-pip node-rail-pip--${firstOpenSlot ? "open" : "locked"}`}
+            />
+          ) : null}
         </span>
       </button>
 
@@ -466,21 +468,14 @@ export const NodeRail = memo(function NodeRail({
 
         <span className="node-menu-divider" aria-hidden />
 
-        {hub.slots.map((slot) => {
-          const ext = slot.occupiedBy ? hub.extensions.find((e) => e.manifest.id === slot.occupiedBy) : undefined;
-          const openSlot = canUseSlot(slot, hub.entitlement);
-          const name = ext?.manifest.name ?? placeholderName(slot.placeholderKey);
-          const state = ext ? "live" : openSlot ? "open" : "locked";
+        {occupiedSlots.map((slot) => {
+          const ext = hub.extensions.find((e) => e.manifest.id === slot.occupiedBy);
+          if (!ext) return null;
+          const name = ext.manifest.name;
           const selected =
-            ext &&
-            (isPanel(surface.panel, { extension: ext.manifest.id }) ||
-              (ext.manifest.id === STUDIO_NODE_ID && surface.view === "studio") ||
-              (ext.manifest.id === CINEMA_NODE_ID && surface.view === "cinema"));
-          const tip = ext
-            ? `${name} · live`
-            : openSlot
-              ? `${slot.tier === "pro" ? "Pro" : "Free"} socket · open (${name})`
-              : `Pro socket · ${name}`;
+            isPanel(surface.panel, { extension: ext.manifest.id }) ||
+            (ext.manifest.id === STUDIO_NODE_ID && surface.view === "studio") ||
+            (ext.manifest.id === CINEMA_NODE_ID && surface.view === "cinema");
           return (
             <Tooltip key={slot.id}>
               <TooltipTrigger
@@ -489,25 +484,48 @@ export const NodeRail = memo(function NodeRail({
                     type="button"
                     tabIndex={open ? 0 : -1}
                     onClick={() => onSlot(slot.id)}
-                    className={`node-rail-button node-rail-button--${state} ${selected ? "node-rail-button--on" : ""}`}
-                    aria-label={ext ? `${name}, wired in` : openSlot ? `Open ${slot.tier} socket, reserved for ${name}` : `Locked Pro socket, reserved for ${name}`}
+                    className={`node-rail-button node-rail-button--live ${selected ? "node-rail-button--on" : ""}`}
+                    aria-label={`${name}, wired in`}
                   >
-                    {ext ? (
-                      <span className="text-[11px] font-semibold">{ext.manifest.monogram ?? name.slice(0, 2)}</span>
-                    ) : openSlot ? (
-                      <PlusIcon size={14} />
-                    ) : (
-                      <LockIcon size={13} />
-                    )}
+                    <span className="text-[11px] font-semibold">
+                      {ext.manifest.monogram ?? name.slice(0, 2)}
+                    </span>
                   </button>
                 }
               />
               <TooltipContent side="left" sideOffset={10}>
-                {tip}
+                {name} · live
               </TooltipContent>
             </Tooltip>
           );
         })}
+
+        {actionSlot ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  tabIndex={open ? 0 : -1}
+                  onClick={() => onSlot(actionSlot.id)}
+                  className={`node-rail-button node-rail-button--${firstOpenSlot ? "open" : "locked"}`}
+                  aria-label={
+                    firstOpenSlot
+                      ? `Add extension to open slot (${placeholderName(firstOpenSlot.placeholderKey)})`
+                      : `Unlock more branch sockets with Pro`
+                  }
+                >
+                  {firstOpenSlot ? <PlusIcon size={14} /> : <LockIcon size={13} />}
+                </button>
+              }
+            />
+            <TooltipContent side="left" sideOffset={10}>
+              {firstOpenSlot
+                ? `Add node · ${hub.slots.length} total slots`
+                : `Preview Pro · ${hub.slots.length} branch slots`}
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
       </nav>
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   ArrowRight,
@@ -27,6 +27,7 @@ import {
   PLANNED_EXTENSIONS,
   canActivateAnother,
   canUseSlot,
+  computeExtensionLinks,
   nexusBus,
   placeholderName,
   type ExtensionCapability,
@@ -36,6 +37,9 @@ import {
   type NexusEventMap,
   type SlotId,
 } from "@/lib/extensions";
+import { useTheme } from "@/lib/theme";
+import { BranchingNetworkCanvas, type BranchNodeMeta } from "./BranchingNetworkCanvas";
+import type { StageTransfer } from "./NeuralStage";
 
 const CONTRACT_URL = "https://github.com/enaanenterprises-hash/Nexus/blob/main/docs/extensions.md";
 
@@ -143,24 +147,6 @@ function summarizeEvent(event: NexusEvent): string {
   }
 }
 
-/** Coordinates for the 5 orbital sockets arranged in a serene arch above the central Nexus Core. */
-const CONSTELLATION_CORE = { x: 300, y: 248 };
-const CONSTELLATION_SOCKETS = [
-  { x: 96, y: 174 },
-  { x: 186, y: 82 },
-  { x: 300, y: 50 },
-  { x: 414, y: 82 },
-  { x: 504, y: 174 },
-] as const;
-
-function conduitPath(to: { x: number; y: number }): string {
-  const cx1 = CONSTELLATION_CORE.x + (to.x - CONSTELLATION_CORE.x) * 0.14;
-  const cy1 = CONSTELLATION_CORE.y - 68;
-  const cx2 = to.x - (to.x - CONSTELLATION_CORE.x) * 0.22;
-  const cy2 = to.y + 42;
-  return `M ${CONSTELLATION_CORE.x} ${CONSTELLATION_CORE.y} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${to.x} ${to.y}`;
-}
-
 type Props = {
   hub: ExtensionHubSnapshot;
   selectedSlotId: SlotId | null;
@@ -191,6 +177,7 @@ export function NodesView({
   onOpenCinema,
   onClose,
 }: Props) {
+  const { theme } = useTheme();
   const { entitlement, slots, extensions } = hub;
   const activeSlots = slots.filter((s) => s.occupiedBy !== null);
   const maxSockets = entitlement.isPro ? slots.length : FREE_ACTIVE_EXTENSION_SLOTS;
@@ -202,11 +189,38 @@ export function NodesView({
   // Default to the user-selected socket, or the first occupied socket, or slot 0
   const effectiveSlotId =
     selectedSlotId ?? activeSlots[0]?.id ?? slots[0]?.id ?? null;
-  const inspectedSlot = slots.find((s) => s.id === effectiveSlotId) ?? slots[0] ?? null;
+  const inspectedSlotIdx = Math.max(
+    0,
+    slots.findIndex((s) => s.id === effectiveSlotId),
+  );
+  const inspectedSlot = slots[inspectedSlotIdx] ?? slots[0] ?? null;
   const inspectedExt = inspectedSlot?.occupiedBy
     ? extensions.find((e) => e.manifest.id === inspectedSlot.occupiedBy) ?? null
     : null;
   const inspectedSlotUsable = inspectedSlot ? canUseSlot(inspectedSlot, entitlement) : false;
+
+  const extensionLinks = useMemo(
+    () => computeExtensionLinks(slots, extensions),
+    [slots, extensions],
+  );
+
+  const branchNodes = useMemo<BranchNodeMeta[]>(
+    () =>
+      slots.map((slot) => {
+        const ext = slot.occupiedBy
+          ? extensions.find((e) => e.manifest.id === slot.occupiedBy)
+          : undefined;
+        const usable = canUseSlot(slot, entitlement);
+        return {
+          slotId: slot.id,
+          status: ext ? "occupied" : usable ? "open" : "locked",
+          monogram: ext ? (ext.manifest.monogram ?? ext.manifest.name.slice(0, 2)) : "",
+          name: ext ? ext.manifest.name : usable ? "Open slot" : "Pro branch slot",
+          tierLabel: slot.tier === "pro" ? "Pro socket" : "Free socket",
+        };
+      }),
+    [slots, extensions, entitlement],
+  );
 
   // Catalog search & filter state
   const [search, setSearch] = useState("");
@@ -230,8 +244,7 @@ export function NodesView({
 
   const [routeFromId, setRouteFromId] = useState<string>("");
   const [routeToId, setRouteToId] = useState<string>("__core__");
-  const [activePulseSockets, setActivePulseSockets] = useState<number[]>([]);
-  const pulseTimerRef = useRef<number | undefined>(undefined);
+  const [routeTransfer, setRouteTransfer] = useState<StageTransfer | null>(null);
 
   const effectiveFromId = liveExtensions.some((item) => item.ext.manifest.id === routeFromId)
     ? routeFromId
@@ -259,23 +272,28 @@ export function NodesView({
     });
     return () => {
       unsub();
-      window.clearTimeout(pulseTimerRef.current);
     };
   }, []);
 
   function fireRoute(fromId: ExtensionId, toId?: ExtensionId) {
     const fromIdx = slots.findIndex((s) => s.occupiedBy === fromId);
     const toIdx = toId ? slots.findIndex((s) => s.occupiedBy === toId) : -1;
-    const indices = [fromIdx, toIdx].filter((i) => i >= 0);
-    setActivePulseSockets(indices);
-    window.clearTimeout(pulseTimerRef.current);
-    pulseTimerRef.current = window.setTimeout(() => setActivePulseSockets([]), 1900);
 
     onTransfer(fromId, toId);
     const fromName = extensions.find((e) => e.manifest.id === fromId)?.manifest.name ?? "Node";
     const toName = toId
       ? (extensions.find((e) => e.manifest.id === toId)?.manifest.name ?? "Node")
       : "Command Core";
+
+    if (fromIdx >= 0) {
+      setRouteTransfer((prev) => ({
+        fromSocket: fromIdx,
+        toSocket: toIdx,
+        label: `${fromName} → ${toName}`,
+        serial: (prev?.serial ?? 0) + 1,
+      }));
+    }
+
     nexusBus.emit(
       "nexus:proactive",
       { suggestion: `Signal routed: ${fromName} → ${toName}`, at: new Date().toISOString() },
@@ -333,27 +351,22 @@ export function NodesView({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Socket Occupancy Indicator */}
+          {/* Compact Scalable Socket Occupancy Bar */}
           <div
-            className="hidden items-center gap-1 rounded-full border border-border bg-card px-2.5 py-1.5 md:flex"
+            className="hidden items-center gap-2 rounded-full border border-border bg-card px-2.5 py-1.5 md:flex"
             aria-label={`${activeSlots.length} of ${maxSockets} sockets occupied`}
           >
-            {slots.map((s) => {
-              const live = Boolean(s.occupiedBy);
-              const open = canUseSlot(s, entitlement);
-              return (
-                <span
-                  key={s.id}
-                  className={`h-1.5 w-4 rounded-full transition-colors ${
-                    live
-                      ? "bg-[color:var(--land-gold)]"
-                      : open
-                        ? "bg-foreground/20"
-                        : "bg-foreground/8"
-                  }`}
-                />
-              );
-            })}
+            <div className="h-1.5 w-16 overflow-hidden rounded-full bg-foreground/12">
+              <div
+                className="h-full rounded-full bg-[color:var(--land-gold)] transition-all duration-300"
+                style={{
+                  width: `${Math.min(100, (activeSlots.length / Math.max(maxSockets, 1)) * 100)}%`,
+                }}
+              />
+            </div>
+            <span className="font-mono text-[10.5px] tabular-nums text-muted-foreground">
+              {activeSlots.length}/{maxSockets}
+            </span>
           </div>
 
           <Button
@@ -413,7 +426,7 @@ export function NodesView({
 
           {/* Row 1: Spatial Socket Constellation + Precision Inspector */}
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
-            {/* Spatial Socket Constellation */}
+            {/* Spatial Branching Socket Constellation */}
             <div className="nodes-constellation-stage flex flex-col justify-between p-5 sm:p-6">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -421,8 +434,8 @@ export function NodesView({
                     Socket topology
                   </h3>
                   <p className="mt-1 text-[13px] text-muted-foreground">
-                    Select any orbital socket to inspect capabilities, snap modules in, or route a
-                    live signal across the core.
+                    Hover or select any branch node to trace live links, inspect capabilities, or
+                    snap modules in.
                   </p>
                 </div>
                 <Badge
@@ -433,203 +446,33 @@ export function NodesView({
                 </Badge>
               </div>
 
-              {/* Interactive SVG Constellation */}
-              <div className="relative my-3 w-full">
-                <svg
-                  viewBox="0 0 600 300"
-                  className="mx-auto block h-auto w-full max-w-[600px] overflow-visible"
-                  role="img"
-                  aria-label="Nexus 5-socket constellation map"
-                >
-                  {/* Subtle orbital reference arc */}
-                  <path
-                    d="M 96 174 A 220 220 0 0 1 504 174"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeOpacity="0.08"
-                    strokeWidth="1"
-                    strokeDasharray="3 6"
-                  />
-
-                  {/* Conduits from Core to all 5 sockets */}
-                  {slots.map((slot, idx) => {
-                    const pt = CONSTELLATION_SOCKETS[idx];
-                    if (!pt) return null;
-                    const occupied = Boolean(slot.occupiedBy);
-                    const usable = canUseSlot(slot, entitlement);
-                    const isSelected = inspectedSlot?.id === slot.id;
-                    const isPulsing = activePulseSockets.includes(idx);
-                    const d = conduitPath(pt);
-
-                    return (
-                      <g key={slot.id}>
-                        {/* Base hairline conduit */}
-                        <path
-                          d={d}
-                          fill="none"
-                          stroke={occupied ? "var(--land-gold)" : "currentColor"}
-                          strokeOpacity={
-                            isPulsing ? 0.9 : occupied ? (isSelected ? 0.65 : 0.36) : usable ? 0.14 : 0.08
-                          }
-                          strokeWidth={isPulsing ? 2.4 : occupied ? (isSelected ? 1.8 : 1.35) : 1}
-                          strokeDasharray={occupied ? undefined : "4 5"}
-                          style={{ transition: "stroke-opacity 240ms ease, stroke-width 240ms ease" }}
-                        />
-                        {/* Animated travelling energy dashes on live conduits */}
-                        {occupied ? (
-                          <path
-                            d={d}
-                            fill="none"
-                            stroke="var(--land-gold)"
-                            strokeOpacity={isPulsing ? 1 : 0.72}
-                            strokeWidth={isPulsing ? 2.8 : 1.5}
-                            className="nodes-conduit-active"
-                          />
-                        ) : null}
-                      </g>
-                    );
-                  })}
-
-                  {/* Central Nexus Core Medallion */}
-                  <g transform={`translate(${CONSTELLATION_CORE.x}, ${CONSTELLATION_CORE.y})`}>
-                    <circle
-                      r="34"
-                      fill="var(--land-gold)"
-                      fillOpacity="0.08"
-                      stroke="var(--land-gold)"
-                      strokeOpacity="0.34"
-                      strokeWidth="1"
-                    />
-                    <circle
-                      r="24"
-                      fill="var(--card)"
-                      stroke="var(--land-gold)"
-                      strokeOpacity="0.72"
-                      strokeWidth="1.25"
-                    />
-                    <g transform="translate(-11, -11) scale(0.22)" fill="var(--land-gold)">
-                      <path d="M58.5 7.5 L85.5 23 L85.5 52 L58.5 52 Z" />
-                      <path d="M58.5 7.5 L85.5 23 L85.5 52 L58.5 52 Z" transform="rotate(120 50 52)" />
-                      <path d="M58.5 7.5 L85.5 23 L85.5 52 L58.5 52 Z" transform="rotate(240 50 52)" />
-                    </g>
-                    <text
-                      y="47"
-                      textAnchor="middle"
-                      fill="currentColor"
-                      fillOpacity="0.58"
-                      fontSize="10.5"
-                      fontWeight="500"
-                    >
-                      Nexus Core
-                    </text>
-                  </g>
-
-                  {/* 5 Interactive Orbital Sockets */}
-                  {slots.map((slot, idx) => {
-                    const pt = CONSTELLATION_SOCKETS[idx];
-                    if (!pt) return null;
-                    const ext = slot.occupiedBy
-                      ? extensions.find((e) => e.manifest.id === slot.occupiedBy) ?? null
-                      : null;
-                    const usable = canUseSlot(slot, entitlement);
-                    const isSelected = inspectedSlot?.id === slot.id;
-                    const isPulsing = activePulseSockets.includes(idx);
-                    const label = ext
-                      ? ext.manifest.name
-                      : usable
-                        ? `Open · ${slot.tier === "pro" ? "Pro" : "Free"}`
-                        : placeholderName(slot.placeholderKey);
-                    const monogram = ext ? (ext.manifest.monogram ?? ext.manifest.name.slice(0, 2)) : "";
-
-                    return (
-                      <g
-                        key={slot.id}
-                        transform={`translate(${pt.x}, ${pt.y})`}
-                        onClick={() => onSelectSlot(slot.id)}
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`${slot.label}: ${label}`}
-                        aria-pressed={isSelected}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            onSelectSlot(slot.id);
-                          }
-                        }}
-                        className="cursor-pointer outline-none"
-                      >
-                        {/* Pulse ring when selected or routing signal */}
-                        {isSelected || isPulsing ? (
-                          <circle
-                            r="29"
-                            fill="none"
-                            stroke="var(--land-gold)"
-                            strokeOpacity={isPulsing ? 0.78 : 0.45}
-                            strokeWidth="1.25"
-                            className={isPulsing ? "nodes-signal-ring" : undefined}
-                          />
-                        ) : null}
-
-                        {/* Outer reticle ring */}
-                        <circle
-                          r="23"
-                          fill="var(--card)"
-                          stroke={ext ? "var(--land-gold)" : "currentColor"}
-                          strokeOpacity={
-                            isSelected ? 0.92 : ext ? 0.7 : usable ? 0.3 : 0.16
-                          }
-                          strokeWidth={isSelected ? 1.85 : ext ? 1.4 : 1.15}
-                          strokeDasharray={ext ? undefined : usable ? "3 3" : "2 4"}
-                          style={{ transition: "stroke-opacity 200ms ease, stroke-width 200ms ease" }}
-                        />
-
-                        {/* Inner symbol */}
-                        {ext ? (
-                          <text
-                            y="4"
-                            textAnchor="middle"
-                            fill="currentColor"
-                            fontSize="11.5"
-                            fontWeight="600"
-                            letterSpacing="0.02em"
-                          >
-                            {monogram}
-                          </text>
-                        ) : usable ? (
-                          <text
-                            y="5"
-                            textAnchor="middle"
-                            fill="var(--land-gold)"
-                            fontSize="16"
-                            fontWeight="400"
-                          >
-                            +
-                          </text>
-                        ) : (
-                          <circle
-                            r="3.5"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeOpacity="0.4"
-                            strokeWidth="1.2"
-                          />
-                        )}
-
-                        {/* Socket caption */}
-                        <text
-                          y="-31"
-                          textAnchor="middle"
-                          fill="currentColor"
-                          fillOpacity={ext || isSelected ? 0.94 : 0.56}
-                          fontSize="11"
-                          fontWeight={ext || isSelected ? "600" : "500"}
-                        >
-                          {label}
-                        </text>
-                      </g>
-                    );
-                  })}
-                </svg>
+              {/* Interactive 50-Node Branching Canvas */}
+              <div className="relative my-3 h-[340px] w-full overflow-hidden rounded-2xl border border-border/70 sm:h-[390px]">
+                <BranchingNetworkCanvas
+                  theme={theme}
+                  nodes={branchNodes}
+                  links={extensionLinks}
+                  energy={0.32}
+                  activeNodeIndex={inspectedSlotIdx}
+                  snap={
+                    hub.lastSnapped
+                      ? {
+                          index: Math.max(
+                            0,
+                            slots.findIndex((s) => s.id === hub.lastSnapped!.slotId),
+                          ),
+                          serial: hub.lastSnapped.serial,
+                        }
+                      : null
+                  }
+                  transfer={routeTransfer}
+                  mode="embedded"
+                  bottomClearance={44}
+                  onSelectNode={(idx) => {
+                    const targetSlot = slots[idx];
+                    if (targetSlot) onSelectSlot(targetSlot.id);
+                  }}
+                />
               </div>
 
               {/* Interactive Signal Router Bar */}

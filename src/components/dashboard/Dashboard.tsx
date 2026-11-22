@@ -29,6 +29,7 @@ import { emitStudioTakeRouted } from "@/lib/studio/studio-client";
 import type { StudioRecording, StudioRecordingContentV1 } from "@/lib/studio/types";
 import {
   canUseSlot,
+  computeExtensionLinks,
   extensionRegistry,
   nexusBus,
   setStubPro,
@@ -651,6 +652,11 @@ export function Dashboard({
     [hub.slots, hub.entitlement],
   );
 
+  const extensionLinks = useMemo(
+    () => computeExtensionLinks(hub.slots, hub.extensions),
+    [hub.slots, hub.extensions],
+  );
+
   const signal = useMemo<StageSignal>(() => {
     const snapIndex = hub.lastSnapped ? hub.slots.findIndex((s) => s.id === hub.lastSnapped!.slotId) : -1;
     const activeExtId = typeof surface.panel === "object" && surface.panel ? surface.panel.extension : null;
@@ -671,6 +677,7 @@ export function Dashboard({
     return {
       brain: session.brain,
       sockets: visuals,
+      links: extensionLinks,
       theme,
       socketLabels,
       snap: hub.lastSnapped && snapIndex >= 0 ? { index: snapIndex, serial: hub.lastSnapped.serial } : null,
@@ -682,6 +689,7 @@ export function Dashboard({
   }, [
     session.brain,
     visuals,
+    extensionLinks,
     theme,
     hub.lastSnapped,
     hub.slots,

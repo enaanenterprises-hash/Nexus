@@ -34,7 +34,15 @@ register(
 );
 
 const ext = await import("../src/lib/extensions/index.ts");
-const { ExtensionBus, ExtensionRegistry, NEXUS_EXTENSION_API_VERSION, setStubPro, validateManifest } = ext;
+const {
+  EXTENSION_SLOT_BLUEPRINT,
+  ExtensionBus,
+  ExtensionRegistry,
+  NEXUS_EXTENSION_API_VERSION,
+  computeExtensionLinks,
+  setStubPro,
+  validateManifest,
+} = ext;
 const { STUDIO_NODE_ID, studioExtension } = await import("../src/extensions/studio/node.ts");
 const { CINEMA_NODE_ID, cinemaExtension } = await import("../src/extensions/cinema/node.ts");
 
@@ -434,6 +442,27 @@ assert(suiteSeen.cinema.includes("studio:smart-cuts"), "Cinema receives studio:s
 assert(suiteSeen.cinema.includes("studio:rhythm-grid"), "Cinema receives studio:rhythm-grid with content:studio.recording:read");
 assert(!suiteSeen.blind.includes("studio:smart-cuts"), "nodes without content:studio.recording:read never see smart-cuts");
 assert(!suiteSeen.blind.includes("studio:rhythm-grid"), "nodes without content:studio.recording:read never see rhythm-grid");
+
+// 50-slot branching hub blueprint & capability inter-node links
+assert(EXTENSION_SLOT_BLUEPRINT.length === 50, "hub defines 50 extension slots (2 free + 48 Pro)");
+await suiteReg.register({ manifest: manifest("com.acme.isolated", { capabilities: ["custom"] }) });
+await suiteReg.activate("com.acme.isolated");
+const linkSnap = suiteReg.getSnapshot();
+const computedLinks = computeExtensionLinks(linkSnap.slots, linkSnap.extensions);
+const studioCinemaLink = computedLinks.find(
+  (l) =>
+    ((l.fromId === STUDIO_NODE_ID && l.toId === CINEMA_NODE_ID) ||
+      (l.fromId === CINEMA_NODE_ID && l.toId === STUDIO_NODE_ID)),
+);
+assert(
+  studioCinemaLink?.kind === "content" && studioCinemaLink?.channel === "studio.recording",
+  "computeExtensionLinks links Studio and Cinema over studio.recording content envelope",
+);
+assert(
+  !computedLinks.some((l) => l.fromId === "com.acme.isolated" || l.toId === "com.acme.isolated"),
+  "computeExtensionLinks does not link extensions with no shared capability",
+);
+
 setStubPro(false);
 
 if (failed > 0) process.exit(1);

@@ -34,11 +34,18 @@ export { ContentClientError, createContentClient, type ContentClient } from "./c
 export {
   EXTENSION_SLOT_BLUEPRINT,
   PLANNED_EXTENSIONS,
+  PRO_EXTENSION_SLOTS,
+  TOTAL_EXTENSION_SLOTS,
   createEmptySlots,
   freeSlotCount,
   placeholderName,
   type PlannedExtension,
 } from "./slots";
+export {
+  computeExtensionLinks,
+  type ExtensionLink,
+  type ExtensionLinkKind,
+} from "./links";
 export { NEXUS_EXTENSION_API_VERSION } from "./types";
 export type {
   ActivationFailure,

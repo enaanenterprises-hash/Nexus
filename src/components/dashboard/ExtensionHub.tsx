@@ -69,19 +69,18 @@ export function ExtensionHub({ hub, selected, notice, onSnap, onRelease, onToggl
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex gap-1.5" aria-hidden>
-            {slots.map((s) => (
-              <span
-                key={s.id}
-                className={`h-1 flex-1 rounded-full ${
-                  s.occupiedBy
-                    ? "bg-[color:var(--land-gold)]"
-                    : canUseSlot(s, entitlement)
-                      ? "bg-foreground/20"
-                      : "bg-foreground/10"
-                }`}
-              />
-            ))}
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-foreground/10" aria-hidden>
+            <div
+              className="h-full rounded-full bg-[color:var(--land-gold)] transition-all duration-300"
+              style={{
+                width: `${Math.min(
+                  100,
+                  (active.length /
+                    Math.max(entitlement.isPro ? slots.length : FREE_ACTIVE_EXTENSION_SLOTS, 1)) *
+                    100,
+                )}%`,
+              }}
+            />
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
