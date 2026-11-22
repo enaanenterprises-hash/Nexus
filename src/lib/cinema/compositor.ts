@@ -165,6 +165,13 @@ function drawBackground(
   width: number,
   height: number,
 ): void {
+  // Fast zero-allocation path for plain solid darkroom backgrounds
+  if (bg.type === "solid" && bg.grain <= 0.005) {
+    ctx.fillStyle = bg.colorA;
+    ctx.fillRect(0, 0, width, height);
+    return;
+  }
+
   const hasOffscreen = typeof OffscreenCanvas !== "undefined";
   if (!hasOffscreen && typeof document === "undefined") {
     paintBackgroundDirect(ctx, bg, width, height);

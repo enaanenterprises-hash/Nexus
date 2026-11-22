@@ -8828,6 +8828,10 @@ html[data-dash-theme="light"] .cinema-range::-webkit-slider-thumb {
   border: 1.5px solid #09090b;
 }
 
+.cinema-scroll {
+  overscroll-behavior: contain;
+}
+
 .cinema-scroll::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -8841,7 +8845,13 @@ html[data-dash-theme="light"] .cinema-range::-webkit-slider-thumb {
 .dash[data-theme="light"] .cinema-scroll::-webkit-scrollbar-thumb,
 html[data-dash-theme="light"] .cinema-scroll::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.cinema-scroll::-webkit-scrollbar-thumb:hover,
+.dash[data-theme="light"] .cinema-scroll::-webkit-scrollbar-thumb:hover,
+html[data-dash-theme="light"] .cinema-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.32);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -94,10 +95,11 @@ function snapPercent(val: number, targets: number[], threshold = 1.6): { value: 
   return { value: val, snapped: null };
 }
 
-export function CinemaStage({
+export const CinemaStage = memo(function CinemaStage({
   project,
   playheadMs,
   playheadRef,
+  subscribePlayhead,
   playing,
   loopEnabled,
   showSafeGuides,
@@ -128,6 +130,7 @@ export function CinemaStage({
   project: CinemaProject;
   playheadMs: number;
   playheadRef: React.RefObject<number>;
+  subscribePlayhead: (listener: (ms: number) => void) => () => void;
   playing: boolean;
   loopEnabled: boolean;
   showSafeGuides: boolean;
@@ -156,6 +159,8 @@ export function CinemaStage({
   renderCanvasRef: React.RefObject<HTMLCanvasElement | null>;
 }) {
   const viewportRef = useRef<HTMLDivElement>(null);
+  const timecodeElRef = useRef<HTMLSpanElement>(null);
+  const meterBarsRef = useRef<Array<HTMLSpanElement | null>>([]);
   const [viewportSize, setViewportSize] = useState({ w: 800, h: 460 });
   const [drag, setDrag] = useState<DragMode | null>(null);
   const [snapGuides, setSnapGuides] = useState<{ x: number | null; y: number | null }>({
@@ -163,9 +168,9 @@ export function CinemaStage({
     y: null,
   });
   const [inlineEditClipId, setInlineEditClipId] = useState<string | null>(null);
-  const [meterLevel, setMeterLevel] = useState(0);
   const binsRef = useRef<Float32Array>(new Float32Array(32));
-  const drawStateRef = useRef({ project, drag, showSafeGuides, playing });
+  const pendingPaintRafRef = useRef<number | null>(null);
+  const drawStateRef = useRef({ project, drag, showSafeGuides, playing, displayW: 800, displayH: 450 });
 
   useEffect(() => {
     const el = viewportRef.current;
@@ -197,13 +202,41 @@ export function CinemaStage({
     };
   }, [canvasZoom, project.height, project.width, viewportSize.h, viewportSize.w]);
 
+  const updateMeterDom = useCallback((level: number) => {
+    const bars = meterBarsRef.current;
+    for (let idx = 0; idx < 10; idx++) {
+      const bar = bars[idx];
+      if (!bar) continue;
+      const lit = level >= (idx + 1) / 10;
+      bar.style.backgroundColor = lit
+        ? idx >= 8
+          ? "var(--cinema-playhead)"
+          : "rgba(244, 244, 246, 0.85)"
+        : "rgba(244, 244, 246, 0.15)";
+    }
+  }, []);
+
   const paintAt = useCallback(
     (targetMs: number) => {
       const canvas = renderCanvasRef.current;
       if (!canvas) return;
       const st = drawStateRef.current;
-      if (canvas.width !== st.project.width) canvas.width = st.project.width;
-      if (canvas.height !== st.project.height) canvas.height = st.project.height;
+      const dpr = typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
+      const desiredScale =
+        Math.max(
+          st.displayW / Math.max(1, st.project.width),
+          st.displayH / Math.max(1, st.project.height),
+        ) * dpr;
+      const minScale = Math.min(
+        1,
+        540 / Math.max(1, Math.max(st.project.width, st.project.height)),
+      );
+      const scale = clamp(desiredScale, minScale, 1);
+      const targetW = Math.max(2, Math.round(st.project.width * scale));
+      const targetH = Math.max(2, Math.round(st.project.height * scale));
+
+      if (canvas.width !== targetW) canvas.width = targetW;
+      if (canvas.height !== targetH) canvas.height = targetH;
       const ctx = canvas.getContext("2d", { alpha: false }) ?? canvas.getContext("2d");
       if (!ctx) return;
 
@@ -223,47 +256,89 @@ export function CinemaStage({
           }
         : st.project;
 
+      // Scale preview canvas to display pixel grid (4x-6x fewer pixels than 1080p full-frame raster)
+      ctx.setTransform(targetW / st.project.width, 0, 0, targetH / st.project.height, 0, 0);
       renderCinemaFrame(ctx, activeProject, targetMs, {
         mediaElements: mediaElementsRef.current,
         frequencyBins: st.playing && engine ? binsRef.current : undefined,
         showSafeGuides: st.showSafeGuides,
         isPlaying: st.playing,
       });
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
     },
     [audioEngineRef, mediaElementsRef, renderCanvasRef],
   );
 
   useEffect(() => {
-    drawStateRef.current = { project, drag, showSafeGuides, playing };
+    drawStateRef.current = {
+      project,
+      drag,
+      showSafeGuides,
+      playing,
+      displayW: displayDims.w,
+      displayH: displayDims.h,
+    };
     redrawRef.current = () => {
       paintAt(playheadRef.current);
     };
     if (!playing) {
-      paintAt(playheadMs);
-    }
-  }, [drag, mediaVersion, paintAt, playheadMs, playheadRef, playing, project, redrawRef, showSafeGuides]);
-
-  // Persistent 60fps RAF loop when playing (throttles React meter updates to ~16Hz to avoid UI churn)
-  useEffect(() => {
-    if (!playing) return;
-    let rafId = 0;
-    let lastMeterPerf = 0;
-    const tick = (now: number) => {
-      if (now - lastMeterPerf >= 60) {
-        lastMeterPerf = now;
-        const engine = audioEngineRef.current;
-        setMeterLevel(engine ? engine.getPeakLevel() : 0);
+      updateMeterDom(0);
+      if (timecodeElRef.current) {
+        timecodeElRef.current.textContent = fmtTimecode(playheadRef.current, project.fps);
       }
       paintAt(playheadRef.current);
-      rafId = window.requestAnimationFrame(tick);
-    };
-    rafId = window.requestAnimationFrame(tick);
-    return () => {
-      if (rafId) window.cancelAnimationFrame(rafId);
-    };
-  }, [audioEngineRef, paintAt, playheadRef, playing]);
+    }
+  }, [
+    displayDims.h,
+    displayDims.w,
+    drag,
+    mediaVersion,
+    paintAt,
+    playheadMs,
+    playheadRef,
+    playing,
+    project,
+    redrawRef,
+    showSafeGuides,
+    updateMeterDom,
+  ]);
 
-  const displayMeterLevel = playing ? meterLevel : 0;
+  // Zero-React-render 60fps playhead subscriber (paints canvas + updates timecode & meter DOM directly)
+  useEffect(() => {
+    let lastMeterPerf = 0;
+    return subscribePlayhead((ms) => {
+      const st = drawStateRef.current;
+      if (timecodeElRef.current) {
+        timecodeElRef.current.textContent = fmtTimecode(ms, st.project.fps);
+      }
+      if (st.playing) {
+        const now = performance.now();
+        if (now - lastMeterPerf >= 45) {
+          lastMeterPerf = now;
+          const engine = audioEngineRef.current;
+          updateMeterDom(engine ? engine.getPeakLevel() : 0);
+        }
+        // Already inside CinemaView's unified 60fps RAF callback
+        paintAt(ms);
+      } else {
+        // Coalesce high-frequency 120Hz mouse scrub events to 1 paint per display refresh
+        if (pendingPaintRafRef.current === null) {
+          pendingPaintRafRef.current = window.requestAnimationFrame(() => {
+            pendingPaintRafRef.current = null;
+            paintAt(playheadRef.current);
+          });
+        }
+      }
+    });
+  }, [audioEngineRef, paintAt, playheadRef, subscribePlayhead, updateMeterDom]);
+
+  useEffect(() => {
+    return () => {
+      if (pendingPaintRafRef.current !== null) {
+        window.cancelAnimationFrame(pendingPaintRafRef.current);
+      }
+    };
+  }, []);
 
   const selectedVisual = useMemo(() => {
     if (!selectedClipId) return null;
@@ -288,7 +363,7 @@ export function CinemaStage({
       const rect = e.currentTarget.getBoundingClientRect();
       const canvasX = ((e.clientX - rect.left) / Math.max(1, rect.width)) * project.width;
       const canvasY = ((e.clientY - rect.top) / Math.max(1, rect.height)) * project.height;
-      const hit = hitTestVisualClip(project, playheadMs, canvasX, canvasY);
+      const hit = hitTestVisualClip(project, playheadRef.current, canvasX, canvasY);
       if (!hit) {
         onSelectClip(null);
         return;
@@ -306,7 +381,7 @@ export function CinemaStage({
         preview: { ...hit.transform },
       });
     },
-    [inlineEditClipId, onSelectClip, playheadMs, project],
+    [inlineEditClipId, onSelectClip, playheadRef, project],
   );
 
   const handleBoxPointerDown = useCallback(
@@ -511,8 +586,8 @@ export function CinemaStage({
             />
           ) : null}
 
-          {/* Canva-style Interactive Selection Frame & Handles */}
-          {selectedVisual && selectedBoxStyle ? (
+          {/* Canva-style Interactive Selection Frame & Handles (hidden during live playback) */}
+          {!playing && selectedVisual && selectedBoxStyle ? (
             <>
               <div
                 onPointerDown={(e) => handleBoxPointerDown(e, selectedVisual)}
@@ -854,7 +929,9 @@ export function CinemaStage({
 
         {/* Center: Tabular Timecode Readout */}
         <div className="flex items-center gap-2 font-mono text-[12px] tabular-nums">
-          <span className="font-medium text-foreground">{fmtTimecode(playheadMs, project.fps)}</span>
+          <span ref={timecodeElRef} className="font-medium text-foreground">
+            {fmtTimecode(playheadMs, project.fps)}
+          </span>
           <span className="text-muted-foreground">/</span>
           <span className="text-muted-foreground">{fmtTimecode(durationMs, project.fps)}</span>
           <span className="hidden rounded-full border border-border/75 px-2 py-0.5 text-[10px] text-muted-foreground md:inline">
@@ -864,27 +941,21 @@ export function CinemaStage({
 
         {/* Right: Stereo Peak Meter, Safe Guides, Zoom & Expand */}
         <div className="flex items-center gap-1.5">
-          {/* Stereo Peak Meter */}
+          {/* Stereo Peak Meter (updated via direct DOM refs at 22Hz with zero React renders) */}
           <div
             className="hidden h-5 items-center gap-0.5 rounded-md border border-border/75 px-2 sm:flex"
             aria-label="Audio output level"
           >
-            {Array.from({ length: 10 }, (_, idx) => {
-              const thresh = (idx + 1) / 10;
-              const lit = displayMeterLevel >= thresh;
-              return (
-                <span
-                  key={idx}
-                  className={`h-2.5 w-1 rounded-full transition-colors duration-75 ${
-                    lit
-                      ? idx >= 8
-                        ? "bg-[color:var(--cinema-playhead)]"
-                        : "bg-foreground/80"
-                      : "bg-foreground/15"
-                  }`}
-                />
-              );
-            })}
+            {Array.from({ length: 10 }, (_, idx) => (
+              <span
+                key={idx}
+                ref={(el) => {
+                  meterBarsRef.current[idx] = el;
+                }}
+                style={{ backgroundColor: "rgba(244, 244, 246, 0.15)" }}
+                className="h-2.5 w-1 rounded-full"
+              />
+            ))}
           </div>
 
           <Tooltip>
@@ -945,4 +1016,4 @@ export function CinemaStage({
       </div>
     </div>
   );
-}
+});

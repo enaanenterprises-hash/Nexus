@@ -148,6 +148,124 @@ function studioEnvelopeToRecording(env: StudioRecordingContentV1): StudioRecordi
   };
 }
 
+function syncCinemaVideoElements(
+  project: CinemaProject,
+  mediaElements: Map<string, HTMLVideoElement | HTMLImageElement>,
+  pendingVideoSeek: Map<string, { timeSec: number; fast: boolean }>,
+  videoPlayPending: Set<string>,
+  lastScrubSeekState: { current: number },
+  ms: number,
+  isPlayingMode: boolean,
+  fastScrub: boolean,
+): boolean {
+  const activeByAsset = new Map<string, number>();
+  const upcomingByAsset = new Map<string, number>();
+  const nowPerf = performance.now();
+  let deferredScrubSeek = false;
+
+  for (const clip of project.clips) {
+    if (clip.kind !== "video" || clip.hidden) continue;
+    if (ms >= clip.startMs && ms <= clip.startMs + clip.durationMs) {
+      const targetSec = Math.max(
+        0,
+        (clip.trimStartMs + (ms - clip.startMs) * (clip.speed || 1)) / 1000,
+      );
+      activeByAsset.set(clip.assetId, targetSec);
+      const vid = mediaElements.get(clip.assetId);
+      if (!(vid instanceof HTMLVideoElement)) continue;
+      const rate = Math.max(0.25, Math.min(4, clip.speed || 1));
+
+      if (isPlayingMode) {
+        if (vid.paused) {
+          if (!videoPlayPending.has(clip.assetId)) {
+            if (Math.abs(vid.playbackRate - rate) > 0.01) {
+              vid.playbackRate = rate;
+            }
+            if (Math.abs(vid.currentTime - targetSec) > 0.12 && !vid.seeking) {
+              vid.currentTime = targetSec;
+            }
+            videoPlayPending.add(clip.assetId);
+            void vid
+              .play()
+              .catch(() => {})
+              .finally(() => {
+                videoPlayPending.delete(clip.assetId);
+              });
+          }
+        } else if (!vid.seeking && vid.readyState >= 2) {
+          const drift = targetSec - vid.currentTime;
+          if (Math.abs(drift) > 0.55) {
+            // Hard resync only on major drift (e.g. tab switch or clip jump)
+            vid.playbackRate = rate;
+            vid.currentTime = targetSec;
+          } else if (Math.abs(drift) > 0.09) {
+            // Gentle playbackRate phase-lock eliminates mid-playback GOP seek stutters
+            const nudged = Math.max(
+              0.25,
+              Math.min(4, rate * (1 + Math.max(-0.06, Math.min(0.06, drift * 0.45)))),
+            );
+            if (Math.abs(vid.playbackRate - nudged) > 0.008) {
+              vid.playbackRate = nudged;
+            }
+          } else if (Math.abs(vid.playbackRate - rate) > 0.008) {
+            vid.playbackRate = rate;
+          }
+        }
+      } else {
+        if (!vid.paused) vid.pause();
+        if (Math.abs(vid.playbackRate - rate) > 0.02) {
+          vid.playbackRate = rate;
+        }
+        if (Math.abs(vid.currentTime - targetSec) > 0.025) {
+          if (vid.seeking) {
+            pendingVideoSeek.set(clip.assetId, {
+              timeSec: targetSec,
+              fast: fastScrub,
+            });
+          } else if (fastScrub) {
+            if (nowPerf - lastScrubSeekState.current < 32) {
+              deferredScrubSeek = true;
+            } else {
+              lastScrubSeekState.current = nowPerf;
+              pendingVideoSeek.delete(clip.assetId);
+              const fastVid = vid as HTMLVideoElement & { fastSeek?: (t: number) => void };
+              if (typeof fastVid.fastSeek === "function") {
+                fastVid.fastSeek(targetSec);
+              } else {
+                vid.currentTime = targetSec;
+              }
+            }
+          } else {
+            pendingVideoSeek.delete(clip.assetId);
+            vid.currentTime = targetSec;
+          }
+        }
+      }
+    } else if (isPlayingMode && clip.startMs > ms && clip.startMs - ms <= 1200) {
+      // Pre-roll upcoming video clips so cut transitions start with zero frame stall
+      if (!upcomingByAsset.has(clip.assetId)) {
+        upcomingByAsset.set(clip.assetId, Math.max(0, clip.trimStartMs / 1000));
+      }
+    }
+  }
+
+  for (const [assetId, el] of mediaElements) {
+    if (!(el instanceof HTMLVideoElement) || activeByAsset.has(assetId)) continue;
+    if (!el.paused) el.pause();
+    const prerollSec = upcomingByAsset.get(assetId);
+    if (
+      prerollSec !== undefined &&
+      !el.seeking &&
+      !videoPlayPending.has(assetId) &&
+      Math.abs(el.currentTime - prerollSec) > 0.08
+    ) {
+      el.currentTime = prerollSec;
+    }
+  }
+
+  return deferredScrubSeek;
+}
+
 export function CinemaView({
   visible,
   incomingStudioTake,
@@ -201,11 +319,28 @@ export function CinemaView({
 
   const [playheadMs, setPlayheadMs] = useState(0);
   const playheadRef = useRef(0);
+  const playheadListenersRef = useRef<Set<(ms: number) => void>>(new Set());
+  const subscribePlayhead = useCallback((listener: (ms: number) => void) => {
+    playheadListenersRef.current.add(listener);
+    return () => {
+      playheadListenersRef.current.delete(listener);
+    };
+  }, []);
+  const notifyPlayhead = useCallback((ms: number) => {
+    for (const listener of playheadListenersRef.current) {
+      listener(ms);
+    }
+  }, []);
   useEffect(() => {
     playheadRef.current = playheadMs;
-  }, [playheadMs]);
+    notifyPlayhead(playheadMs);
+  }, [notifyPlayhead, playheadMs]);
 
   const [playing, setPlaying] = useState(false);
+  const playingRef = useRef(false);
+  useEffect(() => {
+    playingRef.current = playing;
+  }, [playing]);
   const [loopEnabled, setLoopEnabled] = useState(false);
   const [showSafeGuides, setShowSafeGuides] = useState(false);
   const [canvasZoom, setCanvasZoom] = useState<"fit" | 0.5 | 0.75 | 1>("fit");
@@ -237,9 +372,17 @@ export function CinemaView({
 
   const renderCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const stageRedrawRef = useRef<(() => void) | null>(null);
+  const videoHostRef = useRef<HTMLDivElement | null>(null);
   const audioEngineRef = useRef<CinemaAudioEngine | null>(null);
   const mediaElementsRef = useRef<Map<string, HTMLVideoElement | HTMLImageElement>>(new Map());
-  const pendingVideoSeekRef = useRef<Map<string, number>>(new Map());
+  const pendingVideoSeekRef = useRef<Map<string, { timeSec: number; fast: boolean }>>(new Map());
+  const videoPlayPendingRef = useRef<Set<string>>(new Set());
+  const playbackClockRef = useRef<{ startWall: number; startOriginMs: number }>({
+    startWall: 0,
+    startOriginMs: 0,
+  });
+  const lastScrubVideoSeekRef = useRef<number>(0);
+  const scrubSeekTimerRef = useRef<number | undefined>(undefined);
   const audioBuffersRef = useRef<Map<string, AudioBuffer>>(new Map());
   const hydratingRef = useRef<Set<string>>(new Set());
   const blobUrlsRef = useRef<Set<string>>(new Set());
@@ -260,12 +403,20 @@ export function CinemaView({
     const engine = new CinemaAudioEngine();
     audioEngineRef.current = engine;
     const urls = blobUrlsRef.current;
+    const mediaEls = mediaElementsRef.current;
     return () => {
       window.clearTimeout(noticeTimerRef.current);
       window.clearTimeout(autosaveTimerRef.current);
+      window.clearTimeout(scrubSeekTimerRef.current);
       engine.dispose();
       if (audioEngineRef.current === engine) {
         audioEngineRef.current = null;
+      }
+      for (const el of mediaEls.values()) {
+        if (el instanceof HTMLVideoElement) {
+          el.pause();
+          el.remove();
+        }
       }
       for (const u of urls) URL.revokeObjectURL(u);
     };
@@ -414,20 +565,32 @@ export function CinemaView({
             vid.muted = true;
             vid.playsInline = true;
             vid.preload = "auto";
+            vid.style.width = "2px";
+            vid.style.height = "2px";
+            vid.setAttribute("aria-hidden", "true");
+            // Mount in live DOM so Chromium's VideoFrameCompositor decodes at full 30/60fps
+            videoHostRef.current?.appendChild(vid);
             vid.src = url;
             vid.addEventListener("seeked", () => {
+              // Paint the freshly decoded frame immediately before starting any next queued scrub seek
+              if (!playingRef.current) {
+                stageRedrawRef.current?.();
+              }
               const queued = pendingVideoSeekRef.current.get(asset.id);
               if (queued !== undefined) {
                 pendingVideoSeekRef.current.delete(asset.id);
-                if (Math.abs(vid.currentTime - queued) > 0.03) {
-                  vid.currentTime = queued;
-                  return;
+                if (Math.abs(vid.currentTime - queued.timeSec) > 0.025) {
+                  const fastVid = vid as HTMLVideoElement & { fastSeek?: (t: number) => void };
+                  if (queued.fast && !playingRef.current && typeof fastVid.fastSeek === "function") {
+                    fastVid.fastSeek(queued.timeSec);
+                  } else {
+                    vid.currentTime = queued.timeSec;
+                  }
                 }
               }
-              stageRedrawRef.current?.();
             });
             vid.addEventListener("loadeddata", () => {
-              stageRedrawRef.current?.();
+              if (!playingRef.current) stageRedrawRef.current?.();
             });
             await new Promise<void>((resolve) => {
               const timer = window.setTimeout(resolve, 4500);
@@ -473,106 +636,126 @@ export function CinemaView({
   useEffect(() => {
     if (!visible && playing) {
       audioEngineRef.current?.stop();
-      queueMicrotask(() => setPlaying(false));
+      queueMicrotask(() => {
+        setPlayheadMs(Math.round(playheadRef.current));
+        setPlaying(false);
+      });
     }
   }, [playing, visible]);
 
-  const syncVideoElements = useCallback((ms: number, isPlayingMode: boolean) => {
-    const activeByAsset = new Map<string, number>();
-    for (const clip of projectRef.current.clips) {
-      if (clip.kind !== "video" || clip.hidden) continue;
-      if (ms >= clip.startMs && ms <= clip.startMs + clip.durationMs) {
-        const targetSec = Math.max(0, (clip.trimStartMs + (ms - clip.startMs) * (clip.speed || 1)) / 1000);
-        activeByAsset.set(clip.assetId, targetSec);
-        const vid = mediaElementsRef.current.get(clip.assetId);
-        if (!(vid instanceof HTMLVideoElement)) continue;
-        const rate = Math.max(0.25, Math.min(4, clip.speed || 1));
-        if (Math.abs(vid.playbackRate - rate) > 0.02) {
-          vid.playbackRate = rate;
-        }
-        if (isPlayingMode) {
-          if (vid.paused) {
-            if (Math.abs(vid.currentTime - targetSec) > 0.08) {
-              vid.currentTime = targetSec;
-            }
-            void vid.play().catch(() => {});
-          } else if (Math.abs(vid.currentTime - targetSec) > 0.28) {
-            vid.currentTime = targetSec;
-          }
-        } else {
-          if (!vid.paused) vid.pause();
-          if (Math.abs(vid.currentTime - targetSec) > 0.03) {
-            if (vid.seeking) {
-              pendingVideoSeekRef.current.set(clip.assetId, targetSec);
-            } else {
-              vid.currentTime = targetSec;
-            }
-          }
-        }
-      }
-    }
+  const syncVideoElements = useCallback(
+    (ms: number, isPlayingMode: boolean, fastScrub = false) => {
+      const deferredScrubSeek = syncCinemaVideoElements(
+        projectRef.current,
+        mediaElementsRef.current,
+        pendingVideoSeekRef.current,
+        videoPlayPendingRef.current,
+        lastScrubVideoSeekRef,
+        ms,
+        isPlayingMode,
+        fastScrub,
+      );
 
-    for (const [assetId, el] of mediaElementsRef.current) {
-      if (el instanceof HTMLVideoElement && !activeByAsset.has(assetId) && !el.paused) {
-        el.pause();
+      if (deferredScrubSeek && !isPlayingMode) {
+        window.clearTimeout(scrubSeekTimerRef.current);
+        scrubSeekTimerRef.current = window.setTimeout(() => {
+          if (!playingRef.current) {
+            lastScrubVideoSeekRef.current = 0;
+            syncCinemaVideoElements(
+              projectRef.current,
+              mediaElementsRef.current,
+              pendingVideoSeekRef.current,
+              videoPlayPendingRef.current,
+              lastScrubVideoSeekRef,
+              playheadRef.current,
+              false,
+              true,
+            );
+          }
+        }, 34);
       }
-    }
-  }, []);
+    },
+    [],
+  );
 
-  const handleSeek = useCallback(
+  const handleScrub = useCallback(
     (nextMs: number) => {
+      if (playingRef.current) {
+        playingRef.current = false;
+        audioEngineRef.current?.stop();
+        setPlaying(false);
+      }
       const dur = computeProjectDurationMs(projectRef.current);
       const clamped = Math.max(0, Math.min(dur, Math.round(nextMs)));
       playheadRef.current = clamped;
+      notifyPlayhead(clamped);
+      syncVideoElements(clamped, false, true);
+    },
+    [notifyPlayhead, syncVideoElements],
+  );
+
+  const handleSeek = useCallback(
+    (nextMs: number) => {
+      window.clearTimeout(scrubSeekTimerRef.current);
+      const dur = computeProjectDurationMs(projectRef.current);
+      const clamped = Math.max(0, Math.min(dur, Math.round(nextMs)));
+      playheadRef.current = clamped;
+      if (playingRef.current) {
+        playbackClockRef.current = { startWall: performance.now(), startOriginMs: clamped };
+      }
+      notifyPlayhead(clamped);
       setPlayheadMs(clamped);
-      syncVideoElements(clamped, playing);
-      if (playing) {
+      syncVideoElements(clamped, playingRef.current, false);
+      if (playingRef.current) {
         audioEngineRef.current?.play(projectRef.current, clamped, audioBuffersRef.current);
       }
     },
-    [playing, syncVideoElements],
+    [notifyPlayhead, syncVideoElements],
   );
 
-  // Playback loop (plays native <video> smoothly while syncing audio + RAF clock)
+  // Unified 60fps playback loop (ZERO React re-renders during live playback; direct GPU playhead + canvas updates)
   useEffect(() => {
     if (!playing) {
       audioEngineRef.current?.stop();
-      syncVideoElements(playheadRef.current, false);
+      const settled = Math.round(playheadRef.current);
+      notifyPlayhead(settled);
+      syncVideoElements(settled, false, false);
       return;
     }
 
-    const startWall = performance.now();
+    window.clearTimeout(scrubSeekTimerRef.current);
     const startOriginMs = playheadRef.current;
+    playbackClockRef.current = { startWall: performance.now(), startOriginMs };
     audioEngineRef.current?.play(projectRef.current, startOriginMs, audioBuffersRef.current);
-    syncVideoElements(startOriginMs, true);
+    syncVideoElements(startOriginMs, true, false);
+    notifyPlayhead(startOriginMs);
 
     let rafId = 0;
-    let lastUiCommit = startWall;
     const tick = (now: number) => {
       const dur = computeProjectDurationMs(projectRef.current);
-      const next = startOriginMs + (now - startWall);
+      const next =
+        playbackClockRef.current.startOriginMs + (now - playbackClockRef.current.startWall);
       if (next >= dur) {
         if (loopEnabled) {
-          setPlaying(false);
+          playbackClockRef.current = { startWall: now, startOriginMs: 0 };
           playheadRef.current = 0;
-          setPlayheadMs(0);
-          syncVideoElements(0, false);
-          window.setTimeout(() => setPlaying(true), 20);
-        } else {
-          setPlaying(false);
-          playheadRef.current = dur;
-          setPlayheadMs(dur);
-          audioEngineRef.current?.stop();
-          syncVideoElements(dur, false);
+          audioEngineRef.current?.play(projectRef.current, 0, audioBuffersRef.current);
+          syncVideoElements(0, true, false);
+          notifyPlayhead(0);
+          rafId = window.requestAnimationFrame(tick);
+          return;
         }
+        playheadRef.current = dur;
+        notifyPlayhead(dur);
+        setPlayheadMs(dur);
+        audioEngineRef.current?.stop();
+        syncVideoElements(dur, false, false);
+        setPlaying(false);
         return;
       }
       playheadRef.current = next;
-      if (now - lastUiCommit >= 32) {
-        lastUiCommit = now;
-        setPlayheadMs(next);
-      }
-      syncVideoElements(next, true);
+      syncVideoElements(next, true, false);
+      notifyPlayhead(next);
       rafId = window.requestAnimationFrame(tick);
     };
 
@@ -581,19 +764,24 @@ export function CinemaView({
       window.cancelAnimationFrame(rafId);
       audioEngineRef.current?.stop();
     };
-  }, [loopEnabled, playing, syncVideoElements]);
+  }, [loopEnabled, notifyPlayhead, playing, syncVideoElements]);
 
   const handleTogglePlay = useCallback(() => {
-    if (playing) {
+    if (playingRef.current) {
+      const settled = Math.round(playheadRef.current);
+      playheadRef.current = settled;
+      setPlayheadMs(settled);
       setPlaying(false);
       return;
     }
     const dur = computeProjectDurationMs(projectRef.current);
     if (playheadRef.current >= dur - 40) {
+      playheadRef.current = 0;
+      notifyPlayhead(0);
       setPlayheadMs(0);
     }
     setPlaying(true);
-  }, [playing]);
+  }, [notifyPlayhead]);
 
   const handleStepFrame = useCallback(
     (deltaFrames: number) => {
@@ -1875,6 +2063,12 @@ export function CinemaView({
       data-cinema-ready="true"
       className="cinema-screen flex h-full w-full flex-col overflow-hidden"
     >
+      {/* Hidden DOM host for active HTMLVideoElements so Chromium runs hardware decoding at full 30/60fps */}
+      <div
+        ref={videoHostRef}
+        aria-hidden
+        className="pointer-events-none fixed top-0 left-0 h-[2px] w-[2px] overflow-hidden opacity-[0.001]"
+      />
       {/* Apple Liquid Glass Header (h-12 & pl-[68px] align seamlessly beside top-left Nexus Orb & w-[68px] rail) */}
       <header className="cinema-header flex h-12 shrink-0 items-center justify-between gap-2 pl-[68px] pr-3 sm:pr-4">
         <div className="flex min-w-0 items-center gap-1">
@@ -2065,7 +2259,10 @@ export function CinemaView({
             type="button"
             size="sm"
             onClick={() => {
-              if (playing) setPlaying(false);
+              if (playing) {
+                setPlayheadMs(Math.round(playheadRef.current));
+                setPlaying(false);
+              }
               setExportOpen(true);
             }}
             className="h-7 gap-1.5 rounded-lg bg-foreground px-3 text-[11.5px] font-medium text-background hover:opacity-90"
@@ -2213,6 +2410,7 @@ export function CinemaView({
             project={project}
             playheadMs={playheadMs}
             playheadRef={playheadRef}
+            subscribePlayhead={subscribePlayhead}
             playing={playing}
             loopEnabled={loopEnabled}
             showSafeGuides={showSafeGuides}
@@ -2245,6 +2443,9 @@ export function CinemaView({
             <CinemaTimeline
               project={project}
               playheadMs={playheadMs}
+              playheadRef={playheadRef}
+              subscribePlayhead={subscribePlayhead}
+              playing={playing}
               zoom={timelineZoom}
               snapEnabled={snapEnabled}
               beatSnapEnabled={beatSnapEnabled}
@@ -2255,6 +2456,7 @@ export function CinemaView({
                 setSelectedClipId(id);
                 if (id) setInspectorTab("style");
               }}
+              onScrub={handleScrub}
               onSeek={handleSeek}
               onChangeZoom={setTimelineZoom}
               onToggleSnap={() => setSnapEnabled((v) => !v)}

@@ -1,7 +1,9 @@
 "use client";
 
 import {
+  memo,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -46,7 +48,6 @@ import type {
 } from "@/lib/cinema/types";
 
 type DragState =
-  | { kind: "scrub"; pointerId: number }
   | {
       kind: "move";
       pointerId: number;
@@ -107,9 +108,12 @@ function compatibleTrackForClip(clipKind: CinemaClip["kind"], trackKind: CinemaT
   return trackKind === "video" || trackKind === "overlay";
 }
 
-export function CinemaTimeline({
+export const CinemaTimeline = memo(function CinemaTimeline({
   project,
   playheadMs,
+  playheadRef,
+  subscribePlayhead,
+  playing,
   zoom,
   snapEnabled,
   beatSnapEnabled,
@@ -117,6 +121,7 @@ export function CinemaTimeline({
   timelineHeight,
   onResizeHeight,
   onSelectClip,
+  onScrub,
   onSeek,
   onChangeZoom,
   onToggleSnap,
@@ -144,6 +149,9 @@ export function CinemaTimeline({
 }: {
   project: CinemaProject;
   playheadMs: number;
+  playheadRef: React.RefObject<number>;
+  subscribePlayhead: (listener: (ms: number) => void) => () => void;
+  playing: boolean;
   zoom: number;
   snapEnabled: boolean;
   beatSnapEnabled: boolean;
@@ -151,6 +159,7 @@ export function CinemaTimeline({
   timelineHeight: number;
   onResizeHeight: (h: number) => void;
   onSelectClip: (clipId: string | null) => void;
+  onScrub: (ms: number) => void;
   onSeek: (ms: number) => void;
   onChangeZoom: (z: number) => void;
   onToggleSnap: () => void;
@@ -177,9 +186,17 @@ export function CinemaTimeline({
   onFitZoom: () => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const playheadElRef = useRef<HTMLDivElement>(null);
+  const hoverLineElRef = useRef<HTMLDivElement>(null);
+  const hoverBadgeElRef = useRef<HTMLDivElement>(null);
+  const scrubPointerIdRef = useRef<number | null>(null);
+  const lastScrubMsRef = useRef(0);
+  const playingRef = useRef(playing);
+  useEffect(() => {
+    playingRef.current = playing;
+  }, [playing]);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [snapGuideMs, setSnapGuideMs] = useState<number | null>(null);
-  const [hoverMs, setHoverMs] = useState<number | null>(null);
   const [fileDragOverTrackId, setFileDragOverTrackId] = useState<string | null>(null);
 
   const pxPerSec = 56 * zoom;
@@ -257,10 +274,80 @@ export function CinemaTimeline({
     [pxPerSec],
   );
 
+  const hideHoverSkimmer = useCallback(() => {
+    if (hoverLineElRef.current) hoverLineElRef.current.style.opacity = "0";
+    if (hoverBadgeElRef.current) hoverBadgeElRef.current.style.opacity = "0";
+  }, []);
+
+  // Zero-React-render GPU playhead needle updates at 60-120fps
+  useEffect(() => {
+    const positionNeedle = (ms: number) => {
+      const x = TRACK_HEADER_W + (ms / 1000) * pxPerSec;
+      if (playheadElRef.current) {
+        playheadElRef.current.style.transform = `translate3d(${x}px, 0, 0)`;
+      }
+    };
+
+    const onPlayheadTick = (ms: number) => {
+      positionNeedle(ms);
+      // Only auto-page the timeline viewport while actively playing (never yank on pause/zoom/scrub)
+      const scroller = scrollRef.current;
+      if (scroller && playingRef.current && scrubPointerIdRef.current === null) {
+        const viewportW = Math.max(120, scroller.clientWidth - TRACK_HEADER_W);
+        const visibleLeft = scroller.scrollLeft;
+        const visibleRight = visibleLeft + viewportW;
+        const localX = (ms / 1000) * pxPerSec;
+        if (localX > visibleRight - 36 && localX < visibleRight + 180) {
+          scroller.scrollLeft = Math.max(0, localX - viewportW * 0.22);
+        } else if (ms < 140 && visibleLeft > 40) {
+          scroller.scrollLeft = 0;
+        }
+      }
+    };
+
+    positionNeedle(playheadRef.current);
+    return subscribePlayhead(onPlayheadTick);
+  }, [playheadRef, pxPerSec, subscribePlayhead]);
+
+  // Native non-passive wheel listener: cursor-anchored Ctrl/Cmd+Wheel zoom + smooth horizontal wheel scroll
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.18 : 1 / 1.18;
+        const nextZoom = clamp(Number((zoom * factor).toFixed(2)), 0.5, 6);
+        if (nextZoom === zoom) return;
+        const rect = el.getBoundingClientRect();
+        const cursorInLane = Math.max(0, e.clientX - rect.left - TRACK_HEADER_W);
+        const anchorSec = (el.scrollLeft + cursorInLane) / Math.max(1, pxPerSec);
+        onChangeZoom(nextZoom);
+        const nextPxPerSec = 56 * nextZoom;
+        window.requestAnimationFrame(() => {
+          el.scrollLeft = Math.max(0, anchorSec * nextPxPerSec - cursorInLane);
+        });
+        return;
+      }
+      const noVerticalOverflow = el.scrollHeight <= el.clientHeight + 2;
+      if ((e.shiftKey || noVerticalOverflow) && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        e.preventDefault();
+        el.scrollLeft += e.deltaY;
+      }
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [onChangeZoom, pxPerSec, zoom]);
+
   const handleRulerPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
-    setDrag({ kind: "scrub", pointerId: e.pointerId });
-    onSeek(clientXToMs(e.clientX));
+    hideHoverSkimmer();
+    const targetMs = clientXToMs(e.clientX);
+    scrubPointerIdRef.current = e.pointerId;
+    lastScrubMsRef.current = targetMs;
+    onScrub(targetMs);
   };
 
   const handleClipPointerDown = (e: ReactPointerEvent<HTMLDivElement>, clip: CinemaClip) => {
@@ -308,19 +395,45 @@ export function CinemaTimeline({
 
   const handleLanePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     const el = scrollRef.current;
-    if (el) {
-      const rect = el.getBoundingClientRect();
-      const rawX = e.clientX - rect.left + el.scrollLeft - TRACK_HEADER_W;
-      if (rawX >= 0) {
-        setHoverMs(Math.round((rawX / pxPerSec) * 1000));
-      } else {
-        setHoverMs(null);
+
+    if (scrubPointerIdRef.current === e.pointerId) {
+      // Gentle horizontal edge auto-scroll when dragging the playhead past viewport borders
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        const leftEdge = rect.left + TRACK_HEADER_W + 24;
+        const rightEdge = rect.right - 24;
+        if (e.clientX > rightEdge) {
+          el.scrollLeft += Math.min(28, (e.clientX - rightEdge) * 0.45);
+        } else if (e.clientX < leftEdge) {
+          el.scrollLeft = Math.max(0, el.scrollLeft - Math.min(28, (leftEdge - e.clientX) * 0.45));
+        }
       }
+      const targetMs = clientXToMs(e.clientX);
+      lastScrubMsRef.current = targetMs;
+      onScrub(targetMs);
+      return;
     }
 
-    if (!drag || e.pointerId !== drag.pointerId) return;
-    if (drag.kind === "scrub") {
-      onSeek(clientXToMs(e.clientX));
+    if (!drag || e.pointerId !== drag.pointerId) {
+      if (el) {
+        // Zero-React-render GPU hover skimmer update
+        const rect = el.getBoundingClientRect();
+        const rawX = e.clientX - rect.left + el.scrollLeft - TRACK_HEADER_W;
+        if (rawX >= 0) {
+          const ms = Math.round((rawX / pxPerSec) * 1000);
+          if (hoverLineElRef.current) {
+            hoverLineElRef.current.style.opacity = "1";
+            hoverLineElRef.current.style.transform = `translate3d(${TRACK_HEADER_W + rawX}px, 0, 0)`;
+          }
+          if (hoverBadgeElRef.current) {
+            hoverBadgeElRef.current.style.opacity = "1";
+            hoverBadgeElRef.current.style.transform = `translate3d(${rawX}px, 0, 0) translateX(-50%)`;
+            hoverBadgeElRef.current.textContent = fmtSkimMs(ms);
+          }
+        } else {
+          hideHoverSkimmer();
+        }
+      }
       return;
     }
     const deltaMs = Math.round(((e.clientX - drag.startX) / pxPerSec) * 1000);
@@ -371,6 +484,12 @@ export function CinemaTimeline({
   };
 
   const handleLanePointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (scrubPointerIdRef.current === e.pointerId) {
+      scrubPointerIdRef.current = null;
+      // Commit final exact frame & React playhead state once on release
+      onSeek(lastScrubMsRef.current);
+      return;
+    }
     if (!drag || e.pointerId !== drag.pointerId) return;
     if (drag.kind === "move") {
       onMoveClip(drag.clipId, drag.previewStartMs, drag.previewTrackId);
@@ -385,17 +504,32 @@ export function CinemaTimeline({
     setSnapGuideMs(null);
   };
 
-  const playheadX = (playheadMs / 1000) * pxPerSec;
+  const rulerTicks = useMemo(
+    () =>
+      Array.from({ length: totalSec + 1 }, (_, sec) => {
+        const showLabel = sec % (zoom >= 2 ? 1 : zoom >= 1 ? 2 : 5) === 0;
+        return { sec, x: sec * pxPerSec, showLabel };
+      }),
+    [pxPerSec, totalSec, zoom],
+  );
 
   const handleSplitDragStart = (e: ReactPointerEvent<HTMLDivElement>) => {
     const startY = e.clientY;
     const origH = timelineHeight;
     e.currentTarget.setPointerCapture(e.pointerId);
+    let raf = 0;
+    let pendingH = origH;
     const onMove = (ev: PointerEvent) => {
-      const nextH = clamp(origH + (startY - ev.clientY), 196, 400);
-      onResizeHeight(nextH);
+      pendingH = clamp(origH + (startY - ev.clientY), 196, 400);
+      if (!raf) {
+        raf = window.requestAnimationFrame(() => {
+          raf = 0;
+          onResizeHeight(pendingH);
+        });
+      }
     };
     const onUp = () => {
+      if (raf) window.cancelAnimationFrame(raf);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
     };
@@ -611,14 +745,14 @@ export function CinemaTimeline({
       <div
         ref={scrollRef}
         onPointerMove={handleLanePointerMove}
-        onPointerLeave={() => setHoverMs(null)}
+        onPointerLeave={hideHoverSkimmer}
         onPointerUp={handleLanePointerUp}
         onPointerCancel={handleLanePointerUp}
         className="cinema-scroll relative min-h-0 flex-1 overflow-auto"
       >
         <div style={{ width: TRACK_HEADER_W + trackWidthPx }} className="relative min-h-full">
-          {/* Ruler Row */}
-          <div className="sticky top-0 z-20 flex h-[30px] border-b border-white/[0.07] bg-[#060609]/95 backdrop-blur-md">
+          {/* Ruler Row (solid obsidian surface for 120fps GPU-composited scrolling without backdrop-blur repaints) */}
+          <div className="sticky top-0 z-20 flex h-[30px] border-b border-white/[0.07] bg-[#060609]">
             <div
               style={{ width: TRACK_HEADER_W }}
               className="sticky left-0 z-30 flex shrink-0 items-center justify-between border-r border-white/[0.07] bg-[#08080c] px-3 font-mono text-[10.5px] text-muted-foreground"
@@ -631,23 +765,19 @@ export function CinemaTimeline({
               style={{ width: trackWidthPx }}
               className="relative h-full cursor-ew-resize"
             >
-              {Array.from({ length: totalSec + 1 }, (_, sec) => {
-                const showLabel = sec % (zoom >= 2 ? 1 : zoom >= 1 ? 2 : 5) === 0;
-                const x = sec * pxPerSec;
-                return (
-                  <div
-                    key={sec}
-                    style={{ left: x }}
-                    className="pointer-events-none absolute top-0 bottom-0 border-l border-border/55"
-                  >
-                    {showLabel ? (
-                      <span className="pl-1 font-mono text-[10px] leading-[30px] text-muted-foreground tabular-nums">
-                        {fmtRulerTime(sec)}
-                      </span>
-                    ) : null}
-                  </div>
-                );
-              })}
+              {rulerTicks.map(({ sec, x, showLabel }) => (
+                <div
+                  key={sec}
+                  style={{ left: x }}
+                  className="pointer-events-none absolute top-0 bottom-0 border-l border-border/55"
+                >
+                  {showLabel ? (
+                    <span className="pl-1 font-mono text-[10px] leading-[30px] text-muted-foreground tabular-nums">
+                      {fmtRulerTime(sec)}
+                    </span>
+                  ) : null}
+                </div>
+              ))}
 
               {/* Nexus Gold Studio Rhythm / Beat Ticks */}
               {project.rhythmGrid
@@ -661,15 +791,12 @@ export function CinemaTimeline({
                   ))
                 : null}
 
-              {/* Hover Skimmer Timecode Readout */}
-              {hoverMs !== null && drag?.kind !== "scrub" ? (
-                <div
-                  style={{ left: (hoverMs / 1000) * pxPerSec }}
-                  className="pointer-events-none absolute top-0.5 z-10 -translate-x-1/2 rounded bg-background/90 px-1 py-px font-mono text-[9px] text-muted-foreground shadow-sm ring-1 ring-border/70 tabular-nums"
-                >
-                  {fmtSkimMs(hoverMs)}
-                </div>
-              ) : null}
+              {/* Zero-React-render Hover Skimmer Timecode Readout */}
+              <div
+                ref={hoverBadgeElRef}
+                style={{ opacity: 0, left: 0 }}
+                className="pointer-events-none absolute top-0.5 z-10 rounded bg-background/95 px-1 py-px font-mono text-[9px] text-muted-foreground shadow-sm ring-1 ring-border/70 tabular-nums will-change-transform"
+              />
 
               {/* Interactive Ruler Marker Pins (`onPointerDown` stops propagation so ruler never swallows clicks) */}
               {project.markers.map((marker) => {
@@ -855,10 +982,10 @@ export function CinemaTimeline({
                 {/* Track Lane Surface */}
                 <div
                   style={{ width: trackWidthPx }}
-                  onClick={(e) => {
-                    if (e.target === e.currentTarget) {
-                      onSelectClip(null);
-                      onSeek(clientXToMs(e.clientX));
+                  onPointerDown={(e) => {
+                    if (e.button === 0 && e.target === e.currentTarget) {
+                      if (selectedClipId !== null) onSelectClip(null);
+                      handleRulerPointerDown(e);
                     }
                   }}
                   onDragOver={(e: DragEvent<HTMLDivElement>) => {
@@ -935,6 +1062,8 @@ export function CinemaTimeline({
                                   key={i}
                                   src={src}
                                   alt=""
+                                  decoding="async"
+                                  draggable={false}
                                   className="h-full flex-1 object-cover"
                                 />
                               ))}
@@ -1051,14 +1180,13 @@ export function CinemaTimeline({
             );
           })}
 
-          {/* Hover Skimmer Hairline */}
-          {hoverMs !== null && drag?.kind !== "scrub" ? (
-            <div
-              style={{ left: TRACK_HEADER_W + (hoverMs / 1000) * pxPerSec }}
-              className="pointer-events-none absolute top-[30px] bottom-0 z-10 w-px bg-foreground/20"
-              aria-hidden
-            />
-          ) : null}
+          {/* Zero-React-render GPU Hover Skimmer Hairline */}
+          <div
+            ref={hoverLineElRef}
+            style={{ opacity: 0, left: 0 }}
+            className="pointer-events-none absolute top-[30px] bottom-0 z-10 w-px bg-foreground/20 will-change-transform"
+            aria-hidden
+          />
 
           {/* Magnetic Snap Guide Hairline */}
           {snapGuideMs !== null ? (
@@ -1069,16 +1197,27 @@ export function CinemaTimeline({
             />
           ) : null}
 
-          {/* Apple Recording Red Playhead Needle (draggable top handle) */}
+          {/* GPU-Accelerated Apple Recording Red Playhead Needle (directly grabbable top cap; transform managed imperatively) */}
           <div
-            style={{ left: TRACK_HEADER_W + playheadX }}
-            className="pointer-events-none absolute top-0 bottom-0 z-30 w-[1.5px] bg-[color:var(--cinema-playhead)]"
-            aria-hidden
+            ref={playheadElRef}
+            style={{ left: 0 }}
+            className="pointer-events-none absolute top-0 bottom-0 z-30 w-[1.5px] bg-[color:var(--cinema-playhead)] will-change-transform"
           >
-            <div className="h-3 w-3 -translate-x-[5px] rounded-b-sm bg-[color:var(--cinema-playhead)]" />
+            <div
+              onPointerDown={handleRulerPointerDown}
+              role="slider"
+              aria-label="Playhead scrubber"
+              aria-valuemin={0}
+              aria-valuemax={Math.round(durationMs)}
+              aria-valuenow={Math.round(playheadMs)}
+              tabIndex={0}
+              className="pointer-events-auto flex h-6 w-6 -translate-x-[11px] cursor-ew-resize justify-center pt-0 touch-none"
+            >
+              <div className="h-3.5 w-3 rounded-b-sm bg-[color:var(--cinema-playhead)] shadow-sm" />
+            </div>
           </div>
         </div>
       </div>
     </section>
   );
-}
+});
