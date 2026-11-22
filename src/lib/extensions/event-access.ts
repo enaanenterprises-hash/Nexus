@@ -14,6 +14,8 @@ export function requiredCapability(event: NexusEvent): ExtensionCapability | nul
       return "automations";
     case "studio:recording-saved":
     case "studio:take-routed":
+    case "studio:smart-cuts":
+    case "studio:rhythm-grid":
       return contentCapability("studio.recording", "read");
     case "cinema:project-saved":
     case "cinema:project-routed":

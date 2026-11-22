@@ -213,7 +213,7 @@ export function TimelineWaveform({
 
     if (loopEnabled && totalTimelineMs > 0) {
       const loopW = Math.min(width, totalTimelineMs * pxPerMs);
-      ctx.fillStyle = isLight ? "rgba(37, 99, 235, 0.24)" : "rgba(91, 156, 246, 0.28)";
+      ctx.fillStyle = isLight ? "rgba(215, 0, 21, 0.28)" : "rgba(255, 59, 48, 0.32)";
       ctx.fillRect(0, 0, loopW, 3);
     }
 
@@ -261,7 +261,7 @@ export function TimelineWaveform({
       const isActiveRow = layerIdx === activeLayerIndex;
 
       if (isDropTarget) {
-        ctx.fillStyle = isLight ? "rgba(37, 99, 235, 0.08)" : "rgba(91, 156, 246, 0.1)";
+        ctx.fillStyle = isLight ? "rgba(215, 0, 21, 0.06)" : "rgba(255, 59, 48, 0.08)";
         ctx.fillRect(0, yTop, width, LANE_HEIGHT);
       } else if (isActiveRow) {
         ctx.fillStyle = isLight ? "rgba(14, 15, 18, 0.018)" : "rgba(255, 255, 255, 0.018)";
@@ -436,17 +436,30 @@ export function TimelineWaveform({
       }
     }
 
-    // 5. Studio Blue chapter & cue markers along ruler
+    // 5. Chapter & Cinema-linked cue markers along ruler (Gold for cross-node links, Titanium for local)
     for (const m of markers) {
       const mx = clampX(m.atMs * pxPerMs, width);
-      ctx.strokeStyle = isLight ? "rgba(37, 99, 235, 0.6)" : "rgba(91, 156, 246, 0.6)";
+      const isLinked = m.note?.includes("Cinema") || m.id.startsWith("cmrk-");
+      ctx.strokeStyle = isLinked
+        ? isLight
+          ? "rgba(161, 108, 12, 0.55)"
+          : "rgba(240, 181, 74, 0.55)"
+        : isLight
+          ? "rgba(24, 24, 27, 0.35)"
+          : "rgba(228, 228, 231, 0.35)";
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(mx, RULER_HEIGHT);
       ctx.lineTo(mx, height);
       ctx.stroke();
 
-      ctx.fillStyle = isLight ? "#2563eb" : "#5b9cf6";
+      ctx.fillStyle = isLinked
+        ? isLight
+          ? "#a16c0c"
+          : "#f0b54a"
+        : isLight
+          ? "#18181b"
+          : "#e4e4e7";
       ctx.beginPath();
       ctx.moveTo(mx - 4, RULER_HEIGHT - 9);
       ctx.lineTo(mx + 4, RULER_HEIGHT - 9);

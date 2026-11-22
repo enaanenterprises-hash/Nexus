@@ -249,7 +249,8 @@ export async function ingestMediaFile(
     attribution?: { author: string; url: string };
   } = {},
 ): Promise<CinemaAsset> {
-  const mime = file.type || "application/octet-stream";
+  const mime = (file.type || "application/octet-stream").toLowerCase();
+  const originalFileName = (file instanceof File ? file.name : options.name || "").toLowerCase();
   const rawName =
     options.name ||
     (file instanceof File ? file.name.replace(/\.[^/.]+$/, "") : "") ||
@@ -261,9 +262,9 @@ export async function ingestMediaFile(
       ? "image"
       : mime.startsWith("audio/")
         ? "audio"
-        : rawName.toLowerCase().match(/\.(mp4|webm|mov|m4v)$/)
+        : /\.(mp4|webm|mov|m4v|mkv|avi)$/.test(originalFileName)
           ? "video"
-          : rawName.toLowerCase().match(/\.(png|jpg|jpeg|webp|gif)$/)
+          : /\.(png|jpg|jpeg|webp|gif|bmp|avif)$/.test(originalFileName)
             ? "image"
             : "audio";
 

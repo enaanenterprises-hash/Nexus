@@ -1,6 +1,11 @@
 "use client";
 
 import { STUDIO_NODE_ID } from "@/extensions/studio/node";
+import type {
+  StudioAudioRepairedTransfer,
+  StudioRhythmGridTransfer,
+  StudioSmartCutsTransfer,
+} from "@/lib/cinema/types";
 import { nexusBus, type ExtensionId } from "@/lib/extensions";
 import {
   loadAudioBlob,
@@ -388,4 +393,16 @@ export function emitStudioTakeRouted(
     STUDIO_NODE_ID,
   );
   return envelope;
+}
+
+export function emitStudioSmartCuts(transfer: StudioSmartCutsTransfer): void {
+  nexusBus.emit("studio:smart-cuts", transfer, STUDIO_NODE_ID);
+}
+
+export function emitStudioRhythmGrid(transfer: StudioRhythmGridTransfer): void {
+  nexusBus.emit("studio:rhythm-grid", transfer, STUDIO_NODE_ID);
+}
+
+export function emitStudioAudioRepaired(transfer: StudioAudioRepairedTransfer): void {
+  nexusBus.emit("studio:audio-repaired", transfer, STUDIO_NODE_ID);
 }

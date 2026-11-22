@@ -8,6 +8,9 @@ import type {
   CinemaExtractedAudioTransfer,
   CinemaProjectContentV1,
   CinemaVoiceoverRequest,
+  StudioAudioRepairedTransfer,
+  StudioRhythmGridTransfer,
+  StudioSmartCutsTransfer,
 } from "@/lib/cinema/types";
 import type { AutomationRun, FocusSession } from "@/lib/command/automation/types";
 import type { CommandItem, CommandKind } from "@/lib/command/kinds";
@@ -100,6 +103,11 @@ export type NexusEventMap = {
     title: string;
     envelope: StudioRecordingContentV1;
   };
+  /** Delivered only with `content:studio.recording:read`. */
+  "studio:smart-cuts": StudioSmartCutsTransfer;
+  /** Delivered only with `content:studio.recording:read`. */
+  "studio:rhythm-grid": StudioRhythmGridTransfer;
+  "studio:audio-repaired": StudioAudioRepairedTransfer;
   /** Delivered only with `content:cinema.project:read`. */
   "cinema:project-saved": {
     projectId: string;

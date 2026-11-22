@@ -404,6 +404,36 @@ await new Promise((r) => setTimeout(r, 0));
 assert(suiteSeen.cinema.includes("studio:take-routed"), "Cinema receives routed Studio takes cleanly");
 assert(suiteSeen.reader.includes("cinema:project-routed"), "cinema:project-routed reaches consumers declaring content:cinema.project:read");
 assert(!suiteSeen.blind.includes("cinema:project-routed"), "nodes without content:cinema.project:read never see cinema projects");
+
+suiteBus.emit(
+  "studio:smart-cuts",
+  {
+    recordingId: "rec-smoke",
+    title: "Smoke Vocal",
+    keepRegions: [{ startMs: 0, endMs: 1200 }],
+    removedMs: 800,
+    silenceCount: 1,
+    createdAt: new Date().toISOString(),
+  },
+  STUDIO_NODE_ID,
+);
+suiteBus.emit(
+  "studio:rhythm-grid",
+  {
+    recordingId: "rec-smoke",
+    title: "Smoke Beat",
+    bpm: 124,
+    beatMs: [0, 484, 968],
+    transientMs: [0, 484],
+    createdAt: new Date().toISOString(),
+  },
+  STUDIO_NODE_ID,
+);
+await new Promise((r) => setTimeout(r, 0));
+assert(suiteSeen.cinema.includes("studio:smart-cuts"), "Cinema receives studio:smart-cuts with content:studio.recording:read");
+assert(suiteSeen.cinema.includes("studio:rhythm-grid"), "Cinema receives studio:rhythm-grid with content:studio.recording:read");
+assert(!suiteSeen.blind.includes("studio:smart-cuts"), "nodes without content:studio.recording:read never see smart-cuts");
+assert(!suiteSeen.blind.includes("studio:rhythm-grid"), "nodes without content:studio.recording:read never see rhythm-grid");
 setStubPro(false);
 
 if (failed > 0) process.exit(1);

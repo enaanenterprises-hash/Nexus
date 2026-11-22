@@ -100,7 +100,7 @@ export async function listCinemaCollections(useDatabase: boolean): Promise<Cinem
     };
     snap.collections = [initial];
     if (snap.projects.length === 0) {
-      snap.projects = [buildTemplateProject("podcast-audiogram", initial.id)];
+      snap.projects = [buildTemplateProject("editorial-sequence", initial.id)];
     }
     writeLocalCinemaSnapshot(snap);
   }

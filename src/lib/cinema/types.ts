@@ -213,6 +213,7 @@ export interface CinemaTextClip extends CinemaClipBase {
   strokeColor: string;
   strokeWidth: number;
   textPreset: string;
+  reactiveAudioClipId?: string;
   transform: CinemaTransform;
   animation: CinemaAnimation;
 }
@@ -234,6 +235,7 @@ export interface CinemaShapeClip extends CinemaClipBase {
   fill: string;
   stroke: string;
   strokeWidth: number;
+  reactiveAudioClipId?: string;
   transform: CinemaTransform;
   animation: CinemaAnimation;
 }
@@ -248,6 +250,7 @@ export interface CinemaVisualizerClip extends CinemaClipBase {
   secondaryColor: string;
   sensitivity: number;
   sourceClipId?: string;
+  reactiveAudioClipId?: string;
   transform: CinemaTransform;
   animation: CinemaAnimation;
 }
@@ -260,6 +263,7 @@ export interface CinemaAudioClip extends CinemaClipBase {
   fadeInMs: number;
   fadeOutMs: number;
   peaks: number[];
+  duckOthers?: boolean;
   studioRef?: CinemaStudioRef;
 }
 
@@ -309,6 +313,14 @@ export interface CinemaProjectSummary {
   updatedAt: string;
 }
 
+export interface CinemaRhythmGrid {
+  bpm: number;
+  beatMs: number[];
+  transientMs: number[];
+  sourceRecordingId?: string;
+  sourceTitle?: string;
+}
+
 export interface CinemaProject extends CinemaProjectSummary {
   width: number;
   height: number;
@@ -318,6 +330,7 @@ export interface CinemaProject extends CinemaProjectSummary {
   transitions: CinemaTransition[];
   assets: CinemaAsset[];
   markers: CinemaMarker[];
+  rhythmGrid?: CinemaRhythmGrid | null;
   notes: CinemaProjectAnnotationV1 | null;
 }
 
@@ -430,6 +443,9 @@ export interface CinemaExtractedAudioTransfer {
   projectId: string;
   projectTitle: string;
   clipName: string;
+  sourceVideoClipId: string;
+  sourceStartMs: number;
+  sourceTrimStartMs: number;
   audioKey: string;
   durationMs: number;
   sampleRate: number;
@@ -437,4 +453,37 @@ export interface CinemaExtractedAudioTransfer {
   mimeType: string;
   peaks: number[];
   extractedAt: string;
+}
+
+export interface StudioSmartCutsTransfer {
+  recordingId: string;
+  title: string;
+  keepRegions: Array<{ startMs: number; endMs: number }>;
+  removedMs: number;
+  silenceCount: number;
+  createdAt: string;
+}
+
+export interface StudioRhythmGridTransfer {
+  recordingId: string;
+  title: string;
+  bpm: number;
+  beatMs: number[];
+  transientMs: number[];
+  createdAt: string;
+}
+
+export interface StudioAudioRepairedTransfer {
+  recordingId: string;
+  title: string;
+  targetProjectId: string;
+  targetVideoClipId: string;
+  sourceStartMs: number;
+  audioKey: string;
+  durationMs: number;
+  sampleRate: number;
+  byteLength: number;
+  mimeType: string;
+  peaks: number[];
+  repairedAt: string;
 }

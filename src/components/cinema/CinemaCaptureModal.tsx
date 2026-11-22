@@ -222,9 +222,9 @@ export function CinemaCaptureModal({
                 variant={alsoStudio ? "secondary" : "outline"}
                 disabled={recording || !withMic}
                 onClick={() => setAlsoStudio((v) => !v)}
-                className="h-8 gap-1.5 rounded-full text-[12px]"
+                className="h-8 gap-1.5 rounded-lg text-[12px]"
               >
-                <Waves className="size-3.5 text-[color:var(--cinema-studio-link)]" />
+                <Waves className="size-3.5 text-[color:var(--nexus-link)]" />
                 <span>Sync audio to Studio</span>
               </Button>
             </div>

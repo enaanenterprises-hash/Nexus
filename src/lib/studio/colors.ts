@@ -18,49 +18,49 @@ export const STUDIO_COLOR_CYCLE: readonly StudioTrackColor[] = [
 ];
 
 /**
- * Professional audio stem palette — tuned for calm acoustic readability in both
- * Obsidian Dark and Gallery Light modes without borrowing Nexus's Neural Network gold.
+ * Apple Pro console stem palette — monochrome hardware tones plus calm recording
+ * crimson without distracting neon blues, keeping Nexus Gold strictly for interconnections.
  */
 export const STUDIO_STEM_COLORS: Record<StudioTrackColor, StudioStemStyle> = {
   blue: {
     id: "blue",
-    label: "Cobalt",
-    darkRgb: [91, 156, 246],
-    lightRgb: [37, 99, 235],
-    dotClass: "bg-[#5b9cf6]",
-    patchActiveClass: "border-[#5b9cf6] bg-[#5b9cf6]/18 text-foreground",
+    label: "Crimson",
+    darkRgb: [255, 69, 58],
+    lightRgb: [215, 0, 21],
+    dotClass: "bg-[#ff453a]",
+    patchActiveClass: "border-[#ff453a] bg-[#ff453a]/16 text-foreground",
   },
   teal: {
     id: "teal",
-    label: "Teal",
-    darkRgb: [45, 212, 191],
-    lightRgb: [13, 148, 136],
-    dotClass: "bg-[#2dd4bf]",
-    patchActiveClass: "border-[#2dd4bf] bg-[#2dd4bf]/18 text-foreground",
+    label: "Titanium",
+    darkRgb: [212, 212, 216],
+    lightRgb: [63, 63, 70],
+    dotClass: "bg-[#d4d4d8]",
+    patchActiveClass: "border-[#d4d4d8] bg-[#d4d4d8]/16 text-foreground",
   },
   indigo: {
     id: "indigo",
-    label: "Indigo",
-    darkRgb: [129, 140, 248],
-    lightRgb: [79, 70, 229],
-    dotClass: "bg-[#818cf8]",
-    patchActiveClass: "border-[#818cf8] bg-[#818cf8]/18 text-foreground",
+    label: "Warm Sand",
+    darkRgb: [212, 163, 115],
+    lightRgb: [146, 100, 52],
+    dotClass: "bg-[#d4a373]",
+    patchActiveClass: "border-[#d4a373] bg-[#d4a373]/16 text-foreground",
   },
   coral: {
     id: "coral",
-    label: "Coral",
-    darkRgb: [248, 113, 113],
-    lightRgb: [220, 38, 38],
-    dotClass: "bg-[#f87171]",
-    patchActiveClass: "border-[#f87171] bg-[#f87171]/18 text-foreground",
+    label: "Ember",
+    darkRgb: [244, 114, 102],
+    lightRgb: [194, 48, 40],
+    dotClass: "bg-[#f47266]",
+    patchActiveClass: "border-[#f47266] bg-[#f47266]/16 text-foreground",
   },
   slate: {
     id: "slate",
-    label: "Silver",
-    darkRgb: [161, 161, 170],
+    label: "Graphite",
+    darkRgb: [152, 152, 160],
     lightRgb: [82, 82, 91],
-    dotClass: "bg-[#a1a1aa]",
-    patchActiveClass: "border-[#a1a1aa] bg-[#a1a1aa]/18 text-foreground",
+    dotClass: "bg-[#9898a0]",
+    patchActiveClass: "border-[#9898a0] bg-[#9898a0]/16 text-foreground",
   },
 };
 

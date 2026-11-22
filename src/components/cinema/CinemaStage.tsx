@@ -96,6 +96,7 @@ function snapPercent(val: number, targets: number[], threshold = 1.6): { value: 
 export function CinemaStage({
   project,
   playheadMs,
+  playheadRef,
   playing,
   loopEnabled,
   showSafeGuides,
@@ -104,6 +105,7 @@ export function CinemaStage({
   stageExpanded,
   mediaElementsRef,
   audioEngineRef,
+  redrawRef,
   mediaVersion,
   onSelectClip,
   onPreviewTransform,
@@ -124,6 +126,7 @@ export function CinemaStage({
 }: {
   project: CinemaProject;
   playheadMs: number;
+  playheadRef: React.RefObject<number>;
   playing: boolean;
   loopEnabled: boolean;
   showSafeGuides: boolean;
@@ -132,6 +135,7 @@ export function CinemaStage({
   stageExpanded: boolean;
   mediaElementsRef: React.RefObject<Map<string, HTMLVideoElement | HTMLImageElement>>;
   audioEngineRef: React.RefObject<CinemaAudioEngine | null>;
+  redrawRef: React.RefObject<(() => void) | null>;
   mediaVersion: number;
   onSelectClip: (clipId: string | null) => void;
   onPreviewTransform: (clipId: string, transform: CinemaTransform) => void;
@@ -160,6 +164,7 @@ export function CinemaStage({
   const [inlineEditClipId, setInlineEditClipId] = useState<string | null>(null);
   const [meterLevel, setMeterLevel] = useState(0);
   const binsRef = useRef<Float32Array>(new Float32Array(32));
+  const drawStateRef = useRef({ project, drag, showSafeGuides, playing });
 
   useEffect(() => {
     const el = viewportRef.current;
@@ -191,62 +196,68 @@ export function CinemaStage({
     };
   }, [canvasZoom, project.height, project.width, viewportSize.h, viewportSize.w]);
 
-  // Keep canvas rendered cleanly on every change / frame
-  useEffect(() => {
-    const canvas = renderCanvasRef.current;
-    if (!canvas) return;
-    if (canvas.width !== project.width) canvas.width = project.width;
-    if (canvas.height !== project.height) canvas.height = project.height;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+  const paintAt = useCallback(
+    (targetMs: number) => {
+      const canvas = renderCanvasRef.current;
+      if (!canvas) return;
+      const st = drawStateRef.current;
+      if (canvas.width !== st.project.width) canvas.width = st.project.width;
+      if (canvas.height !== st.project.height) canvas.height = st.project.height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
 
-    let rafId = 0;
-    const drawNow = () => {
       const engine = audioEngineRef.current;
-      if (playing && engine) {
+      if (st.playing && engine) {
         engine.getFrequencyBins(binsRef.current);
-        setMeterLevel(engine.getPeakLevel());
       } else {
         binsRef.current.fill(0);
-        setMeterLevel(0);
       }
 
-      // Apply transient drag transform so on-canvas drags are silky smooth
-      const activeProject = drag
+      const activeProject = st.drag
         ? {
-            ...project,
-            clips: project.clips.map((c) =>
-              c.id === drag.clipId && c.kind !== "audio" ? { ...c, transform: drag.preview } : c,
+            ...st.project,
+            clips: st.project.clips.map((c) =>
+              c.id === st.drag!.clipId && c.kind !== "audio" ? { ...c, transform: st.drag!.preview } : c,
             ),
           }
-        : project;
+        : st.project;
 
-      renderCinemaFrame(ctx, activeProject, playheadMs, {
+      renderCinemaFrame(ctx, activeProject, targetMs, {
         mediaElements: mediaElementsRef.current,
-        frequencyBins: playing && engine ? binsRef.current : undefined,
-        showSafeGuides,
+        frequencyBins: st.playing && engine ? binsRef.current : undefined,
+        showSafeGuides: st.showSafeGuides,
       });
+    },
+    [audioEngineRef, mediaElementsRef, renderCanvasRef],
+  );
 
-      if (playing) {
-        rafId = window.requestAnimationFrame(drawNow);
-      }
+  useEffect(() => {
+    drawStateRef.current = { project, drag, showSafeGuides, playing };
+    redrawRef.current = () => {
+      paintAt(playheadRef.current);
     };
+    if (!playing) {
+      paintAt(playheadMs);
+    }
+  }, [drag, mediaVersion, paintAt, playheadMs, playheadRef, playing, project, redrawRef, showSafeGuides]);
 
-    drawNow();
+  // Persistent 60fps RAF loop when playing (never depends on `playheadMs`)
+  useEffect(() => {
+    if (!playing) return;
+    let rafId = 0;
+    const tick = () => {
+      const engine = audioEngineRef.current;
+      setMeterLevel(engine ? engine.getPeakLevel() : 0);
+      paintAt(playheadRef.current);
+      rafId = window.requestAnimationFrame(tick);
+    };
+    rafId = window.requestAnimationFrame(tick);
     return () => {
       if (rafId) window.cancelAnimationFrame(rafId);
     };
-  }, [
-    audioEngineRef,
-    drag,
-    mediaElementsRef,
-    mediaVersion,
-    playheadMs,
-    playing,
-    project,
-    renderCanvasRef,
-    showSafeGuides,
-  ]);
+  }, [audioEngineRef, paintAt, playheadRef, playing]);
+
+  const displayMeterLevel = playing ? meterLevel : 0;
 
   const selectedVisual = useMemo(() => {
     if (!selectedClipId) return null;
@@ -481,14 +492,14 @@ export function CinemaStage({
           {/* Live Magnetic Snap Guides */}
           {snapGuides.x !== null ? (
             <div
-              className="pointer-events-none absolute inset-y-0 z-20 w-px bg-[color:var(--cinema-select)]"
+              className="pointer-events-none absolute inset-y-0 z-20 w-px bg-[color:var(--cinema-playhead)]"
               style={{ left: `${snapGuides.x}%` }}
               aria-hidden
             />
           ) : null}
           {snapGuides.y !== null ? (
             <div
-              className="pointer-events-none absolute inset-x-0 z-20 h-px bg-[color:var(--cinema-select)]"
+              className="pointer-events-none absolute inset-x-0 z-20 h-px bg-[color:var(--cinema-playhead)]"
               style={{ top: `${snapGuides.y}%` }}
               aria-hidden
             />
@@ -593,13 +604,13 @@ export function CinemaStage({
                   left: clamp(selectedBoxStyle.cx, 120, Math.max(120, displayDims.w - 120)),
                   top: Math.max(8, selectedBoxStyle.top - 48),
                 }}
-                className="cinema-glass-bar absolute z-30 flex -translate-x-1/2 items-center gap-0.5 rounded-full px-2 py-1"
+                className="cinema-glass-bar absolute z-30 flex -translate-x-1/2 items-center gap-0.5 rounded-xl px-1.5 py-1"
               >
                 {selectedVisual.kind === "text" ? (
                   <button
                     type="button"
                     onClick={() => setInlineEditClipId(selectedVisual.id)}
-                    className="h-7 rounded-full px-2.5 text-[11.5px] font-medium text-foreground transition-colors hover:bg-foreground/10"
+                    className="h-7 rounded-lg px-2.5 text-[11.5px] font-medium text-foreground transition-colors hover:bg-foreground/10"
                   >
                     Edit text
                   </button>
@@ -612,7 +623,7 @@ export function CinemaStage({
                         <button
                           type="button"
                           onClick={() => onExtractVideoAudio(selectedVisual.id)}
-                          className="inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[11.5px] font-medium text-[color:var(--cinema-studio-link)] transition-colors hover:bg-foreground/10"
+                          className="inline-flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[11.5px] font-medium text-[color:var(--nexus-link)] transition-colors hover:bg-[color:var(--nexus-link-soft)]"
                         >
                           <Waves className="size-3.5" strokeWidth={1.6} />
                           <span>Send Audio → Studio</span>
@@ -786,12 +797,12 @@ export function CinemaStage({
         <div className="flex items-center gap-1.5">
           {/* Stereo Peak Meter */}
           <div
-            className="hidden h-5 items-center gap-0.5 rounded-full border border-border/75 px-2 sm:flex"
+            className="hidden h-5 items-center gap-0.5 rounded-md border border-border/75 px-2 sm:flex"
             aria-label="Audio output level"
           >
             {Array.from({ length: 10 }, (_, idx) => {
               const thresh = (idx + 1) / 10;
-              const lit = meterLevel >= thresh;
+              const lit = displayMeterLevel >= thresh;
               return (
                 <span
                   key={idx}
@@ -799,7 +810,7 @@ export function CinemaStage({
                     lit
                       ? idx >= 8
                         ? "bg-[color:var(--cinema-playhead)]"
-                        : "bg-[color:var(--cinema-select)]"
+                        : "bg-foreground/80"
                       : "bg-foreground/15"
                   }`}
                 />

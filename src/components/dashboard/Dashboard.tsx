@@ -18,7 +18,13 @@ import { COMMAND_NODE_ID } from "@/extensions/command/node";
 import { RESEARCH_NODE_ID } from "@/extensions/research/node";
 import { SAMPLE_EXTENSIONS } from "@/extensions/samples";
 import { STUDIO_NODE_ID, studioExtension } from "@/extensions/studio/node";
-import type { CinemaExtractedAudioTransfer, CinemaVoiceoverRequest } from "@/lib/cinema/types";
+import type {
+  CinemaExtractedAudioTransfer,
+  CinemaVoiceoverRequest,
+  StudioAudioRepairedTransfer,
+  StudioRhythmGridTransfer,
+  StudioSmartCutsTransfer,
+} from "@/lib/cinema/types";
 import { emitStudioTakeRouted } from "@/lib/studio/studio-client";
 import type { StudioRecording, StudioRecordingContentV1 } from "@/lib/studio/types";
 import {
@@ -153,6 +159,18 @@ export function Dashboard({
   } | null>(null);
   const [studioIncomingAudio, setStudioIncomingAudio] = useState<{
     transfer: CinemaExtractedAudioTransfer;
+    serial: number;
+  } | null>(null);
+  const [cinemaIncomingSmartCuts, setCinemaIncomingSmartCuts] = useState<{
+    transfer: StudioSmartCutsTransfer;
+    serial: number;
+  } | null>(null);
+  const [cinemaIncomingRhythmGrid, setCinemaIncomingRhythmGrid] = useState<{
+    transfer: StudioRhythmGridTransfer;
+    serial: number;
+  } | null>(null);
+  const [cinemaIncomingRepaired, setCinemaIncomingRepaired] = useState<{
+    transfer: StudioAudioRepairedTransfer;
     serial: number;
   } | null>(null);
   const pendingCinemaModeRef = useRef<"mix" | "stems">("mix");
@@ -463,12 +481,75 @@ export function Dashboard({
       openStudio();
     });
 
+    const unsubSmartCuts = nexusBus.subscribe("studio:smart-cuts", (event) => {
+      const snap = extensionRegistry.getSnapshot();
+      const fromIdx = snap.slots.findIndex((s) => s.occupiedBy === STUDIO_NODE_ID);
+      const toIdx = snap.slots.findIndex((s) => s.occupiedBy === CINEMA_NODE_ID);
+      if (fromIdx >= 0 && toIdx >= 0) {
+        setTransfer((prev) => ({
+          fromSocket: fromIdx,
+          toSocket: toIdx,
+          label: "Studio → Cinema",
+          serial: (prev?.serial ?? 0) + 1,
+        }));
+      }
+      setCinemaIncomingSmartCuts((prev) => ({
+        transfer: event.payload,
+        serial: (prev?.serial ?? 0) + 1,
+      }));
+      openCinema();
+      flash(`Applied Smart Jump-Cuts (${event.payload.keepRegions.length} active segments) in Cinema.`);
+    });
+
+    const unsubRhythmGrid = nexusBus.subscribe("studio:rhythm-grid", (event) => {
+      const snap = extensionRegistry.getSnapshot();
+      const fromIdx = snap.slots.findIndex((s) => s.occupiedBy === STUDIO_NODE_ID);
+      const toIdx = snap.slots.findIndex((s) => s.occupiedBy === CINEMA_NODE_ID);
+      if (fromIdx >= 0 && toIdx >= 0) {
+        setTransfer((prev) => ({
+          fromSocket: fromIdx,
+          toSocket: toIdx,
+          label: "Studio → Cinema",
+          serial: (prev?.serial ?? 0) + 1,
+        }));
+      }
+      setCinemaIncomingRhythmGrid((prev) => ({
+        transfer: event.payload,
+        serial: (prev?.serial ?? 0) + 1,
+      }));
+      openCinema();
+      flash(`Synced ${event.payload.bpm} BPM Beat Grid to Cinema.`);
+    });
+
+    const unsubRepaired = nexusBus.subscribe("studio:audio-repaired", (event) => {
+      const snap = extensionRegistry.getSnapshot();
+      const fromIdx = snap.slots.findIndex((s) => s.occupiedBy === STUDIO_NODE_ID);
+      const toIdx = snap.slots.findIndex((s) => s.occupiedBy === CINEMA_NODE_ID);
+      if (fromIdx >= 0 && toIdx >= 0) {
+        setTransfer((prev) => ({
+          fromSocket: fromIdx,
+          toSocket: toIdx,
+          label: "Studio → Cinema",
+          serial: (prev?.serial ?? 0) + 1,
+        }));
+      }
+      setCinemaIncomingRepaired((prev) => ({
+        transfer: event.payload,
+        serial: (prev?.serial ?? 0) + 1,
+      }));
+      openCinema();
+      flash(`Returned repaired audio for “${event.payload.title}” to Cinema.`);
+    });
+
     return () => {
       unsubCommand();
       unsubProactive();
       unsubStudioRouted();
       unsubVoiceover();
       unsubExtracted();
+      unsubSmartCuts();
+      unsubRhythmGrid();
+      unsubRepaired();
     };
   }, [flash, openCinema, openStudio]);
 
@@ -784,7 +865,11 @@ export function Dashboard({
     surface.view === "cinema" ||
     surface.view === "command" ||
     surface.view === "nodes";
-  const hasCompactTopBar = surface.view === "command" || surface.view === "nodes";
+  const hasCompactTopBar =
+    surface.view === "command" ||
+    surface.view === "nodes" ||
+    surface.view === "cinema" ||
+    surface.view === "studio";
 
   if (!setupDone) {
     return (
@@ -949,6 +1034,7 @@ export function Dashboard({
                 incomingCinemaAudio={studioIncomingAudio}
                 onClose={() => setSurface({ view: "home", panel: null })}
                 onReleaseNode={() => void release(STUDIO_NODE_ID)}
+                onOpenCinema={openCinema}
                 onRouteTransfer={(fromId, toId) => triggerNodeTransfer(fromId, toId)}
                 onSendToCinema={(recording: StudioRecording, mode: "mix" | "stems") => {
                   pendingCinemaModeRef.current = mode;
@@ -967,6 +1053,9 @@ export function Dashboard({
                 hub={hub}
                 visible={surface.view === "cinema"}
                 incomingStudioTake={cinemaIncomingTake}
+                incomingSmartCuts={cinemaIncomingSmartCuts}
+                incomingRhythmGrid={cinemaIncomingRhythmGrid}
+                incomingRepairedAudio={cinemaIncomingRepaired}
                 onClose={() => setSurface({ view: "home", panel: null })}
                 onReleaseNode={() => void release(CINEMA_NODE_ID)}
                 onOpenStudio={openStudio}

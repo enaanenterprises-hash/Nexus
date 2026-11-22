@@ -7,15 +7,19 @@ import {
   FolderPlus,
   Image as ImageIcon,
   Layers,
+  Link2,
   Loader2,
   Mic,
+  MonitorPlay,
   MoreHorizontal,
   PanelLeft,
   PanelRight,
   Plus,
   Redo2,
   Save,
+  Scissors,
   Trash2,
+  Type,
   Undo2,
   Video,
   Waves,
@@ -48,12 +52,14 @@ import {
   extractAudioFromVideoBlob,
   ingestMediaFile,
   loadCinemaBlob,
+  saveCinemaBlob,
 } from "@/lib/cinema/media-db";
 import {
   ASPECT_RATIO_PRESETS,
   DEFAULT_FILTER,
   DEFAULT_TRANSFORM,
   ELEMENT_PRESETS,
+  TEXT_PRESETS,
   buildTemplateProject,
   type TextStylePreset,
 } from "@/lib/cinema/presets";
@@ -67,16 +73,27 @@ import type {
   CinemaMarker,
   CinemaProject,
   CinemaProjectSummary,
+  CinemaRhythmGrid,
   CinemaTrack,
   CinemaTrackKind,
   CinemaTransform,
   CinemaTransitionType,
   StockMediaItem,
+  StudioAudioRepairedTransfer,
+  StudioRhythmGridTransfer,
+  StudioSmartCutsTransfer,
 } from "@/lib/cinema/types";
-import type { ExtensionHubSnapshot, ExtensionId } from "@/lib/extensions";
-import { saveAudioBlob } from "@/lib/studio/audio-db";
+import {
+  detectBeatsAndTransients,
+  detectSpeechAndSilenceRegions,
+  setActiveCinemaProjectSnapshot,
+  type BridgeCutRegion,
+} from "@/lib/creative/nexus-bridge";
+import { nexusBus, type ExtensionHubSnapshot, type ExtensionId } from "@/lib/extensions";
+import { loadAudioBlob, saveAudioBlob } from "@/lib/studio/audio-db";
+import { getStudioRecording, fetchStudioStatus } from "@/lib/studio/studio-client";
 import type { StudioRecording, StudioRecordingContentV1 } from "@/lib/studio/types";
-import { computePeaksFromBuffer } from "@/lib/studio/wav";
+import { computePeaksFromBuffer, encodeWavFromBuffer, mixTracksOffline } from "@/lib/studio/wav";
 import { useTheme } from "@/lib/theme";
 import { CinemaCaptureModal } from "./CinemaCaptureModal";
 import { CinemaExportDialog } from "./CinemaExportDialog";
@@ -134,6 +151,9 @@ function studioEnvelopeToRecording(env: StudioRecordingContentV1): StudioRecordi
 export function CinemaView({
   visible,
   incomingStudioTake,
+  incomingSmartCuts,
+  incomingRhythmGrid,
+  incomingRepairedAudio,
   onClose,
   onReleaseNode,
   onOpenStudio,
@@ -144,6 +164,18 @@ export function CinemaView({
   incomingStudioTake?: {
     envelope: StudioRecordingContentV1;
     mode?: "mix" | "stems";
+    serial: number;
+  } | null;
+  incomingSmartCuts?: {
+    transfer: StudioSmartCutsTransfer;
+    serial: number;
+  } | null;
+  incomingRhythmGrid?: {
+    transfer: StudioRhythmGridTransfer;
+    serial: number;
+  } | null;
+  incomingRepairedAudio?: {
+    transfer: StudioAudioRepairedTransfer;
     serial: number;
   } | null;
   onClose: () => void;
@@ -159,12 +191,14 @@ export function CinemaView({
   const [summaries, setSummaries] = useState<CinemaProjectSummary[]>([]);
 
   const [project, setProject] = useState<CinemaProject>(() =>
-    buildTemplateProject("podcast-audiogram", "local-cinema-projects"),
+    buildTemplateProject("editorial-sequence", "local-cinema-projects"),
   );
   const projectRef = useRef(project);
   useEffect(() => {
     projectRef.current = project;
+    setActiveCinemaProjectSnapshot(project);
   }, [project]);
+  useEffect(() => () => setActiveCinemaProjectSnapshot(null), []);
 
   const [playheadMs, setPlayheadMs] = useState(0);
   const playheadRef = useRef(0);
@@ -180,12 +214,13 @@ export function CinemaView({
   const [timelineZoom, setTimelineZoom] = useState(1);
   const [timelineHeight, setTimelineHeight] = useState(248);
   const [snapEnabled, setSnapEnabled] = useState(true);
+  const [beatSnapEnabled, setBeatSnapEnabled] = useState(true);
   const [toolMode, setToolMode] = useState<CinemaTimelineTool>("select");
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
 
   // Panels & Modals
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [sidebarTab, setSidebarTab] = useState<CinemaSidebarTab>("studio");
+  const [sidebarTab, setSidebarTab] = useState<CinemaSidebarTab>("media");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
@@ -203,14 +238,19 @@ export function CinemaView({
   const [mediaVersion, setMediaVersion] = useState(0);
 
   const renderCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const stageRedrawRef = useRef<(() => void) | null>(null);
   const audioEngineRef = useRef<CinemaAudioEngine | null>(null);
   const mediaElementsRef = useRef<Map<string, HTMLVideoElement | HTMLImageElement>>(new Map());
+  const pendingVideoSeekRef = useRef<Map<string, number>>(new Map());
   const audioBuffersRef = useRef<Map<string, AudioBuffer>>(new Map());
   const hydratingRef = useRef<Set<string>>(new Set());
   const blobUrlsRef = useRef<Set<string>>(new Set());
   const noticeTimerRef = useRef<number | undefined>(undefined);
   const autosaveTimerRef = useRef<number | undefined>(undefined);
   const handledSerialRef = useRef<number>(0);
+  const handledSmartCutsSerialRef = useRef<number>(0);
+  const handledRhythmSerialRef = useRef<number>(0);
+  const handledRepairedSerialRef = useRef<number>(0);
 
   const showNotice = useCallback((msg: string) => {
     setNotice(msg);
@@ -322,7 +362,7 @@ export function CinemaView({
           const full = await getCinemaProject(st.databaseConfigured, list[0].id);
           if (full && alive) setProject(full);
         } else {
-          setProject(buildTemplateProject("podcast-audiogram", colId));
+          setProject(buildTemplateProject("editorial-sequence", colId));
         }
       }
     })();
@@ -377,8 +417,22 @@ export function CinemaView({
             vid.playsInline = true;
             vid.preload = "auto";
             vid.src = url;
+            vid.addEventListener("seeked", () => {
+              const queued = pendingVideoSeekRef.current.get(asset.id);
+              if (queued !== undefined) {
+                pendingVideoSeekRef.current.delete(asset.id);
+                if (Math.abs(vid.currentTime - queued) > 0.03) {
+                  vid.currentTime = queued;
+                  return;
+                }
+              }
+              stageRedrawRef.current?.();
+            });
+            vid.addEventListener("loadeddata", () => {
+              stageRedrawRef.current?.();
+            });
             await new Promise<void>((resolve) => {
-              const timer = window.setTimeout(resolve, 4000);
+              const timer = window.setTimeout(resolve, 4500);
               vid.onloadeddata = () => {
                 window.clearTimeout(timer);
                 resolve();
@@ -388,6 +442,14 @@ export function CinemaView({
                 resolve();
               };
             });
+            // Seek slightly past t=0 if still at blank frame so first frame decodes cleanly
+            if (vid.readyState >= 2 && vid.currentTime === 0) {
+              try {
+                vid.currentTime = 0.01;
+              } catch {
+                // Ignore initial seek constraint
+              }
+            }
             mediaElementsRef.current.set(asset.id, vid);
 
             // Attempt audio decode so Video soundtracks work seamlessly in Web Audio + Visualizers + MP4 export
@@ -439,16 +501,44 @@ export function CinemaView({
     }
   }, [playing, visible]);
 
-  const seekAllVideosAt = useCallback((ms: number) => {
+  const syncVideoElements = useCallback((ms: number, isPlayingMode: boolean) => {
+    const activeByAsset = new Map<string, number>();
     for (const clip of projectRef.current.clips) {
       if (clip.kind !== "video" || clip.hidden) continue;
-      const vid = mediaElementsRef.current.get(clip.assetId);
-      if (!(vid instanceof HTMLVideoElement)) continue;
       if (ms >= clip.startMs && ms <= clip.startMs + clip.durationMs) {
         const targetSec = Math.max(0, (clip.trimStartMs + (ms - clip.startMs) * (clip.speed || 1)) / 1000);
-        if (Math.abs(vid.currentTime - targetSec) > 0.04) {
-          vid.currentTime = targetSec;
+        activeByAsset.set(clip.assetId, targetSec);
+        const vid = mediaElementsRef.current.get(clip.assetId);
+        if (!(vid instanceof HTMLVideoElement)) continue;
+        const rate = Math.max(0.25, Math.min(4, clip.speed || 1));
+        if (Math.abs(vid.playbackRate - rate) > 0.02) {
+          vid.playbackRate = rate;
         }
+        if (isPlayingMode) {
+          if (vid.paused) {
+            if (Math.abs(vid.currentTime - targetSec) > 0.08) {
+              vid.currentTime = targetSec;
+            }
+            void vid.play().catch(() => {});
+          } else if (Math.abs(vid.currentTime - targetSec) > 0.28) {
+            vid.currentTime = targetSec;
+          }
+        } else {
+          if (!vid.paused) vid.pause();
+          if (Math.abs(vid.currentTime - targetSec) > 0.03) {
+            if (vid.seeking) {
+              pendingVideoSeekRef.current.set(clip.assetId, targetSec);
+            } else {
+              vid.currentTime = targetSec;
+            }
+          }
+        }
+      }
+    }
+
+    for (const [assetId, el] of mediaElementsRef.current) {
+      if (el instanceof HTMLVideoElement && !activeByAsset.has(assetId) && !el.paused) {
+        el.pause();
       }
     }
   }, []);
@@ -457,25 +547,28 @@ export function CinemaView({
     (nextMs: number) => {
       const dur = computeProjectDurationMs(projectRef.current);
       const clamped = Math.max(0, Math.min(dur, Math.round(nextMs)));
+      playheadRef.current = clamped;
       setPlayheadMs(clamped);
-      seekAllVideosAt(clamped);
+      syncVideoElements(clamped, playing);
       if (playing) {
         audioEngineRef.current?.play(projectRef.current, clamped, audioBuffersRef.current);
       }
     },
-    [playing, seekAllVideosAt],
+    [playing, syncVideoElements],
   );
 
-  // Playback loop
+  // Playback loop (plays native <video> smoothly while syncing audio + RAF clock)
   useEffect(() => {
     if (!playing) {
       audioEngineRef.current?.stop();
+      syncVideoElements(playheadRef.current, false);
       return;
     }
 
     const startWall = performance.now();
     const startOriginMs = playheadRef.current;
     audioEngineRef.current?.play(projectRef.current, startOriginMs, audioBuffersRef.current);
+    syncVideoElements(startOriginMs, true);
 
     let rafId = 0;
     const tick = (now: number) => {
@@ -484,18 +577,22 @@ export function CinemaView({
       if (next >= dur) {
         if (loopEnabled) {
           setPlaying(false);
+          playheadRef.current = 0;
           setPlayheadMs(0);
-          seekAllVideosAt(0);
+          syncVideoElements(0, false);
           window.setTimeout(() => setPlaying(true), 20);
         } else {
           setPlaying(false);
+          playheadRef.current = dur;
           setPlayheadMs(dur);
           audioEngineRef.current?.stop();
+          syncVideoElements(dur, false);
         }
         return;
       }
+      playheadRef.current = next;
       setPlayheadMs(next);
-      seekAllVideosAt(next);
+      syncVideoElements(next, true);
       rafId = window.requestAnimationFrame(tick);
     };
 
@@ -504,7 +601,7 @@ export function CinemaView({
       window.cancelAnimationFrame(rafId);
       audioEngineRef.current?.stop();
     };
-  }, [loopEnabled, playing, seekAllVideosAt]);
+  }, [loopEnabled, playing, syncVideoElements]);
 
   const handleTogglePlay = useCallback(() => {
     if (playing) {
@@ -751,13 +848,341 @@ export function CinemaView({
     [commitProjectChange, showNotice],
   );
 
+  const applySmartKeepRegions = useCallback(
+    (keepRegions: BridgeCutRegion[], sourceLabel: string) => {
+      if (keepRegions.length === 0) return;
+      commitProjectChange((prev) => {
+        const mappedRanges: Array<{ origStart: number; origEnd: number; outStart: number }> = [];
+        let cursor = 0;
+        for (const r of keepRegions) {
+          const s = Math.max(0, Math.round(r.startMs));
+          const e = Math.max(s + 180, Math.round(r.endMs));
+          mappedRanges.push({ origStart: s, origEnd: e, outStart: cursor });
+          cursor += e - s;
+        }
+
+        const nextClips: CinemaClip[] = [];
+        for (const clip of prev.clips) {
+          if (clip.kind !== "video" && clip.kind !== "audio") {
+            nextClips.push(clip);
+            continue;
+          }
+          const clipEnd = clip.startMs + clip.durationMs;
+          let addedPiece = false;
+          for (let i = 0; i < mappedRanges.length; i++) {
+            const mr = mappedRanges[i]!;
+            const ovStart = Math.max(clip.startMs, mr.origStart);
+            const ovEnd = Math.min(clipEnd, mr.origEnd);
+            if (ovEnd - ovStart < 140) continue;
+            addedPiece = true;
+            const trimAdvance = Math.round((ovStart - clip.startMs) * (clip.speed || 1));
+            const nextStart = mr.outStart + (ovStart - mr.origStart);
+            const nextDur = ovEnd - ovStart;
+            if (clip.kind === "audio") {
+              const fracStart = (ovStart - clip.startMs) / Math.max(1, clip.durationMs);
+              const fracEnd = (ovEnd - clip.startMs) / Math.max(1, clip.durationMs);
+              const i0 = Math.floor(fracStart * clip.peaks.length);
+              const i1 = Math.max(i0 + 4, Math.ceil(fracEnd * clip.peaks.length));
+              nextClips.push({
+                ...clip,
+                id: i === 0 ? clip.id : makeId("sc"),
+                startMs: nextStart,
+                durationMs: nextDur,
+                trimStartMs: clip.trimStartMs + trimAdvance,
+                peaks: clip.peaks.slice(i0, i1),
+              });
+            } else {
+              nextClips.push({
+                ...clip,
+                id: i === 0 ? clip.id : makeId("sc"),
+                startMs: nextStart,
+                durationMs: nextDur,
+                trimStartMs: clip.trimStartMs + trimAdvance,
+              });
+            }
+          }
+          if (!addedPiece) {
+            nextClips.push(clip);
+          }
+        }
+
+        const nextMarkers = prev.markers.map((m) => {
+          const hit = mappedRanges.find((r) => m.atMs >= r.origStart && m.atMs <= r.origEnd);
+          return hit ? { ...m, atMs: hit.outStart + (m.atMs - hit.origStart) } : m;
+        });
+
+        return { ...prev, clips: nextClips, markers: nextMarkers };
+      });
+      showNotice(`Applied Smart Jump-Cuts (${keepRegions.length} active segments) from “${sourceLabel}”.`);
+    },
+    [commitProjectChange, showNotice],
+  );
+
+  const applyRhythmGrid = useCallback(
+    (grid: CinemaRhythmGrid, label: string) => {
+      commitProjectChange((prev) => ({
+        ...prev,
+        rhythmGrid: grid,
+      }));
+      setBeatSnapEnabled(true);
+      showNotice(`Synced ${grid.bpm} BPM beat grid (${grid.beatMs.length} cues) from “${label}”.`);
+    },
+    [commitProjectChange, showNotice],
+  );
+
+  const refreshLinkedStudioAudioInPlace = useCallback(
+    async (recordingId: string) => {
+      const hasMatch = projectRef.current.clips.some(
+        (c) => c.kind === "audio" && c.studioRef?.recordingId === recordingId,
+      );
+      if (!hasMatch) return;
+
+      const st = await fetchStudioStatus();
+      const recording = await getStudioRecording(st.databaseConfigured, recordingId);
+      if (!recording || recording.tracks.length === 0) return;
+
+      const Ctx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!Ctx) return;
+
+      const actx = new Ctx();
+      const decodedTracks: Array<{ track: (typeof recording.tracks)[number]; blob: Blob; buffer: AudioBuffer }> = [];
+      try {
+        for (const tr of recording.tracks) {
+          let blob = tr.audioRef.idbKey ? await loadAudioBlob(tr.audioRef.idbKey) : null;
+          if (!blob && tr.audioRef.url) {
+            const res = await fetch(tr.audioRef.url);
+            if (res.ok) blob = await res.blob();
+          }
+          if (!blob) continue;
+          const buf = await actx.decodeAudioData(await blob.arrayBuffer());
+          decodedTracks.push({ track: tr, blob, buffer: buf });
+        }
+      } finally {
+        void actx.close();
+      }
+      if (decodedTracks.length === 0) return;
+
+      const rendered = await mixTracksOffline(
+        decodedTracks.map((d) => ({ track: d.track, buffer: d.buffer })),
+        recording.masterGain ?? 1,
+        48_000,
+      );
+      const wavBlob = encodeWavFromBuffer(rendered);
+      const peaks = computePeaksFromBuffer(rendered, 180);
+      const mixAssetId = makeId("ast");
+      const idbKey = `cin-studio-live-${mixAssetId}`;
+      await saveCinemaBlob(idbKey, wavBlob);
+      audioBuffersRef.current.set(mixAssetId, rendered);
+
+      for (const c of projectRef.current.clips) {
+        if (c.kind === "audio" && c.studioRef?.recordingId === recordingId && !c.studioRef.trackId) {
+          audioBuffersRef.current.set(c.assetId, rendered);
+        }
+      }
+
+      commitProjectChange(
+        (prev) => ({
+          ...prev,
+          assets: [
+            {
+              id: mixAssetId,
+              kind: "audio",
+              name: `${recording.title} (Live Mix)`,
+              idbKey,
+              url: null,
+              mimeType: "audio/wav",
+              byteLength: wavBlob.size,
+              durationMs: Math.max(500, Math.round(rendered.duration * 1000)),
+              width: 0,
+              height: 0,
+              thumbnails: [],
+              peaks,
+              source: "studio",
+              studioRef: {
+                recordingId: recording.id,
+                updatedAt: recording.updatedAt,
+                title: recording.title,
+              },
+            },
+            ...prev.assets,
+          ],
+          clips: prev.clips.map((c) =>
+            c.kind === "audio" && c.studioRef?.recordingId === recordingId && !c.studioRef.trackId
+              ? {
+                  ...c,
+                  assetId: mixAssetId,
+                  peaks,
+                  sourceDurationMs: Math.max(500, Math.round(rendered.duration * 1000)),
+                }
+              : c,
+          ),
+        }),
+        false,
+      );
+      setMediaVersion((v) => v + 1);
+      showNotice(`Live-refreshed “${recording.title}” mix from Recording Studio.`);
+    },
+    [commitProjectChange, showNotice],
+  );
+
+  useEffect(
+    () =>
+      nexusBus.subscribe("studio:recording-saved", (ev) => {
+        void refreshLinkedStudioAudioInPlace(ev.payload.recordingId);
+      }),
+    [refreshLinkedStudioAudioInPlace],
+  );
+
   // Auto-handle routed Recording Studio envelopes pushed across the Nexus Bus
   useEffect(() => {
-    if (!incomingStudioTake || incomingStudioTake.serial === handledSerialRef.current) return;
-    handledSerialRef.current = incomingStudioTake.serial;
-    const recording = studioEnvelopeToRecording(incomingStudioTake.envelope);
-    void handleImportStudioRecording(recording, incomingStudioTake.mode ?? "mix");
+    if (!incomingStudioTake) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled || incomingStudioTake.serial === handledSerialRef.current) return;
+      handledSerialRef.current = incomingStudioTake.serial;
+      const recording = studioEnvelopeToRecording(incomingStudioTake.envelope);
+      void handleImportStudioRecording(recording, incomingStudioTake.mode ?? "mix");
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [handleImportStudioRecording, incomingStudioTake]);
+
+  // Handle incoming Studio Smart Jump-Cuts
+  useEffect(() => {
+    if (!incomingSmartCuts) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled || incomingSmartCuts.serial === handledSmartCutsSerialRef.current) return;
+      handledSmartCutsSerialRef.current = incomingSmartCuts.serial;
+      applySmartKeepRegions(incomingSmartCuts.transfer.keepRegions, incomingSmartCuts.transfer.title);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [applySmartKeepRegions, incomingSmartCuts]);
+
+  // Handle incoming Studio Beat & Transient Grid
+  useEffect(() => {
+    if (!incomingRhythmGrid) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled || incomingRhythmGrid.serial === handledRhythmSerialRef.current) return;
+      handledRhythmSerialRef.current = incomingRhythmGrid.serial;
+      const tr = incomingRhythmGrid.transfer;
+      applyRhythmGrid(
+        {
+          bpm: tr.bpm,
+          beatMs: tr.beatMs,
+          transientMs: tr.transientMs,
+          sourceRecordingId: tr.recordingId,
+          sourceTitle: tr.title,
+        },
+        tr.title,
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [applyRhythmGrid, incomingRhythmGrid]);
+
+  // Handle repaired Video Audio returned sample-locked from Recording Studio
+  useEffect(() => {
+    if (!incomingRepairedAudio) return;
+    let cancelled = false;
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled || incomingRepairedAudio.serial === handledRepairedSerialRef.current) return;
+      handledRepairedSerialRef.current = incomingRepairedAudio.serial;
+      const tr = incomingRepairedAudio.transfer;
+      const blob = await loadAudioBlob(tr.audioKey);
+      if (!blob || cancelled) return;
+
+      const assetId = makeId("ast");
+      const cinKey = `cin-repaired-${assetId}`;
+      await saveCinemaBlob(cinKey, blob);
+
+      const Ctx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (Ctx) {
+        const actx = new Ctx();
+        try {
+          const decoded = await actx.decodeAudioData(await blob.arrayBuffer());
+          audioBuffersRef.current.set(assetId, decoded);
+        } finally {
+          void actx.close();
+        }
+      }
+
+      commitProjectChange((prev) => {
+        const [tracks, audioTrackId] = ensureTrackForKind(prev.tracks, "audio");
+        const nextClips = prev.clips.map((c) =>
+          c.id === tr.targetVideoClipId && c.kind === "video" ? { ...c, audioDetached: true } : c,
+        );
+        const repairedClip: CinemaAudioClip = {
+          id: makeId("aud"),
+          trackId: audioTrackId,
+          name: `${tr.title} (Repaired)`,
+          kind: "audio",
+          assetId,
+          startMs: Math.max(0, tr.sourceStartMs),
+          durationMs: tr.durationMs,
+          trimStartMs: 0,
+          sourceDurationMs: tr.durationMs,
+          speed: 1,
+          locked: false,
+          hidden: false,
+          volume: 1,
+          muted: false,
+          fadeInMs: 0,
+          fadeOutMs: 0,
+          peaks: tr.peaks,
+          duckOthers: false,
+          studioRef: {
+            recordingId: tr.recordingId,
+            updatedAt: tr.repairedAt,
+            title: tr.title,
+          },
+        };
+        return {
+          ...prev,
+          tracks,
+          assets: [
+            {
+              id: assetId,
+              kind: "audio",
+              name: `${tr.title} (Repaired Audio)`,
+              idbKey: cinKey,
+              url: null,
+              mimeType: tr.mimeType,
+              byteLength: tr.byteLength,
+              durationMs: tr.durationMs,
+              width: 0,
+              height: 0,
+              thumbnails: [],
+              peaks: tr.peaks,
+              source: "studio",
+              studioRef: {
+                recordingId: tr.recordingId,
+                updatedAt: tr.repairedAt,
+                title: tr.title,
+              },
+            },
+            ...prev.assets,
+          ],
+          clips: [...nextClips, repairedClip],
+        };
+      });
+      setMediaVersion((v) => v + 1);
+      showNotice(`Synced repaired audio back onto timeline at ${(tr.sourceStartMs / 1000).toFixed(1)}s.`);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [commitProjectChange, incomingRepairedAudio, showNotice]);
 
   const handleExtractVideoAudio = useCallback(
     async (clipId: string) => {
@@ -766,7 +1191,7 @@ export function CinemaView({
       const asset = projectRef.current.assets.find((a) => a.id === clip.assetId);
       if (!asset) return;
 
-      showNotice(`Extracting soundtrack from “${clip.name}” for Recording Studio…`);
+      showNotice(`Sending “${clip.name}” audio to Recording Studio…`);
       try {
         let blob: Blob | null = asset.idbKey ? await loadCinemaBlob(asset.idbKey) : null;
         if (!blob && asset.url) {
@@ -782,6 +1207,9 @@ export function CinemaView({
           projectId: projectRef.current.id,
           projectTitle: projectRef.current.title,
           clipName: clip.name,
+          sourceVideoClipId: clip.id,
+          sourceStartMs: clip.startMs,
+          sourceTrimStartMs: clip.trimStartMs,
           audioKey: extracted.audioKey,
           durationMs: extracted.durationMs,
           sampleRate: extracted.sampleRate,
@@ -951,6 +1379,9 @@ export function CinemaView({
             projectId: projectRef.current.id,
             projectTitle: projectRef.current.title,
             clipName: name,
+            sourceVideoClipId: "",
+            sourceStartMs: Math.round(playheadRef.current),
+            sourceTrimStartMs: 0,
             audioKey: extracted.audioKey,
             durationMs: extracted.durationMs,
             sampleRate: extracted.sampleRate,
@@ -1140,6 +1571,9 @@ export function CinemaView({
         projectId: projectRef.current.id,
         projectTitle: projectRef.current.title,
         clipName: `${projectRef.current.title} Master`,
+        sourceVideoClipId: "",
+        sourceStartMs: 0,
+        sourceTrimStartMs: 0,
         audioKey: key,
         durationMs,
         sampleRate,
@@ -1151,6 +1585,223 @@ export function CinemaView({
     },
     [],
   );
+
+  const handleCreateLowerThirdAtMarker = useCallback(
+    (marker: CinemaMarker) => {
+      const preset = TEXT_PRESETS.find((t) => t.id === "lower-third") ?? TEXT_PRESETS[0]!;
+      const clipId = makeId("l3d");
+      commitProjectChange((prev) => {
+        const [tracks, textTrackId] = ensureTrackForKind(prev.tracks, "text");
+        return {
+          ...prev,
+          tracks,
+          clips: [
+            ...prev.clips,
+            {
+              id: clipId,
+              trackId: textTrackId,
+              name: `Lower-Third · ${marker.label}`,
+              kind: "text",
+              startMs: marker.atMs,
+              durationMs: 3600,
+              trimStartMs: 0,
+              sourceDurationMs: 3600,
+              speed: 1,
+              locked: false,
+              hidden: false,
+              text: marker.label,
+              fontFamily: preset.fontFamily,
+              fontSize: preset.fontSize,
+              fontWeight: preset.fontWeight,
+              letterSpacing: preset.letterSpacing,
+              lineHeight: preset.lineHeight,
+              align: "left",
+              color: preset.color,
+              backgroundColor: preset.backgroundColor,
+              backgroundPadding: preset.backgroundPadding,
+              backgroundRadius: preset.backgroundRadius,
+              strokeColor: "transparent",
+              strokeWidth: 0,
+              textPreset: preset.id,
+              transform: {
+                ...DEFAULT_TRANSFORM,
+                x: 29,
+                y: 84,
+                width: 46,
+                height: 11,
+              },
+              animation: { inType: "slide-left", inDurationMs: 300, outType: "fade", outDurationMs: 260 },
+            },
+          ],
+        };
+      });
+      setSelectedClipId(clipId);
+      setInspectorTab("style");
+      showNotice(`Added lower-third "${marker.label}" at ${(marker.atMs / 1000).toFixed(1)}s.`);
+    },
+    [commitProjectChange, showNotice],
+  );
+
+  const handleMarkersToLowerThirds = useCallback(() => {
+    const markers = projectRef.current.markers;
+    if (markers.length === 0) {
+      showNotice("Add at least one marker to generate lower-thirds.");
+      return;
+    }
+    const preset = TEXT_PRESETS.find((t) => t.id === "lower-third") ?? TEXT_PRESETS[0]!;
+    commitProjectChange((prev) => {
+      const [tracks, textTrackId] = ensureTrackForKind(prev.tracks, "text");
+      const generated: CinemaClip[] = markers.map((marker) => ({
+        id: makeId("l3d"),
+        trackId: textTrackId,
+        name: `Lower-Third · ${marker.label}`,
+        kind: "text",
+        startMs: marker.atMs,
+        durationMs: 3500,
+        trimStartMs: 0,
+        sourceDurationMs: 3500,
+        speed: 1,
+        locked: false,
+        hidden: false,
+        text: marker.label,
+        fontFamily: preset.fontFamily,
+        fontSize: preset.fontSize,
+        fontWeight: preset.fontWeight,
+        letterSpacing: preset.letterSpacing,
+        lineHeight: preset.lineHeight,
+        align: "left",
+        color: preset.color,
+        backgroundColor: preset.backgroundColor,
+        backgroundPadding: preset.backgroundPadding,
+        backgroundRadius: preset.backgroundRadius,
+        strokeColor: "transparent",
+        strokeWidth: 0,
+        textPreset: preset.id,
+        transform: {
+          ...DEFAULT_TRANSFORM,
+          x: 29,
+          y: 84,
+          width: 46,
+          height: 11,
+        },
+        animation: { inType: "slide-left", inDurationMs: 280, outType: "fade", outDurationMs: 240 },
+      }));
+      return { ...prev, tracks, clips: [...prev.clips, ...generated] };
+    });
+    showNotice(`Generated ${markers.length} lower-third title cards from markers.`);
+  }, [commitProjectChange, showNotice]);
+
+  const decodeStudioMixBuffer = useCallback(async (recording: StudioRecording): Promise<AudioBuffer | null> => {
+    const Ctx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx || recording.tracks.length === 0) return null;
+    const actx = new Ctx();
+    const items: Array<{ track: (typeof recording.tracks)[number]; buffer: AudioBuffer }> = [];
+    try {
+      for (const tr of recording.tracks) {
+        let blob = tr.audioRef.idbKey ? await loadAudioBlob(tr.audioRef.idbKey) : null;
+        if (!blob && tr.audioRef.url) {
+          const res = await fetch(tr.audioRef.url);
+          if (res.ok) blob = await res.blob();
+        }
+        if (!blob) continue;
+        const decoded = await actx.decodeAudioData(await blob.arrayBuffer());
+        items.push({ track: tr, buffer: decoded });
+      }
+    } finally {
+      void actx.close();
+    }
+    if (items.length === 0) return null;
+    return mixTracksOffline(items, recording.masterGain ?? 1, 48_000);
+  }, []);
+
+  const handleSmartCutFromStudio = useCallback(
+    async (recording: StudioRecording) => {
+      const mixed = await decodeStudioMixBuffer(recording);
+      if (!mixed) {
+        showNotice("No offline audio tracks available for silence detection.");
+        return;
+      }
+      const { keepRegions } = detectSpeechAndSilenceRegions(mixed);
+      applySmartKeepRegions(keepRegions, recording.title);
+    },
+    [applySmartKeepRegions, decodeStudioMixBuffer, showNotice],
+  );
+
+  const handleImportBeatGridFromStudio = useCallback(
+    async (recording: StudioRecording) => {
+      const mixed = await decodeStudioMixBuffer(recording);
+      if (!mixed) {
+        showNotice("No offline audio tracks available for beat detection.");
+        return;
+      }
+      const rhythm = detectBeatsAndTransients(mixed, recording.bpm);
+      applyRhythmGrid(
+        {
+          bpm: rhythm.bpm,
+          beatMs: rhythm.beatMs,
+          transientMs: rhythm.transientMs,
+          sourceRecordingId: recording.id,
+          sourceTitle: recording.title,
+        },
+        recording.title,
+      );
+    },
+    [applyRhythmGrid, decodeStudioMixBuffer, showNotice],
+  );
+
+  const handleAutoCutToBeat = useCallback(() => {
+    const grid = projectRef.current.rhythmGrid;
+    if (!grid || grid.beatMs.length < 2) {
+      showNotice("Import a Beat Grid from Nexus Links (Recording Studio) first.");
+      return;
+    }
+    const targetClip =
+      (selectedClipId
+        ? projectRef.current.clips.find((c) => c.id === selectedClipId && c.kind === "video")
+        : null) ?? projectRef.current.clips.find((c) => c.kind === "video");
+    if (!targetClip) {
+      showNotice("Place a video clip on the timeline to auto-cut on the beat.");
+      return;
+    }
+
+    // Slice every 2 beats across the clip's span cleanly
+    const beatPoints = grid.beatMs.filter(
+      (b, idx) =>
+        idx % 2 === 0 &&
+        b > targetClip.startMs + 350 &&
+        b < targetClip.startMs + targetClip.durationMs - 350,
+    );
+    if (beatPoints.length === 0) {
+      showNotice("Clip does not span multiple beat intervals.");
+      return;
+    }
+
+    const boundaries = [targetClip.startMs, ...beatPoints, targetClip.startMs + targetClip.durationMs];
+    const sliced: CinemaClip[] = [];
+    for (let i = 0; i < boundaries.length - 1; i++) {
+      const s = boundaries[i]!;
+      const e = boundaries[i + 1]!;
+      const dur = e - s;
+      if (dur < 220) continue;
+      const trimAdvance = Math.round((s - targetClip.startMs) * (targetClip.speed || 1));
+      sliced.push({
+        ...targetClip,
+        id: i === 0 ? targetClip.id : makeId("bt"),
+        name: `${targetClip.name} · B${i + 1}`,
+        startMs: s,
+        durationMs: dur,
+        trimStartMs: targetClip.trimStartMs + trimAdvance,
+      });
+    }
+
+    commitProjectChange((prev) => ({
+      ...prev,
+      clips: prev.clips.flatMap((c) => (c.id === targetClip.id ? sliced : [c])),
+    }));
+    showNotice(`Sliced “${targetClip.name}” across ${sliced.length} beat cuts (${grid.bpm} BPM).`);
+  }, [commitProjectChange, selectedClipId, showNotice]);
 
   // Full Pro Keyboard Shortcuts (guarded from inputs/textareas & only active when Cinema is visible)
   useEffect(() => {
@@ -1250,16 +1901,16 @@ export function CinemaView({
       data-cinema-ready="true"
       className="cinema-screen flex h-full w-full flex-col overflow-hidden"
     >
-      {/* Apple Liquid Glass Header (pl-[92px] clears top-left Nexus Orb button) */}
-      <header className="cinema-header flex shrink-0 items-center justify-between gap-2 py-2 pl-[92px] pr-4 sm:pr-5">
-        <div className="flex min-w-0 items-center gap-1.5">
+      {/* Apple Liquid Glass Header (h-12 & pl-[68px] align seamlessly beside top-left Nexus Orb & w-[68px] rail) */}
+      <header className="cinema-header flex h-12 shrink-0 items-center justify-between gap-2 pl-[68px] pr-3 sm:pr-4">
+        <div className="flex min-w-0 items-center gap-1">
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
             onClick={() => setMobileSidebarOpen(true)}
             aria-label="Open Cinema tool drawer"
-            className="size-8 rounded-full lg:hidden"
+            className="size-7 rounded-lg lg:hidden"
           >
             <PanelLeft className="size-4" />
           </Button>
@@ -1271,7 +1922,7 @@ export function CinemaView({
             }
             onBlur={() => void persistProject(projectRef.current)}
             aria-label="Cinema project title"
-            className="h-8 w-full max-w-[160px] min-w-0 border-0 bg-transparent px-1.5 text-[14px] font-medium tracking-[-0.01em] text-foreground shadow-none focus-visible:ring-1 sm:max-w-[210px]"
+            className="h-7 w-full max-w-[160px] min-w-0 border-0 bg-transparent px-1.5 text-[13.5px] font-medium tracking-[-0.01em] text-foreground shadow-none focus-visible:ring-1 sm:max-w-[210px]"
           />
 
           <Tooltip>
@@ -1283,7 +1934,7 @@ export function CinemaView({
                   variant="ghost"
                   onClick={() => setProjectsDrawerOpen(true)}
                   aria-label="Browse Cinema projects"
-                  className="size-7 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
+                  className="size-7 shrink-0 rounded-lg text-muted-foreground hover:text-foreground"
                 >
                   <ChevronDown className="size-4" />
                 </Button>
@@ -1300,7 +1951,7 @@ export function CinemaView({
               disabled={undoStack.length === 0}
               onClick={handleUndo}
               aria-label="Undo"
-              className="size-7 rounded-full"
+              className="size-7 rounded-lg"
             >
               <Undo2 className="size-3.5" />
             </Button>
@@ -1311,34 +1962,109 @@ export function CinemaView({
               disabled={redoStack.length === 0}
               onClick={handleRedo}
               aria-label="Redo"
-              className="size-7 rounded-full"
+              className="size-7 rounded-lg"
             >
               <Redo2 className="size-3.5" />
             </Button>
           </div>
         </div>
 
-        {/* Center: Recording Studio Creative Suite Bridge Pill */}
+        {/* Center: Clean Format Spec Trigger */}
         <div className="hidden items-center gap-2 md:flex">
           <button
             type="button"
-            onClick={handleRequestVoiceoverInStudio}
-            className="inline-flex h-7 items-center gap-1.5 rounded-full border border-[color:var(--cinema-studio-link)]/40 bg-[color:var(--cinema-studio-link)]/10 px-3 text-[11.5px] font-medium text-[color:var(--cinema-studio-link)] transition-colors hover:bg-[color:var(--cinema-studio-link)]/18"
+            onClick={() => {
+              setSidebarTab("canvas");
+              setSidebarOpen(true);
+            }}
+            className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-border/75 bg-foreground/[0.03] px-2.5 font-mono text-[11px] text-muted-foreground tabular-nums transition-colors hover:border-foreground/30 hover:text-foreground"
           >
-            <Waves className="size-3.5" />
-            <span>
-              {project.hasLinkedStudioAudio ? "Synced w/ Studio · Voiceover" : "Record Voiceover in Studio"}
-            </span>
+            <span>{project.aspectRatio}</span>
+            <span className="opacity-40">·</span>
+            <span>{project.fps}fps</span>
+            {project.rhythmGrid ? (
+              <>
+                <span className="opacity-40">·</span>
+                <span className="text-[color:var(--nexus-link)]">{project.rhythmGrid.bpm} BPM</span>
+              </>
+            ) : null}
           </button>
         </div>
 
-        {/* Right: Inspector, Export, Actions, Done */}
+        {/* Right: Subtle Gold Links Menu, Inspector, Export, Actions, Done */}
         <div className="flex items-center gap-1.5">
           {notice ? (
-            <span className="hidden max-w-[230px] truncate rounded-full border border-border/75 bg-card/75 px-2.5 py-1 text-[11px] text-foreground xl:inline">
+            <span className="hidden max-w-[220px] truncate rounded-lg border border-border/75 bg-card/75 px-2.5 py-1 text-[11px] text-foreground xl:inline">
               {notice}
             </span>
           ) : null}
+
+          <Popover>
+            <PopoverTrigger
+              render={
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1.5 rounded-lg border-[color:var(--nexus-link-border)] bg-[color:var(--nexus-link-soft)] px-2.5 text-[11.5px] font-medium text-foreground hover:border-[color:var(--nexus-link)]"
+                >
+                  <span className="size-1.5 rounded-full bg-[color:var(--nexus-link)]" />
+                  <Link2 className="size-3.5 text-[color:var(--nexus-link)]" />
+                  <span className="hidden sm:inline">Links</span>
+                </Button>
+              }
+            />
+            <PopoverContent align="end" className="w-64 space-y-1 rounded-xl p-2">
+              <div className="flex items-center justify-between px-2 py-1 text-[11px] text-muted-foreground">
+                <span className="font-medium text-foreground">Nexus Node Links</span>
+                <span className="size-1.5 rounded-full bg-[color:var(--nexus-link)]" />
+              </div>
+              <button
+                type="button"
+                onClick={handleRequestVoiceoverInStudio}
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] text-foreground hover:bg-foreground/[0.06]"
+              >
+                <MonitorPlay className="size-3.5 text-[color:var(--nexus-link)]" />
+                <span>Score in Studio (Live Monitor)</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleAutoCutToBeat}
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] text-foreground hover:bg-foreground/[0.06]"
+              >
+                <Scissors className="size-3.5 text-[color:var(--nexus-link)]" />
+                <span>Auto-Cut Clip to Studio Beat Grid</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleMarkersToLowerThirds}
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] text-foreground hover:bg-foreground/[0.06]"
+              >
+                <Type className="size-3.5 text-[color:var(--nexus-link)]" />
+                <span>Generate Lower-Thirds from Cues</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSidebarTab("nodes");
+                  setSidebarOpen(true);
+                }}
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] text-foreground hover:bg-foreground/[0.06]"
+              >
+                <Waves className="size-3.5 text-[color:var(--nexus-link)]" />
+                <span>Browse Recording Studio Sessions</span>
+              </button>
+              <Separator className="my-1" />
+              <button
+                type="button"
+                onClick={onOpenStudio}
+                className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-[11.5px] text-[color:var(--nexus-link)] hover:bg-[color:var(--nexus-link-soft)]"
+              >
+                <span>Open Recording Studio</span>
+                <span className="font-mono text-[10px]">St</span>
+              </button>
+            </PopoverContent>
+          </Popover>
 
           <Button
             type="button"
@@ -1348,7 +2074,7 @@ export function CinemaView({
               if (window.innerWidth < 1280) setMobileInspectorOpen((v) => !v);
               else setInspectorOpen((v) => !v);
             }}
-            className="h-8 gap-1.5 rounded-full px-3 text-[12px]"
+            className="h-7 gap-1.5 rounded-lg px-2.5 text-[11.5px]"
           >
             <PanelRight className="size-3.5" />
             <span className="hidden sm:inline">Inspector</span>
@@ -1358,7 +2084,7 @@ export function CinemaView({
             type="button"
             size="sm"
             onClick={() => setExportOpen(true)}
-            className="h-8 gap-1.5 rounded-full bg-foreground px-3.5 text-[12px] font-medium text-background hover:opacity-90"
+            className="h-7 gap-1.5 rounded-lg bg-foreground px-3 text-[11.5px] font-medium text-background hover:opacity-90"
           >
             {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
             <span>Export</span>
@@ -1372,36 +2098,36 @@ export function CinemaView({
                   size="icon-sm"
                   variant="ghost"
                   aria-label="Cinema actions"
-                  className="size-8 rounded-full text-muted-foreground hover:text-foreground"
+                  className="size-7 rounded-lg text-muted-foreground hover:text-foreground"
                 >
                   <MoreHorizontal className="size-4" />
                 </Button>
               }
             />
-            <PopoverContent align="end" className="w-60 rounded-2xl p-2">
-              <div className="space-y-1">
+            <PopoverContent align="end" className="w-56 rounded-xl p-1.5">
+              <div className="space-y-0.5">
                 <button
                   type="button"
                   onClick={() => void persistProject(projectRef.current).then(() => showNotice("Saved Cinema project."))}
-                  className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[12.5px] text-foreground hover:bg-foreground/[0.06]"
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] text-foreground hover:bg-foreground/[0.06]"
                 >
-                  <Save className="size-4 text-muted-foreground" />
+                  <Save className="size-3.5 text-muted-foreground" />
                   <span>Save project now</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setCaptureOpen(true)}
-                  className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[12.5px] text-foreground hover:bg-foreground/[0.06]"
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] text-foreground hover:bg-foreground/[0.06]"
                 >
-                  <Video className="size-4 text-muted-foreground" />
+                  <Video className="size-3.5 text-muted-foreground" />
                   <span>Record Camera / Screen</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleRequestVoiceoverInStudio}
-                  className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[12.5px] text-[color:var(--cinema-studio-link)] hover:bg-foreground/[0.06]"
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] text-[color:var(--nexus-link)] hover:bg-[color:var(--nexus-link-soft)]"
                 >
-                  <Mic className="size-4" />
+                  <Mic className="size-3.5" />
                   <span>Record Voiceover in Studio</span>
                 </button>
                 <button
@@ -1412,18 +2138,18 @@ export function CinemaView({
                     });
                     downloadBlob(snap.blob, snap.filename);
                   }}
-                  className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[12.5px] text-foreground hover:bg-foreground/[0.06]"
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] text-foreground hover:bg-foreground/[0.06]"
                 >
-                  <ImageIcon className="size-4 text-muted-foreground" />
+                  <ImageIcon className="size-3.5 text-muted-foreground" />
                   <span>Save Frame Snapshot (.png)</span>
                 </button>
                 <Separator className="my-1" />
                 <button
                   type="button"
                   onClick={onReleaseNode}
-                  className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[12.5px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                 >
-                  <Trash2 className="size-4" />
+                  <Trash2 className="size-3.5" />
                   <span>Disconnect Cinema node</span>
                 </button>
               </div>
@@ -1435,7 +2161,7 @@ export function CinemaView({
             size="sm"
             variant="ghost"
             onClick={onClose}
-            className="h-8 rounded-full px-3 text-[12px] text-muted-foreground hover:text-foreground"
+            className="h-7 rounded-lg px-2.5 text-[11.5px] text-muted-foreground hover:text-foreground"
           >
             Done
           </Button>
@@ -1456,6 +2182,7 @@ export function CinemaView({
                 setSidebarOpen(true);
               }
             }}
+            onToggleCollapse={() => setSidebarOpen(false)}
             mobileOpen={mobileSidebarOpen}
             onMobileOpenChange={setMobileSidebarOpen}
             project={project}
@@ -1463,6 +2190,7 @@ export function CinemaView({
             onApplyTemplate={(tplId) => {
               const tpl = buildTemplateProject(tplId, project.collectionId || activeCollectionId, project.aspectRatio);
               setProject(tpl);
+              playheadRef.current = 0;
               setPlayheadMs(0);
               setSelectedClipId(tpl.clips[0]?.id ?? null);
               showNotice(`Loaded “${tpl.title}” template.`);
@@ -1471,6 +2199,9 @@ export function CinemaView({
             onAddAssetToTimeline={(asset) => addAssetToTimeline(asset)}
             onOpenCapture={() => setCaptureOpen(true)}
             onImportStudioRecording={handleImportStudioRecording}
+            onSmartCutFromStudio={handleSmartCutFromStudio}
+            onImportBeatGridFromStudio={handleImportBeatGridFromStudio}
+            onMarkersToLowerThirds={handleMarkersToLowerThirds}
             onRequestVoiceoverInStudio={handleRequestVoiceoverInStudio}
             onAddStockItem={handleAddStockItem}
             onAddTextPreset={handleAddTextPreset}
@@ -1497,6 +2228,7 @@ export function CinemaView({
           <CinemaStage
             project={project}
             playheadMs={playheadMs}
+            playheadRef={playheadRef}
             playing={playing}
             loopEnabled={loopEnabled}
             showSafeGuides={showSafeGuides}
@@ -1505,6 +2237,7 @@ export function CinemaView({
             stageExpanded={stageExpanded}
             mediaElementsRef={mediaElementsRef}
             audioEngineRef={audioEngineRef}
+            redrawRef={stageRedrawRef}
             mediaVersion={mediaVersion}
             onSelectClip={setSelectedClipId}
             onPreviewTransform={handlePreviewTransform}
@@ -1530,6 +2263,7 @@ export function CinemaView({
               playheadMs={playheadMs}
               zoom={timelineZoom}
               snapEnabled={snapEnabled}
+              beatSnapEnabled={beatSnapEnabled}
               toolMode={toolMode}
               selectedClipId={selectedClipId}
               timelineHeight={timelineHeight}
@@ -1541,6 +2275,8 @@ export function CinemaView({
               onSeek={handleSeek}
               onChangeZoom={setTimelineZoom}
               onToggleSnap={() => setSnapEnabled((v) => !v)}
+              onToggleBeatSnap={() => setBeatSnapEnabled((v) => !v)}
+              onAutoCutToBeat={handleAutoCutToBeat}
               onChangeTool={setToolMode}
               onMoveClip={(clipId, startMs, trackId) =>
                 commitProjectChange((prev) => ({
@@ -1559,6 +2295,23 @@ export function CinemaView({
               onDeleteClip={handleDeleteClip}
               onAddMarker={handleAddMarker}
               onSelectMarker={() => setInspectorTab("layers")}
+              onUpdateMarker={(markerId, label) =>
+                commitProjectChange(
+                  (prev) => ({
+                    ...prev,
+                    markers: prev.markers.map((m) => (m.id === markerId ? { ...m, label } : m)),
+                  }),
+                  false,
+                )
+              }
+              onDeleteMarker={(markerId) =>
+                commitProjectChange((prev) => ({
+                  ...prev,
+                  markers: prev.markers.filter((m) => m.id !== markerId),
+                }))
+              }
+              onCreateLowerThirdAtMarker={handleCreateLowerThirdAtMarker}
+              onPushMarkersToStudio={handleRequestVoiceoverInStudio}
               onToggleTrackMute={(trackId) =>
                 commitProjectChange((prev) => ({
                   ...prev,
@@ -1647,6 +2400,7 @@ export function CinemaView({
                   markers: prev.markers.filter((m) => m.id !== markerId),
                 }))
               }
+              onCreateLowerThirdAtMarker={handleCreateLowerThirdAtMarker}
               onPushMarkersToStudio={handleRequestVoiceoverInStudio}
               onResyncStudioAudio={handleResyncStudioAudio}
               onExtractVideoAudio={handleExtractVideoAudio}
@@ -1687,6 +2441,7 @@ export function CinemaView({
                 markers: prev.markers.filter((m) => m.id !== markerId),
               }))
             }
+            onCreateLowerThirdAtMarker={handleCreateLowerThirdAtMarker}
             onPushMarkersToStudio={handleRequestVoiceoverInStudio}
             onResyncStudioAudio={handleResyncStudioAudio}
             onExtractVideoAudio={handleExtractVideoAudio}

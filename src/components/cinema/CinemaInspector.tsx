@@ -12,6 +12,7 @@ import {
   Sliders,
   Sparkles,
   Trash2,
+  Type,
   Unlock,
   Waves,
   X,
@@ -23,6 +24,7 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { FILTER_PRESETS } from "@/lib/cinema/presets";
 import type {
+  CinemaAudioClip,
   CinemaBlendMode,
   CinemaClip,
   CinemaFontFamily,
@@ -58,11 +60,10 @@ const BLEND_MODES: Array<{ value: CinemaBlendMode; label: string }> = [
 const COLOR_CHIPS = [
   "#f5f5f7",
   "#09090b",
-  "#38bdf8",
-  "#5b9cf6",
-  "#ef4444",
-  "#22c55e",
+  "#ff3b30",
   "#d4d4d8",
+  "#71717a",
+  "#22c55e",
   "transparent",
 ] as const;
 
@@ -78,6 +79,7 @@ export function CinemaInspectorContent({
   onSeek,
   onUpdateMarker,
   onDeleteMarker,
+  onCreateLowerThirdAtMarker,
   onPushMarkersToStudio,
   onResyncStudioAudio,
   onExtractVideoAudio,
@@ -94,6 +96,7 @@ export function CinemaInspectorContent({
   onSeek: (ms: number) => void;
   onUpdateMarker: (markerId: string, label: string) => void;
   onDeleteMarker: (markerId: string) => void;
+  onCreateLowerThirdAtMarker: (marker: CinemaMarker) => void;
   onPushMarkersToStudio: (markers: CinemaMarker[]) => void;
   onResyncStudioAudio: (clipId: string) => void;
   onExtractVideoAudio: (clipId: string) => void;
@@ -101,11 +104,19 @@ export function CinemaInspectorContent({
 }) {
   const [resyncing, setResyncing] = useState(false);
 
+  const audioStemClips = project.clips.filter(
+    (c): c is CinemaAudioClip => c.kind === "audio",
+  );
   const hasTransform = selectedClip && selectedClip.kind !== "audio";
   const hasFilter = selectedClip && (selectedClip.kind === "video" || selectedClip.kind === "image");
   const hasAnim = selectedClip && selectedClip.kind !== "audio";
   const hasAudioControls =
     selectedClip && (selectedClip.kind === "audio" || selectedClip.kind === "video");
+  const canBindAudioStem =
+    selectedClip &&
+    (selectedClip.kind === "visualizer" ||
+      selectedClip.kind === "text" ||
+      selectedClip.kind === "shape");
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -662,13 +673,38 @@ export function CinemaInspectorContent({
                   </div>
                 </div>
 
+                {selectedClip.kind === "audio" ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onUpdateClip(selectedClip.id, (c) =>
+                        c.kind === "audio" ? { ...c, duckOthers: !c.duckOthers } : c,
+                      )
+                    }
+                    className={`flex h-8 w-full items-center justify-between rounded-lg border px-2.5 text-[11px] transition-colors ${
+                      selectedClip.duckOthers
+                        ? "border-[color:var(--nexus-link-border)] bg-[color:var(--nexus-link-soft)] font-medium text-foreground"
+                        : "border-border/75 bg-background/50 text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <span>Auto-Duck Music Below This Track</span>
+                    <span
+                      className={`font-mono text-[10px] ${
+                        selectedClip.duckOthers ? "text-[color:var(--nexus-link)]" : ""
+                      }`}
+                    >
+                      {selectedClip.duckOthers ? "Active" : "Off"}
+                    </span>
+                  </button>
+                ) : null}
+
                 {selectedClip.kind === "video" ? (
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
                     onClick={() => onExtractVideoAudio(selectedClip.id)}
-                    className="h-8 w-full gap-1.5 rounded-full border-[color:var(--cinema-studio-link)]/50 text-[11.5px] text-[color:var(--cinema-studio-link)]"
+                    className="h-8 w-full gap-1.5 rounded-lg border-[color:var(--nexus-link-border)] bg-[color:var(--nexus-link-soft)] text-[11.5px] text-[color:var(--nexus-link)]"
                   >
                     <Waves className="size-3.5" />
                     <span>Send Audio Track → Studio</span>
@@ -689,12 +725,48 @@ export function CinemaInspectorContent({
                         setResyncing(false);
                       }
                     }}
-                    className="h-8 w-full gap-1.5 rounded-full border-[color:var(--cinema-studio-link)]/50 text-[11.5px] text-[color:var(--cinema-studio-link)]"
+                    className="h-8 w-full gap-1.5 rounded-lg border-[color:var(--nexus-link-border)] bg-[color:var(--nexus-link-soft)] text-[11.5px] text-[color:var(--nexus-link)]"
                   >
                     <RefreshCw className={`size-3.5 ${resyncing ? "animate-spin" : ""}`} />
                     <span>Pull Latest from Studio</span>
                   </Button>
                 ) : null}
+              </div>
+            ) : null}
+
+            {/* Stem-Bound Audio Reactivity (Visualizers, Typography & Shapes) */}
+            {canBindAudioStem ? (
+              <div className="space-y-2 rounded-2xl border border-border/75 bg-card/50 p-3">
+                <div className="flex items-center justify-between text-[11.5px]">
+                  <span className="font-medium text-foreground">Stem Reactivity</span>
+                  {selectedClip.reactiveAudioClipId ? (
+                    <span className="size-1.5 rounded-full bg-[color:var(--nexus-link)]" />
+                  ) : null}
+                </div>
+                <Select
+                  value={selectedClip.reactiveAudioClipId || "__master__"}
+                  onValueChange={(val) => {
+                    if (!val) return;
+                    const nextId = val === "__master__" ? undefined : val;
+                    onUpdateClip(selectedClip.id, (c) =>
+                      c.kind === "visualizer" || c.kind === "text" || c.kind === "shape"
+                        ? { ...c, reactiveAudioClipId: nextId }
+                        : c,
+                    );
+                  }}
+                >
+                  <SelectTrigger className="h-8 w-full rounded-lg text-[11.5px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__master__">Master Output Mix</SelectItem>
+                    {audioStemClips.map((aud) => (
+                      <SelectItem key={aud.id} value={aud.id}>
+                        Stem: {aud.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             ) : null}
           </div>
@@ -1027,7 +1099,7 @@ export function CinemaInspectorContent({
                   <button
                     type="button"
                     onClick={() => onPushMarkersToStudio(project.markers)}
-                    className="text-[10.5px] font-medium text-[color:var(--cinema-studio-link)] hover:underline"
+                    className="text-[10.5px] font-medium text-[color:var(--nexus-link)] hover:underline"
                   >
                     Sync to Studio
                   </button>
@@ -1043,12 +1115,12 @@ export function CinemaInspectorContent({
                   {project.markers.map((marker) => (
                     <div
                       key={marker.id}
-                      className="flex items-center gap-1.5 rounded-xl border border-border/75 bg-card/55 px-2.5 py-1.5"
+                      className="flex items-center gap-1 rounded-xl border border-border/75 bg-card/55 px-2.5 py-1.5"
                     >
                       <button
                         type="button"
                         onClick={() => onSeek(marker.atMs)}
-                        className="shrink-0 font-mono text-[10.5px] text-[color:var(--cinema-select)] tabular-nums hover:underline"
+                        className="shrink-0 font-mono text-[10.5px] text-[color:var(--cinema-playhead)] tabular-nums hover:underline"
                       >
                         {(marker.atMs / 1000).toFixed(1)}s
                       </button>
@@ -1057,6 +1129,15 @@ export function CinemaInspectorContent({
                         onChange={(e) => onUpdateMarker(marker.id, e.target.value)}
                         className="h-6 border-0 bg-transparent px-1 text-[11.5px] shadow-none"
                       />
+                      <button
+                        type="button"
+                        title="Create lower-third card at marker"
+                        aria-label={`Add lower-third at ${marker.label}`}
+                        onClick={() => onCreateLowerThirdAtMarker(marker)}
+                        className="p-1 text-muted-foreground hover:text-foreground"
+                      >
+                        <Type className="size-3" />
+                      </button>
                       <button
                         type="button"
                         onClick={() => onDeleteMarker(marker.id)}

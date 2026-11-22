@@ -9,9 +9,13 @@ import {
   Image as ImageIcon,
   Layers,
   LayoutTemplate,
+  Link2,
   Loader2,
   Mic,
+  MonitorPlay,
+  PanelLeftClose,
   Plus,
+  Scissors,
   Search,
   Shapes,
   SlidersHorizontal,
@@ -50,34 +54,47 @@ import {
 import type { StudioCollection, StudioRecording, StudioRecordingSummary } from "@/lib/studio/types";
 
 export type CinemaSidebarTab =
-  | "templates"
   | "media"
-  | "studio"
-  | "stock"
+  | "templates"
   | "text"
   | "elements"
-  | "canvas";
+  | "stock"
+  | "canvas"
+  | "nodes";
 
-const SIDEBAR_ITEMS: Array<{
-  id: CinemaSidebarTab;
+const CORE_SIDEBAR_ITEMS: Array<{
+  id: Exclude<CinemaSidebarTab, "nodes">;
   label: string;
   icon: typeof LayoutTemplate;
 }> = [
-  { id: "templates", label: "Templates", icon: LayoutTemplate },
   { id: "media", label: "Media", icon: Layers },
-  { id: "studio", label: "Studio", icon: Waves },
-  { id: "stock", label: "Stock", icon: Film },
+  { id: "templates", label: "Templates", icon: LayoutTemplate },
   { id: "text", label: "Text", icon: Type },
   { id: "elements", label: "Elements", icon: Shapes },
+  { id: "stock", label: "Stock", icon: Film },
   { id: "canvas", label: "Canvas", icon: SlidersHorizontal },
 ];
 
+const TAB_TITLES: Record<CinemaSidebarTab, string> = {
+  media: "Media Bin",
+  templates: "Templates",
+  text: "Typography",
+  elements: "Elements & FX",
+  stock: "Stock Library",
+  canvas: "Canvas Format",
+  nodes: "Nexus Links",
+};
+
 const TOPIC_CHIPS = ["Architecture", "Minimal", "Nature", "Studio", "City", "Light"] as const;
+
+const ACCEPTED_MEDIA_TYPES =
+  ".mp4,.mov,.webm,.m4v,.mkv,.png,.jpg,.jpeg,.webp,.gif,.wav,.mp3,.m4a,.ogg,.aac,video/mp4,video/webm,video/quicktime,video/*,image/*,audio/*";
 
 export function CinemaSidebar({
   open,
   activeTab,
   onSelectTab,
+  onToggleCollapse,
   mobileOpen,
   onMobileOpenChange,
   project,
@@ -87,6 +104,9 @@ export function CinemaSidebar({
   onAddAssetToTimeline,
   onOpenCapture,
   onImportStudioRecording,
+  onSmartCutFromStudio,
+  onImportBeatGridFromStudio,
+  onMarkersToLowerThirds,
   onRequestVoiceoverInStudio,
   onAddStockItem,
   onAddTextPreset,
@@ -99,6 +119,7 @@ export function CinemaSidebar({
   open: boolean;
   activeTab: CinemaSidebarTab;
   onSelectTab: (tab: CinemaSidebarTab) => void;
+  onToggleCollapse: () => void;
   mobileOpen: boolean;
   onMobileOpenChange: (open: boolean) => void;
   project: CinemaProject;
@@ -111,6 +132,9 @@ export function CinemaSidebar({
     rec: StudioRecording,
     mode: "mix" | "stems" | "captions" | "markers",
   ) => Promise<void>;
+  onSmartCutFromStudio: (rec: StudioRecording) => Promise<void>;
+  onImportBeatGridFromStudio: (rec: StudioRecording) => Promise<void>;
+  onMarkersToLowerThirds: () => void;
   onRequestVoiceoverInStudio: () => void;
   onAddStockItem: (item: StockMediaItem) => Promise<void>;
   onAddTextPreset: (preset: TextStylePreset) => void;
@@ -120,13 +144,13 @@ export function CinemaSidebar({
   onChangeBackground: (bg: CinemaBackground) => void;
   onOpenStudioView: () => void;
 }) {
-  // Recording Studio Bridge State
+  // Recording Studio Bridge State (inside the dedicated Nexus Links panel)
   const [studioDb, setStudioDb] = useState(false);
   const [studioCols, setStudioCols] = useState<StudioCollection[]>([]);
   const [studioColId, setStudioColId] = useState("");
   const [studioRecs, setStudioRecs] = useState<StudioRecordingSummary[]>([]);
   const [loadingStudio, setLoadingStudio] = useState(false);
-  const [importingRecId, setImportingRecId] = useState<string | null>(null);
+  const [importingRecKey, setImportingRecKey] = useState<string | null>(null);
 
   // Stock Pexels State
   const [stockType, setStockType] = useState<"videos" | "photos">("videos");
@@ -139,7 +163,7 @@ export function CinemaSidebar({
   const [dragOverMedia, setDragOverMedia] = useState(false);
 
   useEffect(() => {
-    if (activeTab !== "studio") return;
+    if (activeTab !== "nodes") return;
     let cancelled = false;
     void (async () => {
       await Promise.resolve();
@@ -205,18 +229,23 @@ export function CinemaSidebar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, stockServerConfigured]);
 
-  async function triggerStudioImport(
+  async function triggerStudioAction(
     summary: StudioRecordingSummary,
-    mode: "mix" | "stems" | "captions" | "markers",
+    action: "mix" | "stems" | "captions" | "markers" | "smart-cut" | "beat-grid",
   ) {
-    setImportingRecId(`${summary.id}-${mode}`);
+    setImportingRecKey(`${summary.id}-${action}`);
     try {
       const full = await getStudioRecording(studioDb, summary.id);
-      if (full) {
-        await onImportStudioRecording(full, mode);
+      if (!full) return;
+      if (action === "smart-cut") {
+        await onSmartCutFromStudio(full);
+      } else if (action === "beat-grid") {
+        await onImportBeatGridFromStudio(full);
+      } else {
+        await onImportStudioRecording(full, action);
       }
     } finally {
-      setImportingRecId(null);
+      setImportingRecKey(null);
     }
   }
 
@@ -237,327 +266,258 @@ export function CinemaSidebar({
   }
 
   const drawerBody = (
-    <div className="cinema-scroll flex min-h-0 flex-1 flex-col overflow-y-auto px-3.5 py-3">
-      {activeTab === "templates" ? (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-[13px] font-medium text-foreground">Starter Templates</h3>
-            <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
-              {CINEMA_TEMPLATES.length}
-            </span>
-          </div>
-          <div className="grid grid-cols-1 gap-2">
-            {CINEMA_TEMPLATES.map((tpl) => (
-              <button
-                key={tpl.id}
-                type="button"
-                onClick={() => onApplyTemplate(tpl.id)}
-                className="group flex items-start gap-3 rounded-2xl border border-border/80 bg-card/65 p-3 text-left transition-colors hover:border-[color:var(--cinema-select)]/60 hover:bg-card"
-              >
-                <span
-                  className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl border border-white/10 text-[11px] font-medium text-white shadow-inner"
-                  style={{ background: tpl.accentSwatch }}
-                >
-                  {tpl.defaultAspect}
-                </span>
-                <div className="min-w-0">
-                  <div className="text-[12.5px] font-medium text-foreground">{tpl.name}</div>
-                  <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-                    {tpl.subtitle}
-                  </p>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
+    <div
+      onDragOver={(e) => {
+        if (activeTab === "media" && e.dataTransfer.types.includes("Files")) {
+          e.preventDefault();
+          setDragOverMedia(true);
+        }
+      }}
+      onDragLeave={() => {
+        if (dragOverMedia) setDragOverMedia(false);
+      }}
+      onDrop={(e) => {
+        if (activeTab === "media") handleDrop(e);
+      }}
+      className="cinema-scroll flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-3"
+    >
       {activeTab === "media" ? (
-        <div className="space-y-3.5">
-          <div
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOverMedia(true);
-            }}
-            onDragLeave={() => setDragOverMedia(false)}
-            onDrop={handleDrop}
-            className={`rounded-2xl border border-dashed p-3.5 text-center transition-colors ${
-              dragOverMedia
-                ? "border-[color:var(--cinema-select)] bg-[color:var(--cinema-select-soft)]"
-                : "border-border/85 bg-card/45"
-            }`}
-          >
-            <Upload className="mx-auto size-4 text-muted-foreground" strokeWidth={1.6} />
-            <p className="mt-1.5 text-[12px] font-medium text-foreground">Drop video, photos, or audio</p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">MP4, WebM, MOV, PNG, JPG, WAV</p>
-            <div className="mt-2.5 flex items-center justify-center gap-1.5">
-              <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full bg-foreground px-3 text-[11.5px] font-medium text-background transition-opacity hover:opacity-90">
-                <Plus className="size-3.5" />
-                <span>Upload</span>
-                <input
-                  type="file"
-                  accept="video/*,image/*,audio/*"
-                  multiple
-                  onChange={(e) => void handleFileInput(e)}
-                  className="hidden"
-                />
-              </label>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={onOpenCapture}
-                className="h-8 gap-1.5 rounded-full px-3 text-[11.5px]"
-              >
-                <Video className="size-3.5" />
-                <span>Record</span>
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <h3 className="text-[12.5px] font-medium text-foreground">Project Bin</h3>
-            <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
-              {project.assets.length}
-            </span>
-          </div>
-
-          {project.assets.length === 0 ? (
-            <p className="rounded-2xl border border-border/60 bg-card/30 px-3 py-5 text-center text-[11.5px] text-muted-foreground">
-              Upload footage, capture your screen, or pull a take from Recording Studio.
-            </p>
-          ) : (
-            <div className="grid grid-cols-2 gap-2">
-              {project.assets.map((asset) => (
-                <button
-                  key={asset.id}
-                  type="button"
-                  onClick={() => onAddAssetToTimeline(asset)}
-                  className="group overflow-hidden rounded-xl border border-border/80 bg-card/70 text-left transition-colors hover:border-[color:var(--cinema-select)]/70"
-                >
-                  <div className="relative aspect-video w-full overflow-hidden bg-black/40">
-                    {asset.thumbnails[0] ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={asset.thumbnails[0]}
-                        alt={asset.name}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center">
-                        {asset.kind === "audio" ? (
-                          <AudioLines className="size-4 text-[color:var(--cinema-studio-link)]" />
-                        ) : (
-                          <ImageIcon className="size-4 text-muted-foreground" />
-                        )}
-                      </div>
-                    )}
-                    <span className="absolute right-1.5 bottom-1 rounded bg-black/75 px-1.5 py-0.5 font-mono text-[9.5px] text-white tabular-nums">
-                      {(asset.durationMs / 1000).toFixed(1)}s
-                    </span>
-                  </div>
-                  <div className="p-2">
-                    <div className="truncate text-[11.5px] font-medium text-foreground">
-                      {asset.name}
-                    </div>
-                    <div className="mt-0.5 flex items-center justify-between text-[10px] text-muted-foreground">
-                      <span className="capitalize">{asset.kind}</span>
-                      <span className="text-[color:var(--cinema-select)] opacity-0 transition-opacity group-hover:opacity-100">
-                        + Add
-                      </span>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      ) : null}
-
-      {activeTab === "studio" ? (
-        <div className="space-y-3.5">
-          <div className="rounded-2xl border border-[color:var(--cinema-studio-link)]/35 bg-[color:var(--cinema-studio-link)]/10 p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5 text-[12.5px] font-medium text-foreground">
-                <Waves className="size-4 text-[color:var(--cinema-studio-link)]" />
-                <span>Recording Studio Sync</span>
-              </div>
-              <button
-                type="button"
-                onClick={onOpenStudioView}
-                className="text-[11px] font-medium text-[color:var(--cinema-studio-link)] hover:underline"
-              >
-                Open Studio
-              </button>
-            </div>
-            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-              Pull multi-track takes, markers, and captions straight onto Cinema without rendering intermediates.
-            </p>
+        <div className="space-y-3">
+          <div className="flex items-center gap-1.5">
+            <label className="inline-flex h-8 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-foreground px-3 text-[12px] font-medium text-background transition-opacity hover:opacity-90">
+              <Plus className="size-3.5" strokeWidth={1.75} />
+              <span>Import Media</span>
+              <input
+                type="file"
+                accept={ACCEPTED_MEDIA_TYPES}
+                multiple
+                onChange={(e) => void handleFileInput(e)}
+                className="hidden"
+              />
+            </label>
             <Button
               type="button"
               size="sm"
-              onClick={onRequestVoiceoverInStudio}
-              className="mt-2.5 h-8 w-full gap-1.5 rounded-full bg-foreground text-[11.5px] font-medium text-background hover:opacity-90"
+              variant="outline"
+              onClick={onOpenCapture}
+              className="h-8 gap-1.5 rounded-lg px-2.5 text-[12px]"
             >
-              <Mic className="size-3.5" />
-              <span>Record Voiceover in Studio</span>
+              <Video className="size-3.5" strokeWidth={1.6} />
+              <span>Record</span>
             </Button>
           </div>
 
-          {studioCols.length > 0 ? (
-            <Select
-              value={studioColId}
-              onValueChange={(val) => {
-                if (!val) return;
-                setStudioColId(val);
-                void listStudioRecordings(studioDb, val).then(setStudioRecs);
-              }}
+          {dragOverMedia || project.assets.length === 0 ? (
+            <div
+              className={`rounded-xl border border-dashed px-3 py-6 text-center transition-colors ${
+                dragOverMedia
+                  ? "border-[color:var(--cinema-playhead)] bg-[color:var(--studio-accent-soft)]"
+                  : "border-border/80 bg-card/35"
+              }`}
             >
-              <SelectTrigger className="h-8 w-full text-[12px]">
-                <SelectValue>
-                  {studioCols.find((c) => c.id === studioColId)?.name ?? "Studio sessions"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {studioCols.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name} ({c.recordingCount})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : null}
-
-          {loadingStudio ? (
-            <div className="flex items-center justify-center py-6 text-[12px] text-muted-foreground">
-              <Loader2 className="mr-2 size-3.5 animate-spin" />
-              Loading Studio sessions…
-            </div>
-          ) : studioRecs.length === 0 ? (
-            <div className="rounded-2xl border border-border/70 bg-card/40 p-4 text-center">
-              <p className="text-[12px] font-medium text-foreground">No recordings yet</p>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Record a voiceover or podcast take in Recording Studio to import here.
+              <Upload className="mx-auto size-4 text-muted-foreground" strokeWidth={1.6} />
+              <p className="mt-2 text-[12px] font-medium text-foreground">
+                Drop MP4, MOV, WebM, images, or WAV
+              </p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                Click an item below to place on the timeline
               </p>
             </div>
-          ) : (
-            <div className="space-y-2.5">
-              {studioRecs.map((rec) => (
-                <div
-                  key={rec.id}
-                  className="rounded-2xl border border-border/80 bg-card/70 p-3 transition-colors hover:border-[color:var(--cinema-studio-link)]/50"
+          ) : null}
+
+          {project.assets.length > 0 ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                <span>Project Bin</span>
+                <span className="font-mono tabular-nums">{project.assets.length}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {project.assets.map((asset) => {
+                  const isStudioAsset = asset.source === "studio" || Boolean(asset.studioRef);
+                  return (
+                    <button
+                      key={asset.id}
+                      type="button"
+                      onClick={() => onAddAssetToTimeline(asset)}
+                      className="group overflow-hidden rounded-lg border border-border/80 bg-card/65 text-left transition-colors hover:border-foreground/45"
+                    >
+                      <div className="relative aspect-video w-full overflow-hidden bg-black/50">
+                        {asset.thumbnails[0] ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={asset.thumbnails[0]}
+                            alt={asset.name}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center">
+                            {asset.kind === "audio" ? (
+                              <AudioLines
+                                className={`size-4 ${
+                                  isStudioAsset
+                                    ? "text-[color:var(--nexus-link)]"
+                                    : "text-muted-foreground"
+                                }`}
+                              />
+                            ) : (
+                              <ImageIcon className="size-4 text-muted-foreground" />
+                            )}
+                          </div>
+                        )}
+                        {isStudioAsset ? (
+                          <span
+                            title="Synced via Nexus Link"
+                            className="absolute top-1.5 left-1.5 size-1.5 rounded-full bg-[color:var(--nexus-link)]"
+                          />
+                        ) : null}
+                        <span className="absolute right-1 bottom-1 rounded bg-black/75 px-1.5 py-0.5 font-mono text-[9.5px] text-white tabular-nums">
+                          {(asset.durationMs / 1000).toFixed(1)}s
+                        </span>
+                      </div>
+                      <div className="px-2 py-1.5">
+                        <div className="truncate text-[11px] font-medium text-foreground">
+                          {asset.name}
+                        </div>
+                        <div className="mt-0.5 flex items-center justify-between text-[10px] text-muted-foreground">
+                          <span className="capitalize">{asset.kind}</span>
+                          <span className="text-foreground opacity-0 transition-opacity group-hover:opacity-100">
+                            + Add
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {activeTab === "templates" ? (
+        <div className="space-y-1.5">
+          {CINEMA_TEMPLATES.map((tpl) => (
+            <button
+              key={tpl.id}
+              type="button"
+              onClick={() => onApplyTemplate(tpl.id)}
+              className="group flex w-full items-center gap-2.5 rounded-lg border border-border/75 bg-card/55 p-2.5 text-left transition-colors hover:border-foreground/40 hover:bg-card"
+            >
+              <span
+                className="grid size-8 shrink-0 place-items-center rounded-md border border-white/15 font-mono text-[10px] font-medium text-white shadow-inner"
+                style={{
+                  background: tpl.accentSwatch,
+                  color: tpl.accentSwatch === "#f4f4f5" || tpl.accentSwatch === "#f7f6f2" || tpl.accentSwatch === "#d4d4d8" ? "#09090b" : "#ffffff",
+                }}
+              >
+                {tpl.defaultAspect}
+              </span>
+              <div className="min-w-0">
+                <div className="truncate text-[12px] font-medium text-foreground">{tpl.name}</div>
+                <div className="truncate text-[10.5px] text-muted-foreground">{tpl.subtitle}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {activeTab === "text" ? (
+        <div className="space-y-1.5">
+          {TEXT_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              onClick={() => onAddTextPreset(preset)}
+              className="flex w-full flex-col items-start gap-0.5 rounded-lg border border-border/75 bg-card/55 px-3 py-2.5 text-left transition-colors hover:border-foreground/40 hover:bg-card"
+            >
+              <span
+                style={{ fontFamily: preset.fontFamily, fontWeight: preset.fontWeight }}
+                className="line-clamp-1 text-[15px] text-foreground"
+              >
+                {preset.previewText}
+              </span>
+              <span className="text-[10.5px] text-muted-foreground">{preset.name}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {activeTab === "elements" ? (
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <div className="text-[11px] font-medium text-muted-foreground">Audio Reactive</div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {ELEMENT_PRESETS.filter((e) => e.category === "visualizer").map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => onAddElementPreset(preset)}
+                  className="flex flex-col items-start gap-1.5 rounded-lg border border-border/75 bg-card/55 p-2.5 text-left transition-colors hover:border-foreground/40 hover:bg-card"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="truncate text-[12.5px] font-medium text-foreground">
-                        {rec.title}
-                      </div>
-                      <div className="mt-0.5 font-mono text-[10.5px] text-muted-foreground tabular-nums">
-                        {(rec.durationMs / 1000).toFixed(1)}s · {rec.trackCount}{" "}
-                        {rec.trackCount === 1 ? "track" : "tracks"}
-                        {rec.markerCount > 0 ? ` · ${rec.markerCount} cues` : ""}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Mini Waveform Preview */}
-                  {rec.peaks.length > 0 ? (
-                    <div className="mt-2 flex h-6 items-end gap-[2px] overflow-hidden rounded-lg bg-foreground/[0.04] px-1.5 py-1">
-                      {rec.peaks.slice(0, 36).map((pk, idx) => (
-                        <span
-                          key={idx}
-                          className="flex-1 rounded-full bg-[color:var(--cinema-studio-link)]/75"
-                          style={{ height: `${Math.max(15, Math.round(pk * 100))}%` }}
-                        />
-                      ))}
-                    </div>
-                  ) : null}
-
-                  <div className="mt-2.5 flex flex-wrap gap-1.5">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={importingRecId !== null}
-                      onClick={() => void triggerStudioImport(rec, "mix")}
-                      className="h-7 flex-1 gap-1 rounded-full px-2.5 text-[11px]"
-                    >
-                      {importingRecId === `${rec.id}-mix` ? (
-                        <Loader2 className="size-3 animate-spin" />
-                      ) : (
-                        <Plus className="size-3" />
-                      )}
-                      <span>Add Mix</span>
-                    </Button>
-
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={importingRecId !== null}
-                      onClick={() => void triggerStudioImport(rec, "stems")}
-                      className="h-7 flex-1 gap-1 rounded-full px-2.5 text-[11px]"
-                    >
-                      <Layers className="size-3 text-[color:var(--cinema-studio-link)]" />
-                      <span>Stems</span>
-                    </Button>
-
-                    {rec.markerCount > 0 ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        disabled={importingRecId !== null}
-                        onClick={() => void triggerStudioImport(rec, "markers")}
-                        className="h-7 rounded-full px-2 text-[10.5px]"
-                      >
-                        Sync Cues
-                      </Button>
-                    ) : null}
-
-                    {rec.hasTranscript ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        disabled={importingRecId !== null}
-                        onClick={() => void triggerStudioImport(rec, "captions")}
-                        className="h-7 gap-1 rounded-full px-2 text-[10.5px]"
-                      >
-                        <Captions className="size-3" />
-                        <span>Captions</span>
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
+                  <AudioLines className="size-4 text-[color:var(--cinema-playhead)]" strokeWidth={1.6} />
+                  <span className="text-[11px] font-medium text-foreground">{preset.name}</span>
+                </button>
               ))}
             </div>
-          )}
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="text-[11px] font-medium text-muted-foreground">Frames &amp; HUD</div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {ELEMENT_PRESETS.filter((e) => e.category === "frame").map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => onAddElementPreset(preset)}
+                  className="flex flex-col items-start gap-1.5 rounded-lg border border-border/75 bg-card/55 p-2.5 text-left transition-colors hover:border-foreground/40 hover:bg-card"
+                >
+                  <Sparkles className="size-4 text-foreground/85" strokeWidth={1.6} />
+                  <span className="text-[11px] font-medium text-foreground">{preset.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="text-[11px] font-medium text-muted-foreground">Shapes</div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {ELEMENT_PRESETS.filter((e) => e.category === "shape").map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => onAddElementPreset(preset)}
+                  className="flex flex-col items-start gap-1.5 rounded-lg border border-border/75 bg-card/55 p-2.5 text-left transition-colors hover:border-foreground/40 hover:bg-card"
+                >
+                  <Shapes className="size-4 text-muted-foreground" strokeWidth={1.6} />
+                  <span className="text-[11px] font-medium text-foreground">{preset.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       ) : null}
 
       {activeTab === "stock" ? (
         <div className="space-y-3">
           {!stockServerConfigured ? (
-            <div className="rounded-2xl border border-border/80 bg-card/75 p-4 text-left">
-              <div className="flex items-center gap-2 text-[13px] font-medium text-foreground">
-                <Film className="size-4 text-[color:var(--cinema-select)]" />
-                <span>Connect Pexels Stock Library</span>
+            <div className="rounded-xl border border-border/80 bg-card/65 p-3.5 text-left">
+              <div className="flex items-center gap-2 text-[12.5px] font-medium text-foreground">
+                <Film className="size-4 text-[color:var(--cinema-playhead)]" />
+                <span>Pexels Stock Library</span>
               </div>
-              <p className="mt-1.5 text-[11.5px] leading-relaxed text-muted-foreground">
-                Search free HD stock video &amp; photography inside Cinema by adding a free API key from{" "}
-                <span className="text-foreground">pexels.com/api</span> to your{" "}
+              <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                Add a free key from <span className="text-foreground">pexels.com/api</span> to{" "}
                 <code className="dash-code">.env.local</code>:
               </p>
-              <pre className="dash-code mt-2.5 rounded-xl border border-border/75 bg-background/70 p-2.5 text-[11px]">
-                PEXELS_API_KEY=your_api_key
+              <pre className="dash-code mt-2 rounded-lg border border-border/75 bg-background/70 p-2 text-[10.5px]">
+                PEXELS_API_KEY=your_key
               </pre>
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
                 onClick={() => void runStockSearch(stockQuery, stockType)}
-                className="mt-3 h-7 rounded-full text-[11px]"
+                className="mt-2.5 h-7 rounded-lg text-[11px]"
               >
                 Re-check environment
               </Button>
@@ -574,34 +534,32 @@ export function CinemaSidebar({
                 <Input
                   value={stockQuery}
                   onChange={(e) => setStockQuery(e.target.value)}
-                  placeholder="Search Pexels B-roll…"
-                  className="h-8 text-[12px]"
+                  placeholder="Search Pexels…"
+                  className="h-8 rounded-lg text-[12px]"
                 />
-                <Button type="submit" size="icon-sm" variant="outline" className="size-8 shrink-0">
+                <Button type="submit" size="icon-sm" variant="outline" className="size-8 shrink-0 rounded-lg">
                   <Search className="size-3.5" />
                 </Button>
               </form>
 
-              <div className="flex items-center justify-between gap-2">
-                <div className="inline-flex rounded-full border border-border/80 bg-card/60 p-0.5">
-                  {(["videos", "photos"] as const).map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => {
-                        setStockType(t);
-                        void runStockSearch(stockQuery, t);
-                      }}
-                      className={`rounded-full px-2.5 py-0.5 text-[11px] capitalize transition-colors ${
-                        stockType === t
-                          ? "bg-foreground font-medium text-background"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
+              <div className="grid grid-cols-2 gap-1 rounded-lg border border-border/80 bg-card/50 p-0.5">
+                {(["videos", "photos"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => {
+                      setStockType(t);
+                      void runStockSearch(stockQuery, t);
+                    }}
+                    className={`h-6 rounded-md text-[11px] capitalize transition-colors ${
+                      stockType === t
+                        ? "bg-foreground font-medium text-background"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
               </div>
 
               <div className="flex flex-wrap gap-1">
@@ -613,7 +571,7 @@ export function CinemaSidebar({
                       setStockQuery(topic);
                       void runStockSearch(topic, stockType);
                     }}
-                    className="rounded-full border border-border/75 px-2 py-0.5 text-[10.5px] text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+                    className="rounded-md border border-border/75 px-2 py-0.5 text-[10.5px] text-muted-foreground transition-colors hover:border-foreground/35 hover:text-foreground"
                   >
                     {topic}
                   </button>
@@ -623,7 +581,7 @@ export function CinemaSidebar({
               {stockLoading ? (
                 <div className="flex items-center justify-center py-8 text-[12px] text-muted-foreground">
                   <Loader2 className="mr-2 size-3.5 animate-spin" />
-                  Searching Pexels…
+                  Loading…
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-2">
@@ -642,7 +600,7 @@ export function CinemaSidebar({
                             setAddingStockId(null);
                           }
                         }}
-                        className="group relative overflow-hidden rounded-xl border border-border/80 bg-card/60 text-left transition-colors hover:border-[color:var(--cinema-select)]/75"
+                        className="group relative overflow-hidden rounded-lg border border-border/80 bg-card/60 text-left transition-colors hover:border-foreground/45"
                       >
                         <div className="relative aspect-video w-full overflow-hidden bg-black/40">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -656,11 +614,11 @@ export function CinemaSidebar({
                               <Loader2 className="size-4 animate-spin text-white" />
                             </div>
                           ) : null}
-                          <span className="absolute right-1.5 bottom-1 rounded bg-black/75 px-1.5 py-0.5 font-mono text-[9.5px] text-white tabular-nums">
+                          <span className="absolute right-1 bottom-1 rounded bg-black/75 px-1.5 py-0.5 font-mono text-[9.5px] text-white tabular-nums">
                             {item.kind === "video" ? `${(item.durationMs / 1000).toFixed(0)}s` : "IMG"}
                           </span>
                         </div>
-                        <div className="truncate px-2 py-1.5 text-[10.5px] text-muted-foreground">
+                        <div className="truncate px-2 py-1 text-[10.5px] text-muted-foreground">
                           {item.author}
                         </div>
                       </button>
@@ -673,88 +631,11 @@ export function CinemaSidebar({
         </div>
       ) : null}
 
-      {activeTab === "text" ? (
-        <div className="space-y-2.5">
-          <h3 className="text-[12.5px] font-medium text-foreground">Editorial Typography</h3>
-          {TEXT_PRESETS.map((preset) => (
-            <button
-              key={preset.id}
-              type="button"
-              onClick={() => onAddTextPreset(preset)}
-              className="flex w-full flex-col items-start gap-1 rounded-2xl border border-border/80 bg-card/60 px-3.5 py-3 text-left transition-colors hover:border-[color:var(--cinema-select)]/70 hover:bg-card"
-            >
-              <span
-                style={{ fontFamily: preset.fontFamily, fontWeight: preset.fontWeight }}
-                className="line-clamp-1 text-[16px] text-foreground"
-              >
-                {preset.previewText}
-              </span>
-              <span className="text-[10.5px] text-muted-foreground">{preset.name}</span>
-            </button>
-          ))}
-        </div>
-      ) : null}
-
-      {activeTab === "elements" ? (
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <h3 className="text-[12.5px] font-medium text-foreground">Live Audio Visualizers</h3>
-            <div className="grid grid-cols-2 gap-2">
-              {ELEMENT_PRESETS.filter((e) => e.category === "visualizer").map((preset) => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  onClick={() => onAddElementPreset(preset)}
-                  className="flex flex-col items-start gap-1.5 rounded-2xl border border-border/80 bg-card/60 p-3 text-left transition-colors hover:border-[color:var(--cinema-studio-link)]/70 hover:bg-card"
-                >
-                  <AudioLines className="size-4 text-[color:var(--cinema-studio-link)]" strokeWidth={1.6} />
-                  <span className="text-[11.5px] font-medium text-foreground">{preset.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <h3 className="text-[12.5px] font-medium text-foreground">Frames &amp; HUD</h3>
-            <div className="grid grid-cols-2 gap-2">
-              {ELEMENT_PRESETS.filter((e) => e.category === "frame").map((preset) => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  onClick={() => onAddElementPreset(preset)}
-                  className="flex flex-col items-start gap-1.5 rounded-2xl border border-border/80 bg-card/60 p-3 text-left transition-colors hover:border-[color:var(--cinema-select)]/70 hover:bg-card"
-                >
-                  <Sparkles className="size-4 text-[color:var(--cinema-select)]" strokeWidth={1.6} />
-                  <span className="text-[11.5px] font-medium text-foreground">{preset.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <h3 className="text-[12.5px] font-medium text-foreground">Vector Shapes</h3>
-            <div className="grid grid-cols-2 gap-2">
-              {ELEMENT_PRESETS.filter((e) => e.category === "shape").map((preset) => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  onClick={() => onAddElementPreset(preset)}
-                  className="flex flex-col items-start gap-1.5 rounded-2xl border border-border/80 bg-card/60 p-3 text-left transition-colors hover:border-[color:var(--cinema-select)]/70 hover:bg-card"
-                >
-                  <Shapes className="size-4 text-muted-foreground" strokeWidth={1.6} />
-                  <span className="text-[11.5px] font-medium text-foreground">{preset.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       {activeTab === "canvas" ? (
         <div className="space-y-4">
-          <div className="space-y-2">
-            <h3 className="text-[12.5px] font-medium text-foreground">Aspect Ratio</h3>
-            <div className="space-y-1.5">
+          <div className="space-y-1.5">
+            <div className="text-[11px] font-medium text-muted-foreground">Aspect Ratio</div>
+            <div className="space-y-1">
               {(Object.values(ASPECT_RATIO_PRESETS) as Array<(typeof ASPECT_RATIO_PRESETS)["16:9"]>).map(
                 (preset) => {
                   const active = project.aspectRatio === preset.id;
@@ -763,17 +644,17 @@ export function CinemaSidebar({
                       key={preset.id}
                       type="button"
                       onClick={() => onChangeAspectRatio(preset.id)}
-                      className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left transition-colors ${
+                      className={`flex w-full items-center justify-between rounded-lg border px-2.5 py-2 text-left transition-colors ${
                         active
-                          ? "border-[color:var(--cinema-select)] bg-[color:var(--cinema-select-soft)] text-foreground"
-                          : "border-border/75 bg-card/50 text-muted-foreground hover:text-foreground"
+                          ? "border-foreground/45 bg-foreground/[0.06] text-foreground"
+                          : "border-border/70 bg-card/45 text-muted-foreground hover:text-foreground"
                       }`}
                     >
                       <div>
-                        <div className="text-[12px] font-medium text-foreground">{preset.label}</div>
-                        <div className="text-[10.5px] text-muted-foreground">{preset.hint}</div>
+                        <div className="text-[11.5px] font-medium text-foreground">{preset.label}</div>
+                        <div className="text-[10px] text-muted-foreground">{preset.hint}</div>
                       </div>
-                      {active ? <Check className="size-3.5 text-[color:var(--cinema-select)]" /> : null}
+                      {active ? <Check className="size-3.5 text-[color:var(--cinema-playhead)]" /> : null}
                     </button>
                   );
                 },
@@ -781,18 +662,18 @@ export function CinemaSidebar({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <h3 className="text-[12.5px] font-medium text-foreground">Frame Rate</h3>
-            <div className="grid grid-cols-3 gap-1.5">
+          <div className="space-y-1.5">
+            <div className="text-[11px] font-medium text-muted-foreground">Frame Rate</div>
+            <div className="grid grid-cols-3 gap-1">
               {([24, 30, 60] as const).map((rate) => (
                 <button
                   key={rate}
                   type="button"
                   onClick={() => onChangeFps(rate)}
-                  className={`h-8 rounded-xl border font-mono text-[11.5px] tabular-nums transition-colors ${
+                  className={`h-7 rounded-md border font-mono text-[11px] tabular-nums transition-colors ${
                     project.fps === rate
                       ? "border-foreground bg-foreground font-medium text-background"
-                      : "border-border/75 bg-card/50 text-muted-foreground hover:text-foreground"
+                      : "border-border/75 bg-card/45 text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   {rate} fps
@@ -801,18 +682,18 @@ export function CinemaSidebar({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <h3 className="text-[12.5px] font-medium text-foreground">Stage Backdrop</h3>
-            <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1.5">
+            <div className="text-[11px] font-medium text-muted-foreground">Stage Backdrop</div>
+            <div className="grid grid-cols-2 gap-1.5">
               {BACKDROP_PRESETS.map((bp) => (
                 <button
                   key={bp.id}
                   type="button"
                   onClick={() => onChangeBackground(bp.background)}
-                  className="flex items-center gap-2 rounded-xl border border-border/80 bg-card/60 p-2 text-left transition-colors hover:border-[color:var(--cinema-select)]/70"
+                  className="flex items-center gap-2 rounded-lg border border-border/75 bg-card/50 p-1.5 text-left transition-colors hover:border-foreground/40"
                 >
                   <span
-                    className="size-6 shrink-0 rounded-lg border border-white/15"
+                    className="size-5 shrink-0 rounded-md border border-white/15"
                     style={{
                       background:
                         bp.background.type === "linear"
@@ -822,15 +703,15 @@ export function CinemaSidebar({
                             : bp.background.colorA,
                     }}
                   />
-                  <span className="truncate text-[11px] font-medium text-foreground">{bp.name}</span>
+                  <span className="truncate text-[10.5px] font-medium text-foreground">{bp.name}</span>
                 </button>
               ))}
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-[11.5px]">
-              <span className="text-muted-foreground">Optical Film Grain</span>
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-muted-foreground">Film Grain</span>
               <span className="font-mono text-foreground tabular-nums">
                 {Math.round(project.background.grain * 100)}%
               </span>
@@ -849,48 +730,311 @@ export function CinemaSidebar({
           </div>
         </div>
       ) : null}
+
+      {activeTab === "nodes" ? (
+        <div className="space-y-3">
+          {/* Extensible Nexus Node Bridge Header Card (subtle Gold marks cross-node links only) */}
+          <div className="rounded-xl border border-[color:var(--nexus-link-border)] bg-[color:var(--nexus-link-soft)] p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-[12px] font-medium text-foreground">
+                <span className="size-1.5 rounded-full bg-[color:var(--nexus-link)]" />
+                <Waves className="size-3.5 text-[color:var(--nexus-link)]" />
+                <span>Recording Studio</span>
+              </div>
+              <button
+                type="button"
+                onClick={onOpenStudioView}
+                className="text-[11px] font-medium text-[color:var(--nexus-link)] hover:underline"
+              >
+                Open
+              </button>
+            </div>
+
+            <div className="mt-2.5 space-y-1.5">
+              <Button
+                type="button"
+                size="sm"
+                onClick={onRequestVoiceoverInStudio}
+                className="h-8 w-full justify-start gap-2 rounded-lg bg-foreground px-2.5 text-[11.5px] font-medium text-background hover:opacity-90"
+              >
+                <MonitorPlay className="size-3.5 shrink-0" />
+                <span className="truncate">Score w/ Live Video Monitor</span>
+              </Button>
+
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={project.markers.length === 0}
+                onClick={onMarkersToLowerThirds}
+                className="h-7 w-full justify-start gap-2 rounded-lg border-border/80 bg-background/50 px-2.5 text-[11px]"
+              >
+                <Mic className="size-3 shrink-0 text-[color:var(--nexus-link)]" />
+                <span className="truncate">
+                  Markers → Lower-Thirds ({project.markers.length})
+                </span>
+              </Button>
+            </div>
+          </div>
+
+          {studioCols.length > 0 ? (
+            <Select
+              value={studioColId}
+              onValueChange={(val) => {
+                if (!val) return;
+                setStudioColId(val);
+                void listStudioRecordings(studioDb, val).then(setStudioRecs);
+              }}
+            >
+              <SelectTrigger className="h-8 w-full rounded-lg text-[11.5px]">
+                <SelectValue>
+                  {studioCols.find((c) => c.id === studioColId)?.name ?? "Studio sessions"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {studioCols.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name} ({c.recordingCount})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null}
+
+          {loadingStudio ? (
+            <div className="flex items-center justify-center py-6 text-[11.5px] text-muted-foreground">
+              <Loader2 className="mr-2 size-3.5 animate-spin" />
+              Loading linked sessions…
+            </div>
+          ) : studioRecs.length === 0 ? (
+            <div className="rounded-lg border border-border/70 bg-card/40 p-3 text-center">
+              <p className="text-[11.5px] text-muted-foreground">
+                No Recording Studio sessions found yet.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {studioRecs.map((rec) => (
+                <div
+                  key={rec.id}
+                  className="rounded-xl border border-border/80 bg-card/60 p-2.5 transition-colors hover:border-[color:var(--nexus-link-border)]"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-[12px] font-medium text-foreground">
+                      {rec.title}
+                    </span>
+                    <span className="shrink-0 font-mono text-[10px] text-muted-foreground tabular-nums">
+                      {(rec.durationMs / 1000).toFixed(1)}s
+                    </span>
+                  </div>
+
+                  {rec.peaks.length > 0 ? (
+                    <div className="mt-1.5 flex h-5 items-end gap-[2px] overflow-hidden rounded-md bg-foreground/[0.04] px-1.5 py-0.5">
+                      {rec.peaks.slice(0, 32).map((pk, idx) => (
+                        <span
+                          key={idx}
+                          className="flex-1 rounded-full bg-[color:var(--nexus-link)]/75"
+                          style={{ height: `${Math.max(16, Math.round(pk * 100))}%` }}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <div className="mt-2 grid grid-cols-2 gap-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={importingRecKey !== null}
+                      onClick={() => void triggerStudioAction(rec, "mix")}
+                      className="h-6 justify-center gap-1 rounded-md px-1.5 text-[10.5px]"
+                    >
+                      {importingRecKey === `${rec.id}-mix` ? (
+                        <Loader2 className="size-3 animate-spin" />
+                      ) : (
+                        <Plus className="size-3" />
+                      )}
+                      <span>Mix</span>
+                    </Button>
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={importingRecKey !== null}
+                      onClick={() => void triggerStudioAction(rec, "stems")}
+                      className="h-6 justify-center gap-1 rounded-md px-1.5 text-[10.5px]"
+                    >
+                      <Layers className="size-3 text-[color:var(--nexus-link)]" />
+                      <span>Stems</span>
+                    </Button>
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={importingRecKey !== null}
+                      onClick={() => void triggerStudioAction(rec, "smart-cut")}
+                      className="h-6 justify-center gap-1 rounded-md px-1.5 text-[10.5px] text-[color:var(--nexus-link)] hover:bg-[color:var(--nexus-link-soft)]"
+                    >
+                      {importingRecKey === `${rec.id}-smart-cut` ? (
+                        <Loader2 className="size-3 animate-spin" />
+                      ) : (
+                        <Scissors className="size-3" />
+                      )}
+                      <span>Smart Cut</span>
+                    </Button>
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={importingRecKey !== null}
+                      onClick={() => void triggerStudioAction(rec, "beat-grid")}
+                      className="h-6 justify-center gap-1 rounded-md px-1.5 text-[10.5px] text-[color:var(--nexus-link)] hover:bg-[color:var(--nexus-link-soft)]"
+                    >
+                      {importingRecKey === `${rec.id}-beat-grid` ? (
+                        <Loader2 className="size-3 animate-spin" />
+                      ) : (
+                        <Waves className="size-3" />
+                      )}
+                      <span>Beat Grid</span>
+                    </Button>
+
+                    {rec.markerCount > 0 ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={importingRecKey !== null}
+                        onClick={() => void triggerStudioAction(rec, "markers")}
+                        className="h-6 justify-center rounded-md px-1.5 text-[10.5px]"
+                      >
+                        Sync Cues
+                      </Button>
+                    ) : null}
+
+                    {rec.hasTranscript ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        disabled={importingRecKey !== null}
+                        onClick={() => void triggerStudioAction(rec, "captions")}
+                        className="h-6 justify-center gap-1 rounded-md px-1.5 text-[10.5px]"
+                      >
+                        <Captions className="size-3" />
+                        <span>Captions</span>
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Quiet Extensible Slot Roster for Future Node Links */}
+          <div className="space-y-1 border-t border-border/60 pt-2.5 text-[10.5px] text-muted-foreground">
+            <div className="flex items-center justify-between px-1">
+              <span>Command Context</span>
+              <span className="font-mono">Bus Ready</span>
+            </div>
+            <div className="flex items-center justify-between px-1">
+              <span>Study Space · Research</span>
+              <span className="font-mono">Content API</span>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 
   return (
     <>
-      {/* Desktop Rail + Collapsible Canva Drawer (>= lg) */}
+      {/* Desktop Rail + Clean Fixed-Width Drawer (>= lg) */}
       <div className="hidden min-h-0 shrink-0 lg:flex">
         <aside
           aria-label="Cinema tool rail"
-          className="cinema-chrome-surface flex w-[64px] shrink-0 flex-col items-center gap-1 border-r border-border/75 py-2.5"
+          className="cinema-chrome-surface flex w-[68px] shrink-0 flex-col justify-between overflow-y-auto overflow-x-hidden border-r border-border/75 py-2"
         >
-          {SIDEBAR_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const active = open && activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onSelectTab(item.id)}
-                className={`flex w-13 flex-col items-center justify-center gap-1 rounded-xl py-2 text-[10.5px] font-medium transition-colors ${
-                  active
-                    ? "bg-foreground/10 text-foreground"
-                    : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground"
-                }`}
-              >
-                <Icon
-                  className={`size-4 ${
-                    item.id === "studio" ? "text-[color:var(--cinema-studio-link)]" : ""
+          <div className="flex flex-col items-center gap-1 px-1.5">
+            {CORE_SIDEBAR_ITEMS.map((item) => {
+              const Icon = item.icon;
+              const active = open && activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => onSelectTab(item.id)}
+                  className={`relative flex w-full flex-col items-center justify-center gap-1 rounded-lg py-2 text-[10px] font-medium transition-colors ${
+                    active
+                      ? "bg-foreground/[0.08] text-foreground"
+                      : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground"
                   }`}
+                >
+                  {active ? (
+                    <span
+                      aria-hidden
+                      className="absolute top-2 bottom-2 left-0 w-[2px] rounded-r-full bg-[color:var(--cinema-playhead)]"
+                    />
+                  ) : null}
+                  <Icon className="size-4 shrink-0" strokeWidth={1.6} />
+                  <span className="max-w-full truncate px-0.5 leading-tight">{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Bottom Pinned Extensible Nexus Nodes Link Tab */}
+          <div className="border-t border-border/60 px-1.5 pt-2">
+            <button
+              type="button"
+              onClick={() => onSelectTab("nodes")}
+              className={`relative flex w-full flex-col items-center justify-center gap-1 rounded-lg py-2 text-[10px] font-medium transition-colors ${
+                open && activeTab === "nodes"
+                  ? "bg-[color:var(--nexus-link-soft)] text-foreground"
+                  : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground"
+              }`}
+            >
+              {open && activeTab === "nodes" ? (
+                <span
+                  aria-hidden
+                  className="absolute top-2 bottom-2 left-0 w-[2px] rounded-r-full bg-[color:var(--nexus-link)]"
+                />
+              ) : null}
+              <div className="relative">
+                <Link2
+                  className="size-4 shrink-0 text-[color:var(--nexus-link)]"
                   strokeWidth={1.6}
                 />
-                <span>{item.label}</span>
-              </button>
-            );
-          })}
+                <span
+                  aria-hidden
+                  className="absolute -top-0.5 -right-1 size-1.5 rounded-full bg-[color:var(--nexus-link)]"
+                />
+              </div>
+              <span className="max-w-full truncate px-0.5 leading-tight">Nodes</span>
+            </button>
+          </div>
         </aside>
 
         {open ? (
           <aside
             aria-label="Cinema drawer"
-            className="cinema-panel-surface flex w-[288px] shrink-0 flex-col border-r border-border/75"
+            className="cinema-panel-surface flex w-[272px] shrink-0 flex-col overflow-hidden border-r border-border/75"
           >
+            <div className="flex h-[38px] shrink-0 items-center justify-between border-b border-border/65 px-3">
+              <span className="truncate text-[12px] font-medium text-foreground">
+                {TAB_TITLES[activeTab]}
+              </span>
+              <button
+                type="button"
+                onClick={onToggleCollapse}
+                aria-label="Collapse tool drawer"
+                className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
+              >
+                <PanelLeftClose className="size-3.5" strokeWidth={1.6} />
+              </button>
+            </div>
             {drawerBody}
           </aside>
         ) : null}
@@ -898,17 +1042,17 @@ export function CinemaSidebar({
 
       {/* Tablet / Mobile Drawer Fallback (< lg) */}
       <Sheet open={mobileOpen} onOpenChange={onMobileOpenChange}>
-        <SheetContent side="left" className="flex w-[308px] flex-col p-0 sm:max-w-[340px]">
+        <SheetContent side="left" className="flex w-[304px] flex-col p-0 sm:max-w-[336px]">
           <SheetHeader className="border-b border-border/60 px-4 py-3">
-            <SheetTitle className="text-[14px] font-medium capitalize">{activeTab}</SheetTitle>
+            <SheetTitle className="text-[13.5px] font-medium">{TAB_TITLES[activeTab]}</SheetTitle>
           </SheetHeader>
           <div className="flex flex-wrap gap-1 border-b border-border/60 px-3 py-2">
-            {SIDEBAR_ITEMS.map((item) => (
+            {[...CORE_SIDEBAR_ITEMS, { id: "nodes" as const, label: "Nodes", icon: Link2 }].map((item) => (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => onSelectTab(item.id)}
-                className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                className={`rounded-md px-2 py-1 text-[11px] font-medium ${
                   activeTab === item.id
                     ? "bg-foreground text-background"
                     : "text-muted-foreground hover:text-foreground"

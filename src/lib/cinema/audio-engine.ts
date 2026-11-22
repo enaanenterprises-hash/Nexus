@@ -1,3 +1,4 @@
+import { buildDuckingIntervalsFromClip, type BridgeCutRegion } from "@/lib/creative/nexus-bridge";
 import type { CinemaAudioClip, CinemaProject, CinemaVideoClip } from "./types";
 
 type AudioClipPlayable = CinemaAudioClip | CinemaVideoClip;
@@ -15,6 +16,9 @@ function wireClipGainEnvelope(
   clipStartAtCtxSec: number,
   clipElapsedSec: number,
   playDurSec: number,
+  clipTimelineStartMs: number,
+  playOriginTimelineMs: number,
+  duckIntervals: BridgeCutRegion[],
 ): AudioNode[] {
   const created: AudioNode[] = [];
   const totalClipSec = Math.max(0.05, clip.durationMs / 1000);
@@ -55,10 +59,71 @@ function wireClipGainEnvelope(
     env.gain.setValueAtTime(baseVol, clipStartAtCtxSec);
   }
 
+  let outputNode: AudioNode = env;
+
+  // Apply smooth -12 dB sidechain auto-ducking whenever a vocal clip with `duckOthers` speaks
+  const isDuckLeader = clip.kind === "audio" && Boolean(clip.duckOthers);
+  if (!isDuckLeader && duckIntervals.length > 0) {
+    const duckGain = ctx.createGain();
+    duckGain.gain.setValueAtTime(1, clipStartAtCtxSec);
+    const clipActiveStartMs = Math.max(playOriginTimelineMs, clipTimelineStartMs);
+    const clipActiveEndMs = clipActiveStartMs + playDurSec * 1000;
+    const rampSec = 0.14;
+
+    for (const seg of duckIntervals) {
+      if (seg.endMs <= clipActiveStartMs || seg.startMs >= clipActiveEndMs) continue;
+      const enterOffsetSec = (seg.startMs - clipActiveStartMs) / 1000;
+      const exitOffsetSec = (seg.endMs - clipActiveStartMs) / 1000;
+      if (enterOffsetSec <= 0 && exitOffsetSec > 0) {
+        duckGain.gain.setValueAtTime(0.25, clipStartAtCtxSec);
+      } else if (enterOffsetSec > 0) {
+        const tEnter = clipStartAtCtxSec + enterOffsetSec;
+        duckGain.gain.setValueAtTime(1, Math.max(clipStartAtCtxSec, tEnter - rampSec));
+        duckGain.gain.linearRampToValueAtTime(0.25, tEnter);
+      }
+      if (exitOffsetSec > 0 && exitOffsetSec < playDurSec) {
+        const tExit = clipStartAtCtxSec + exitOffsetSec;
+        duckGain.gain.setValueAtTime(0.25, tExit);
+        duckGain.gain.linearRampToValueAtTime(1, Math.min(clipStartAtCtxSec + playDurSec, tExit + rampSec));
+      }
+    }
+
+    env.connect(duckGain);
+    duckGain.connect(destination);
+    created.push(duckGain);
+    outputNode = duckGain;
+  } else {
+    env.connect(destination);
+  }
+
   source.connect(env);
-  env.connect(destination);
   created.push(env);
+  void outputNode;
   return created;
+}
+
+function collectDuckingRegions(project: CinemaProject): BridgeCutRegion[] {
+  const trackMap = new Map(project.tracks.map((t) => [t.id, t]));
+  const regions: BridgeCutRegion[] = [];
+  for (const c of project.clips) {
+    if (c.kind !== "audio" || !c.duckOthers || c.hidden || c.muted) continue;
+    const tr = trackMap.get(c.trackId);
+    if (!tr || tr.muted || tr.hidden) continue;
+    regions.push(...buildDuckingIntervalsFromClip(c));
+  }
+  if (regions.length <= 1) return regions;
+  regions.sort((a, b) => a.startMs - b.startMs);
+  const merged: BridgeCutRegion[] = [regions[0]!];
+  for (let i = 1; i < regions.length; i++) {
+    const prev = merged[merged.length - 1]!;
+    const cur = regions[i]!;
+    if (cur.startMs <= prev.endMs + 80) {
+      prev.endMs = Math.max(prev.endMs, cur.endMs);
+    } else {
+      merged.push(cur);
+    }
+  }
+  return merged;
 }
 
 /**
@@ -126,6 +191,7 @@ export class CinemaAudioEngine {
     const nowCtx = ctx.currentTime + 0.025;
 
     const trackMap = new Map(project.tracks.map((t) => [t.id, t]));
+    const duckRegions = collectDuckingRegions(project);
     const audibleClips = project.clips.filter(
       (c): c is AudioClipPlayable =>
         (c.kind === "audio" || (c.kind === "video" && !c.audioDetached)) &&
@@ -168,6 +234,9 @@ export class CinemaAudioEngine {
         nowCtx + delaySec,
         elapsedInTimelineMs / 1000,
         remainingTimelineSec,
+        clip.startMs,
+        fromMs,
+        duckRegions,
       );
       src.start(nowCtx + delaySec, sourceOffsetSec, playSourceSec);
       this.activeSources.push({ src, nodes });
@@ -249,6 +318,8 @@ export async function renderCinemaAudioOffline(
   limiter.release.value = 0.08;
   limiter.connect(offline.destination);
 
+  const duckRegions = collectDuckingRegions(project);
+
   for (const clip of playable) {
     const buf = audioBuffers.get(clip.assetId);
     const tr = trackMap.get(clip.trackId);
@@ -264,7 +335,19 @@ export async function renderCinemaAudioOffline(
     const src = offline.createBufferSource();
     src.buffer = buf;
     src.playbackRate.value = speed;
-    wireClipGainEnvelope(offline, src, limiter, clip, tr.volume ?? 1, startSec, 0, timelineDurSec);
+    wireClipGainEnvelope(
+      offline,
+      src,
+      limiter,
+      clip,
+      tr.volume ?? 1,
+      startSec,
+      0,
+      timelineDurSec,
+      clip.startMs,
+      0,
+      duckRegions,
+    );
     src.start(startSec, trimSec, sourcePlaySec);
   }
 

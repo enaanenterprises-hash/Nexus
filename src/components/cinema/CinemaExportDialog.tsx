@@ -162,9 +162,9 @@ export function CinemaExportDialog({
                   <Icon
                     className={`mt-0.5 size-4 shrink-0 ${
                       card.id === "wav-studio"
-                        ? "text-[color:var(--cinema-studio-link)]"
+                        ? "text-[color:var(--nexus-link)]"
                         : active
-                          ? "text-[color:var(--cinema-select)]"
+                          ? "text-[color:var(--cinema-playhead)]"
                           : ""
                     }`}
                     strokeWidth={1.6}
@@ -257,7 +257,7 @@ export function CinemaExportDialog({
               </div>
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-foreground/10">
                 <div
-                  className="h-full rounded-full bg-[color:var(--cinema-select)] transition-all duration-150"
+                  className="h-full rounded-full bg-[color:var(--cinema-playhead)] transition-all duration-150"
                   style={{ width: `${Math.round(progress.progress * 100)}%` }}
                 />
               </div>

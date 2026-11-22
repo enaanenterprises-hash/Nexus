@@ -1,5 +1,7 @@
+import { sampleClipEnvelopeAt } from "@/lib/creative/nexus-bridge";
 import type {
   CinemaAnimation,
+  CinemaAudioClip,
   CinemaBackground,
   CinemaClip,
   CinemaFilter,
@@ -482,7 +484,7 @@ function drawShapeClip(
     roundRectPath(ctx, -w / 2, -h / 2, w, h, barR);
     ctx.fill();
     const fillW = Math.max(h, w * clamp(projectProgress, 0, 1));
-    ctx.fillStyle = clip.fill || "#38bdf8";
+    ctx.fillStyle = clip.fill || "#ff3b30";
     roundRectPath(ctx, -w / 2, -h / 2, fillW, h, barR);
     ctx.fill();
     return;
@@ -688,7 +690,21 @@ export function renderCinemaFrame(
       if (clip.transform.rotation !== 0) {
         ctx.rotate((clip.transform.rotation * Math.PI) / 180);
       }
-      const totalScale = motion.scale * trans.scale;
+      const reactiveAudioClipId =
+        "reactiveAudioClipId" in clip ? clip.reactiveAudioClipId : undefined;
+      const totalScale =
+        motion.scale *
+        trans.scale *
+        (reactiveAudioClipId
+          ? (() => {
+              const targetAud = project.clips.find(
+                (c): c is CinemaAudioClip =>
+                  c.id === reactiveAudioClipId && c.kind === "audio" && !c.muted,
+              );
+              if (!targetAud) return 1;
+              return 1 + sampleClipEnvelopeAt(targetAud.peaks, targetAud, timeMs) * 0.065;
+            })()
+          : 1);
       ctx.scale(
         totalScale * (clip.transform.flipH ? -1 : 1),
         totalScale * (clip.transform.flipV ? -1 : 1),
@@ -708,7 +724,23 @@ export function renderCinemaFrame(
       } else if (clip.kind === "shape") {
         drawShapeClip(ctx, clip, w, h, projectProgress, height);
       } else if (clip.kind === "visualizer") {
-        drawVisualizerClip(ctx, clip, w, h, runtime.frequencyBins, timeMs);
+        let boundBins = runtime.frequencyBins;
+        if (clip.reactiveAudioClipId) {
+          const targetAud = project.clips.find(
+            (c): c is CinemaAudioClip =>
+              c.id === clip.reactiveAudioClipId && c.kind === "audio" && !c.muted,
+          );
+          if (targetAud && targetAud.peaks.length > 0) {
+            const synth = new Float32Array(32);
+            const energy = sampleClipEnvelopeAt(targetAud.peaks, targetAud, timeMs);
+            for (let b = 0; b < 32; b++) {
+              const harmonic = 0.62 + 0.38 * Math.sin(timeMs * 0.014 + b * 0.65);
+              synth[b] = clamp(energy * harmonic * 1.15, 0.04, 1);
+            }
+            boundBins = synth;
+          }
+        }
+        drawVisualizerClip(ctx, clip, w, h, boundBins, timeMs);
       }
 
       ctx.restore();
@@ -725,13 +757,13 @@ export function renderCinemaFrame(
 
   if (runtime.showSafeGuides && !runtime.isExport) {
     ctx.save();
-    ctx.strokeStyle = "rgba(56, 189, 248, 0.35)";
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.28)";
     ctx.lineWidth = Math.max(1, width / 1000);
     ctx.setLineDash([6, 6]);
     const mx = width * 0.05;
     const my = height * 0.05;
     ctx.strokeRect(mx, my, width - mx * 2, height - my * 2);
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.14)";
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
     ctx.strokeRect(width * 0.1, height * 0.1, width * 0.8, height * 0.8);
     ctx.restore();
   }

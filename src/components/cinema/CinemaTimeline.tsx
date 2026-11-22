@@ -9,6 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
+  AudioLines,
   BookmarkPlus,
   Copy,
   Diamond,
@@ -32,6 +33,7 @@ import {
   ZoomOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { computeProjectDurationMs } from "@/lib/cinema/compositor";
@@ -72,8 +74,8 @@ type DragState =
       previewDurationMs: number;
     };
 
-const TRACK_HEADER_W = 136;
-const RULER_H = 28;
+const TRACK_HEADER_W = 140;
+const RULER_H = 30;
 const TRACK_H = 54;
 const MIN_CLIP_MS = 200;
 
@@ -85,6 +87,14 @@ function fmtRulerTime(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = Math.floor(sec % 60);
   return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function fmtSkimMs(ms: number): string {
+  const safe = Math.max(0, ms);
+  const m = Math.floor(safe / 60_000);
+  const s = Math.floor((safe % 60_000) / 1000);
+  const d = Math.floor((safe % 1000) / 100);
+  return `${m}:${String(s).padStart(2, "0")}.${d}`;
 }
 
 function trackIcon(kind: CinemaTrackKind) {
@@ -105,6 +115,7 @@ export function CinemaTimeline({
   playheadMs,
   zoom,
   snapEnabled,
+  beatSnapEnabled,
   toolMode,
   selectedClipId,
   timelineHeight,
@@ -113,6 +124,8 @@ export function CinemaTimeline({
   onSeek,
   onChangeZoom,
   onToggleSnap,
+  onToggleBeatSnap,
+  onAutoCutToBeat,
   onChangeTool,
   onMoveClip,
   onTrimClip,
@@ -121,6 +134,10 @@ export function CinemaTimeline({
   onDeleteClip,
   onAddMarker,
   onSelectMarker,
+  onUpdateMarker,
+  onDeleteMarker,
+  onCreateLowerThirdAtMarker,
+  onPushMarkersToStudio,
   onToggleTrackMute,
   onToggleTrackHidden,
   onToggleTrackLocked,
@@ -134,6 +151,7 @@ export function CinemaTimeline({
   playheadMs: number;
   zoom: number;
   snapEnabled: boolean;
+  beatSnapEnabled: boolean;
   toolMode: CinemaTimelineTool;
   selectedClipId: string | null;
   timelineHeight: number;
@@ -142,6 +160,8 @@ export function CinemaTimeline({
   onSeek: (ms: number) => void;
   onChangeZoom: (z: number) => void;
   onToggleSnap: () => void;
+  onToggleBeatSnap: () => void;
+  onAutoCutToBeat: () => void;
   onChangeTool: (tool: CinemaTimelineTool) => void;
   onMoveClip: (clipId: string, startMs: number, trackId: string) => void;
   onTrimClip: (clipId: string, patch: { startMs: number; trimStartMs: number; durationMs: number }) => void;
@@ -150,6 +170,10 @@ export function CinemaTimeline({
   onDeleteClip: (clipId: string) => void;
   onAddMarker: () => void;
   onSelectMarker: (m: CinemaMarker) => void;
+  onUpdateMarker: (markerId: string, label: string) => void;
+  onDeleteMarker: (markerId: string) => void;
+  onCreateLowerThirdAtMarker: (marker: CinemaMarker) => void;
+  onPushMarkersToStudio: (markers: CinemaMarker[]) => void;
   onToggleTrackMute: (trackId: string) => void;
   onToggleTrackHidden: (trackId: string) => void;
   onToggleTrackLocked: (trackId: string) => void;
@@ -162,6 +186,7 @@ export function CinemaTimeline({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [snapGuideMs, setSnapGuideMs] = useState<number | null>(null);
+  const [hoverMs, setHoverMs] = useState<number | null>(null);
   const [fileDragOverTrackId, setFileDragOverTrackId] = useState<string | null>(null);
 
   const pxPerSec = 56 * zoom;
@@ -176,7 +201,11 @@ export function CinemaTimeline({
   );
 
   const splittableAtPlayhead = useMemo(() => {
-    if (selectedClip && playheadMs > selectedClip.startMs + 140 && playheadMs < selectedClip.startMs + selectedClip.durationMs - 140) {
+    if (
+      selectedClip &&
+      playheadMs > selectedClip.startMs + 140 &&
+      playheadMs < selectedClip.startMs + selectedClip.durationMs - 140
+    ) {
       return selectedClip;
     }
     return (
@@ -194,9 +223,13 @@ export function CinemaTimeline({
         if (c.id === excludeClipId) continue;
         pts.push(c.startMs, c.startMs + c.durationMs);
       }
+      if (beatSnapEnabled && project.rhythmGrid) {
+        for (const b of project.rhythmGrid.beatMs) pts.push(b);
+        for (const t of project.rhythmGrid.transientMs) pts.push(t);
+      }
       return pts;
     },
-    [playheadMs, project.clips, project.markers],
+    [beatSnapEnabled, playheadMs, project.clips, project.markers, project.rhythmGrid],
   );
 
   const snapMs = useCallback(
@@ -284,6 +317,17 @@ export function CinemaTimeline({
   };
 
   const handleLanePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const el = scrollRef.current;
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      const rawX = e.clientX - rect.left + el.scrollLeft - TRACK_HEADER_W;
+      if (rawX >= 0) {
+        setHoverMs(Math.round((rawX / pxPerSec) * 1000));
+      } else {
+        setHoverMs(null);
+      }
+    }
+
     if (!drag || e.pointerId !== drag.pointerId) return;
     if (drag.kind === "scrub") {
       onSeek(clientXToMs(e.clientX));
@@ -294,9 +338,7 @@ export function CinemaTimeline({
       const snappedStart = snapMs(drag.origStartMs + deltaMs, drag.clipId, e.shiftKey);
       setSnapGuideMs(snappedStart.guide);
 
-      // Detect vertical track target
       let nextTrackId = drag.previewTrackId;
-      const el = scrollRef.current;
       if (el) {
         const rect = el.getBoundingClientRect();
         const relY = e.clientY - rect.top + el.scrollTop - RULER_H;
@@ -388,14 +430,14 @@ export function CinemaTimeline({
         <span className="h-[3px] w-10 rounded-full bg-foreground/20" />
       </div>
 
-      {/* Compact Timeline Toolbar */}
+      {/* Compact Apple Pro Timeline Toolbar */}
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/70 px-3 py-1.5">
         <div className="flex flex-wrap items-center gap-1.5">
-          <div className="inline-flex rounded-full border border-border/80 bg-foreground/[0.03] p-0.5">
+          <div className="inline-flex rounded-lg border border-border/80 bg-foreground/[0.03] p-0.5">
             <button
               type="button"
               onClick={() => onChangeTool("select")}
-              className={`inline-flex h-6 items-center gap-1 rounded-full px-2.5 text-[11px] font-medium transition-colors ${
+              className={`inline-flex h-6 items-center gap-1 rounded-md px-2 text-[11px] font-medium transition-colors ${
                 toolMode === "select"
                   ? "bg-foreground text-background"
                   : "text-muted-foreground hover:text-foreground"
@@ -407,7 +449,7 @@ export function CinemaTimeline({
             <button
               type="button"
               onClick={() => onChangeTool("cut")}
-              className={`inline-flex h-6 items-center gap-1 rounded-full px-2.5 text-[11px] font-medium transition-colors ${
+              className={`inline-flex h-6 items-center gap-1 rounded-md px-2 text-[11px] font-medium transition-colors ${
                 toolMode === "cut"
                   ? "bg-[color:var(--cinema-playhead)] text-white"
                   : "text-muted-foreground hover:text-foreground"
@@ -426,7 +468,7 @@ export function CinemaTimeline({
             onClick={() => {
               if (splittableAtPlayhead) onSplitClipAt(splittableAtPlayhead.id, playheadMs);
             }}
-            className="h-7 gap-1 rounded-full px-2.5 text-[11px]"
+            className="h-7 gap-1 rounded-lg px-2 text-[11px]"
           >
             <Scissors className="size-3" />
             <span>Split</span>
@@ -439,7 +481,7 @@ export function CinemaTimeline({
             disabled={!selectedClip}
             onClick={() => selectedClip && onDuplicateClip(selectedClip.id)}
             aria-label="Duplicate selected clip"
-            className="h-7 gap-1 rounded-full px-2 text-[11px]"
+            className="h-7 gap-1 rounded-lg px-2 text-[11px]"
           >
             <Copy className="size-3" />
             <span className="hidden sm:inline">Duplicate</span>
@@ -452,7 +494,7 @@ export function CinemaTimeline({
             disabled={!selectedClip}
             onClick={() => selectedClip && onDeleteClip(selectedClip.id)}
             aria-label="Delete selected clip"
-            className="h-7 gap-1 rounded-full px-2 text-[11px] hover:text-destructive"
+            className="h-7 gap-1 rounded-lg px-2 text-[11px] hover:text-destructive"
           >
             <Trash2 className="size-3" />
           </Button>
@@ -462,7 +504,7 @@ export function CinemaTimeline({
             size="sm"
             variant="outline"
             onClick={onAddMarker}
-            className="h-7 gap-1 rounded-full px-2.5 text-[11px]"
+            className="h-7 gap-1 rounded-lg px-2 text-[11px]"
           >
             <BookmarkPlus className="size-3" />
             <span className="hidden md:inline">Marker</span>
@@ -474,11 +516,35 @@ export function CinemaTimeline({
               size="sm"
               variant="outline"
               onClick={() => onExtractVideoAudio(selectedClip.id)}
-              className="h-7 gap-1.5 rounded-full border-[color:var(--cinema-studio-link)]/50 bg-[color:var(--cinema-studio-link)]/10 px-2.5 text-[11px] font-medium text-[color:var(--cinema-studio-link)]"
+              className="h-7 gap-1.5 rounded-lg border-[color:var(--nexus-link-border)] bg-[color:var(--nexus-link-soft)] px-2.5 text-[11px] font-medium text-[color:var(--nexus-link)] hover:opacity-90"
             >
               <Waves className="size-3" />
-              <span>Extract Audio → Studio</span>
+              <span>Send Audio → Studio</span>
             </Button>
+          ) : null}
+
+          {project.rhythmGrid ? (
+            <div className="inline-flex items-center gap-1 rounded-lg border border-[color:var(--nexus-link-border)] bg-[color:var(--nexus-link-soft)] p-0.5">
+              <button
+                type="button"
+                onClick={onToggleBeatSnap}
+                className={`inline-flex h-6 items-center gap-1 rounded-md px-2 font-mono text-[10.5px] font-medium tabular-nums transition-colors ${
+                  beatSnapEnabled
+                    ? "bg-[color:var(--nexus-link)] text-[#09090b]"
+                    : "text-[color:var(--nexus-link)]"
+                }`}
+              >
+                <AudioLines className="size-3" />
+                <span>{project.rhythmGrid.bpm} BPM</span>
+              </button>
+              <button
+                type="button"
+                onClick={onAutoCutToBeat}
+                className="inline-flex h-6 items-center rounded-md px-2 text-[10.5px] font-medium text-[color:var(--nexus-link)] hover:bg-background/40"
+              >
+                Cut to Beat
+              </button>
+            </div>
           ) : null}
         </div>
 
@@ -486,26 +552,26 @@ export function CinemaTimeline({
           <Popover>
             <PopoverTrigger
               render={
-                <Button type="button" size="sm" variant="outline" className="h-7 gap-1 rounded-full px-2.5 text-[11px]">
+                <Button type="button" size="sm" variant="outline" className="h-7 gap-1 rounded-lg px-2.5 text-[11px]">
                   <Plus className="size-3" />
                   <span>Track</span>
                 </Button>
               }
             />
-            <PopoverContent align="end" className="w-48 rounded-2xl p-1.5">
+            <PopoverContent align="end" className="w-48 rounded-xl p-1.5">
               {(
                 [
                   { kind: "video", label: "Video Track" },
                   { kind: "overlay", label: "Overlay / PiP Track" },
                   { kind: "text", label: "Text Track" },
-                  { kind: "audio", label: "Studio Audio Track" },
+                  { kind: "audio", label: "Audio Track" },
                 ] as const
               ).map((item) => (
                 <button
                   key={item.kind}
                   type="button"
                   onClick={() => onAddTrack(item.kind)}
-                  className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-left text-[12px] text-foreground transition-colors hover:bg-foreground/[0.06]"
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] text-foreground transition-colors hover:bg-foreground/[0.06]"
                 >
                   <Plus className="size-3.5 text-muted-foreground" />
                   <span>{item.label}</span>
@@ -524,7 +590,7 @@ export function CinemaTimeline({
                   onClick={onToggleSnap}
                   aria-pressed={snapEnabled}
                   aria-label="Magnetic timeline snap"
-                  className="size-7 rounded-full"
+                  className="size-7 rounded-lg"
                 >
                   <Magnet className="size-3.5" />
                 </Button>
@@ -533,12 +599,12 @@ export function CinemaTimeline({
             <TooltipContent side="top">Magnetic snap (Shift to bypass)</TooltipContent>
           </Tooltip>
 
-          <div className="inline-flex h-7 items-center rounded-full border border-border/75 px-1">
+          <div className="inline-flex h-7 items-center rounded-lg border border-border/75 px-1">
             <button
               type="button"
               onClick={() => onChangeZoom(Math.max(0.5, Number((zoom - 0.5).toFixed(1))))}
               aria-label="Zoom out timeline"
-              className="flex size-5 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
+              className="flex size-5 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
             >
               <ZoomOut className="size-3" />
             </button>
@@ -549,7 +615,7 @@ export function CinemaTimeline({
               type="button"
               onClick={() => onChangeZoom(Math.min(6, Number((zoom + 0.5).toFixed(1))))}
               aria-label="Zoom in timeline"
-              className="flex size-5 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
+              className="flex size-5 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
             >
               <ZoomIn className="size-3" />
             </button>
@@ -561,7 +627,7 @@ export function CinemaTimeline({
             variant="ghost"
             onClick={onFitZoom}
             aria-label="Fit timeline"
-            className="size-7 rounded-full"
+            className="size-7 rounded-lg"
           >
             <Maximize2 className="size-3" />
           </Button>
@@ -572,13 +638,14 @@ export function CinemaTimeline({
       <div
         ref={scrollRef}
         onPointerMove={handleLanePointerMove}
+        onPointerLeave={() => setHoverMs(null)}
         onPointerUp={handleLanePointerUp}
         onPointerCancel={handleLanePointerUp}
         className="cinema-scroll relative min-h-0 flex-1 overflow-auto"
       >
         <div style={{ width: TRACK_HEADER_W + trackWidthPx }} className="relative min-h-full">
           {/* Ruler Row */}
-          <div className="sticky top-0 z-20 flex h-[28px] border-b border-border/75 bg-card/95 backdrop-blur-md">
+          <div className="sticky top-0 z-20 flex h-[30px] border-b border-border/75 bg-card/95 backdrop-blur-md">
             <div
               style={{ width: TRACK_HEADER_W }}
               className="sticky left-0 z-30 flex shrink-0 items-center justify-between border-r border-border/75 bg-card px-3 font-mono text-[10.5px] text-muted-foreground"
@@ -598,10 +665,10 @@ export function CinemaTimeline({
                   <div
                     key={sec}
                     style={{ left: x }}
-                    className="pointer-events-none absolute top-0 bottom-0 border-l border-border/60"
+                    className="pointer-events-none absolute top-0 bottom-0 border-l border-border/55"
                   >
                     {showLabel ? (
-                      <span className="pl-1 font-mono text-[10px] leading-[28px] text-muted-foreground tabular-nums">
+                      <span className="pl-1 font-mono text-[10px] leading-[30px] text-muted-foreground tabular-nums">
                         {fmtRulerTime(sec)}
                       </span>
                     ) : null}
@@ -609,29 +676,108 @@ export function CinemaTimeline({
                 );
               })}
 
-              {/* Ruler Marker Pins */}
+              {/* Nexus Gold Studio Rhythm / Beat Ticks */}
+              {project.rhythmGrid
+                ? project.rhythmGrid.beatMs.map((bMs, idx) => (
+                    <span
+                      key={idx}
+                      aria-hidden
+                      style={{ left: (bMs / 1000) * pxPerSec }}
+                      className="pointer-events-none absolute bottom-0 h-2 w-px bg-[color:var(--nexus-link)]/55"
+                    />
+                  ))
+                : null}
+
+              {/* Hover Skimmer Timecode Readout */}
+              {hoverMs !== null && drag?.kind !== "scrub" ? (
+                <div
+                  style={{ left: (hoverMs / 1000) * pxPerSec }}
+                  className="pointer-events-none absolute top-0.5 z-10 -translate-x-1/2 rounded bg-background/90 px-1 py-px font-mono text-[9px] text-muted-foreground shadow-sm ring-1 ring-border/70 tabular-nums"
+                >
+                  {fmtSkimMs(hoverMs)}
+                </div>
+              ) : null}
+
+              {/* Interactive Ruler Marker Pins (`onPointerDown` stops propagation so ruler never swallows clicks) */}
               {project.markers.map((marker) => {
                 const x = (marker.atMs / 1000) * pxPerSec;
                 const isStudio = marker.kind === "studio";
                 return (
-                  <button
-                    key={marker.id}
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSeek(marker.atMs);
-                      onSelectMarker(marker);
-                    }}
-                    style={{ left: x }}
-                    title={`${marker.label} (${(marker.atMs / 1000).toFixed(1)}s)`}
-                    className={`absolute top-1 z-10 -translate-x-1/2 rounded-full border px-1.5 py-[1px] font-mono text-[9.5px] font-medium whitespace-nowrap ${
-                      isStudio
-                        ? "border-[color:var(--cinema-studio-link)]/65 bg-[color:var(--cinema-studio-link)]/20 text-[color:var(--cinema-studio-link)]"
-                        : "border-white/30 bg-foreground/15 text-foreground"
-                    }`}
-                  >
-                    {marker.label}
-                  </button>
+                  <Popover key={marker.id}>
+                    <PopoverTrigger
+                      render={
+                        <button
+                          type="button"
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSeek(marker.atMs);
+                            onSelectMarker(marker);
+                          }}
+                          style={{ left: x }}
+                          title={`${marker.label} (${(marker.atMs / 1000).toFixed(1)}s)`}
+                          className={`absolute top-1 z-20 -translate-x-1/2 rounded-md border px-1.5 py-[1px] font-mono text-[9.5px] font-medium whitespace-nowrap transition-colors ${
+                            isStudio
+                              ? "border-[color:var(--nexus-link-border)] bg-[color:var(--nexus-link-soft)] text-[color:var(--nexus-link)] hover:bg-[color:var(--nexus-link)] hover:text-[#09090b]"
+                              : "border-foreground/25 bg-card text-foreground hover:border-foreground/55"
+                          }`}
+                        >
+                          {marker.label}
+                        </button>
+                      }
+                    />
+                    <PopoverContent
+                      align="center"
+                      side="top"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      className="w-60 space-y-2 rounded-xl p-2.5"
+                    >
+                      <div className="flex items-center justify-between text-[10.5px] text-muted-foreground">
+                        <span className="capitalize">{marker.kind} marker</span>
+                        <span className="font-mono tabular-nums">{(marker.atMs / 1000).toFixed(2)}s</span>
+                      </div>
+                      <Input
+                        value={marker.label}
+                        onChange={(e) => onUpdateMarker(marker.id, e.target.value)}
+                        aria-label="Marker label"
+                        className="h-7 rounded-lg text-[12px]"
+                      />
+                      <div className="flex flex-col gap-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onCreateLowerThirdAtMarker(marker)}
+                          className="h-7 w-full justify-start gap-1.5 rounded-lg text-[11px]"
+                        >
+                          <Type className="size-3" />
+                          <span>Add Lower-Third at Cue</span>
+                        </Button>
+                        <div className="flex gap-1">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => onPushMarkersToStudio([marker])}
+                            className="h-7 flex-1 justify-start gap-1 rounded-lg border-[color:var(--nexus-link-border)] text-[11px] text-[color:var(--nexus-link)]"
+                          >
+                            <Waves className="size-3" />
+                            <span>Sync → Studio</span>
+                          </Button>
+                          <Button
+                            type="button"
+                            size="icon-sm"
+                            variant="ghost"
+                            onClick={() => onDeleteMarker(marker.id)}
+                            aria-label="Delete marker"
+                            className="size-7 shrink-0 rounded-lg text-muted-foreground hover:text-destructive"
+                          >
+                            <Trash2 className="size-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 );
               })}
             </div>
@@ -644,7 +790,6 @@ export function CinemaTimeline({
               .filter((c) => c.trackId === track.id)
               .sort((a, b) => a.startMs - b.startMs);
 
-            // Include dragged clip preview cleanly on its target track
             const trackClips = project.clips
               .filter((c) => {
                 if (drag && drag.kind === "move" && drag.clipId === c.id) {
@@ -686,14 +831,7 @@ export function CinemaTimeline({
                   className="sticky left-0 z-10 flex shrink-0 items-center justify-between gap-1 border-r border-border/75 bg-card px-2.5"
                 >
                   <div className="flex min-w-0 items-center gap-1.5">
-                    <Icon
-                      className={`size-3.5 shrink-0 ${
-                        track.kind === "audio"
-                          ? "text-[color:var(--cinema-studio-link)]"
-                          : "text-muted-foreground"
-                      }`}
-                      strokeWidth={1.6}
-                    />
+                    <Icon className="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.6} />
                     <span className="truncate text-[11.5px] font-medium text-foreground">
                       {track.name}
                     </span>
@@ -732,7 +870,7 @@ export function CinemaTimeline({
                       aria-label={track.locked ? "Unlock track" : "Lock track"}
                       className={`rounded p-1 transition-colors ${
                         track.locked
-                          ? "text-[color:var(--cinema-select)]"
+                          ? "text-[color:var(--cinema-playhead)]"
                           : "text-muted-foreground hover:text-foreground"
                       }`}
                     >
@@ -768,6 +906,18 @@ export function CinemaTimeline({
                     isDropTarget ? "bg-[color:var(--cinema-select-soft)]" : "bg-foreground/[0.015]"
                   } ${track.hidden ? "opacity-45" : ""}`}
                 >
+                  {/* Subtle Gold Vertical Beat Lines inside Lanes */}
+                  {project.rhythmGrid
+                    ? project.rhythmGrid.beatMs.map((bMs, idx) => (
+                        <div
+                          key={idx}
+                          aria-hidden
+                          style={{ left: (bMs / 1000) * pxPerSec }}
+                          className="pointer-events-none absolute top-0 bottom-0 w-px bg-[color:var(--nexus-link)]/[0.08]"
+                        />
+                      ))
+                    : null}
+
                   {trackClips.map((clip, clipIdx) => {
                     const leftPx = (clip.startMs / 1000) * pxPerSec;
                     const widthPx = Math.max(22, (clip.durationMs / 1000) * pxPerSec);
@@ -792,13 +942,14 @@ export function CinemaTimeline({
                             isSelected
                               ? "z-10 border-[color:var(--cinema-select)] bg-card shadow-[0_0_0_1px_var(--cinema-select)]"
                               : isStudioLinked
-                                ? "border-[color:var(--cinema-studio-link)]/55 bg-[color:var(--cinema-studio-link)]/15 hover:border-[color:var(--cinema-studio-link)]"
+                                ? "border-[color:var(--nexus-link-border)] bg-[color:var(--nexus-link-soft)] hover:border-[color:var(--nexus-link)]"
                                 : "border-border/90 bg-card/85 hover:border-foreground/35"
                           }`}
                         >
-                          {/* Video Filmstrip Thumbnails */}
-                          {clip.kind === "video" && asset?.thumbnails.length ? (
-                            <div className="pointer-events-none absolute inset-0 flex opacity-45">
+                          {/* Video & Photo Filmstrip Thumbnails */}
+                          {(clip.kind === "video" || clip.kind === "image") &&
+                          asset?.thumbnails.length ? (
+                            <div className="pointer-events-none absolute inset-0 flex opacity-50">
                               {asset.thumbnails.map((src, i) => (
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img
@@ -819,7 +970,7 @@ export function CinemaTimeline({
                                   key={idx}
                                   className={`flex-1 rounded-full ${
                                     isStudioLinked
-                                      ? "bg-[color:var(--cinema-studio-link)]"
+                                      ? "bg-[color:var(--nexus-link)]"
                                       : "bg-foreground/70"
                                   }`}
                                   style={{ height: `${Math.max(12, Math.round(pk * 100))}%` }}
@@ -828,14 +979,15 @@ export function CinemaTimeline({
                             </div>
                           ) : null}
 
-                          {/* Clip Label Pill */}
+                          {/* Clip Label Badge */}
                           <div className="pointer-events-none relative z-10 flex min-w-0 items-center gap-1.5 px-2.5">
                             {isStudioLinked ? (
-                              <span className="shrink-0 rounded bg-[color:var(--cinema-studio-link)] px-1 py-[1px] text-[9px] font-semibold text-white">
-                                Studio
-                              </span>
+                              <span
+                                title="Linked with Recording Studio"
+                                className="size-1.5 shrink-0 rounded-full bg-[color:var(--nexus-link)]"
+                              />
                             ) : null}
-                            <span className="truncate text-[11px] font-medium text-foreground">
+                            <span className="truncate text-[11px] font-medium text-foreground drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]">
                               {clip.kind === "text" ? clip.text : clip.name}
                             </span>
                           </div>
@@ -845,13 +997,13 @@ export function CinemaTimeline({
                             type="button"
                             aria-label={`Trim start of ${clip.name}`}
                             onPointerDown={(e) => handleTrimPointerDown(e, clip, "trim-left")}
-                            className="absolute inset-y-0 left-0 z-20 w-2 cursor-ew-resize bg-transparent transition-colors hover:bg-[color:var(--cinema-select)]/60"
+                            className="absolute inset-y-0 left-0 z-20 w-2 cursor-ew-resize bg-transparent transition-colors hover:bg-foreground/35"
                           />
                           <button
                             type="button"
                             aria-label={`Trim end of ${clip.name}`}
                             onPointerDown={(e) => handleTrimPointerDown(e, clip, "trim-right")}
-                            className="absolute inset-y-0 right-0 z-20 w-2 cursor-ew-resize bg-transparent transition-colors hover:bg-[color:var(--cinema-select)]/60"
+                            className="absolute inset-y-0 right-0 z-20 w-2 cursor-ew-resize bg-transparent transition-colors hover:bg-foreground/35"
                           />
                         </div>
 
@@ -866,7 +1018,7 @@ export function CinemaTimeline({
                                   style={{ left: leftPx + widthPx }}
                                   className={`absolute top-1/2 z-20 flex size-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-md border transition-colors ${
                                     activeTrans && activeTrans.type !== "cut"
-                                      ? "border-[color:var(--cinema-select)] bg-[color:var(--cinema-select)] text-white"
+                                      ? "border-foreground bg-foreground text-background"
                                       : "border-border bg-card text-muted-foreground hover:text-foreground"
                                   }`}
                                 >
@@ -874,7 +1026,7 @@ export function CinemaTimeline({
                                 </button>
                               }
                             />
-                            <PopoverContent align="center" side="top" className="w-56 rounded-2xl p-2">
+                            <PopoverContent align="center" side="top" className="w-56 rounded-xl p-2">
                               <div className="mb-1.5 px-2 text-[11.5px] font-medium text-foreground">
                                 Clip Transition
                               </div>
@@ -893,9 +1045,9 @@ export function CinemaTimeline({
                                           activeTrans?.durationMs || trPreset.defaultMs || 550,
                                         )
                                       }
-                                      className={`flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-left text-[11.5px] ${
+                                      className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[11.5px] ${
                                         picked
-                                          ? "bg-[color:var(--cinema-select-soft)] font-medium text-foreground"
+                                          ? "bg-foreground/10 font-medium text-foreground"
                                           : "text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground"
                                       }`}
                                     >
@@ -920,16 +1072,25 @@ export function CinemaTimeline({
             );
           })}
 
-          {/* Magnetic Snap Guide Hairline */}
-          {snapGuideMs !== null ? (
+          {/* Hover Skimmer Hairline */}
+          {hoverMs !== null && drag?.kind !== "scrub" ? (
             <div
-              style={{ left: TRACK_HEADER_W + (snapGuideMs / 1000) * pxPerSec }}
-              className="pointer-events-none absolute top-0 bottom-0 z-20 w-px bg-[color:var(--cinema-select)]"
+              style={{ left: TRACK_HEADER_W + (hoverMs / 1000) * pxPerSec }}
+              className="pointer-events-none absolute top-[30px] bottom-0 z-10 w-px bg-foreground/20"
               aria-hidden
             />
           ) : null}
 
-          {/* Cinema Crimson Playhead Needle */}
+          {/* Magnetic Snap Guide Hairline */}
+          {snapGuideMs !== null ? (
+            <div
+              style={{ left: TRACK_HEADER_W + (snapGuideMs / 1000) * pxPerSec }}
+              className="pointer-events-none absolute top-0 bottom-0 z-20 w-px bg-foreground/75"
+              aria-hidden
+            />
+          ) : null}
+
+          {/* Apple Recording Red Playhead Needle (draggable top handle) */}
           <div
             style={{ left: TRACK_HEADER_W + playheadX }}
             className="pointer-events-none absolute top-0 bottom-0 z-30 w-[1.5px] bg-[color:var(--cinema-playhead)]"

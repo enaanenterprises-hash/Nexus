@@ -7,9 +7,11 @@ import {
   Film,
   FolderPlus,
   Layers,
+  Link2,
   Loader2,
   Magnet,
   Metronome,
+  MonitorPlay,
   MoreHorizontal,
   MousePointer,
   PanelRight,
@@ -27,6 +29,7 @@ import {
   Trash2,
   Undo2,
   Upload,
+  Waves,
   X,
   Zap,
   ZoomIn,
@@ -42,12 +45,16 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { STUDIO_NODE_ID } from "@/extensions/studio/node";
+import { detectBeatsAndTransients, detectSpeechAndSilenceRegions } from "@/lib/creative/nexus-bridge";
 import type { ExtensionHubSnapshot, ExtensionId } from "@/lib/extensions";
 import { loadAudioBlob, saveAudioBlob } from "@/lib/studio/audio-db";
 import { defaultStudioColorForSlot } from "@/lib/studio/colors";
 import {
   createStudioCollection,
   deleteStudioRecording,
+  emitStudioAudioRepaired,
+  emitStudioRhythmGrid,
+  emitStudioSmartCuts,
   fetchStudioStatus,
   getStudioRecording,
   listStudioCollections,
@@ -63,9 +70,10 @@ import type {
   StudioTrackColor,
   StudioTrackV1,
 } from "@/lib/studio/types";
-import { slicePeaksForRange } from "@/lib/studio/wav";
+import { computePeaksFromBuffer, slicePeaksForRange } from "@/lib/studio/wav";
 import { useTheme } from "@/lib/theme";
 import { StudioCaptureStage } from "./StudioCaptureStage";
+import { StudioCinemaMonitor } from "./StudioCinemaMonitor";
 import { StudioInspectorContent, type StudioInspectorTab } from "./StudioInspector";
 import { StudioIoPatchbay } from "./StudioIoPatchbay";
 import { StudioRoutingSheet } from "./StudioRoutingSheet";
@@ -161,6 +169,7 @@ export function StudioView({
   incomingCinemaAudio,
   onClose,
   onReleaseNode,
+  onOpenCinema,
   onRouteTransfer,
   onSendToCinema,
 }: {
@@ -169,6 +178,7 @@ export function StudioView({
   incomingCinemaAudio?: { transfer: CinemaExtractedAudioTransfer; serial: number } | null;
   onClose: () => void;
   onReleaseNode: () => void;
+  onOpenCinema?: () => void;
   onRouteTransfer?: (fromId: ExtensionId, toId?: ExtensionId) => void;
   onSendToCinema?: (recording: StudioRecording, mode: "mix" | "stems") => void;
 }) {
@@ -222,6 +232,11 @@ export function StudioView({
   const [linkedCinemaVoiceover, setLinkedCinemaVoiceover] = useState<CinemaVoiceoverRequest | null>(
     null,
   );
+  const [activeCinemaRepair, setActiveCinemaRepair] = useState<CinemaExtractedAudioTransfer | null>(
+    null,
+  );
+  const [monitorOpen, setMonitorOpen] = useState(false);
+  const [analyzingBridge, setAnalyzingBridge] = useState<string | null>(null);
   const voiceoverSerialRef = useRef(0);
   const cinemaAudioSerialRef = useRef(0);
 
@@ -998,6 +1013,7 @@ export function StudioView({
         });
       }
       setStudioPage("record");
+      setMonitorOpen(true);
       showNotice(`Voiceover ready for Cinema “${req.projectTitle}” (${req.markers.length} cues synced).`);
     });
     return () => {
@@ -1046,14 +1062,108 @@ export function StudioView({
         void persistDraft(next, markersRef.current);
         return next;
       });
+      setActiveCinemaRepair(tr);
+      setMonitorOpen(true);
       setSelectedTrackId(newTrack.id);
       setStudioPage("edit");
-      showNotice("Imported soundtrack from Cinema — polish with EQ & Compressor, then Send to Cinema.");
+      showNotice("Imported soundtrack from Cinema — polish with EQ & Compressor, then return sample-locked.");
     });
     return () => {
       cancelled = true;
     };
   }, [incomingCinemaAudio, persistDraft, showNotice]);
+
+  const decodeMixedWavBuffer = useCallback(async (): Promise<{
+    blob: Blob;
+    buffer: AudioBuffer;
+    saved: StudioRecording | null;
+  } | null> => {
+    if (tracksRef.current.length === 0) {
+      showNotice("Record or import an audio layer first.");
+      return null;
+    }
+    const saved = await persistDraft(tracksRef.current, markersRef.current);
+    const mix = await audio.exportMixWav();
+    if (!mix) return null;
+    const Ctx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return null;
+    const ctx = new Ctx();
+    try {
+      const buffer = await ctx.decodeAudioData(await mix.blob.arrayBuffer());
+      return { blob: mix.blob, buffer, saved };
+    } finally {
+      void ctx.close();
+    }
+  }, [audio, persistDraft, showNotice]);
+
+  const handleSendSmartCutsToCinema = useCallback(async () => {
+    setAnalyzingBridge("smart-cut");
+    try {
+      const res = await decodeMixedWavBuffer();
+      if (!res) return;
+      const detected = detectSpeechAndSilenceRegions(res.buffer);
+      emitStudioSmartCuts({
+        recordingId: res.saved?.id ?? activeId ?? makeClientId("rec"),
+        title: title.trim() || "Untitled session",
+        keepRegions: detected.keepRegions,
+        removedMs: detected.removedMs,
+        silenceCount: detected.silenceRegions.length,
+        createdAt: new Date().toISOString(),
+      });
+    } finally {
+      setAnalyzingBridge(null);
+    }
+  }, [activeId, decodeMixedWavBuffer, title]);
+
+  const handleSendRhythmGridToCinema = useCallback(async () => {
+    setAnalyzingBridge("beat-grid");
+    try {
+      const res = await decodeMixedWavBuffer();
+      if (!res) return;
+      const rhythm = detectBeatsAndTransients(res.buffer, bpm);
+      emitStudioRhythmGrid({
+        recordingId: res.saved?.id ?? activeId ?? makeClientId("rec"),
+        title: title.trim() || "Untitled session",
+        bpm: rhythm.bpm,
+        beatMs: rhythm.beatMs,
+        transientMs: rhythm.transientMs,
+        createdAt: new Date().toISOString(),
+      });
+    } finally {
+      setAnalyzingBridge(null);
+    }
+  }, [activeId, bpm, decodeMixedWavBuffer, title]);
+
+  const handleReturnRepairedAudioToCinema = useCallback(async () => {
+    if (!activeCinemaRepair) return;
+    setAnalyzingBridge("repair");
+    try {
+      const res = await decodeMixedWavBuffer();
+      if (!res) return;
+      const key = `st-repaired-${makeClientId("wav")}`;
+      await saveAudioBlob(key, res.blob);
+      const peaks = computePeaksFromBuffer(res.buffer, 180);
+      emitStudioAudioRepaired({
+        recordingId: res.saved?.id ?? activeId ?? makeClientId("rec"),
+        title: activeCinemaRepair.clipName,
+        targetProjectId: activeCinemaRepair.projectId,
+        targetVideoClipId: activeCinemaRepair.sourceVideoClipId,
+        sourceStartMs: activeCinemaRepair.sourceStartMs,
+        audioKey: key,
+        durationMs: Math.round(res.buffer.duration * 1000),
+        sampleRate: res.buffer.sampleRate,
+        byteLength: res.blob.size,
+        mimeType: "audio/wav",
+        peaks,
+        repairedAt: new Date().toISOString(),
+      });
+      setActiveCinemaRepair(null);
+    } finally {
+      setAnalyzingBridge(null);
+    }
+  }, [activeCinemaRepair, activeId, decodeMixedWavBuffer]);
 
   const selectedTrack = useMemo(
     () => (selectedTrackId ? tracks.find((t) => t.id === selectedTrackId) ?? null : null),
@@ -1206,10 +1316,10 @@ export function StudioView({
       data-studio-page={studioPage}
       className="studio-screen flex h-full w-full flex-col overflow-hidden"
     >
-      {/* Quiet Apple HIG Studio Header (pl-[92px] clears floating top-left Nexus Orb trigger) */}
+      {/* Quiet Apple HIG Studio Header (pl-[68px] & md:h-12 align cleanly beside top-left Nexus Orb) */}
       <header
         data-page={studioPage}
-        className="studio-header grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 py-2.5 pl-[92px] pr-5 sm:pr-6 md:grid-cols-[1fr_auto_1fr] md:gap-y-0"
+        className="studio-header grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 py-1.5 pl-[68px] pr-4 sm:pr-5 md:h-12 md:grid-cols-[1fr_auto_1fr] md:gap-y-0"
       >
         {/* Left: Quiet Session Title + Sessions Chevron */}
         <div className="col-start-1 row-start-1 flex min-w-0 items-center gap-1 justify-self-start">
@@ -1274,8 +1384,102 @@ export function StudioView({
           </button>
         </div>
 
-        {/* Right: Single Consolidated Action Menu + Quiet Exit */}
+        {/* Right: Subtle Gold Links Popover + Consolidated Export Menu + Quiet Exit */}
         <div className="col-start-2 row-start-1 flex items-center justify-end gap-1.5 justify-self-end md:col-start-3">
+          <Popover>
+            <PopoverTrigger
+              render={
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1.5 rounded-lg border-[color:var(--nexus-link-border)] bg-[color:var(--nexus-link-soft)] px-2.5 text-[11.5px] font-medium text-foreground hover:border-[color:var(--nexus-link)]"
+                >
+                  <span className="size-1.5 rounded-full bg-[color:var(--nexus-link)]" />
+                  <Link2 className="size-3.5 text-[color:var(--nexus-link)]" />
+                  <span className="hidden sm:inline">Links</span>
+                </Button>
+              }
+            />
+            <PopoverContent align="end" className="w-64 space-y-1 rounded-xl p-2">
+              <div className="flex items-center justify-between px-2 py-1 text-[11px] text-muted-foreground">
+                <span className="font-medium text-foreground">Nexus Node Links</span>
+                <span className="size-1.5 rounded-full bg-[color:var(--nexus-link)]" />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setMonitorOpen((v) => !v)}
+                className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-[12px] text-foreground hover:bg-foreground/[0.06]"
+              >
+                <span className="flex items-center gap-2">
+                  <MonitorPlay className="size-3.5 text-[color:var(--nexus-link)]" />
+                  <span>Cinema Live Video Monitor</span>
+                </span>
+                <span className="font-mono text-[10px] text-[color:var(--nexus-link)]">
+                  {monitorOpen ? "On" : "Off"}
+                </span>
+              </button>
+
+              {activeCinemaRepair ? (
+                <button
+                  type="button"
+                  disabled={analyzingBridge !== null}
+                  onClick={() => void handleReturnRepairedAudioToCinema()}
+                  className="flex w-full items-center gap-2 rounded-lg bg-[color:var(--nexus-link-soft)] px-2 py-1.5 text-left text-[12px] font-medium text-[color:var(--nexus-link)] hover:opacity-90 disabled:opacity-45"
+                >
+                  <Waves className="size-3.5" />
+                  <span>Return Repaired Audio → Cinema</span>
+                </button>
+              ) : null}
+
+              <button
+                type="button"
+                disabled={tracks.length === 0 || analyzingBridge !== null}
+                onClick={() => void handleSendSmartCutsToCinema()}
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] text-foreground hover:bg-foreground/[0.06] disabled:opacity-45"
+              >
+                <Scissors className="size-3.5 text-[color:var(--nexus-link)]" />
+                <span>
+                  {analyzingBridge === "smart-cut" ? "Detecting speech…" : "Send Smart Jump-Cuts → Cinema"}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                disabled={tracks.length === 0 || analyzingBridge !== null}
+                onClick={() => void handleSendRhythmGridToCinema()}
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] text-foreground hover:bg-foreground/[0.06] disabled:opacity-45"
+              >
+                <Waves className="size-3.5 text-[color:var(--nexus-link)]" />
+                <span>
+                  {analyzingBridge === "beat-grid" ? "Detecting beats…" : "Send Beat Grid → Cinema"}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                disabled={tracks.length === 0}
+                onClick={() => void handleEditInCinema("stems")}
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12px] text-foreground hover:bg-foreground/[0.06] disabled:opacity-45"
+              >
+                <Layers className="size-3.5 text-[color:var(--nexus-link)]" />
+                <span>Send Isolated Stems → Cinema</span>
+              </button>
+
+              <Separator className="my-1" />
+
+              <button
+                type="button"
+                onClick={() => void openRouting()}
+                className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-[11.5px] text-[color:var(--nexus-link)] hover:bg-[color:var(--nexus-link-soft)]"
+              >
+                <span>Route to Other Nexus Nodes…</span>
+                <Zap className="size-3" />
+              </button>
+            </PopoverContent>
+          </Popover>
+
           <Popover>
             <PopoverTrigger
               render={
@@ -1348,7 +1552,7 @@ export function StudioView({
                   type="button"
                   disabled={tracks.length === 0}
                   onClick={() => void handleEditInCinema("mix")}
-                  className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[12.5px] font-medium text-[color:var(--studio-accent)] transition-colors hover:bg-foreground/[0.06] disabled:opacity-45"
+                  className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[12.5px] font-medium text-[color:var(--nexus-link)] transition-colors hover:bg-[color:var(--nexus-link-soft)] disabled:opacity-45"
                 >
                   <Film className="size-4 shrink-0" />
                   <span>Edit in Cinema</span>
@@ -1359,7 +1563,7 @@ export function StudioView({
                   onClick={() => void openRouting()}
                   className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[12.5px] font-medium text-foreground transition-colors hover:bg-foreground/[0.06]"
                 >
-                  <Zap className="size-4 shrink-0 text-[color:var(--studio-accent)]" />
+                  <Zap className="size-4 shrink-0 text-[color:var(--nexus-link)]" />
                   <span>Route to Nexus Node</span>
                 </button>
 
@@ -1398,33 +1602,58 @@ export function StudioView({
         </div>
       </header>
 
-      {/* Sliding Dual-Surface Stage: Record <-> Arrange */}
-      {linkedCinemaVoiceover ? (
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[color:var(--studio-accent)]/30 bg-[color:var(--studio-accent)]/10 px-4 py-1.5 text-[12px]">
+      {/* Subtle Gold Cross-Node Sync Bar (shown when actively scoring or repairing for Cinema) */}
+      {linkedCinemaVoiceover || activeCinemaRepair ? (
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[color:var(--nexus-link-border)] bg-[color:var(--nexus-link-soft)] px-4 py-1.5 text-[12px]">
           <div className="flex min-w-0 items-center gap-2">
-            <Film className="size-3.5 shrink-0 text-[color:var(--studio-accent)]" />
+            <span className="size-1.5 shrink-0 rounded-full bg-[color:var(--nexus-link)]" />
+            <Film className="size-3.5 shrink-0 text-[color:var(--nexus-link)]" />
             <span className="truncate font-medium text-foreground">
-              Synced to Cinema · {linkedCinemaVoiceover.projectTitle}
-            </span>
-            <span className="hidden font-mono text-[11px] text-muted-foreground tabular-nums sm:inline">
-              {(linkedCinemaVoiceover.durationMs / 1000).toFixed(1)}s timeline
+              {activeCinemaRepair
+                ? `Repairing Cinema Clip · ${activeCinemaRepair.clipName}`
+                : `Synced w/ Cinema · ${linkedCinemaVoiceover?.projectTitle}`}
             </span>
           </div>
           <div className="flex items-center gap-1.5">
             <Button
               type="button"
               size="sm"
-              disabled={tracks.length === 0}
-              onClick={() => void handleEditInCinema("mix")}
-              className="h-7 rounded-full bg-foreground px-3 text-[11px] font-medium text-background hover:opacity-90"
+              variant="outline"
+              onClick={() => setMonitorOpen((v) => !v)}
+              className="h-7 gap-1 rounded-lg px-2.5 text-[11px]"
             >
-              Send Take Back to Cinema
+              <MonitorPlay className="size-3 text-[color:var(--nexus-link)]" />
+              <span>{monitorOpen ? "Hide Video" : "Monitor Video"}</span>
             </Button>
+            {activeCinemaRepair ? (
+              <Button
+                type="button"
+                size="sm"
+                disabled={tracks.length === 0 || analyzingBridge !== null}
+                onClick={() => void handleReturnRepairedAudioToCinema()}
+                className="h-7 rounded-lg bg-foreground px-3 text-[11px] font-medium text-background hover:opacity-90"
+              >
+                Return Repaired Audio → Cinema
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                disabled={tracks.length === 0}
+                onClick={() => void handleEditInCinema("mix")}
+                className="h-7 rounded-lg bg-foreground px-3 text-[11px] font-medium text-background hover:opacity-90"
+              >
+                Send Take → Cinema
+              </Button>
+            )}
             <button
               type="button"
-              onClick={() => setLinkedCinemaVoiceover(null)}
+              onClick={() => {
+                setLinkedCinemaVoiceover(null);
+                setActiveCinemaRepair(null);
+              }}
               aria-label="Dismiss Cinema sync banner"
-              className="rounded-full p-1 text-muted-foreground hover:text-foreground"
+              className="rounded-lg p-1 text-muted-foreground hover:text-foreground"
             >
               <X className="size-3.5" />
             </button>
@@ -1768,7 +1997,7 @@ export function StudioView({
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="audio/*"
+                    accept=".wav,.mp3,.m4a,.ogg,.flac,.aac,.webm,.mp4,audio/*"
                     multiple
                     onChange={(e) => void handleImportInputChange(e)}
                     className="hidden"
@@ -2095,6 +2324,15 @@ export function StudioView({
         theme={theme}
         onRouteTransfer={(targetId) => onRouteTransfer?.(STUDIO_NODE_ID, targetId)}
         onRouteToCinema={onSendToCinema}
+      />
+
+      {/* Live Frame-Locked Cinema PiP Monitor */}
+      <StudioCinemaMonitor
+        open={monitorOpen}
+        playheadMs={audio.playheadMs}
+        transport={audio.transport}
+        onOpenCinema={onOpenCinema}
+        onClose={() => setMonitorOpen(false)}
       />
     </section>
   );

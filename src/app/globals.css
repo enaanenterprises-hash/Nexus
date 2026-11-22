@@ -2159,11 +2159,14 @@ button.landing-signup {
 }
 
 :root {
-  --studio-accent: #5b9cf6;
-  --studio-accent-strong: #3b82f6;
-  --studio-accent-soft: rgba(91, 156, 246, 0.14);
-  --studio-accent-ring: rgba(91, 156, 246, 0.55);
+  --studio-accent: #ff3b30;
+  --studio-accent-strong: #e12621;
+  --studio-accent-soft: rgba(255, 59, 48, 0.14);
+  --studio-accent-ring: rgba(255, 59, 48, 0.45);
   --studio-thumb: #e4e4e7;
+  --nexus-link: #f0b54a;
+  --nexus-link-soft: rgba(240, 181, 74, 0.11);
+  --nexus-link-border: rgba(240, 181, 74, 0.34);
 }
 
 /* Studio replaces the network completely edge-to-edge; top-left orb floats inline in the Studio header. */
@@ -2276,7 +2279,7 @@ button.landing-signup {
 }
 
 .studio-header {
-  min-height: 3.75rem;
+  min-height: 3rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.085);
   background: rgba(15, 15, 19, 0.92);
   backdrop-filter: blur(18px) saturate(1.25);
@@ -6164,11 +6167,14 @@ html[data-dash-theme="light"] {
 
 .dash[data-theme="light"],
 html[data-dash-theme="light"] {
-  --studio-accent: #2563eb;
-  --studio-accent-strong: #1d4ed8;
-  --studio-accent-soft: rgba(37, 99, 235, 0.1);
-  --studio-accent-ring: rgba(37, 99, 235, 0.45);
+  --studio-accent: #d70015;
+  --studio-accent-strong: #b80012;
+  --studio-accent-soft: rgba(215, 0, 21, 0.09);
+  --studio-accent-ring: rgba(215, 0, 21, 0.38);
   --studio-thumb: #18181b;
+  --nexus-link: #a16c0c;
+  --nexus-link-soft: rgba(161, 108, 12, 0.09);
+  --nexus-link-border: rgba(161, 108, 12, 0.34);
 }
 
 .dash[data-theme="light"] .studio-fullscreen,
@@ -8649,26 +8655,28 @@ html[data-dash-theme="light"] {
 
 /* ─── Nexus Cinema (Apple HIG Pro Video Editor + Studio Integration) ─── */
 :root {
-  --cinema-playhead: #ef4444;
-  --cinema-select: #38bdf8;
-  --cinema-select-soft: rgba(56, 189, 248, 0.14);
-  --cinema-studio-link: #5b9cf6;
+  --cinema-playhead: var(--studio-accent);
+  --cinema-accent: var(--studio-accent);
+  --cinema-select: #f4f4f5;
+  --cinema-select-soft: rgba(255, 255, 255, 0.08);
+  --cinema-studio-link: var(--nexus-link);
   --cinema-bg: #08080a;
-  --cinema-chrome: #0e0e11;
-  --cinema-surface: #131317;
-  --cinema-elevated: #18181d;
+  --cinema-chrome: #0f0f12;
+  --cinema-surface: #141418;
+  --cinema-elevated: #1c1c21;
   --cinema-thumb: #e4e4e7;
 }
 
 .dash[data-theme="light"],
 html[data-dash-theme="light"] {
-  --cinema-playhead: #dc2626;
-  --cinema-select: #0284c7;
-  --cinema-select-soft: rgba(2, 132, 199, 0.12);
-  --cinema-studio-link: #2563eb;
-  --cinema-bg: #ebe9e4;
+  --cinema-playhead: var(--studio-accent);
+  --cinema-accent: var(--studio-accent);
+  --cinema-select: #18181b;
+  --cinema-select-soft: rgba(24, 24, 27, 0.07);
+  --cinema-studio-link: var(--nexus-link);
+  --cinema-bg: #eceae5;
   --cinema-chrome: #ffffff;
-  --cinema-surface: #f7f6f2;
+  --cinema-surface: #f6f5f1;
   --cinema-elevated: #ffffff;
   --cinema-thumb: #18181b;
 }
@@ -8679,7 +8687,7 @@ html[data-dash-theme="light"] {
   z-index: 20;
   padding: 0;
   background: var(--cinema-bg);
-  --ring: rgba(56, 189, 248, 0.48);
+  --ring: var(--studio-accent-ring);
   --accent: var(--cinema-select-soft);
 }
 
@@ -8689,13 +8697,14 @@ html[data-dash-theme="light"] {
 
 .cinema-fullscreen input,
 .cinema-fullscreen textarea {
-  caret-color: var(--cinema-select);
+  caret-color: var(--cinema-playhead);
 }
 
 .cinema-header {
-  min-height: 3.35rem;
+  height: 3rem;
+  min-height: 3rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.085);
-  background: rgba(14, 14, 17, 0.84);
+  background: rgba(15, 15, 18, 0.88);
   backdrop-filter: blur(22px) saturate(1.35);
   -webkit-backdrop-filter: blur(22px) saturate(1.35);
 }

@@ -58,8 +58,8 @@ export const FILTER_PRESETS: Array<{
   { id: "obsidian-matte", name: "Obsidian Matte", swatch: ["#111216", "#64748b"], values: { brightness: 0.96, contrast: 1.12, saturate: 0.88, temperature: -0.1, blur: 0, vignette: 0.34 } },
   { id: "silver-halide", name: "Silver Halide", swatch: ["#18181b", "#e4e4e7"], values: { brightness: 1.03, contrast: 1.24, saturate: 0.05, temperature: 0, blur: 0, vignette: 0.25 } },
   { id: "warm-35mm", name: "Warm 35mm", swatch: ["#573b26", "#e7b98a"], values: { brightness: 1.02, contrast: 1.08, saturate: 1.12, temperature: 0.35, blur: 0, vignette: 0.2 } },
-  { id: "cool-editorial", name: "Cool Editorial", swatch: ["#0f172a", "#7dd3fc"], values: { brightness: 1.0, contrast: 1.1, saturate: 0.92, temperature: -0.35, blur: 0, vignette: 0.14 } },
-  { id: "vivid", name: "Vivid", swatch: ["#0c4a6e", "#38bdf8"], values: { brightness: 1.04, contrast: 1.14, saturate: 1.38, temperature: 0.08, blur: 0, vignette: 0.08 } },
+  { id: "cool-editorial", name: "Crisp Slate", swatch: ["#141418", "#d4d4d8"], values: { brightness: 1.0, contrast: 1.1, saturate: 0.9, temperature: -0.22, blur: 0, vignette: 0.14 } },
+  { id: "vivid", name: "Vivid", swatch: ["#27272a", "#ff3b30"], values: { brightness: 1.04, contrast: 1.14, saturate: 1.38, temperature: 0.08, blur: 0, vignette: 0.08 } },
   { id: "faded-film", name: "Faded Film", swatch: ["#3b3a36", "#b8b4a8"], values: { brightness: 1.06, contrast: 0.86, saturate: 0.82, temperature: 0.16, blur: 0, vignette: 0.12 } },
   { id: "noir", name: "Noir", swatch: ["#050507", "#71717a"], values: { brightness: 0.92, contrast: 1.42, saturate: 0, temperature: -0.1, blur: 0, vignette: 0.45 } },
 ];
@@ -217,7 +217,7 @@ export const TEXT_PRESETS: TextStylePreset[] = [
   {
     id: "pill-tag",
     name: "Monochrome Badge",
-    previewText: "Episode 04 · Live Mix",
+    previewText: "Chapter 01",
     fontFamily: "Manrope, -apple-system, 'SF Pro Display', sans-serif",
     fontSize: 26,
     fontWeight: 500,
@@ -225,7 +225,7 @@ export const TEXT_PRESETS: TextStylePreset[] = [
     lineHeight: 1.2,
     align: "center",
     color: "#f5f5f7",
-    backgroundColor: "rgba(56, 189, 248, 0.16)",
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
     backgroundPadding: 16,
     backgroundRadius: 999,
     width: 36,
@@ -249,15 +249,15 @@ export const ELEMENT_PRESETS: Array<{
   { id: "circle", name: "Orbital Ring", category: "shape", shapeKind: "circle", fill: "rgba(255, 255, 255, 0.06)", stroke: "rgba(255, 255, 255, 0.35)", width: 24, height: 24 },
   { id: "pill", name: "Glass Pill", category: "shape", shapeKind: "pill", fill: "rgba(255, 255, 255, 0.12)", stroke: "rgba(255, 255, 255, 0.25)", width: 32, height: 10 },
   { id: "line", name: "Hairline Rule", category: "shape", shapeKind: "line", fill: "transparent", stroke: "rgba(255, 255, 255, 0.45)", width: 54, height: 4 },
-  { id: "arrow", name: "Pointer Arrow", category: "shape", shapeKind: "arrow", fill: "transparent", stroke: "#38bdf8", width: 24, height: 10 },
-  { id: "callout", name: "Callout Frame", category: "shape", shapeKind: "callout", fill: "rgba(18, 19, 24, 0.9)", stroke: "#38bdf8", width: 34, height: 18 },
+  { id: "arrow", name: "Pointer Arrow", category: "shape", shapeKind: "arrow", fill: "transparent", stroke: "#ff3b30", width: 24, height: 10 },
+  { id: "callout", name: "Callout Frame", category: "shape", shapeKind: "callout", fill: "rgba(18, 19, 24, 0.9)", stroke: "rgba(255, 255, 255, 0.26)", width: 34, height: 18 },
   { id: "device-desktop", name: "Display Frame", category: "frame", shapeKind: "device-desktop", fill: "rgba(12, 12, 16, 0.9)", stroke: "rgba(255, 255, 255, 0.24)", width: 72, height: 64 },
   { id: "device-phone", name: "Phone Frame", category: "frame", shapeKind: "device-phone", fill: "rgba(12, 12, 16, 0.9)", stroke: "rgba(255, 255, 255, 0.24)", width: 28, height: 76 },
-  { id: "progress-bar", name: "Progress Bar", category: "frame", shapeKind: "progress-bar", fill: "#38bdf8", stroke: "rgba(255, 255, 255, 0.16)", width: 76, height: 4 },
-  { id: "viz-bars", name: "Studio Bars", category: "visualizer", visualizerStyle: "bars", fill: "#5b9cf6", stroke: "#e4e4e7", width: 64, height: 22 },
-  { id: "viz-mirror", name: "Mirror Wave", category: "visualizer", visualizerStyle: "mirror-wave", fill: "#f5f5f7", stroke: "#5b9cf6", width: 72, height: 26 },
-  { id: "viz-horizon", name: "Horizon Line", category: "visualizer", visualizerStyle: "horizon-line", fill: "#38bdf8", stroke: "#ffffff", width: 78, height: 20 },
-  { id: "viz-ring", name: "Radial Pulse", category: "visualizer", visualizerStyle: "ring", fill: "#5b9cf6", stroke: "#f5f5f7", width: 34, height: 34 },
+  { id: "progress-bar", name: "Progress Bar", category: "frame", shapeKind: "progress-bar", fill: "#ff3b30", stroke: "rgba(255, 255, 255, 0.16)", width: 76, height: 4 },
+  { id: "viz-bars", name: "Studio Bars", category: "visualizer", visualizerStyle: "bars", fill: "#f4f4f5", stroke: "#71717a", width: 64, height: 22 },
+  { id: "viz-mirror", name: "Mirror Wave", category: "visualizer", visualizerStyle: "mirror-wave", fill: "#f4f4f5", stroke: "#ff3b30", width: 72, height: 26 },
+  { id: "viz-horizon", name: "Horizon Line", category: "visualizer", visualizerStyle: "horizon-line", fill: "#ff3b30", stroke: "#ffffff", width: 78, height: 20 },
+  { id: "viz-ring", name: "Radial Pulse", category: "visualizer", visualizerStyle: "ring", fill: "#f4f4f5", stroke: "#71717a", width: 34, height: 34 },
 ];
 
 export const TRANSITION_PRESETS: Array<{
@@ -284,8 +284,8 @@ export const BACKDROP_PRESETS: Array<{
   { id: "pitch", name: "Pure Pitch", background: { type: "solid", colorA: "#000000", colorB: "#000000", angleDeg: 135, grain: 0 } },
   { id: "gallery-paper", name: "Gallery Paper", background: { type: "solid", colorA: "#f7f6f2", colorB: "#eceae5", angleDeg: 135, grain: 0.015 } },
   { id: "graphite", name: "Graphite Sweep", background: { type: "linear", colorA: "#0c0d11", colorB: "#1c1e26", angleDeg: 145, grain: 0.03 } },
-  { id: "slate-halo", name: "Slate Vignette", background: { type: "radial", colorA: "#1c2029", colorB: "#07080a", angleDeg: 0, grain: 0.025 } },
-  { id: "abyss-teal", name: "Nocturne Teal", background: { type: "radial", colorA: "#0f222d", colorB: "#07090d", angleDeg: 0, grain: 0.025 } },
+  { id: "slate-halo", name: "Obsidian Vignette", background: { type: "radial", colorA: "#1c1c21", colorB: "#070709", angleDeg: 0, grain: 0.025 } },
+  { id: "abyss-crimson", name: "Darkroom Depth", background: { type: "radial", colorA: "#221214", colorB: "#08080a", angleDeg: 0, grain: 0.025 } },
   { id: "warm-slate", name: "Warm Slate", background: { type: "linear", colorA: "#1a1816", colorB: "#0b0a09", angleDeg: 160, grain: 0.035 } },
   { id: "technical-grid", name: "Studio Grid", background: { type: "grid", colorA: "#0b0c10", colorB: "rgba(255,255,255,0.055)", angleDeg: 0, grain: 0.015 } },
 ];
@@ -299,12 +299,13 @@ export interface CinemaTemplateMeta {
 }
 
 export const CINEMA_TEMPLATES: CinemaTemplateMeta[] = [
-  { id: "blank", name: "Blank Canvas", subtitle: "Clean video, overlay, text & Studio audio tracks", defaultAspect: "16:9", accentSwatch: "#27272a" },
-  { id: "podcast-audiogram", name: "Podcast Audiogram", subtitle: "Live Studio waveform visualizer + synced progress bar", defaultAspect: "16:9", accentSwatch: "#5b9cf6" },
-  { id: "product-reel", name: "Product Launch Reel", subtitle: "Device showcase frame + staggered architectural headlines", defaultAspect: "16:9", accentSwatch: "#38bdf8" },
-  { id: "vertical-short", name: "Vertical Short (9:16)", subtitle: "Bold kinetic captions framed for mobile reels", defaultAspect: "9:16", accentSwatch: "#ef4444" },
-  { id: "editorial-title", name: "Editorial Essay", subtitle: "Gallery serif typography + warm film plate aesthetic", defaultAspect: "16:9", accentSwatch: "#d4d4d8" },
-  { id: "quote-sequence", name: "Minimal Quote Loop", subtitle: "Calm gallery-paper typography & rule composition", defaultAspect: "1:1", accentSwatch: "#f7f6f2" },
+  { id: "editorial-sequence", name: "Editorial Sequence", subtitle: "Obsidian canvas, serif opener & chapter marker", defaultAspect: "16:9", accentSwatch: "#18181d" },
+  { id: "blank", name: "Blank Canvas", subtitle: "Clean video, overlay, text & audio tracks", defaultAspect: "16:9", accentSwatch: "#27272a" },
+  { id: "podcast-audiogram", name: "Audiogram", subtitle: "Waveform visualizer & progress bar", defaultAspect: "16:9", accentSwatch: "#ff3b30" },
+  { id: "product-reel", name: "Product Reel", subtitle: "Display frame & architectural typography", defaultAspect: "16:9", accentSwatch: "#f4f4f5" },
+  { id: "vertical-short", name: "Vertical Short (9:16)", subtitle: "Bold kinetic captions for mobile", defaultAspect: "9:16", accentSwatch: "#d70015" },
+  { id: "editorial-title", name: "Title Card", subtitle: "Centered serif typography & hairline rule", defaultAspect: "16:9", accentSwatch: "#d4d4d8" },
+  { id: "quote-sequence", name: "Gallery Card", subtitle: "Light paper typography & understated layout", defaultAspect: "1:1", accentSwatch: "#f7f6f2" },
 ];
 
 export function defaultTracks(): CinemaTrack[] {
@@ -355,7 +356,62 @@ export function buildTemplateProject(
     notes: null,
   };
 
-  if (templateId === "podcast-audiogram") {
+  if (templateId === "editorial-sequence") {
+    base.title = "Untitled Sequence";
+    base.background = BACKDROP_PRESETS[0]!.background;
+    base.durationMs = 10_000;
+    base.clips = [
+      {
+        id: `${id}-title`,
+        trackId: "trk-text-1",
+        name: "Opening Title",
+        kind: "text",
+        startMs: 0,
+        durationMs: 10_000,
+        trimStartMs: 0,
+        sourceDurationMs: 10_000,
+        speed: 1,
+        locked: false,
+        hidden: false,
+        text: "Untitled Sequence",
+        fontFamily: "'Source Serif 4', 'New York', Georgia, serif",
+        fontSize: 76,
+        fontWeight: 400,
+        letterSpacing: -0.03,
+        lineHeight: 1.08,
+        align: "center",
+        color: "#f5f5f7",
+        backgroundColor: "transparent",
+        backgroundPadding: 0,
+        backgroundRadius: 0,
+        strokeColor: "transparent",
+        strokeWidth: 0,
+        textPreset: "editorial-title",
+        transform: { ...DEFAULT_TRANSFORM, x: 50, y: 46, width: 76, height: 20 },
+        animation: { inType: "rise", inDurationMs: 420, outType: "fade", outDurationMs: 320 },
+      },
+      {
+        id: `${id}-prog`,
+        trackId: "trk-overlay-1",
+        name: "Timeline Progress",
+        kind: "shape",
+        startMs: 0,
+        durationMs: 10_000,
+        trimStartMs: 0,
+        sourceDurationMs: 10_000,
+        speed: 1,
+        locked: false,
+        hidden: false,
+        shapeKind: "progress-bar",
+        fill: "#ff3b30",
+        stroke: "rgba(255, 255, 255, 0.14)",
+        strokeWidth: 1,
+        transform: { ...DEFAULT_TRANSFORM, x: 50, y: 92, width: 82, height: 1.4 },
+        animation: { inType: "none", inDurationMs: 0, outType: "none", outDurationMs: 0 },
+      },
+    ];
+    base.markers = [{ id: `${id}-m1`, atMs: 4000, label: "Chapter 1", kind: "chapter", note: null }];
+  } else if (templateId === "podcast-audiogram") {
     base.background = BACKDROP_PRESETS[4]!.background;
     base.durationMs = 12_000;
     base.clips = [
@@ -371,15 +427,15 @@ export function buildTemplateProject(
         speed: 1,
         locked: false,
         hidden: false,
-        text: "NEXUS RECORDING STUDIO · MASTER MIX",
+        text: "EPISODE 01 · MASTER MIX",
         fontFamily: "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace",
         fontSize: 22,
         fontWeight: 500,
         letterSpacing: 0.04,
         lineHeight: 1.2,
         align: "center",
-        color: "#5b9cf6",
-        backgroundColor: "rgba(91, 156, 246, 0.14)",
+        color: "#f4f4f5",
+        backgroundColor: "rgba(255, 255, 255, 0.1)",
         backgroundPadding: 14,
         backgroundRadius: 999,
         strokeColor: "transparent",
@@ -431,7 +487,7 @@ export function buildTemplateProject(
         hidden: false,
         style: "mirror-wave",
         barCount: 48,
-        color: "#5b9cf6",
+        color: "#ff3b30",
         secondaryColor: "#e4e4e7",
         sensitivity: 1.25,
         transform: { ...DEFAULT_TRANSFORM, x: 50, y: 66, width: 72, height: 22 },
@@ -450,14 +506,14 @@ export function buildTemplateProject(
         locked: false,
         hidden: false,
         shapeKind: "progress-bar",
-        fill: "#5b9cf6",
+        fill: "#ff3b30",
         stroke: "rgba(255, 255, 255, 0.14)",
         strokeWidth: 1,
         transform: { ...DEFAULT_TRANSFORM, x: 50, y: 88, width: 72, height: 2 },
         animation: { inType: "none", inDurationMs: 0, outType: "none", outDurationMs: 0 },
       },
     ];
-    base.markers = [{ id: `${id}-m1`, atMs: 4000, label: "Key Insight", kind: "chapter", note: null }];
+    base.markers = [{ id: `${id}-m1`, atMs: 4000, label: "Chapter 1", kind: "chapter", note: null }];
   } else if (templateId === "product-reel") {
     base.background = BACKDROP_PRESETS[7]!.background;
     base.durationMs = 10_000;
@@ -522,14 +578,14 @@ export function buildTemplateProject(
         speed: 1,
         locked: false,
         hidden: false,
-        text: "Studio audio, frame exact.",
+        text: "Frame exact sound & motion.",
         fontFamily: "Manrope, -apple-system, 'SF Pro Display', sans-serif",
         fontSize: 52,
         fontWeight: 400,
         letterSpacing: -0.025,
         lineHeight: 1.18,
         align: "center",
-        color: "#38bdf8",
+        color: "#d4d4d8",
         backgroundColor: "transparent",
         backgroundPadding: 0,
         backgroundRadius: 0,
@@ -616,7 +672,7 @@ export function buildTemplateProject(
         hidden: false,
         style: "bars",
         barCount: 32,
-        color: "#38bdf8",
+        color: "#ff3b30",
         secondaryColor: "#f5f5f7",
         sensitivity: 1.2,
         transform: { ...DEFAULT_TRANSFORM, x: 50, y: 80, width: 78, height: 14 },
