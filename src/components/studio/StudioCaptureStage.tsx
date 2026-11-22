@@ -15,6 +15,7 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
+import GlassSurface from "@/components/landing/GlassSurface";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
@@ -664,38 +665,58 @@ export function StudioCaptureStage({
       aria-label="Nexus Audio Recorder"
       className="studio-capture-stage relative flex h-full w-full flex-col justify-between overflow-y-auto px-6 pb-8 pt-6 sm:px-10"
     >
-      {/* Top Whisper Pill — Single Quiet Input Indicator */}
+      {/* Top Refractive Liquid Glass Input Telemetry Capsule */}
       <div className="mx-auto flex w-full max-w-[1040px] shrink-0 flex-col items-center gap-2">
         <div className="flex flex-wrap items-center justify-center gap-2">
-          <button
-            type="button"
-            onClick={onOpenPatchbay}
-            className="inline-flex h-8 items-center gap-2 rounded-full border border-border/75 bg-card/55 px-3.5 text-[12px] text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+          <GlassSurface
+            width="auto"
+            height={36}
+            borderRadius={18}
+            borderWidth={0.28}
+            brightness={50}
+            opacity={0.86}
+            blur={7}
+            displace={2.6}
+            distortionScale={-195}
+            redOffset={0}
+            greenOffset={12}
+            blueOffset={26}
+            xChannel="R"
+            yChannel="G"
+            backgroundOpacity={0.22}
+            saturation={1.4}
+            className="landing-glass-nav landing-glass-nav--dark studio-liquid-glass"
           >
-            <span
-              className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                isRecording
-                  ? "bg-[#e12621]"
-                  : micReady
-                    ? "bg-[#34d399]"
-                    : "bg-muted-foreground/45"
-              }`}
-              aria-hidden
-            />
-            <span className="max-w-[220px] truncate font-medium text-foreground">{activeDeviceLabel}</span>
-            {isMultiMic ? (
-              <>
-                <span className="text-muted-foreground/70" aria-hidden>·</span>
-                <span className="font-mono text-[11px] tabular-nums">{armedCount} Mics</span>
-              </>
-            ) : null}
-            {micReady ? (
-              <>
-                <span className="text-muted-foreground/70" aria-hidden>·</span>
-                <span className="font-mono text-[11px] tabular-nums">{(sampleRate / 1000).toFixed(0)} kHz</span>
-              </>
-            ) : null}
-          </button>
+            <button
+              type="button"
+              onClick={onOpenPatchbay}
+              className="inline-flex h-9 items-center gap-2 rounded-full px-4 text-[12px] text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <span
+                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                  isRecording
+                    ? "bg-[#e12621]"
+                    : micReady
+                      ? "bg-[#34d399]"
+                      : "bg-muted-foreground/45"
+                }`}
+                aria-hidden
+              />
+              <span className="max-w-[220px] truncate font-medium text-foreground">{activeDeviceLabel}</span>
+              {isMultiMic ? (
+                <>
+                  <span className="text-muted-foreground/70" aria-hidden>·</span>
+                  <span className="font-mono text-[11px] tabular-nums">{armedCount} Mics</span>
+                </>
+              ) : null}
+              {micReady ? (
+                <>
+                  <span className="text-muted-foreground/70" aria-hidden>·</span>
+                  <span className="font-mono text-[11px] tabular-nums">{(sampleRate / 1000).toFixed(0)} kHz</span>
+                </>
+              ) : null}
+            </button>
+          </GlassSurface>
 
           <button
             ref={clipDotRef}
@@ -734,11 +755,31 @@ export function StudioCaptureStage({
 
           {isCounting && countInBeat !== null ? (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div className="studio-glass-dock flex h-20 w-20 items-center justify-center rounded-full">
-                <span className="font-mono text-[2rem] font-light text-foreground tabular-nums">
-                  {countInBeat}
-                </span>
-              </div>
+              <GlassSurface
+                width={84}
+                height={84}
+                borderRadius={42}
+                borderWidth={0.28}
+                brightness={50}
+                opacity={0.86}
+                blur={7}
+                displace={2.6}
+                distortionScale={-195}
+                redOffset={0}
+                greenOffset={12}
+                blueOffset={26}
+                xChannel="R"
+                yChannel="G"
+                backgroundOpacity={0.22}
+                saturation={1.4}
+                className="landing-glass-nav landing-glass-nav--dark studio-liquid-glass"
+              >
+                <div className="flex h-full w-full items-center justify-center">
+                  <span className="font-mono text-[2rem] font-light text-foreground tabular-nums">
+                    {countInBeat}
+                  </span>
+                </div>
+              </GlassSurface>
             </div>
           ) : null}
         </div>
@@ -906,109 +947,131 @@ export function StudioCaptureStage({
         ) : null}
       </div>
 
-      {/* Whisper-Quiet Bottom Utility Footer */}
-      <footer className="mx-auto flex shrink-0 flex-wrap items-center justify-center gap-1 text-[12px] text-muted-foreground">
-        <button
-          type="button"
-          onClick={() => setMixerTrayOpen((v) => !v)}
-          aria-expanded={mixerTrayOpen}
-          className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 font-medium transition-colors ${
-            mixerTrayOpen
-              ? "bg-foreground/10 text-foreground"
-              : "hover:bg-foreground/[0.05] hover:text-foreground"
-          }`}
+      {/* Floating Refractive Liquid Glass Bottom Utility Console Capsule */}
+      <footer className="mx-auto flex shrink-0 justify-center">
+        <GlassSurface
+          width="auto"
+          height={42}
+          borderRadius={21}
+          borderWidth={0.28}
+          brightness={50}
+          opacity={0.86}
+          blur={7}
+          displace={2.6}
+          distortionScale={-195}
+          redOffset={0}
+          greenOffset={12}
+          blueOffset={26}
+          xChannel="R"
+          yChannel="G"
+          backgroundOpacity={0.22}
+          saturation={1.4}
+          className="landing-glass-nav landing-glass-nav--dark studio-liquid-glass"
         >
-          <span>{inputs.length > 1 ? `Inputs (${inputs.length})` : "Mixer"}</span>
-          <ChevronDown
-            className={`size-3.5 transition-transform duration-200 ${mixerTrayOpen ? "rotate-180" : ""}`}
-          />
-        </button>
-
-        <span className="text-border" aria-hidden>·</span>
-
-        <button
-          type="button"
-          onClick={onOpenPatchbay}
-          className="inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 font-medium transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
-        >
-          <SlidersHorizontal className="size-3.5" />
-          <span>Audio I/O</span>
-        </button>
-
-        <span className="text-border" aria-hidden>·</span>
-
-        <Popover>
-          <PopoverTrigger
-            render={
-              <button
-                type="button"
-                className="inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 font-medium transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
-              >
-                <Metronome className="size-3.5" />
-                <span>{metronomeEnabled ? `Click · ${bpm}` : "Timing"}</span>
-              </button>
-            }
-          />
-          <PopoverContent align="center" side="top" className="w-64 space-y-3.5 rounded-2xl p-4">
-            <div className="flex items-center justify-between text-[12.5px]">
-              <span className="text-foreground">Metronome click</span>
-              <Switch
-                checked={metronomeEnabled}
-                onCheckedChange={onToggleMetronome}
-                aria-label="Toggle metronome click"
+          <div className="flex flex-wrap items-center justify-center gap-1 px-1.5 text-[12px] text-muted-foreground">
+            <button
+              type="button"
+              onClick={() => setMixerTrayOpen((v) => !v)}
+              aria-expanded={mixerTrayOpen}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 font-medium transition-colors ${
+                mixerTrayOpen
+                  ? "bg-foreground/15 text-foreground"
+                  : "hover:bg-foreground/[0.06] hover:text-foreground"
+              }`}
+            >
+              <span>{inputs.length > 1 ? `Inputs (${inputs.length})` : "Mixer"}</span>
+              <ChevronDown
+                className={`size-3.5 transition-transform duration-200 ${mixerTrayOpen ? "rotate-180" : ""}`}
               />
-            </div>
+            </button>
 
-            <div className="flex items-center justify-between text-[12.5px]">
-              <span className="text-muted-foreground">Tempo (BPM)</span>
-              <input
-                type="number"
-                min={40}
-                max={240}
-                value={bpm}
-                onChange={(e) => onChangeBpm(Math.max(40, Math.min(240, Number(e.target.value) || 120)))}
-                aria-label="Tempo BPM"
-                className="h-7 w-16 rounded-lg border border-border/80 bg-transparent px-2 text-right font-mono text-[12px] text-foreground tabular-nums focus:outline-none"
+            <span className="text-border" aria-hidden>·</span>
+
+            <button
+              type="button"
+              onClick={onOpenPatchbay}
+              className="inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 font-medium transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
+            >
+              <SlidersHorizontal className="size-3.5" />
+              <span>Audio I/O</span>
+            </button>
+
+            <span className="text-border" aria-hidden>·</span>
+
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 font-medium transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
+                  >
+                    <Metronome className="size-3.5" />
+                    <span>{metronomeEnabled ? `Click · ${bpm}` : "Timing"}</span>
+                  </button>
+                }
               />
-            </div>
+              <PopoverContent align="center" side="top" className="w-64 space-y-3.5 rounded-2xl p-4">
+                <div className="flex items-center justify-between text-[12.5px]">
+                  <span className="text-foreground">Metronome click</span>
+                  <Switch
+                    checked={metronomeEnabled}
+                    onCheckedChange={onToggleMetronome}
+                    aria-label="Toggle metronome click"
+                  />
+                </div>
 
-            <div className="flex items-center justify-between text-[12.5px]">
-              <span className="text-muted-foreground">Count-in</span>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={onCycleCountIn}
-                className="h-7 rounded-full px-2.5 font-mono text-[11px] tabular-nums"
-              >
-                {countInBars === 0 ? "Off" : `${countInBars} ${countInBars === 1 ? "bar" : "bars"}`}
-              </Button>
-            </div>
+                <div className="flex items-center justify-between text-[12.5px]">
+                  <span className="text-muted-foreground">Tempo (BPM)</span>
+                  <input
+                    type="number"
+                    min={40}
+                    max={240}
+                    value={bpm}
+                    onChange={(e) => onChangeBpm(Math.max(40, Math.min(240, Number(e.target.value) || 120)))}
+                    aria-label="Tempo BPM"
+                    className="h-7 w-16 rounded-lg border border-border/80 bg-transparent px-2 text-right font-mono text-[12px] text-foreground tabular-nums focus:outline-none"
+                  />
+                </div>
 
-            <Separator />
+                <div className="flex items-center justify-between text-[12.5px]">
+                  <span className="text-muted-foreground">Count-in</span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={onCycleCountIn}
+                    className="h-7 rounded-full px-2.5 font-mono text-[11px] tabular-nums"
+                  >
+                    {countInBars === 0 ? "Off" : `${countInBars} ${countInBars === 1 ? "bar" : "bars"}`}
+                  </Button>
+                </div>
 
-            <div className="flex items-center justify-between text-[12.5px]">
-              <span className="text-foreground">Overdub playback</span>
-              <Switch
-                checked={overdubEnabled}
-                onCheckedChange={onToggleOverdub}
-                aria-label="Toggle overdub playback"
-              />
-            </div>
+                <Separator />
 
-            <div className="flex items-center justify-between text-[12.5px]">
-              <div className="flex items-center gap-1.5">
-                <Headphones className="size-3.5 text-muted-foreground" />
-                <span className="text-foreground">Browser monitor</span>
-              </div>
-              <Switch
-                checked={monitorInput}
-                onCheckedChange={onToggleMonitor}
-                aria-label="Toggle browser headphone monitor"
-              />
-            </div>
-          </PopoverContent>
-        </Popover>
+                <div className="flex items-center justify-between text-[12.5px]">
+                  <span className="text-foreground">Overdub playback</span>
+                  <Switch
+                    checked={overdubEnabled}
+                    onCheckedChange={onToggleOverdub}
+                    aria-label="Toggle overdub playback"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between text-[12.5px]">
+                  <div className="flex items-center gap-1.5">
+                    <Headphones className="size-3.5 text-muted-foreground" />
+                    <span className="text-foreground">Browser monitor</span>
+                  </div>
+                  <Switch
+                    checked={monitorInput}
+                    onCheckedChange={onToggleMonitor}
+                    aria-label="Toggle browser headphone monitor"
+                  />
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
+        </GlassSurface>
       </footer>
     </section>
   );

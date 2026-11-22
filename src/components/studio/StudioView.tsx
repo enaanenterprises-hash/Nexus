@@ -35,6 +35,7 @@ import {
   ZoomOut,
 } from "lucide-react";
 import type { CinemaExtractedAudioTransfer, CinemaVoiceoverRequest } from "@/lib/cinema/types";
+import GlassSurface from "@/components/landing/GlassSurface";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -1305,76 +1306,96 @@ export function StudioView({
       data-studio-page={studioPage}
       className="studio-screen flex h-full w-full flex-col overflow-hidden"
     >
-      {/* Quiet Apple HIG Studio Header (pl-[68px] & md:h-12 align cleanly beside top-left Nexus Orb) */}
+      {/* Floating Refractive Liquid Glass Top Studio Capsule (<GlassSurface /> from Landing Page) */}
       <header
         data-page={studioPage}
-        className="studio-header grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 py-1.5 pl-[68px] pr-4 sm:pr-5 md:h-12 md:grid-cols-[1fr_auto_1fr] md:gap-y-0"
+        className="shrink-0 pt-1.5 pb-1 pl-[64px] pr-3 sm:pr-4"
       >
-        {/* Left: Quiet Session Title + Sessions Chevron */}
-        <div className="col-start-1 row-start-1 flex min-w-0 items-center gap-1 justify-self-start">
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onBlur={() => {
-              if (tracks.length > 0 || activeId) void persistDraft(tracks, markers);
-            }}
-            aria-label="Recording session title"
-            className="h-8 w-full min-w-0 max-w-[168px] border-0 bg-transparent px-1.5 text-[14px] font-medium tracking-[-0.01em] text-foreground/90 shadow-none hover:text-foreground focus-visible:ring-1 sm:max-w-[204px]"
-          />
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="ghost"
-                  onClick={() => setTakesDrawerOpen(true)}
-                  aria-label={`Browse saved sessions (${summaries.length})`}
-                  className="h-7 w-7 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
-                >
-                  <ChevronDown className="size-4" />
-                </Button>
-              }
-            />
-            <TooltipContent side="bottom">Sessions &amp; folders ({summaries.length})</TooltipContent>
-          </Tooltip>
-        </div>
-
-        {/* Center: Minimal Segmented Pill (Record | Arrange) */}
-        <div
-          className="studio-tabs col-span-2 row-start-2 -ml-[76px] justify-self-center sm:-ml-[68px] md:col-span-1 md:col-start-2 md:row-start-1 md:ml-0"
-          role="tablist"
-          aria-label="Studio workspace view"
+        <GlassSurface
+          width="100%"
+          height="auto"
+          borderRadius={23}
+          borderWidth={0.28}
+          brightness={50}
+          opacity={0.86}
+          blur={7}
+          displace={2.6}
+          distortionScale={-195}
+          redOffset={0}
+          greenOffset={12}
+          blueOffset={26}
+          xChannel="R"
+          yChannel="G"
+          backgroundOpacity={0.22}
+          saturation={1.4}
+          className="landing-glass-nav landing-glass-nav--dark studio-liquid-glass w-full"
         >
-          <span className="studio-tabs-indicator" data-page={studioPage} aria-hidden />
-          <button
-            type="button"
-            role="tab"
-            id="studio-tab-record"
-            aria-selected={studioPage === "record"}
-            aria-controls="studio-panel-record"
-            onClick={() => setStudioPage("record")}
-            className={`studio-tab ${studioPage === "record" ? "studio-tab--active" : ""}`}
-          >
-            <span className={`studio-tab-dot ${isCaptureLive ? "studio-tab-dot--live" : ""}`} aria-hidden />
-            <span>Record</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            id="studio-tab-edit"
-            aria-selected={studioPage === "edit"}
-            aria-controls="studio-panel-edit"
-            onClick={() => setStudioPage("edit")}
-            className={`studio-tab ${studioPage === "edit" ? "studio-tab--active" : ""}`}
-          >
-            <span>Arrange</span>
-            {tracks.length > 0 ? <span className="studio-tab-count">{tracks.length}</span> : null}
-          </button>
-        </div>
+          <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 px-3 py-1.5 md:h-[44px] md:grid-cols-[1fr_auto_1fr] md:gap-y-0 md:py-0">
+            {/* Left: Quiet Session Title + Sessions Chevron */}
+            <div className="col-start-1 row-start-1 flex min-w-0 items-center gap-1 justify-self-start">
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onBlur={() => {
+                  if (tracks.length > 0 || activeId) void persistDraft(tracks, markers);
+                }}
+                aria-label="Recording session title"
+                className="h-8 w-full min-w-0 max-w-[168px] border-0 bg-transparent px-1.5 text-[14px] font-medium tracking-[-0.01em] text-foreground/90 shadow-none hover:text-foreground focus-visible:ring-1 sm:max-w-[204px]"
+              />
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type="button"
+                      size="icon-sm"
+                      variant="ghost"
+                      onClick={() => setTakesDrawerOpen(true)}
+                      aria-label={`Browse saved sessions (${summaries.length})`}
+                      className="h-7 w-7 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
+                    >
+                      <ChevronDown className="size-4" />
+                    </Button>
+                  }
+                />
+                <TooltipContent side="bottom">Sessions &amp; folders ({summaries.length})</TooltipContent>
+              </Tooltip>
+            </div>
 
-        {/* Right: Subtle Gold Links Popover + Consolidated Export Menu + Quiet Exit */}
-        <div className="col-start-2 row-start-1 flex items-center justify-end gap-1.5 justify-self-end md:col-start-3">
+            {/* Center: Minimal Segmented Pill (Record | Arrange) */}
+            <div
+              className="studio-tabs col-span-2 row-start-2 justify-self-center md:col-span-1 md:col-start-2 md:row-start-1"
+              role="tablist"
+              aria-label="Studio workspace view"
+            >
+              <span className="studio-tabs-indicator" data-page={studioPage} aria-hidden />
+              <button
+                type="button"
+                role="tab"
+                id="studio-tab-record"
+                aria-selected={studioPage === "record"}
+                aria-controls="studio-panel-record"
+                onClick={() => setStudioPage("record")}
+                className={`studio-tab ${studioPage === "record" ? "studio-tab--active" : ""}`}
+              >
+                <span className={`studio-tab-dot ${isCaptureLive ? "studio-tab-dot--live" : ""}`} aria-hidden />
+                <span>Record</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                id="studio-tab-edit"
+                aria-selected={studioPage === "edit"}
+                aria-controls="studio-panel-edit"
+                onClick={() => setStudioPage("edit")}
+                className={`studio-tab ${studioPage === "edit" ? "studio-tab--active" : ""}`}
+              >
+                <span>Arrange</span>
+                {tracks.length > 0 ? <span className="studio-tab-count">{tracks.length}</span> : null}
+              </button>
+            </div>
+
+            {/* Right: Subtle Gold Links Popover + Consolidated Export Menu + Quiet Exit */}
+            <div className="col-start-2 row-start-1 flex items-center justify-end gap-1.5 justify-self-end md:col-start-3">
           <Popover>
             <PopoverTrigger
               render={
@@ -1588,7 +1609,9 @@ export function StudioView({
           >
             Done
           </Button>
-        </div>
+            </div>
+          </div>
+        </GlassSurface>
       </header>
 
       {/* Subtle Gold Cross-Node Sync Bar (shown when actively scoring or repairing for Cinema) */}
@@ -1733,10 +1756,29 @@ export function StudioView({
                 </div>
               ) : null}
 
-              {/* Single Cohesive Arrange Transport & Editing Strip */}
-              <div className="studio-arrange-bar flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-2xl border border-border/80 px-3 py-2">
-                {/* Left: Transport + Monospace Timecode */}
-                <div className="flex items-center gap-1.5">
+              {/* Single Cohesive Refractive Liquid Glass Arrange Transport & Editing Strip */}
+              <GlassSurface
+                width="100%"
+                height="auto"
+                borderRadius={20}
+                borderWidth={0.28}
+                brightness={50}
+                opacity={0.86}
+                blur={7}
+                displace={2.6}
+                distortionScale={-195}
+                redOffset={0}
+                greenOffset={12}
+                blueOffset={26}
+                xChannel="R"
+                yChannel="G"
+                backgroundOpacity={0.22}
+                saturation={1.4}
+                className="landing-glass-nav landing-glass-nav--dark studio-liquid-glass w-full shrink-0"
+              >
+                <div className="flex w-full flex-wrap items-center justify-between gap-2 px-3 py-2">
+                  {/* Left: Transport + Monospace Timecode */}
+                  <div className="flex items-center gap-1.5">
                   <Tooltip>
                     <TooltipTrigger
                       render={
@@ -2042,7 +2084,8 @@ export function StudioView({
                     <span className="hidden md:inline">Inspector</span>
                   </Button>
                 </div>
-              </div>
+                </div>
+              </GlassSurface>
 
               {/* Main Split Stage: Multi-Track DAW Canvas + Docked Apple HIG Inspector */}
               <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
