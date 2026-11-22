@@ -15,9 +15,9 @@ export function LandingScenes() {
       <div id="dark-realm" data-obsidian-band="true" className="landing-obsidian">
         <SingularityStage />
         <IntegrationsAtlas />
+        <NodePlatformSection />
         <WorkflowsShowcase />
         <ArchitecturePrinciple />
-        <NodePlatformSection />
         <SecurityAndBetaClose />
       </div>
     </>

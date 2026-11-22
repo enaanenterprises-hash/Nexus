@@ -51,9 +51,9 @@ const SERVICE_ATLAS: ServiceGroup[] = [
     items: [
       { name: "Spotify", live: true },
       { name: "Recording Studio", live: true },
+      { name: "Cinema", live: true },
       { name: "Research Reader", live: true },
       { name: "Study Socket", live: false },
-      { name: "Call Socket", live: false },
       { name: "Notion & Home Assistant", live: false },
     ],
   },
