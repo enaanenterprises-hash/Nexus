@@ -40,6 +40,7 @@ export interface BranchingNetworkCanvasProps {
   paused?: boolean;
   mode?: "stage" | "embedded";
   bottomClearance?: number;
+  showcaseAll?: boolean;
   onSelectNode?: (index: number) => void;
   onHoverNode?: (index: number | null) => void;
   className?: string;
@@ -282,6 +283,7 @@ export function BranchingNetworkCanvas({
   paused = false,
   mode = "stage",
   bottomClearance,
+  showcaseAll = false,
   onSelectNode,
   onHoverNode,
   className = "",
@@ -347,6 +349,7 @@ export function BranchingNetworkCanvas({
     activeNodeIndex,
     hoveredIdx,
     paused,
+    showcaseAll,
     layout,
     occupiedEdgeSet,
     occupiedNodeSet,
@@ -361,6 +364,7 @@ export function BranchingNetworkCanvas({
       activeNodeIndex,
       hoveredIdx,
       paused,
+      showcaseAll,
       layout,
       occupiedEdgeSet,
       occupiedNodeSet,
@@ -491,8 +495,9 @@ export function BranchingNetworkCanvas({
 
       // 1. GoldenNetwork basal & upward Core filigree sweeps (batched by 6 buckets)
       const sweepScale = Math.max(W * 0.54, H * 0.48);
+      const sweepStrength = cur.showcaseAll ? (isLight ? 0.62 : 0.52) : isLight ? 0.42 : 0.34;
       for (let bIdx = 0; bIdx < buckets.length; bIdx++) {
-        strokeBatched(bIdx, isLight ? 0.42 : 0.34, () => {
+        strokeBatched(bIdx, sweepStrength, () => {
           for (const sw of strands.sweeps) {
             if (sw.bucket !== bIdx) continue;
             const swayA = Math.sin(time * 0.22 + sw.phase) * sw.sway;
@@ -513,8 +518,28 @@ export function BranchingNetworkCanvas({
 
       // 2. Branch edges + feathered outer tails (split cleanly into ambient vs highlighted passes)
       const hasFocus = focusIdx !== null && focusIdx !== undefined;
-      const ambientEdgeAlpha = hasFocus ? (isLight ? 0.34 : 0.26) : isLight ? 0.56 : 0.48;
-      const activeEdgeAlpha = isLight ? 1.15 : 1.35;
+      const ambientEdgeAlpha = cur.showcaseAll
+        ? hasFocus
+          ? isLight
+            ? 0.78
+            : 0.72
+          : isLight
+            ? 1.05
+            : 1.18
+        : hasFocus
+          ? isLight
+            ? 0.34
+            : 0.26
+          : isLight
+            ? 0.56
+            : 0.48;
+      const activeEdgeAlpha = cur.showcaseAll
+        ? isLight
+          ? 1.32
+          : 1.55
+        : isLight
+          ? 1.15
+          : 1.35;
 
       for (const isActivePass of [false, true]) {
         for (let bIdx = 0; bIdx < buckets.length; bIdx++) {
@@ -526,7 +551,7 @@ export function BranchingNetworkCanvas({
                 const edge = lyt.edges[eIdx]!;
                 const isAnc = Boolean(focusEdges?.has(eIdx));
                 const isLivePath = cur.occupiedEdgeSet.has(eIdx);
-                const highlighted = isLivePath || isAnc;
+                const highlighted = cur.showcaseAll ? (!hasFocus || isAnc) : isLivePath || isAnc;
                 if (highlighted !== isActivePass) continue;
 
                 const tierBundle = strands.trunkStrands[edge.tier - 1]!;
@@ -568,14 +593,39 @@ export function BranchingNetworkCanvas({
         b.toIndex === focusIdx;
 
       for (const isHigh of [false, true]) {
+        const bridgeAlpha = cur.showcaseAll
+          ? isHigh
+            ? isLight
+              ? 1.28
+              : 1.48
+            : hasFocus
+              ? isLight
+                ? 0.62
+                : 0.66
+              : isLight
+                ? 0.92
+                : 1.05
+          : isHigh
+            ? isLight
+              ? 1.25
+              : 1.45
+            : hasFocus
+              ? 0.14
+              : isLight
+                ? 0.24
+                : 0.2;
+
         for (let bIdx = 0; bIdx < buckets.length; bIdx++) {
           strokeBatched(
             bIdx,
-            isHigh ? (isLight ? 1.25 : 1.45) : hasFocus ? 0.14 : isLight ? 0.24 : 0.2,
+            bridgeAlpha,
             () => {
               for (const br of lyt.bridges) {
                 if (bridgeIsHighlighted(br) !== isHigh) continue;
-                const list = br.isLive ? strands.bridgeStrands : strands.bridgeStrands.slice(0, 2);
+                const list =
+                  br.isLive || cur.showcaseAll
+                    ? strands.bridgeStrands.slice(0, br.isLive ? 5 : 3)
+                    : strands.bridgeStrands.slice(0, 2);
                 for (const st of list) {
                   if (st.bucket !== bIdx) continue;
                   const [c1, c2] = swayControlPoints(br.p0, br.c1, br.c2, br.p3, st, time, 0.85);
@@ -584,7 +634,7 @@ export function BranchingNetworkCanvas({
                 }
               }
             },
-            isHigh ? 1.15 : 0.8,
+            isHigh || cur.showcaseAll ? 1.12 : 0.8,
           );
         }
       }
@@ -596,8 +646,9 @@ export function BranchingNetworkCanvas({
           const edge = lyt.edges[d.edgeIdx % lyt.edges.length]!;
           const pt = bezier(edge.p0, edge.c1, edge.c2, edge.p3, d.t);
           const twinkle = 0.45 + 0.55 * Math.sin(time * 1.4 + d.phase);
-          const activeBoost = cur.occupiedEdgeSet.has(d.edgeIdx % lyt.edges.length) ? 1.1 : 0.65;
-          ctx.globalAlpha = d.alpha * twinkle * activeBoost * (isLight ? 0.62 : 0.85);
+          const activeBoost =
+            cur.showcaseAll || cur.occupiedEdgeSet.has(d.edgeIdx % lyt.edges.length) ? 1.12 : 0.65;
+          ctx.globalAlpha = d.alpha * twinkle * activeBoost * (isLight ? 0.68 : 0.9);
           ctx.fillRect(pt.x + d.ox, pt.y + d.oy, d.size, d.size);
         }
       }
@@ -610,20 +661,23 @@ export function BranchingNetworkCanvas({
         let pos: Vec | null = null;
         if (bead.kind === "bridge" && lyt.bridges.length > 0) {
           const liveBridges = lyt.bridges.filter((b) => b.isLive);
-          const pool = liveBridges.length > 0 && bead.idx % 2 === 0 ? liveBridges : lyt.bridges;
+          const pool =
+            !cur.showcaseAll && liveBridges.length > 0 && bead.idx % 2 === 0
+              ? liveBridges
+              : lyt.bridges;
           const br = pool[bead.idx % pool.length]!;
           pos = bezier(br.p0, br.c1, br.c2, br.p3, beadU);
         } else if (lyt.edges.length > 0) {
           const liveIdxList = Array.from(cur.occupiedEdgeSet);
           const eIdx =
-            liveIdxList.length > 0 && bead.idx % 3 !== 0
+            !cur.showcaseAll && liveIdxList.length > 0 && bead.idx % 3 !== 0
               ? liveIdxList[bead.idx % liveIdxList.length]!
               : bead.idx % lyt.edges.length;
           const edge = lyt.edges[eIdx]!;
           pos = bezier(edge.p0, edge.c1, edge.c2, edge.p3, beadU);
         }
         if (!pos) continue;
-        ctx.globalAlpha = bead.alpha * (isLight ? 0.78 : 0.92);
+        ctx.globalAlpha = bead.alpha * (cur.showcaseAll ? (isLight ? 0.86 : 0.96) : isLight ? 0.78 : 0.92);
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, bead.size, 0, Math.PI * 2);
         ctx.fill();
@@ -724,6 +778,47 @@ export function BranchingNetworkCanvas({
         const isAct = cur.activeNodeIndex === i;
         const isPeer = Boolean(focusPeers?.has(i));
         const emphasized = isOcc || isHov || isAct || isPeer;
+
+        if (cur.showcaseAll) {
+          // Showcase mode (landing page preview): every node glows cleanly as a highlighted golden dot without names/monograms
+          const r =
+            bNode.tier === 1
+              ? isHov || isAct
+                ? 7.8
+                : 5.8
+              : bNode.tier === 2
+                ? isHov || isAct
+                  ? 6.8
+                  : 4.8
+                : isHov || isAct
+                  ? 6.0
+                  : 3.9;
+          radialGlow(ctx, bNode.pos, r * (isHov || isAct || isPeer ? 3.8 : 2.6), [
+            [0, isLight ? "rgba(248, 186, 36, 0.42)" : "rgba(255, 224, 130, 0.45)"],
+            [1, "rgba(0, 0, 0, 0)"],
+          ]);
+          if (isHov || isAct || isPeer) {
+            ctx.beginPath();
+            ctx.arc(bNode.pos.x, bNode.pos.y, r + 4, 0, Math.PI * 2);
+            ctx.strokeStyle = isLight ? "rgba(154, 105, 16, 0.55)" : "rgba(255, 232, 166, 0.65)";
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
+          ctx.beginPath();
+          ctx.arc(bNode.pos.x, bNode.pos.y, r, 0, Math.PI * 2);
+          ctx.fillStyle = isLight
+            ? isHov || isAct
+              ? "#f5c23b"
+              : "#e5a817"
+            : isHov || isAct
+              ? "#fff7e0"
+              : "#ffe6a3";
+          ctx.fill();
+          ctx.lineWidth = isHov || isAct ? 1.6 : 1.15;
+          ctx.strokeStyle = isLight ? "#9a6910" : "#f0b54a";
+          ctx.stroke();
+          continue;
+        }
 
         if (isOcc) {
           const r = bNode.tier === 1 ? (lyt.compact ? 11 : 13) : lyt.compact ? 9.5 : 11;
@@ -931,12 +1026,18 @@ export function BranchingNetworkCanvas({
     }
   }
 
-  // Accessible keyboard targets only for occupied live nodes + first open free slot (never 50 stacked controls)
+  // Accessible keyboard targets strictly for live/first-open slots (or crown dots in showcase mode)
   const firstOpenIdx = nodes.findIndex((n) => n.status === "open");
   const keyboardIndices: number[] = [];
-  for (let i = 0; i < nodes.length; i++) {
-    if (nodes[i]?.status === "occupied" || i === firstOpenIdx) {
+  if (showcaseAll) {
+    for (let i = 0; i < Math.min(5, nodes.length); i++) {
       keyboardIndices.push(i);
+    }
+  } else {
+    for (let i = 0; i < nodes.length; i++) {
+      if (nodes[i]?.status === "occupied" || i === firstOpenIdx) {
+        keyboardIndices.push(i);
+      }
     }
   }
 
@@ -977,9 +1078,11 @@ export function BranchingNetworkCanvas({
                 onSelectNode?.(idx);
               }}
               aria-label={
-                meta.status === "occupied"
-                  ? `${meta.name} node`
-                  : `Open extension slot ${idx + 1}`
+                showcaseAll
+                  ? `Network node ${idx + 1}`
+                  : meta.status === "occupied"
+                    ? `${meta.name} node`
+                    : `Open extension slot ${idx + 1}`
               }
               className="pointer-events-auto absolute top-0 left-0 h-8 w-8 rounded-full bg-transparent opacity-0 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--land-gold)]"
               style={{
@@ -990,8 +1093,8 @@ export function BranchingNetworkCanvas({
         })}
       </div>
 
-      {/* Single Floating Liquid Glass Inspection Pill (appears cleanly on hover/focus without overlapping crown peers) */}
-      {hoveredNode && hoveredMeta ? (
+      {/* Single Floating Liquid Glass Inspection Pill (disabled in landing showcase mode so zero names appear) */}
+      {!showcaseAll && hoveredNode && hoveredMeta ? (
         <div
           role="status"
           aria-live="polite"

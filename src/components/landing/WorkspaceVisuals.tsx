@@ -54,39 +54,15 @@ const NETWORK_PROMPTS: PreviewPrompt[] = [
   },
 ];
 
-const ACTIVE_PREVIEW_SOCKETS: ReadonlyArray<{
-  monogram: string;
-  name: string;
-  status: "occupied" | "open";
-}> = [
-  { status: "occupied", monogram: "St", name: "Studio" },
-  { status: "occupied", monogram: "Cn", name: "Cinema" },
-  { status: "occupied", monogram: "DB", name: "Daily Brief" },
-  { status: "occupied", monogram: "FG", name: "Focus Guard" },
-  { status: "open", monogram: "", name: "Open slot" },
-];
-
 const PREVIEW_BRANCH_NODES: BranchNodeMeta[] = Array.from(
   { length: TOTAL_EXTENSION_SLOTS },
-  (_, idx) => {
-    const active = ACTIVE_PREVIEW_SOCKETS[idx];
-    if (active) {
-      return {
-        slotId: `preview-${idx}`,
-        status: active.status,
-        monogram: active.monogram,
-        name: active.name,
-        tierLabel: active.status === "occupied" ? "Live branch node" : "Free slot",
-      };
-    }
-    return {
-      slotId: `preview-${idx}`,
-      status: "locked",
-      monogram: "",
-      name: `Branch slot ${idx + 1}`,
-      tierLabel: "Pro branch",
-    };
-  },
+  (_, idx) => ({
+    slotId: `preview-${idx}`,
+    status: "occupied",
+    monogram: "",
+    name: `Node ${idx + 1}`,
+    tierLabel: "Connected branch",
+  }),
 );
 
 const PREVIEW_LINKS: ExtensionLink[] = [
@@ -213,7 +189,6 @@ export function NeuralNetworkPreview({ theme }: { theme: "dark" | "light" }) {
     } else if (idx === 3) {
       triggerPrompt(NETWORK_PROMPTS[2]!);
     } else {
-      const meta = PREVIEW_BRANCH_NODES[idx];
       setActiveIdx(idx);
       setTransfer((prev) => ({
         fromSocket: idx,
@@ -222,8 +197,8 @@ export function NeuralNetworkPreview({ theme }: { theme: "dark" | "light" }) {
         serial: (prev?.serial ?? 0) + 1,
       }));
       setConversation({
-        prompt: meta?.status === "open" ? "Inspect open branch slot" : `Inspect branch node ${idx + 1}`,
-        response: `Up to ${TOTAL_EXTENSION_SLOTS} modular extensions connect across linked branches without cluttering the canopy—hover any node to trace its links.`,
+        prompt: "Inspect branch node",
+        response: `Up to ${TOTAL_EXTENSION_SLOTS} modular extensions connect across linked branches without cluttering the canopy—hover any dot to trace its links.`,
         sourceLabel: "Branch Topology",
       });
     }
@@ -261,6 +236,7 @@ export function NeuralNetworkPreview({ theme }: { theme: "dark" | "light" }) {
         transfer={transfer}
         mode="embedded"
         bottomClearance={compactWidth ? 334 : 278}
+        showcaseAll
         onSelectNode={handleNodeClick}
       />
 
@@ -297,17 +273,11 @@ export function NeuralNetworkPreview({ theme }: { theme: "dark" | "light" }) {
         }`}
         aria-hidden="true"
       >
-        {ACTIVE_PREVIEW_SOCKETS.map((s, idx) => (
+        {[0, 1, 2, 3, 4].map((idx) => (
           <span
-            key={s.name + idx}
+            key={idx}
             className={`h-1.5 w-1.5 rounded-full transition-colors ${
-              s.status === "occupied"
-                ? isLight
-                  ? "bg-[#c88d18]"
-                  : "bg-[#f0b54a]"
-                : isLight
-                  ? "bg-[#0e0f12]/35"
-                  : "bg-white/40"
+              isLight ? "bg-[#c88d18]" : "bg-[#f0b54a]"
             }`}
           />
         ))}
