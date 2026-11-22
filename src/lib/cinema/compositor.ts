@@ -1,3 +1,4 @@
+import { VideoSample } from "mediabunny";
 import { sampleClipEnvelopeAt } from "@/lib/creative/nexus-bridge";
 import type {
   CinemaAnimation,
@@ -16,17 +17,22 @@ import type {
   CinemaVisualizerClip,
 } from "./types";
 
+export type Cinema2DContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+
 export type CinemaDrawableMedia =
   | HTMLVideoElement
   | HTMLImageElement
   | HTMLCanvasElement
-  | OffscreenCanvas;
+  | OffscreenCanvas
+  | VideoSample;
 
 export interface CinemaRenderRuntime {
   mediaElements: ReadonlyMap<string, CinemaDrawableMedia>;
+  clipMediaOverrides?: ReadonlyMap<string, CinemaDrawableMedia>;
   frequencyBins?: Float32Array;
   showSafeGuides?: boolean;
   isExport?: boolean;
+  isPlaying?: boolean;
 }
 
 function clamp(n: number, min: number, max: number): number {
@@ -39,7 +45,7 @@ function easeOutCubic(t: number): number {
 }
 
 function roundRectPath(
-  ctx: CanvasRenderingContext2D,
+  ctx: Cinema2DContext,
   x: number,
   y: number,
   w: number,
@@ -77,11 +83,11 @@ export function visualBoxPx(
   return { cx, cy, w, h };
 }
 
-let cachedBgCanvas: HTMLCanvasElement | null = null;
+let cachedBgCanvas: HTMLCanvasElement | OffscreenCanvas | null = null;
 let cachedBgKey = "";
 
 function paintBackgroundDirect(
-  ctx: CanvasRenderingContext2D,
+  ctx: Cinema2DContext,
   bg: CinemaBackground,
   width: number,
   height: number,
@@ -154,12 +160,13 @@ function paintBackgroundDirect(
 }
 
 function drawBackground(
-  ctx: CanvasRenderingContext2D,
+  ctx: Cinema2DContext,
   bg: CinemaBackground,
   width: number,
   height: number,
 ): void {
-  if (typeof document === "undefined") {
+  const hasOffscreen = typeof OffscreenCanvas !== "undefined";
+  if (!hasOffscreen && typeof document === "undefined") {
     paintBackgroundDirect(ctx, bg, width, height);
     return;
   }
@@ -167,11 +174,13 @@ function drawBackground(
   const key = `${width}x${height}|${bg.type}|${bg.colorA}|${bg.colorB}|${bg.angleDeg}|${bg.grain.toFixed(4)}`;
   if (!cachedBgCanvas || cachedBgKey !== key) {
     if (!cachedBgCanvas) {
-      cachedBgCanvas = document.createElement("canvas");
+      cachedBgCanvas = hasOffscreen
+        ? new OffscreenCanvas(width, height)
+        : document.createElement("canvas");
     }
     cachedBgCanvas.width = width;
     cachedBgCanvas.height = height;
-    const bgCtx = cachedBgCanvas.getContext("2d", { alpha: false });
+    const bgCtx = cachedBgCanvas.getContext("2d", { alpha: false }) as Cinema2DContext | null;
     if (!bgCtx) {
       paintBackgroundDirect(ctx, bg, width, height);
       return;
@@ -350,21 +359,24 @@ function computeClipTransitionEffect(
 }
 
 function drawMediaBox(
-  ctx: CanvasRenderingContext2D,
+  ctx: Cinema2DContext,
   el: CinemaDrawableMedia,
   w: number,
   h: number,
   fit: "cover" | "contain",
   kenBurnsFactor = { scale: 1, panX: 0 },
 ): void {
-  const natW =
-    el instanceof HTMLVideoElement
+  const isVideoSample = el instanceof VideoSample;
+  const natW = isVideoSample
+    ? el.displayWidth || el.codedWidth || w
+    : el instanceof HTMLVideoElement
       ? el.videoWidth || w
       : el instanceof HTMLImageElement
         ? el.naturalWidth || w
         : el.width || w;
-  const natH =
-    el instanceof HTMLVideoElement
+  const natH = isVideoSample
+    ? el.displayHeight || el.codedHeight || h
+    : el instanceof HTMLVideoElement
       ? el.videoHeight || h
       : el instanceof HTMLImageElement
         ? el.naturalHeight || h
@@ -398,11 +410,17 @@ function drawMediaBox(
   drawH *= kenBurnsFactor.scale;
   const offsetX = -drawW / 2 + kenBurnsFactor.panX * w * 0.08;
   const offsetY = -drawH / 2;
-  ctx.drawImage(el, offsetX, offsetY, drawW, drawH);
+  if (isVideoSample) {
+    el.draw(ctx, offsetX, offsetY, drawW, drawH);
+  } else {
+    ctx.drawImage(el, offsetX, offsetY, drawW, drawH);
+  }
 }
 
+const textLayoutCache = new Map<string, { lines: string[]; maxMeasuredW: number }>();
+
 function drawTextClip(
-  ctx: CanvasRenderingContext2D,
+  ctx: Cinema2DContext,
   clip: CinemaTextClip,
   w: number,
   h: number,
@@ -412,33 +430,44 @@ function drawTextClip(
   const fontPx = Math.max(10, (clip.fontSize / 1080) * canvasHeight);
   const visibleChars = Math.max(1, Math.round(clip.text.length * charFraction));
   const rawText = charFraction < 0.999 ? clip.text.slice(0, visibleChars) : clip.text;
-  ctx.font = `${clip.fontWeight} ${fontPx}px ${clip.fontFamily}`;
+  const fontSpec = `${clip.fontWeight} ${fontPx}px ${clip.fontFamily}`;
+  ctx.font = fontSpec;
   ctx.textBaseline = "middle";
 
   const pad = (clip.backgroundPadding / 1080) * canvasHeight;
   const maxLineWidth = Math.max(40, w - pad * 2);
 
-  // Word-wrap respecting explicit newlines
-  const paragraphs = rawText.split("\n");
-  const lines: string[] = [];
-  for (const para of paragraphs) {
-    const words = para.split(/\s+/);
-    let current = "";
-    for (const word of words) {
-      const candidate = current ? `${current} ${word}` : word;
-      if (ctx.measureText(candidate).width <= maxLineWidth || !current) {
-        current = candidate;
-      } else {
-        lines.push(current);
-        current = word;
+  const layoutKey = `${fontSpec}|${Math.round(maxLineWidth)}|${rawText}`;
+  let layout = textLayoutCache.get(layoutKey);
+  if (!layout) {
+    const paragraphs = rawText.split("\n");
+    const lines: string[] = [];
+    for (const para of paragraphs) {
+      const words = para.split(/\s+/);
+      let current = "";
+      for (const word of words) {
+        const candidate = current ? `${current} ${word}` : word;
+        if (ctx.measureText(candidate).width <= maxLineWidth || !current) {
+          current = candidate;
+        } else {
+          lines.push(current);
+          current = word;
+        }
       }
+      lines.push(current);
     }
-    lines.push(current);
+    const maxMeasuredW = lines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0);
+    layout = { lines, maxMeasuredW };
+    if (textLayoutCache.size >= 256) {
+      const firstKey = textLayoutCache.keys().next().value;
+      if (firstKey !== undefined) textLayoutCache.delete(firstKey);
+    }
+    textLayoutCache.set(layoutKey, layout);
   }
 
+  const { lines, maxMeasuredW } = layout;
   const linePx = fontPx * clip.lineHeight;
   const totalTextH = lines.length * linePx;
-  const maxMeasuredW = lines.reduce((m, l) => Math.max(m, ctx.measureText(l).width), 0);
 
   if (clip.backgroundColor && clip.backgroundColor !== "transparent") {
     const plateW = Math.min(w, maxMeasuredW + pad * 2.2);
@@ -485,7 +514,7 @@ function drawTextClip(
 }
 
 function drawShapeClip(
-  ctx: CanvasRenderingContext2D,
+  ctx: Cinema2DContext,
   clip: CinemaShapeClip,
   w: number,
   h: number,
@@ -605,7 +634,7 @@ function drawShapeClip(
 }
 
 function drawVisualizerClip(
-  ctx: CanvasRenderingContext2D,
+  ctx: Cinema2DContext,
   clip: CinemaVisualizerClip,
   w: number,
   h: number,
@@ -742,37 +771,81 @@ export function isCinemaFrameStaticSince(
   return prevVisibleCount === currVisibleCount;
 }
 
+interface PreparedVisualTrack {
+  trackId: string;
+  sortedClips: CinemaVisualClip[];
+}
+
+const preparedIndexCache = new WeakMap<
+  CinemaClip[],
+  { tracksRef: CinemaProject["tracks"]; prepared: PreparedVisualTrack[]; audioById: Map<string, CinemaAudioClip> }
+>();
+
+function getPreparedProjectIndex(project: CinemaProject): {
+  prepared: PreparedVisualTrack[];
+  audioById: Map<string, CinemaAudioClip>;
+} {
+  const hit = preparedIndexCache.get(project.clips);
+  if (hit && hit.tracksRef === project.tracks) {
+    return hit;
+  }
+
+  const orderedTracks = [...project.tracks]
+    .filter((t) => t.kind !== "audio" && !t.hidden)
+    .reverse();
+
+  const clipsByTrack = new Map<string, CinemaVisualClip[]>();
+  const audioById = new Map<string, CinemaAudioClip>();
+  for (const c of project.clips) {
+    if (c.kind === "audio") {
+      if (!c.muted) audioById.set(c.id, c);
+      continue;
+    }
+    let list = clipsByTrack.get(c.trackId);
+    if (!list) {
+      list = [];
+      clipsByTrack.set(c.trackId, list);
+    }
+    list.push(c);
+  }
+
+  const prepared: PreparedVisualTrack[] = [];
+  for (const track of orderedTracks) {
+    const list = clipsByTrack.get(track.id);
+    if (!list || list.length === 0) continue;
+    list.sort((a, b) => a.startMs - b.startMs);
+    prepared.push({ trackId: track.id, sortedClips: list });
+  }
+
+  const entry = { tracksRef: project.tracks, prepared, audioById };
+  preparedIndexCache.set(project.clips, entry);
+  return entry;
+}
+
 export function renderCinemaFrame(
-  ctx: CanvasRenderingContext2D,
+  ctx: Cinema2DContext,
   project: CinemaProject,
   timeMs: number,
   runtime: CinemaRenderRuntime,
 ): void {
   const { width, height } = project;
   ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = runtime.isExport ? "medium" : "high";
+  ctx.imageSmoothingQuality = runtime.isExport || runtime.isPlaying ? "medium" : "high";
   drawBackground(ctx, project.background, width, height);
 
   const projectDurationMs = computeProjectDurationMs(project);
   const projectProgress = projectDurationMs > 0 ? timeMs / projectDurationMs : 0;
 
-  // Render from bottom track -> top track so upper tracks overlay lower tracks
-  const orderedTracks = [...project.tracks]
-    .filter((t) => t.kind !== "audio" && !t.hidden)
-    .reverse();
+  // Pre-indexed bottom track -> top track so upper tracks overlay lower tracks with zero per-frame sorting
+  const { prepared, audioById } = getPreparedProjectIndex(project);
 
   let activeDip: { color: string; alpha: number } | null = null;
 
-  for (const track of orderedTracks) {
-    const trackClips = project.clips
-      .filter((c): c is CinemaVisualClip => c.trackId === track.id && c.kind !== "audio")
-      .sort((a, b) => a.startMs - b.startMs);
-
-    const visibleClips = trackClips.filter(
-      (c) => !c.hidden && timeMs >= c.startMs && timeMs <= c.startMs + c.durationMs,
-    );
-
-    for (const clip of visibleClips) {
+  for (const { sortedClips: trackClips } of prepared) {
+    for (const clip of trackClips) {
+      if (clip.hidden || timeMs < clip.startMs || timeMs > clip.startMs + clip.durationMs) {
+        continue;
+      }
       const localMs = timeMs - clip.startMs;
       const motion = computeMotionState(clip.animation, localMs, clip.durationMs, width, height);
       const trans = computeClipTransitionEffect(
@@ -807,19 +880,11 @@ export function renderCinemaFrame(
       }
       const reactiveAudioClipId =
         "reactiveAudioClipId" in clip ? clip.reactiveAudioClipId : undefined;
+      const reactiveAud = reactiveAudioClipId ? audioById.get(reactiveAudioClipId) : undefined;
       const totalScale =
         motion.scale *
         trans.scale *
-        (reactiveAudioClipId
-          ? (() => {
-              const targetAud = project.clips.find(
-                (c): c is CinemaAudioClip =>
-                  c.id === reactiveAudioClipId && c.kind === "audio" && !c.muted,
-              );
-              if (!targetAud) return 1;
-              return 1 + sampleClipEnvelopeAt(targetAud.peaks, targetAud, timeMs) * 0.065;
-            })()
-          : 1);
+        (reactiveAud ? 1 + sampleClipEnvelopeAt(reactiveAud.peaks, reactiveAud, timeMs) * 0.065 : 1);
       ctx.scale(
         totalScale * (clip.transform.flipH ? -1 : 1),
         totalScale * (clip.transform.flipV ? -1 : 1),
@@ -841,10 +906,7 @@ export function renderCinemaFrame(
       } else if (clip.kind === "visualizer") {
         let boundBins = runtime.frequencyBins;
         if (clip.reactiveAudioClipId) {
-          const targetAud = project.clips.find(
-            (c): c is CinemaAudioClip =>
-              c.id === clip.reactiveAudioClipId && c.kind === "audio" && !c.muted,
-          );
+          const targetAud = audioById.get(clip.reactiveAudioClipId);
           if (targetAud && targetAud.peaks.length > 0) {
             const synth = new Float32Array(32);
             const energy = sampleClipEnvelopeAt(targetAud.peaks, targetAud, timeMs);
@@ -885,7 +947,7 @@ export function renderCinemaFrame(
 }
 
 function drawVisualAssetClip(
-  ctx: CanvasRenderingContext2D,
+  ctx: Cinema2DContext,
   clip: CinemaVideoClip | CinemaImageClip,
   w: number,
   h: number,
@@ -893,7 +955,7 @@ function drawVisualAssetClip(
   extraBlurPx: number,
   runtime: CinemaRenderRuntime,
 ): void {
-  const el = runtime.mediaElements.get(clip.assetId);
+  const el = runtime.clipMediaOverrides?.get(clip.id) ?? runtime.mediaElements.get(clip.assetId);
   const radius = clip.transform.borderRadius > 0 ? (clip.transform.borderRadius / 1080) * h * 1.4 : 0;
 
   if (radius > 0) {

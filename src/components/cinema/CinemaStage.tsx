@@ -204,7 +204,7 @@ export function CinemaStage({
       const st = drawStateRef.current;
       if (canvas.width !== st.project.width) canvas.width = st.project.width;
       if (canvas.height !== st.project.height) canvas.height = st.project.height;
-      const ctx = canvas.getContext("2d");
+      const ctx = canvas.getContext("2d", { alpha: false }) ?? canvas.getContext("2d");
       if (!ctx) return;
 
       const engine = audioEngineRef.current;
@@ -227,6 +227,7 @@ export function CinemaStage({
         mediaElements: mediaElementsRef.current,
         frequencyBins: st.playing && engine ? binsRef.current : undefined,
         showSafeGuides: st.showSafeGuides,
+        isPlaying: st.playing,
       });
     },
     [audioEngineRef, mediaElementsRef, renderCanvasRef],
@@ -242,13 +243,17 @@ export function CinemaStage({
     }
   }, [drag, mediaVersion, paintAt, playheadMs, playheadRef, playing, project, redrawRef, showSafeGuides]);
 
-  // Persistent 60fps RAF loop when playing (never depends on `playheadMs`)
+  // Persistent 60fps RAF loop when playing (throttles React meter updates to ~16Hz to avoid UI churn)
   useEffect(() => {
     if (!playing) return;
     let rafId = 0;
-    const tick = () => {
-      const engine = audioEngineRef.current;
-      setMeterLevel(engine ? engine.getPeakLevel() : 0);
+    let lastMeterPerf = 0;
+    const tick = (now: number) => {
+      if (now - lastMeterPerf >= 60) {
+        lastMeterPerf = now;
+        const engine = audioEngineRef.current;
+        setMeterLevel(engine ? engine.getPeakLevel() : 0);
+      }
       paintAt(playheadRef.current);
       rafId = window.requestAnimationFrame(tick);
     };

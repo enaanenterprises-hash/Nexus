@@ -399,9 +399,11 @@ export type CinemaProjectContentV1 = ContentEnvelope<
 
 export type CinemaExportFormat = "mp4" | "webm" | "png" | "wav-studio";
 
+export type CinemaExportResolution = "720p" | "1080p" | "4k";
+
 export interface CinemaExportOptions {
   format: CinemaExportFormat;
-  resolution: "1080p" | "720p";
+  resolution: CinemaExportResolution;
   fps: 24 | 30 | 60;
   quality: "high" | "balanced";
 }
@@ -412,6 +414,8 @@ export interface CinemaExportProgress {
   currentFrame: number;
   totalFrames: number;
   message: string;
+  fps?: number;
+  speedMul?: number;
 }
 
 export interface StockMediaItem {

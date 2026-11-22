@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Download, Film, Image as ImageIcon, Loader2, Waves, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,11 +12,17 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { computeProjectDurationMs, type CinemaRenderRuntime } from "@/lib/cinema/compositor";
-import { exportCinemaVideo, exportCurrentFramePng, type CinemaExportResult } from "@/lib/cinema/exporter";
+import {
+  exportCinemaVideo,
+  exportCurrentFramePng,
+  predictCinemaExportMode,
+  type CinemaExportResult,
+} from "@/lib/cinema/exporter";
 import type {
   CinemaExportFormat,
   CinemaExportOptions,
   CinemaExportProgress,
+  CinemaExportResolution,
   CinemaProject,
 } from "@/lib/cinema/types";
 
@@ -37,8 +43,8 @@ const FORMAT_CARDS: Array<{
   sub: string;
   icon: typeof Film;
 }> = [
-  { id: "mp4", label: "MP4 Video", sub: "Turbo Hardware WebCodecs H.264", icon: Film },
-  { id: "webm", label: "WebM Video", sub: "Real-time VP9 / Opus container", icon: Film },
+  { id: "mp4", label: "MP4 Video", sub: "Mediabunny Hardware H.264 + AAC", icon: Film },
+  { id: "webm", label: "WebM Video", sub: "Mediabunny Hardware VP9 + Opus", icon: Film },
   { id: "png", label: "PNG Frame", sub: "Crisp still at current playhead", icon: ImageIcon },
   { id: "wav-studio", label: "Master WAV", sub: "48 kHz mixdown for Studio / DAW", icon: Waves },
 ];
@@ -63,7 +69,7 @@ export function CinemaExportDialog({
   onSendMasterWavToStudio: (blob: Blob) => Promise<void>;
 }) {
   const [format, setFormat] = useState<CinemaExportFormat>("mp4");
-  const [resolution, setResolution] = useState<"1080p" | "720p">("720p");
+  const [resolution, setResolution] = useState<CinemaExportResolution>("720p");
   const [fps, setFps] = useState<24 | 30 | 60>(project.fps);
   const [quality, setQuality] = useState<"high" | "balanced">("balanced");
 
@@ -72,6 +78,11 @@ export function CinemaExportDialog({
   const [error, setError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<CinemaExportResult | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  const predictedMode = useMemo(
+    () => predictCinemaExportMode(project, { format, resolution, fps, quality }),
+    [format, fps, project, quality, resolution],
+  );
 
   async function startExport() {
     setError(null);
@@ -181,68 +192,75 @@ export function CinemaExportDialog({
           </div>
 
           {format === "mp4" || format === "webm" ? (
-            <div className="grid grid-cols-3 gap-3 rounded-2xl border border-border/80 bg-muted/25 p-3.5 text-[12px]">
-              <div className="space-y-1.5">
-                <div className="text-[11px] font-medium text-muted-foreground">Resolution</div>
-                <div className="flex gap-1">
-                  {(["1080p", "720p"] as const).map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      disabled={exporting}
-                      onClick={() => setResolution(r)}
-                      className={`flex-1 rounded-lg py-1 font-mono text-[11px] transition-colors ${
-                        resolution === r
-                          ? "bg-foreground font-medium text-background"
-                          : "bg-card text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {r}
-                    </button>
-                  ))}
+            <div className="space-y-3 rounded-2xl border border-border/80 bg-muted/25 p-3.5 text-[12px]">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <div className="text-[11px] font-medium text-muted-foreground">Resolution</div>
+                  <div className="flex gap-1">
+                    {(["720p", "1080p", "4k"] as const).map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        disabled={exporting}
+                        onClick={() => setResolution(r)}
+                        className={`flex-1 rounded-lg py-1 font-mono text-[10.5px] uppercase transition-colors ${
+                          resolution === r
+                            ? "bg-foreground font-medium text-background"
+                            : "bg-card text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="text-[11px] font-medium text-muted-foreground">Frame rate</div>
+                  <div className="flex gap-1">
+                    {([24, 30, 60] as const).map((rate) => (
+                      <button
+                        key={rate}
+                        type="button"
+                        disabled={exporting}
+                        onClick={() => setFps(rate)}
+                        className={`flex-1 rounded-lg py-1 font-mono text-[11px] tabular-nums transition-colors ${
+                          fps === rate
+                            ? "bg-foreground font-medium text-background"
+                            : "bg-card text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {rate}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="text-[11px] font-medium text-muted-foreground">Quality</div>
+                  <div className="flex gap-1">
+                    {(["balanced", "high"] as const).map((q) => (
+                      <button
+                        key={q}
+                        type="button"
+                        disabled={exporting}
+                        onClick={() => setQuality(q)}
+                        className={`flex-1 rounded-lg py-1 text-[11px] transition-colors ${
+                          quality === q
+                            ? "bg-foreground font-medium text-background"
+                            : "bg-card text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {q === "high" ? "High" : "Fast"}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <div className="text-[11px] font-medium text-muted-foreground">Frame rate</div>
-                <div className="flex gap-1">
-                  {([24, 30, 60] as const).map((rate) => (
-                    <button
-                      key={rate}
-                      type="button"
-                      disabled={exporting}
-                      onClick={() => setFps(rate)}
-                      className={`flex-1 rounded-lg py-1 font-mono text-[11px] tabular-nums transition-colors ${
-                        fps === rate
-                          ? "bg-foreground font-medium text-background"
-                          : "bg-card text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {rate}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <div className="text-[11px] font-medium text-muted-foreground">Quality</div>
-                <div className="flex gap-1">
-                  {(["high", "balanced"] as const).map((q) => (
-                    <button
-                      key={q}
-                      type="button"
-                      disabled={exporting}
-                      onClick={() => setQuality(q)}
-                      className={`flex-1 rounded-lg py-1 text-[11px] capitalize transition-colors ${
-                        quality === q
-                          ? "bg-foreground font-medium text-background"
-                          : "bg-card text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {q === "high" ? "High" : "Fast"}
-                    </button>
-                  ))}
-                </div>
+              <div className="flex items-center justify-between border-t border-border/60 pt-2.5 text-[11px]">
+                <span className="font-medium text-foreground">{predictedMode.label}</span>
+                <span className="text-muted-foreground">{predictedMode.detail}</span>
               </div>
             </div>
           ) : null}
@@ -271,8 +289,10 @@ export function CinemaExportDialog({
           ) : null}
 
           {lastResult && !exporting ? (
-            <p className="rounded-xl border border-[color:var(--cinema-select)]/45 bg-[color:var(--cinema-select-soft)] px-3 py-2 text-[12px] text-foreground">
-              Saved <strong>{lastResult.filename}</strong> ({(lastResult.blob.size / (1024 * 1024)).toFixed(2)} MB)
+            <p className="rounded-xl border border-[color:var(--cinema-select)]/45 bg-[color:var(--cinema-select-soft)] px-3 py-2 text-[12px] text-foreground tabular-nums">
+              Saved <strong>{lastResult.filename}</strong> ·{" "}
+              {(lastResult.elapsedMs / 1000).toFixed(2)}s ·{" "}
+              {(lastResult.blob.size / (1024 * 1024)).toFixed(2)} MB
               {format === "wav-studio" ? " & staged for Recording Studio." : "."}
             </p>
           ) : null}

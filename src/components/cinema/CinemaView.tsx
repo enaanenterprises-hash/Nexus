@@ -49,6 +49,7 @@ import {
 import { computeProjectDurationMs } from "@/lib/cinema/compositor";
 import { exportCurrentFramePng } from "@/lib/cinema/exporter";
 import {
+  decodeAudioBufferUniversal,
   extractAudioFromVideoBlob,
   ingestMediaFile,
   loadCinemaBlob,
@@ -449,39 +450,17 @@ export function CinemaView({
             }
             mediaElementsRef.current.set(asset.id, vid);
 
-            // Attempt audio decode so Video soundtracks work seamlessly in Web Audio + Visualizers + MP4 export
+            // Universal audio decode (Web Audio + Mediabunny fallback) for MP4/MOV/WebM/MKV
             try {
-              const Ctx =
-                window.AudioContext ||
-                (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-              if (Ctx) {
-                const actx = new Ctx();
-                try {
-                  const arr = await blob.arrayBuffer();
-                  const decoded = await actx.decodeAudioData(arr);
-                  audioBuffersRef.current.set(asset.id, decoded);
-                } finally {
-                  void actx.close();
-                }
-              }
+              const decoded = await decodeAudioBufferUniversal(blob);
+              if (decoded) audioBuffersRef.current.set(asset.id, decoded);
             } catch {
               // Video may intentionally lack an audio track
             }
             setMediaVersion((v) => v + 1);
           } else if (asset.kind === "audio") {
-            const Ctx =
-              window.AudioContext ||
-              (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-            if (Ctx) {
-              const actx = new Ctx();
-              try {
-                const arr = await blob.arrayBuffer();
-                const decoded = await actx.decodeAudioData(arr);
-                audioBuffersRef.current.set(asset.id, decoded);
-              } finally {
-                void actx.close();
-              }
-            }
+            const decoded = await decodeAudioBufferUniversal(blob);
+            if (decoded) audioBuffersRef.current.set(asset.id, decoded);
           }
         } finally {
           hydratingRef.current.delete(asset.id);
@@ -568,6 +547,7 @@ export function CinemaView({
     syncVideoElements(startOriginMs, true);
 
     let rafId = 0;
+    let lastUiCommit = startWall;
     const tick = (now: number) => {
       const dur = computeProjectDurationMs(projectRef.current);
       const next = startOriginMs + (now - startWall);
@@ -588,7 +568,10 @@ export function CinemaView({
         return;
       }
       playheadRef.current = next;
-      setPlayheadMs(next);
+      if (now - lastUiCommit >= 32) {
+        lastUiCommit = now;
+        setPlayheadMs(next);
+      }
       syncVideoElements(next, true);
       rafId = window.requestAnimationFrame(tick);
     };

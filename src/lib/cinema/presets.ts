@@ -13,11 +13,12 @@ export const ASPECT_RATIO_PRESETS: Record<
 
 export function resolutionForAspectRatio(
   aspectRatio: CinemaAspectRatio,
-  tier: "1080p" | "720p",
+  tier: "4k" | "1080p" | "720p",
 ): { width: number; height: number } {
   const base = ASPECT_RATIO_PRESETS[aspectRatio] ?? ASPECT_RATIO_PRESETS["16:9"];
   if (tier === "1080p") return { width: base.width & ~1, height: base.height & ~1 };
-  const scale = 720 / Math.min(base.width, base.height);
+  const targetShort = tier === "4k" ? 2160 : 720;
+  const scale = targetShort / Math.min(base.width, base.height);
   return {
     width: Math.max(320, Math.round(base.width * scale) & ~1),
     height: Math.max(320, Math.round(base.height * scale) & ~1),

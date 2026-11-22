@@ -70,7 +70,7 @@ const PRIMARY_TABS: Array<{ id: "media" | "text" | "elements" | "canvas"; label:
 const TOPIC_CHIPS = ["Architecture", "Minimal", "Nature", "Studio", "City", "Light"] as const;
 
 const ACCEPTED_MEDIA_TYPES =
-  ".mp4,.mov,.webm,.m4v,.mkv,.png,.jpg,.jpeg,.webp,.gif,.wav,.mp3,.m4a,.ogg,.aac,video/mp4,video/webm,video/quicktime,video/*,image/*,audio/*";
+  ".mp4,.mov,.webm,.m4v,.mkv,.png,.jpg,.jpeg,.webp,.gif,.wav,.mp3,.m4a,.ogg,.flac,.aac,video/mp4,video/webm,video/quicktime,video/*,image/*,audio/*";
 
 export function CinemaSidebar({
   open,

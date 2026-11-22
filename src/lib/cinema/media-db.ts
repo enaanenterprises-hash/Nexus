@@ -1,3 +1,10 @@
+import {
+  ALL_FORMATS,
+  AudioBufferSink,
+  BlobSource,
+  CanvasSink,
+  Input,
+} from "mediabunny";
 import { saveAudioBlob } from "@/lib/studio/audio-db";
 import { computePeaksFromBuffer, encodeWavFromBuffer } from "@/lib/studio/wav";
 import type { CinemaAsset, CinemaAssetSource, CinemaCollection, CinemaProject } from "./types";
@@ -119,26 +126,86 @@ function makeMediaId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-async function decodePeaksAndDuration(blob: Blob): Promise<{ durationMs: number; peaks: number[] }> {
-  try {
-    const AudioCtx =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!AudioCtx) return { durationMs: 0, peaks: [] };
+/**
+ * Decodes an audio `AudioBuffer` from any video or audio `Blob`.
+ * Uses Web Audio `decodeAudioData` first and automatically falls back to
+ * Mediabunny's `AudioBufferSink` for containers like MKV, MOV, Opus-in-MP4, or FLAC.
+ */
+export async function decodeAudioBufferUniversal(blob: Blob): Promise<AudioBuffer | null> {
+  const AudioCtx =
+    typeof window !== "undefined"
+      ? window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+      : null;
+
+  if (AudioCtx) {
     const ctx = new AudioCtx();
     try {
       const arr = await blob.arrayBuffer();
       const buffer = await ctx.decodeAudioData(arr);
-      return {
-        durationMs: Math.max(250, Math.round(buffer.duration * 1000)),
-        peaks: computePeaksFromBuffer(buffer, 160),
-      };
+      return buffer;
+    } catch {
+      // Fall through to Mediabunny AudioBufferSink
     } finally {
       void ctx.close();
     }
-  } catch {
-    return { durationMs: 0, peaks: [] };
   }
+
+  let input: Input | null = null;
+  try {
+    input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS });
+    const audioTrack = await input.getPrimaryAudioTrack();
+    if (!audioTrack || !(await audioTrack.canDecode())) return null;
+
+    const sink = new AudioBufferSink(audioTrack);
+    const chunks: AudioBuffer[] = [];
+    let totalFrames = 0;
+    let sampleRate = 48_000;
+    let channels = 2;
+
+    for await (const wrapped of sink.buffers()) {
+      if (!wrapped?.buffer) continue;
+      if (chunks.length === 0) {
+        sampleRate = wrapped.buffer.sampleRate;
+        channels = Math.min(2, Math.max(1, wrapped.buffer.numberOfChannels));
+      }
+      chunks.push(wrapped.buffer);
+      totalFrames += wrapped.buffer.length;
+    }
+
+    if (chunks.length === 0 || totalFrames === 0) return null;
+    if (chunks.length === 1) return chunks[0]!;
+
+    const merged = new AudioBuffer({
+      length: totalFrames,
+      numberOfChannels: channels,
+      sampleRate,
+    });
+
+    for (let ch = 0; ch < channels; ch++) {
+      const dest = merged.getChannelData(ch);
+      let offset = 0;
+      for (const part of chunks) {
+        const src = part.getChannelData(Math.min(ch, part.numberOfChannels - 1));
+        dest.set(src, offset);
+        offset += part.length;
+      }
+    }
+    return merged;
+  } catch {
+    return null;
+  } finally {
+    input?.dispose();
+  }
+}
+
+async function decodePeaksAndDuration(blob: Blob): Promise<{ durationMs: number; peaks: number[] }> {
+  const buffer = await decodeAudioBufferUniversal(blob);
+  if (!buffer) return { durationMs: 0, peaks: [] };
+  return {
+    durationMs: Math.max(250, Math.round(buffer.duration * 1000)),
+    peaks: computePeaksFromBuffer(buffer, 160),
+  };
 }
 
 async function extractImageMeta(blob: Blob): Promise<{
@@ -173,7 +240,74 @@ async function extractImageMeta(blob: Blob): Promise<{
   }
 }
 
-async function extractVideoMeta(blob: Blob): Promise<{
+function canvasToJpegDataUrl(
+  src: HTMLCanvasElement | OffscreenCanvas,
+  scratchCanvas: HTMLCanvasElement,
+): string | null {
+  try {
+    if (src instanceof HTMLCanvasElement) {
+      return src.toDataURL("image/jpeg", 0.68);
+    }
+    scratchCanvas.width = src.width;
+    scratchCanvas.height = src.height;
+    const sctx = scratchCanvas.getContext("2d");
+    if (!sctx) return null;
+    sctx.drawImage(src, 0, 0);
+    return scratchCanvas.toDataURL("image/jpeg", 0.68);
+  } catch {
+    return null;
+  }
+}
+
+async function extractVideoMetaViaMediabunny(blob: Blob): Promise<{
+  width: number;
+  height: number;
+  durationMs: number;
+  thumbnails: string[];
+} | null> {
+  let input: Input | null = null;
+  try {
+    input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS });
+    const videoTrack = await input.getPrimaryVideoTrack();
+    if (!videoTrack || !(await videoTrack.canDecode())) return null;
+
+    const width = videoTrack.displayWidth || videoTrack.codedWidth || 1920;
+    const height = videoTrack.displayHeight || videoTrack.codedHeight || 1080;
+    const firstTs = Math.max(0, await videoTrack.getFirstTimestamp());
+    const computedDur = await input.computeDuration();
+    const durationSec = Number.isFinite(computedDur) && computedDur > 0.1 ? computedDur : 5;
+    const durationMs = Math.max(500, Math.round(durationSec * 1000));
+
+    const count = 6;
+    const thumbTimes: number[] = [];
+    for (let i = 0; i < count; i++) {
+      const rel = Math.min(Math.max(0.02, durationSec - 0.04), ((i + 0.15) / count) * durationSec);
+      thumbTimes.push(firstTs + rel);
+    }
+
+    const sink = new CanvasSink(videoTrack, {
+      width: 160,
+      poolSize: 2,
+      decoderOptions: { optimizeForLatency: true },
+    });
+
+    const thumbnails: string[] = [];
+    const scratch = document.createElement("canvas");
+    for await (const wrapped of sink.canvasesAtTimestamps(thumbTimes)) {
+      if (!wrapped?.canvas) continue;
+      const url = canvasToJpegDataUrl(wrapped.canvas, scratch);
+      if (url) thumbnails.push(url);
+    }
+
+    return { width, height, durationMs, thumbnails };
+  } catch {
+    return null;
+  } finally {
+    input?.dispose();
+  }
+}
+
+async function extractVideoMetaFallbackDom(blob: Blob): Promise<{
   width: number;
   height: number;
   durationMs: number;
@@ -238,6 +372,17 @@ async function extractVideoMeta(blob: Blob): Promise<{
     video.src = "";
     URL.revokeObjectURL(objectUrl);
   }
+}
+
+async function extractVideoMeta(blob: Blob): Promise<{
+  width: number;
+  height: number;
+  durationMs: number;
+  thumbnails: string[];
+}> {
+  const fastMeta = await extractVideoMetaViaMediabunny(blob);
+  if (fastMeta) return fastMeta;
+  return extractVideoMetaFallbackDom(blob);
 }
 
 export async function ingestMediaFile(
@@ -330,9 +475,9 @@ export async function ingestMediaFile(
 }
 
 /**
- * Decodes the audio track from a Cinema video asset, encodes it into stereo
- * 16-bit PCM WAV, and writes it directly into Recording Studio's shared IDB
- * so Recording Studio can open & process it immediately with EQ/compression/mixdown.
+ * Decodes the audio track from a Cinema video asset (supporting MP4, MOV, WebM, MKV via
+ * Web Audio + Mediabunny fallback), encodes it into stereo 16-bit PCM WAV, and writes it
+ * directly into Recording Studio's shared IDB for EQ/compression/mixdown.
  */
 export async function extractAudioFromVideoBlob(
   blob: Blob,
@@ -346,21 +491,9 @@ export async function extractAudioFromVideoBlob(
   mimeType: string;
   wavBlob: Blob;
 }> {
-  const AudioCtx =
-    window.AudioContext ||
-    (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-  if (!AudioCtx) {
-    throw new Error("Web Audio API is unavailable in this browser.");
-  }
-  const ctx = new AudioCtx();
-  let decoded: AudioBuffer;
-  try {
-    const buf = await blob.arrayBuffer();
-    decoded = await ctx.decodeAudioData(buf);
-  } catch {
+  const decoded = await decodeAudioBufferUniversal(blob);
+  if (!decoded) {
     throw new Error(`“${clipName}” has no decodable audio track.`);
-  } finally {
-    void ctx.close();
   }
 
   const wavBlob = encodeWavFromBuffer(decoded);
