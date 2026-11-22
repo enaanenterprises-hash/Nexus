@@ -842,7 +842,7 @@ export function renderCinemaFrame(
 ): void {
   const { width, height } = project;
   ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = runtime.isExport || runtime.isPlaying ? "medium" : "high";
+  ctx.imageSmoothingQuality = runtime.isPlaying ? "medium" : "high";
   drawBackground(ctx, project.background, width, height);
 
   const projectDurationMs = computeProjectDurationMs(project);

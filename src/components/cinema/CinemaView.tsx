@@ -625,7 +625,11 @@ export function CinemaView({
             setMediaVersion((v) => v + 1);
 
             // Warm off-main-thread GPU ImageBitmap scrub cache (instant 120fps playhead bar scrubbing)
-            scrubCacheRef.current?.warmAsset(asset.id, blob);
+            scrubCacheRef.current?.warmAsset(asset.id, blob, () => {
+              if (isScrubbingRef.current && !playingRef.current) {
+                stageRedrawRef.current?.();
+              }
+            });
 
             // Decode audio in parallel (Web Audio + Mediabunny AudioBufferSink fallback for MP4/MOV/WebM/MKV)
             try {

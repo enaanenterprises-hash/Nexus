@@ -109,11 +109,11 @@ export interface ScrubFrameSet {
   bitmaps: ImageBitmap[];
 }
 
-const MAX_CACHED_ASSETS = 4;
+const MAX_CACHED_ASSETS = 3;
 
 /**
  * LRU GPU `ImageBitmap` proxy cache for instant 120fps timeline scrubbing.
- * Decodes ~24-32 lightweight 480px frames per video in `media.worker.ts` (off the main thread),
+ * Decodes up to 48 lightweight 480px frames per video in `media.worker.ts` (off the main thread),
  * eliminating Chrome's 100-300ms `<video>` GOP seek lag while dragging the playhead bar.
  */
 export class CinemaScrubCache {
@@ -128,7 +128,7 @@ export class CinemaScrubCache {
       .request({
         type: "extract-scrub-frames",
         blob,
-        maxFrames: 32,
+        maxFrames: 48,
         frameWidth: 480,
       })
       .then((res) => {

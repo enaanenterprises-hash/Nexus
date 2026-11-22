@@ -105,13 +105,17 @@ function yieldToMainThread(): Promise<void> {
 export interface HardwareEncodeSelection {
   codec: NonNullable<Awaited<ReturnType<typeof getFirstEncodableVideoCodec>>>;
   hardwareAcceleration: "prefer-hardware" | "no-preference";
-  latencyMode: "realtime" | "quality";
+  latencyMode: "quality";
 }
 
 /**
- * Probes WebCodecs hardware video encoding (`hardwareAcceleration: 'prefer-hardware'`)
- * first so NVENC / QuickSync / VideoToolbox accelerate exports, falling back safely
- * to `'no-preference'` when a given codec/resolution lacks HW encode support.
+ * Probes WebCodecs video encoding with `latencyMode: 'quality'` ONLY.
+ *
+ * CRITICAL: Offline exports must NEVER use `latencyMode: 'realtime'`, because WebCodecs
+ * encoders (NVENC / MediaFoundation / VideoToolbox / OpenH264) are explicitly permitted
+ * to drop frames in `'realtime'` mode when frames arrive faster than real-time.
+ * `'quality'` guarantees zero dropped frames and full visual sharpness while still
+ * accelerating via GPU hardware when `hardwareAcceleration: 'prefer-hardware'` is supported.
  */
 export async function probeHardwareVideoEncode(
   outputFormat: Mp4OutputFormat | WebMOutputFormat,
@@ -120,50 +124,38 @@ export async function probeHardwareVideoEncode(
     height: number;
     videoQuality: Quality;
     fps: number;
+    allowHardware?: boolean;
   },
 ): Promise<HardwareEncodeSelection | null> {
   const codecs = outputFormat.getSupportedVideoCodecs();
-  const { width, height, videoQuality, fps } = params;
+  const { width, height, videoQuality, fps, allowHardware = true } = params;
 
-  // 1. Prefer the first codec that genuinely supports hardware-accelerated encoding
-  for (const codec of codecs) {
-    try {
-      const hwRealtimeOk = await canEncodeVideo(codec, {
-        width,
-        height,
-        quality: videoQuality,
-        frameRate: fps,
-        hardwareAcceleration: "prefer-hardware",
-        latencyMode: "realtime",
-      });
-      if (hwRealtimeOk) {
-        return {
-          codec,
-          hardwareAcceleration: "prefer-hardware",
-          latencyMode: "realtime",
-        };
-      }
-      const hwQualityOk = await canEncodeVideo(codec, {
-        width,
-        height,
-        quality: videoQuality,
-        frameRate: fps,
-        hardwareAcceleration: "prefer-hardware",
-        latencyMode: "quality",
-      });
-      if (hwQualityOk) {
-        return {
-          codec,
+  // 1. Prefer the first codec supporting hardware-accelerated quality-mode encoding
+  if (allowHardware) {
+    for (const codec of codecs) {
+      try {
+        const hwOk = await canEncodeVideo(codec, {
+          width,
+          height,
+          quality: videoQuality,
+          frameRate: fps,
           hardwareAcceleration: "prefer-hardware",
           latencyMode: "quality",
-        };
+        });
+        if (hwOk) {
+          return {
+            codec,
+            hardwareAcceleration: "prefer-hardware",
+            latencyMode: "quality",
+          };
+        }
+      } catch {
+        // Try next supported codec
       }
-    } catch {
-      // Try next supported codec
     }
   }
 
-  // 2. Fallback to browser-selected encoder ('no-preference')
+  // 2. Safe fallback to browser-selected encoder ('no-preference') in quality mode
   try {
     const fallbackCodec = await getFirstEncodableVideoCodec(codecs, {
       width,
@@ -172,67 +164,53 @@ export async function probeHardwareVideoEncode(
       frameRate: fps,
     });
     if (!fallbackCodec) return null;
-
-    let latencyMode: "realtime" | "quality" = "quality";
-    try {
-      const realtimeOk = await canEncodeVideo(fallbackCodec, {
-        width,
-        height,
-        quality: videoQuality,
-        frameRate: fps,
-        hardwareAcceleration: "no-preference",
-        latencyMode: "realtime",
-      });
-      if (realtimeOk) latencyMode = "realtime";
-    } catch {
-      latencyMode = "quality";
-    }
     return {
       codec: fallbackCodec,
       hardwareAcceleration: "no-preference",
-      latencyMode,
+      latencyMode: "quality",
     };
   } catch {
     return null;
   }
 }
 
-interface ClipSampleStream {
+interface ActiveSequentialStream {
   clip: CinemaVideoClip;
   input: Input;
-  iterator: AsyncGenerator<VideoSample | null, void, unknown>;
-  frameIndices: number[];
-  cursor: number;
+  iterator: AsyncGenerator<VideoSample, void, unknown>;
+  firstTs: number;
+  currentSample: VideoSample | null;
+  nextSample: VideoSample | null;
+  exhausted: boolean;
 }
 
-function closeSamplesMap(samples: Map<string, CinemaDrawableMedia>): void {
-  for (const drawable of samples.values()) {
-    if (drawable instanceof VideoSample) {
-      try {
-        drawable.close();
-      } catch {
-        // Ignore already-closed sample
-      }
-    }
+function closeSampleSafe(sample: VideoSample | null | undefined): void {
+  if (!sample) return;
+  try {
+    sample.close();
+  } catch {
+    // Ignore already-closed sample
   }
-  samples.clear();
 }
 
 /**
- * Worker-safe Mediabunny `VideoSampleSink` pool:
- * - Uses `optimizeForLatency: false` for full hardware B-frame/batch decoder pipelining.
- * - Clamps requested timestamps cleanly inside `[firstTs, trackEnd]` so EOF never drops frames.
- * - Does NOT retain old `VideoSample` references across frames; callers close every `VideoSample`
- *   immediately after `renderCinemaFrame(...)` draws it to keep GPU VideoFrame pools clear.
+ * Sequential, zero-missing-frame Mediabunny `VideoSampleSink.samples()` decoder pool:
+ * - Uses Mediabunny's continuous `samples(start, end)` stream (zero GOP decoder flushes,
+ *   proper HEVC/H.264 B-frame presentation ordering, internal 4-frame lookahead pump).
+ * - Opens each clip's `Input` + `VideoDecoder` lazily only while active on the timeline and
+ *   disposes it immediately once the clip ends (never exhausts GPU decoder session limits).
+ * - Holds at most 1 current sample (`currentSample`) + 1 lookahead (`nextSample`) per active
+ *   clip, closing every superseded `VideoSample` immediately to prevent GPU memory exhaustion.
+ * - Guarantees Frame 0 and trailing/VFR frames never render blank/missing frames.
  */
-class WorkerSamplePool {
-  private readonly project: CinemaProject;
+class SequentialSamplePool {
   private readonly videoClips: CinemaVideoClip[];
   private readonly assetBlobs: ReadonlyMap<string, Blob>;
   private readonly fallbackMediaElements?: ReadonlyMap<string, CinemaDrawableMedia>;
   private readonly inWorker: boolean;
-  private readonly clipStreams: ClipSampleStream[] = [];
-  private readonly fallbackClips: CinemaVideoClip[] = [];
+  private readonly activeStreams = new Map<string, ActiveSequentialStream>();
+  private readonly finishedClipIds = new Set<string>();
+  private readonly fallbackClipIds = new Set<string>();
 
   constructor(
     project: CinemaProject,
@@ -240,7 +218,6 @@ class WorkerSamplePool {
     inWorker: boolean,
     fallbackMediaElements?: ReadonlyMap<string, CinemaDrawableMedia>,
   ) {
-    this.project = project;
     this.assetBlobs = assetBlobs;
     this.inWorker = inWorker;
     this.fallbackMediaElements = fallbackMediaElements;
@@ -257,152 +234,195 @@ class WorkerSamplePool {
     return this.videoClips.length > 0;
   }
 
-  async initForTimeline(fps: number, totalFrames: number): Promise<void> {
-    if (this.videoClips.length === 0) return;
+  private async openClipStream(clip: CinemaVideoClip): Promise<ActiveSequentialStream | null> {
+    const blob = this.assetBlobs.get(clip.assetId);
+    if (!blob) {
+      if (this.inWorker) {
+        throw new WorkerFallbackRequiredError(`Missing video blob for clip ${clip.id}`);
+      }
+      this.fallbackClipIds.add(clip.id);
+      return null;
+    }
 
-    const frameDurMs = 1000 / fps;
-
-    for (const clip of this.videoClips) {
-      const blob = this.assetBlobs.get(clip.assetId);
-      if (!blob) {
+    let input: Input | null = null;
+    try {
+      input = new Input({
+        source: new BlobSource(blob),
+        formats: ALL_FORMATS,
+      });
+      const videoTrack = await input.getPrimaryVideoTrack();
+      if (!videoTrack || !(await videoTrack.canDecode())) {
+        input.dispose();
         if (this.inWorker) {
-          throw new WorkerFallbackRequiredError(`Missing video blob for clip ${clip.id}`);
+          throw new WorkerFallbackRequiredError(`Undecodable video track for clip ${clip.id}`);
         }
-        this.fallbackClips.push(clip);
-        continue;
+        this.fallbackClipIds.add(clip.id);
+        return null;
       }
 
-      let input: Input | null = null;
-      try {
-        input = new Input({
-          source: new BlobSource(blob),
-          formats: ALL_FORMATS,
-        });
-        const videoTrack = await input.getPrimaryVideoTrack();
-        if (!videoTrack || !(await videoTrack.canDecode())) {
-          input.dispose();
-          if (this.inWorker) {
-            throw new WorkerFallbackRequiredError(`Undecodable video track for clip ${clip.id}`);
-          }
-          this.fallbackClips.push(clip);
-          continue;
+      const firstTs = Math.max(0, await videoTrack.getFirstTimestamp());
+      const speed = clamp(clip.speed || 1, 0.25, 4);
+      const startSec = firstTs + Math.max(0, clip.trimStartMs / 1000);
+      // Add generous +0.6s end headroom so Mediabunny never drops the clip's closing frame
+      const endSec = startSec + (clip.durationMs * speed) / 1000 + 0.6;
+
+      // Batch export uses full hardware decoder pipelining (`optimizeForLatency: false`)
+      const sink = new VideoSampleSink(videoTrack, {
+        optimizeForLatency: false,
+      });
+      const iterator = sink.samples(startSec, endSec);
+
+      // Prime initial sample + 1 lookahead sample so Frame 0 is guaranteed non-null
+      const firstRes = await iterator.next();
+      const currentSample = !firstRes.done ? firstRes.value : null;
+      let nextSample: VideoSample | null = null;
+      let exhausted = firstRes.done === true;
+
+      if (!exhausted) {
+        const secondRes = await iterator.next();
+        if (secondRes.done) {
+          exhausted = true;
+        } else {
+          nextSample = secondRes.value;
         }
-
-        const firstTs = Math.max(0, await videoTrack.getFirstTimestamp());
-        const computedDur = await videoTrack.computeDuration().catch(() => 0);
-        const maxValidTs =
-          Number.isFinite(computedDur) && computedDur > 0.04
-            ? firstTs + Math.max(0.0005, computedDur - 0.015)
-            : Number.POSITIVE_INFINITY;
-
-        const speed = clamp(clip.speed || 1, 0.25, 4);
-        const frameIndices: number[] = [];
-        const timestampsSec: number[] = [];
-
-        for (let f = 0; f < totalFrames; f++) {
-          const timeMs = f * frameDurMs;
-          if (timeMs >= clip.startMs && timeMs <= clip.startMs + clip.durationMs) {
-            const relSec = Math.max(0, (clip.trimStartMs + (timeMs - clip.startMs) * speed) / 1000);
-            frameIndices.push(f);
-            timestampsSec.push(Math.min(maxValidTs, firstTs + relSec + 0.0005));
-          }
-        }
-
-        if (frameIndices.length === 0) {
-          input.dispose();
-          continue;
-        }
-
-        // Batch export benefits from decoder pipelining (`optimizeForLatency: false`)
-        const sink = new VideoSampleSink(videoTrack, {
-          optimizeForLatency: false,
-        });
-        const iterator = sink.samplesAtTimestamps(timestampsSec);
-
-        this.clipStreams.push({
-          clip,
-          input,
-          iterator,
-          frameIndices,
-          cursor: 0,
-        });
-      } catch (err) {
-        if (input) {
-          try {
-            input.dispose();
-          } catch {
-            // Ignore
-          }
-        }
-        if (err instanceof WorkerFallbackRequiredError) throw err;
-        if (this.inWorker) {
-          throw new WorkerFallbackRequiredError(
-            err instanceof Error ? err.message : "Worker video decode initialization failed",
-          );
-        }
-        this.fallbackClips.push(clip);
       }
+
+      const stream: ActiveSequentialStream = {
+        clip,
+        input,
+        iterator,
+        firstTs,
+        currentSample,
+        nextSample,
+        exhausted,
+      };
+      this.activeStreams.set(clip.id, stream);
+      return stream;
+    } catch (err) {
+      if (input) {
+        try {
+          input.dispose();
+        } catch {
+          // Ignore
+        }
+      }
+      if (err instanceof WorkerFallbackRequiredError) throw err;
+      if (this.inWorker) {
+        throw new WorkerFallbackRequiredError(
+          err instanceof Error ? err.message : "Worker video decode initialization failed",
+        );
+      }
+      this.fallbackClipIds.add(clip.id);
+      return null;
     }
   }
 
+  private closeStream(clipId: string): void {
+    const stream = this.activeStreams.get(clipId);
+    if (!stream) return;
+    this.activeStreams.delete(clipId);
+    closeSampleSafe(stream.currentSample);
+    closeSampleSafe(stream.nextSample);
+    stream.currentSample = null;
+    stream.nextSample = null;
+    try {
+      void stream.iterator.return();
+    } catch {
+      // Ignore
+    }
+    try {
+      stream.input.dispose();
+    } catch {
+      // Ignore
+    }
+  }
+
+  private async advanceStreamTo(
+    stream: ActiveSequentialStream,
+    targetSec: number,
+  ): Promise<VideoSample | null> {
+    // Advance until `nextSample` lies strictly after `targetSec` (closing every skipped sample immediately)
+    while (stream.nextSample && stream.nextSample.timestamp <= targetSec + 0.002) {
+      closeSampleSafe(stream.currentSample);
+      stream.currentSample = stream.nextSample;
+      stream.nextSample = null;
+      if (!stream.exhausted) {
+        try {
+          const res = await stream.iterator.next();
+          if (res.done) {
+            stream.exhausted = true;
+          } else {
+            stream.nextSample = res.value;
+          }
+        } catch {
+          stream.exhausted = true;
+        }
+      }
+    }
+    return stream.currentSample;
+  }
+
   /**
-   * Decodes the `VideoSample`s for `frameIndex`. Caller MUST close all returned
-   * `VideoSample`s immediately after `renderCinemaFrame(...)` completes!
+   * Returns exact, frame-accurate drawables for every video clip visible at `timeMs`.
+   * Immediately closes and disposes any clip streams whose timeline span has ended.
    */
-  async pullFrame(
-    frameIndex: number,
-    timeMs: number,
-  ): Promise<Map<string, CinemaDrawableMedia>> {
+  async getSamplesForTime(timeMs: number): Promise<Map<string, CinemaDrawableMedia>> {
     const overrides = new Map<string, CinemaDrawableMedia>();
     if (this.videoClips.length === 0) return overrides;
 
-    const activeStreams: ClipSampleStream[] = [];
-    for (const stream of this.clipStreams) {
-      if (
-        stream.cursor < stream.frameIndices.length &&
-        stream.frameIndices[stream.cursor] === frameIndex
-      ) {
-        activeStreams.push(stream);
+    // 1. Dispose any active stream whose clip has already ended on the timeline
+    for (const [clipId, stream] of Array.from(this.activeStreams.entries())) {
+      if (timeMs > stream.clip.startMs + stream.clip.durationMs + 2) {
+        this.closeStream(clipId);
+        this.finishedClipIds.add(clipId);
       }
     }
 
-    if (activeStreams.length > 0) {
-      await Promise.all(
-        activeStreams.map(async (stream) => {
-          stream.cursor++;
-          try {
-            const res = await stream.iterator.next();
-            if (!res.done && res.value) {
-              overrides.set(stream.clip.id, res.value);
-            }
-          } catch {
-            // Skip malformed trailing packet safely
-          }
-        }),
-      );
+    // 2. Collect clips visible at `timeMs`
+    const visibleClips: CinemaVideoClip[] = [];
+    for (const clip of this.videoClips) {
+      if (timeMs >= clip.startMs && timeMs <= clip.startMs + clip.durationMs) {
+        visibleClips.push(clip);
+      }
     }
+    if (visibleClips.length === 0) return overrides;
 
-    if (!this.inWorker && this.fallbackClips.length > 0 && this.fallbackMediaElements) {
-      const activeFallbacks = this.fallbackClips.filter(
-        (c) => timeMs >= c.startMs && timeMs <= c.startMs + c.durationMs,
-      );
-      await Promise.all(
-        activeFallbacks.map(async (clip) => {
-          const el = this.fallbackMediaElements?.get(clip.assetId);
-          if (typeof HTMLVideoElement === "undefined" || !(el instanceof HTMLVideoElement) || el.readyState < 1) {
+    // 3. Advance (or lazily open) each visible clip concurrently
+    await Promise.all(
+      visibleClips.map(async (clip) => {
+        const speed = clamp(clip.speed || 1, 0.25, 4);
+        const relSec = Math.max(0, (clip.trimStartMs + (timeMs - clip.startMs) * speed) / 1000);
+
+        if (!this.fallbackClipIds.has(clip.id) && !this.finishedClipIds.has(clip.id)) {
+          let stream = this.activeStreams.get(clip.id) ?? null;
+          if (!stream) {
+            stream = await this.openClipStream(clip);
+          }
+          if (stream) {
+            const sample = await this.advanceStreamTo(stream, stream.firstTs + relSec);
+            if (sample) {
+              overrides.set(clip.id, sample);
+              return;
+            }
+          }
+        }
+
+        // Main-thread fallback for codecs unsupported by WebCodecs VideoDecoder
+        if (!this.inWorker && this.fallbackMediaElements) {
+          const el = this.fallbackMediaElements.get(clip.assetId);
+          if (
+            typeof HTMLVideoElement === "undefined" ||
+            !(el instanceof HTMLVideoElement) ||
+            el.readyState < 1
+          ) {
             return;
           }
-          const speed = clamp(clip.speed || 1, 0.25, 4);
-          const targetSec = Math.max(
-            0,
-            (clip.trimStartMs + (timeMs - clip.startMs) * speed) / 1000,
-          );
           const finiteDur =
             Number.isFinite(el.duration) && el.duration > 0
               ? Math.max(0, el.duration - 0.025)
-              : targetSec;
-          const clamped = Math.min(finiteDur, targetSec);
-          if (Math.abs(el.currentTime - clamped) > 0.025) {
+              : relSec;
+          const clamped = Math.min(finiteDur, relSec);
+          if (Math.abs(el.currentTime - clamped) > 0.02) {
             await new Promise<void>((resolve) => {
               let done = false;
               const finish = () => {
@@ -415,7 +435,7 @@ class WorkerSamplePool {
                 clearTimeout(timer);
                 finish();
               };
-              const timer = setTimeout(finish, 250);
+              const timer = setTimeout(finish, 300);
               el.addEventListener("seeked", onSeeked, { once: true });
               try {
                 el.currentTime = clamped;
@@ -426,33 +446,29 @@ class WorkerSamplePool {
             });
           }
           overrides.set(clip.id, el);
-        }),
-      );
-    }
+        }
+      }),
+    );
 
     return overrides;
   }
 
   dispose(): void {
-    for (const stream of this.clipStreams) {
-      try {
-        void stream.iterator.return();
-      } catch {
-        // Ignore
-      }
-      try {
-        stream.input.dispose();
-      } catch {
-        // Ignore
-      }
+    for (const clipId of Array.from(this.activeStreams.keys())) {
+      this.closeStream(clipId);
     }
-    this.clipStreams.length = 0;
+    this.finishedClipIds.clear();
+    this.fallbackClipIds.clear();
   }
 }
 
 /**
- * Tier 0B core: Mediabunny `Conversion` (direct packet-copy trim/remux or hardware-accelerated
- * canvas-free transcode). Runs identically inside `export.worker.ts` or on the main thread.
+ * Tier 0B core: Mediabunny `Conversion` for single-clip remuxes, mutes, rotations,
+ * frame-accurate trims, and direct hardware resizes without 2D canvas overhead.
+ *
+ * - Pure untrimmed remux/mute/rotation: zero-re-encode packet stream copy (`copy: preferred`).
+ * - Trimmed or resized clips: frame-accurate hardware transcode in `'quality'` mode so cuts
+ *   never suffer keyframe-boundary missing/frozen opening frames.
  */
 export async function runMediabunnyConversionCore(
   params: ConversionCoreParams,
@@ -514,14 +530,15 @@ export async function runMediabunnyConversionCore(
     const sourceVideoCodec = await videoTrack.getCodec();
     const canCopyVideoCodec =
       sourceVideoCodec !== null && outputFormat.getSupportedVideoCodecs().includes(sourceVideoCodec);
-    const willTranscodeVideo = needsResize || !canCopyVideoCodec;
+
+    // Only stream-copy when untrimmed; trimmed cuts transcode cleanly for exact frame accuracy
+    const willTranscodeVideo = isTrimmed || needsResize || !canCopyVideoCodec;
 
     const videoQuality = new Quality({
       bitrate: videoBitrate,
       bitrateMode: "variable",
     });
 
-    // Probe hardware encoder preference ONLY when transcoding is actually required
     let hwAccel: "prefer-hardware" | "no-preference" = "no-preference";
     if (willTranscodeVideo) {
       const probed = await probeHardwareVideoEncode(outputFormat, {
@@ -539,16 +556,20 @@ export async function runMediabunnyConversionCore(
       input,
       output,
       ...(isTrimmed ? { trim: { start: trimStart, end: trimEnd } } : {}),
-      copy: {
-        mode: "preferred",
-        shiftTolerance: 0.15,
-        boundaryPolicy: "expand",
-      },
+      ...(!isTrimmed
+        ? {
+            copy: {
+              mode: "preferred",
+              shiftTolerance: 0.1,
+              boundaryPolicy: "expand",
+            },
+          }
+        : {}),
       video: {
         ...(needsResize ? { width, height, fit, frameRate: fps } : {}),
+        ...(willTranscodeVideo ? { forceTranscode: true } : {}),
         ...(rotation90 !== 0 ? { rotate: rotation90 } : {}),
         ...(flipH ? { flip: true } : {}),
-        // Omit quality & hardwareAcceleration when stream-copying so Mediabunny never forces a transcode
         ...(willTranscodeVideo
           ? { quality: videoQuality, hardwareAcceleration: hwAccel }
           : {}),
@@ -588,8 +609,8 @@ export async function runMediabunnyConversionCore(
       currentFrame: 0,
       totalFrames,
       message: willTranscodeVideo
-        ? "Starting Mediabunny hardware conversion (Worker)…"
-        : "Starting Mediabunny zero-re-encode remux…",
+        ? "Starting frame-accurate hardware conversion…"
+        : "Starting zero-re-encode stream remux…",
     });
 
     await conversion.execute();
@@ -628,16 +649,9 @@ export async function runMediabunnyConversionCore(
   }
 }
 
-/**
- * Tier 1 core: Full multi-layer Mediabunny GPU compositor (`OffscreenCanvas` + `VideoSampleSink`
- * + `CanvasSource` + `AudioSampleSource`) with:
- * - `hardwareAcceleration: 'prefer-hardware'` video encoding (with automatic safe fallback)
- * - Immediate `sample.close()` after every single frame draw (zero GPU VideoFrame starvation)
- * - Overlapped `Promise.all` encode(f) + decode(f+1)
- * - Zero `requestAnimationFrame` throttling
- */
-export async function runMediabunnyCompositorCore(
+async function runCompositorPass(
   params: CompositorCoreParams,
+  allowHardware: boolean,
 ): Promise<CoreBinaryOutput | null> {
   const {
     project,
@@ -668,6 +682,7 @@ export async function runMediabunnyCompositorCore(
     height: project.height,
     videoQuality,
     fps,
+    allowHardware,
   });
   if (!encodeChoice) return null;
 
@@ -724,14 +739,14 @@ export async function runMediabunnyCompositorCore(
     codec: encodeChoice.codec,
     quality: videoQuality,
     keyFrameInterval: 2,
-    latencyMode: encodeChoice.latencyMode,
+    latencyMode: "quality",
     hardwareAcceleration: encodeChoice.hardwareAcceleration,
   });
   output.addVideoTrack(canvasSource, { frameRate: fps });
 
   let audioSource: AudioSampleSource | null = null;
   if (audioMix && audioMix.length > 0 && audioMix.channels.length > 0) {
-    const audioQuality = new Quality({ bitrate: 128_000 });
+    const audioQuality = new Quality({ bitrate: 160_000 });
     try {
       const audioCodec = await getFirstEncodableAudioCodec(
         outputFormat.getSupportedAudioCodecs(),
@@ -753,17 +768,14 @@ export async function runMediabunnyCompositorCore(
     }
   }
 
-  const samplePool = new WorkerSamplePool(
+  const samplePool = new SequentialSamplePool(
     project,
     assetBlobs,
     inWorker,
     fallbackMediaElements,
   );
 
-  let currentOverrides = new Map<string, CinemaDrawableMedia>();
-
   try {
-    await samplePool.initForTimeline(fps, totalFrames);
     await output.start();
 
     const frameDurMs = 1000 / fps;
@@ -773,14 +785,8 @@ export async function runMediabunnyCompositorCore(
     let lastYieldPerf = exportStartPerf;
     let lastRenderedTimeMs = -1;
 
-    // Pre-pull Frame 0 before the tight loop (never RAF-throttled!)
-    if (samplePool.hasVideoClips) {
-      currentOverrides = await samplePool.pullFrame(0, 0);
-    }
-
     for (let f = 0; f < totalFrames; f++) {
       if (signal?.aborted) {
-        closeSamplesMap(currentOverrides);
         await output.cancel();
         throw new DOMException("Export cancelled", "AbortError");
       }
@@ -790,31 +796,24 @@ export async function runMediabunnyCompositorCore(
         !samplePool.hasVideoClips &&
         isCinemaFrameStaticSince(project, lastRenderedTimeMs, timeMs);
 
-      try {
-        if (!canReuseStaticCanvas) {
-          renderCinemaFrame(ctx, project, timeMs, {
-            mediaElements: mediaMap,
-            clipMediaOverrides: currentOverrides,
-            frequencyBins: frameBins[f],
-            showSafeGuides: false,
-            isExport: true,
-          });
-          lastRenderedTimeMs = timeMs;
-        }
-      } finally {
-        // Immediately close every VideoSample right after drawing to release WebCodecs GPU surfaces
-        closeSamplesMap(currentOverrides);
+      if (!canReuseStaticCanvas) {
+        const clipMediaOverrides = samplePool.hasVideoClips
+          ? await samplePool.getSamplesForTime(timeMs)
+          : undefined;
+
+        renderCinemaFrame(ctx, project, timeMs, {
+          mediaElements: mediaMap,
+          clipMediaOverrides,
+          frequencyBins: frameBins[f],
+          showSafeGuides: false,
+          isExport: true,
+        });
+        lastRenderedTimeMs = timeMs;
       }
 
-      // Overlap GPU encode(f) with hardware decode(f+1) with zero stale GPU frames pinned
-      const encodePromise = canvasSource.add(f * frameDurSec, frameDurSec);
-      const nextPrefetchPromise =
-        samplePool.hasVideoClips && f + 1 < totalFrames
-          ? samplePool.pullFrame(f + 1, (f + 1) * frameDurMs)
-          : Promise.resolve(currentOverrides);
-
-      const [, nextOverrides] = await Promise.all([encodePromise, nextPrefetchPromise]);
-      currentOverrides = nextOverrides;
+      // Snapshots OffscreenCanvas synchronously & awaits encoder backpressure cleanly (0 dropped frames).
+      // Mediabunny's internal VideoSampleSink.samples() pump pre-decodes 4 frames ahead concurrently!
+      await canvasSource.add(f / fps, frameDurSec);
 
       // Only yield when running on the main thread fallback; inside the Web Worker run full speed
       const now = performance.now();
@@ -830,7 +829,7 @@ export async function runMediabunnyCompositorCore(
         const speedMul = exportedVideoSec / elapsedSec;
         const currentFps = Math.round((f + 1) / elapsedSec);
         const hwLabel = encodeChoice.hardwareAcceleration === "prefer-hardware" ? "HW · " : "";
-        const speedTag = speedMul >= 1.1 ? ` · ${hwLabel}${speedMul.toFixed(1)}× (${currentFps} fps)` : "";
+        const speedTag = speedMul >= 1.05 ? ` · ${hwLabel}${speedMul.toFixed(1)}× (${currentFps} fps)` : "";
         onProgress({
           phase: "rendering",
           progress: 0.08 + 0.8 * ((f + 1) / totalFrames),
@@ -843,7 +842,8 @@ export async function runMediabunnyCompositorCore(
       }
     }
 
-    closeSamplesMap(currentOverrides);
+    // Release all remaining decoded video samples before muxing audio & finalizing container
+    samplePool.dispose();
     canvasSource.close();
 
     if (audioSource && audioMix && audioMix.length > 0) {
@@ -856,7 +856,10 @@ export async function runMediabunnyCompositorCore(
       });
 
       const { sampleRate, numberOfChannels, length, channels } = audioMix;
-      const maxFramesPerChunk = Math.max(1024, Math.floor((sampleRate * 5) / Math.max(1, numberOfChannels)));
+      const maxFramesPerChunk = Math.max(
+        1024,
+        Math.floor((sampleRate * 5) / Math.max(1, numberOfChannels)),
+      );
       let offset = 0;
 
       while (offset < length) {
@@ -919,7 +922,6 @@ export async function runMediabunnyCompositorCore(
       elapsedMs,
     };
   } finally {
-    closeSamplesMap(currentOverrides);
     samplePool.dispose();
     for (const bmp of decodedBitmaps) {
       try {
@@ -935,5 +937,28 @@ export async function runMediabunnyCompositorCore(
         // Ignore
       }
     }
+  }
+}
+
+/**
+ * Tier 1 core: Full multi-layer Mediabunny GPU compositor (`OffscreenCanvas` + continuous
+ * `VideoSampleSink.samples()` + `CanvasSource` + `AudioSampleSource`).
+ * Automatically retries with `'no-preference'` if a GPU driver rejects `'prefer-hardware'` mid-run.
+ */
+export async function runMediabunnyCompositorCore(
+  params: CompositorCoreParams,
+): Promise<CoreBinaryOutput | null> {
+  try {
+    return await runCompositorPass(params, true);
+  } catch (err) {
+    if (
+      params.signal?.aborted ||
+      (err as DOMException)?.name === "AbortError" ||
+      err instanceof WorkerFallbackRequiredError
+    ) {
+      throw err;
+    }
+    // Retry once without forcing hardwareAcceleration in case a driver rejected 'prefer-hardware'
+    return runCompositorPass(params, false);
   }
 }

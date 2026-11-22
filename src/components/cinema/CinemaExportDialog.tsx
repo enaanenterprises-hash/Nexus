@@ -69,9 +69,9 @@ export function CinemaExportDialog({
   onSendMasterWavToStudio: (blob: Blob) => Promise<void>;
 }) {
   const [format, setFormat] = useState<CinemaExportFormat>("mp4");
-  const [resolution, setResolution] = useState<CinemaExportResolution>("720p");
+  const [resolution, setResolution] = useState<CinemaExportResolution>("1080p");
   const [fps, setFps] = useState<24 | 30 | 60>(project.fps);
-  const [quality, setQuality] = useState<"high" | "balanced">("balanced");
+  const [quality, setQuality] = useState<"high" | "balanced">("high");
 
   const [exporting, setExporting] = useState(false);
   const [progress, setProgress] = useState<CinemaExportProgress | null>(null);

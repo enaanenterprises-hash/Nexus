@@ -516,12 +516,12 @@ async function tryFastMediabunnyConversion(params: {
 
 function resolveVideoBitrate(options: CinemaExportOptions): number {
   if (options.resolution === "4k") {
-    return options.quality === "high" ? 18_000_000 : 12_000_000;
+    return options.quality === "high" ? 38_000_000 : 24_000_000;
   }
   if (options.resolution === "1080p") {
-    return options.quality === "high" ? 6_500_000 : 3_800_000;
+    return options.quality === "high" ? 15_000_000 : 9_000_000;
   }
-  return options.quality === "high" ? 3_800_000 : 2_200_000;
+  return options.quality === "high" ? 8_000_000 : 5_000_000;
 }
 
 export async function exportCinemaVideo(
