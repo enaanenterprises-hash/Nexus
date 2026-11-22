@@ -71,7 +71,10 @@ export function visualBoxPx(
   return { cx, cy, w, h };
 }
 
-function drawBackground(
+let cachedBgCanvas: HTMLCanvasElement | null = null;
+let cachedBgKey = "";
+
+function paintBackgroundDirect(
   ctx: CanvasRenderingContext2D,
   bg: CinemaBackground,
   width: number,
@@ -142,6 +145,36 @@ function drawBackground(
     }
     ctx.restore();
   }
+}
+
+function drawBackground(
+  ctx: CanvasRenderingContext2D,
+  bg: CinemaBackground,
+  width: number,
+  height: number,
+): void {
+  if (typeof document === "undefined") {
+    paintBackgroundDirect(ctx, bg, width, height);
+    return;
+  }
+
+  const key = `${width}x${height}|${bg.type}|${bg.colorA}|${bg.colorB}|${bg.angleDeg}|${bg.grain.toFixed(4)}`;
+  if (!cachedBgCanvas || cachedBgKey !== key) {
+    if (!cachedBgCanvas) {
+      cachedBgCanvas = document.createElement("canvas");
+    }
+    cachedBgCanvas.width = width;
+    cachedBgCanvas.height = height;
+    const bgCtx = cachedBgCanvas.getContext("2d", { alpha: false });
+    if (!bgCtx) {
+      paintBackgroundDirect(ctx, bg, width, height);
+      return;
+    }
+    paintBackgroundDirect(bgCtx, bg, width, height);
+    cachedBgKey = key;
+  }
+
+  ctx.drawImage(cachedBgCanvas, 0, 0);
 }
 
 function buildFilterString(filter: CinemaFilter, extraBlurPx = 0): string {
@@ -628,6 +661,71 @@ function drawVisualizerClip(
   }
 }
 
+/**
+ * Returns true if the rendered 2D canvas frame at `timeMs` is guaranteed to be
+ * pixel-identical to the frame already rendered at `prevTimeMs`.
+ */
+export function isCinemaFrameStaticSince(
+  project: CinemaProject,
+  prevTimeMs: number,
+  timeMs: number,
+): boolean {
+  if (prevTimeMs < 0) return false;
+
+  const activeTrackIds = new Set<string>();
+  for (const t of project.tracks) {
+    if (t.kind !== "audio" && !t.hidden) activeTrackIds.add(t.id);
+  }
+
+  const maxTransMs =
+    project.transitions.length > 0
+      ? project.transitions.reduce((m, tr) => Math.max(m, tr.durationMs), 0)
+      : 0;
+
+  let prevVisibleCount = 0;
+  let currVisibleCount = 0;
+
+  for (const clip of project.clips) {
+    if (clip.kind === "audio" || clip.hidden || !activeTrackIds.has(clip.trackId)) continue;
+    const endMs = clip.startMs + clip.durationMs;
+    const inPrev = prevTimeMs >= clip.startMs && prevTimeMs <= endMs;
+    const inCurr = timeMs >= clip.startMs && timeMs <= endMs;
+    if (inPrev !== inCurr) return false;
+    if (inPrev) prevVisibleCount++;
+    if (!inCurr) continue;
+    currVisibleCount++;
+
+    if (clip.kind === "video" || clip.kind === "visualizer") return false;
+    if (clip.kind === "shape" && clip.shapeKind === "progress-bar") return false;
+    if ("reactiveAudioClipId" in clip && clip.reactiveAudioClipId) return false;
+    if (clip.kind === "image" && clip.kenBurns !== "none") return false;
+
+    const localCurr = timeMs - clip.startMs;
+    const localPrev = prevTimeMs - clip.startMs;
+    const enterDur = Math.max(0, clip.animation.inDurationMs);
+    if (clip.animation.inType !== "none" && (localCurr <= enterDur || localPrev <= enterDur)) {
+      return false;
+    }
+    const exitStart = Math.max(0, clip.durationMs - Math.max(0, clip.animation.outDurationMs));
+    if (clip.animation.outType !== "none" && (localCurr >= exitStart || localPrev >= exitStart)) {
+      return false;
+    }
+
+    if (maxTransMs > 0) {
+      if (
+        localCurr <= maxTransMs ||
+        localPrev <= maxTransMs ||
+        clip.durationMs - localCurr <= maxTransMs ||
+        clip.durationMs - localPrev <= maxTransMs
+      ) {
+        return false;
+      }
+    }
+  }
+
+  return prevVisibleCount === currVisibleCount;
+}
+
 export function renderCinemaFrame(
   ctx: CanvasRenderingContext2D,
   project: CinemaProject,
@@ -635,7 +733,8 @@ export function renderCinemaFrame(
   runtime: CinemaRenderRuntime,
 ): void {
   const { width, height } = project;
-  ctx.clearRect(0, 0, width, height);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = runtime.isExport ? "medium" : "high";
   drawBackground(ctx, project.background, width, height);
 
   const projectDurationMs = computeProjectDurationMs(project);

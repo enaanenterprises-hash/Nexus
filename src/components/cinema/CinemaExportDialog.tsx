@@ -37,8 +37,8 @@ const FORMAT_CARDS: Array<{
   sub: string;
   icon: typeof Film;
 }> = [
-  { id: "mp4", label: "MP4 Video", sub: "Hardware WebCodecs H.264 + AAC", icon: Film },
-  { id: "webm", label: "WebM Video", sub: "Universal VP9 / Opus container", icon: Film },
+  { id: "mp4", label: "MP4 Video", sub: "Turbo Hardware WebCodecs H.264", icon: Film },
+  { id: "webm", label: "WebM Video", sub: "Real-time VP9 / Opus container", icon: Film },
   { id: "png", label: "PNG Frame", sub: "Crisp still at current playhead", icon: ImageIcon },
   { id: "wav-studio", label: "Master WAV", sub: "48 kHz mixdown for Studio / DAW", icon: Waves },
 ];
@@ -65,7 +65,7 @@ export function CinemaExportDialog({
   const [format, setFormat] = useState<CinemaExportFormat>("mp4");
   const [resolution, setResolution] = useState<"1080p" | "720p">("1080p");
   const [fps, setFps] = useState<24 | 30 | 60>(project.fps);
-  const [quality, setQuality] = useState<"high" | "balanced">("high");
+  const [quality, setQuality] = useState<"high" | "balanced">("balanced");
 
   const [exporting, setExporting] = useState(false);
   const [progress, setProgress] = useState<CinemaExportProgress | null>(null);
