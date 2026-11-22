@@ -85,14 +85,16 @@ void main() {
   for (int i = 0; i < 5; i++) {
     vec3 h = CAMERA + u * dir;
     vec3 h2 = h * h;
-    u -= (dot(h2, h2) - 1.0) / (4.0 * dot(dir, h2 * h));
+    float denom = 4.0 * dot(dir, h2 * h);
+    denom = abs(denom) > 1e-6 ? denom : (denom >= 0.0 ? 1e-6 : -1e-6);
+    u -= (dot(h2, h2) - 1.0) / denom;
   }
   vec3 hit = CAMERA + u * dir;
   vec3 normal = hit * hit * hit;
-  float facing = dot(normal, dir);
-  vec3 stepX = u * (vec3(1.0, 0.0, 0.0) - dir * (normal.x / facing));
-  vec3 stepY = u * (vec3(0.0, 1.0, 0.0) - dir * (normal.y / facing));
-  float ring = hit.y * hit.y + hit.z * hit.z;
+  float safeFacing = max(dot(normal, dir), 1e-6);
+  vec3 stepX = u * (vec3(1.0, 0.0, 0.0) - dir * (normal.x / safeFacing));
+  vec3 stepY = u * (vec3(0.0, 1.0, 0.0) - dir * (normal.y / safeFacing));
+  float ring = max(hit.y * hit.y + hit.z * hit.z, 1e-6);
   float theta = atan(hit.z, hit.y);
   mat2 jacobian = mat2(
     stepX.x,
@@ -158,7 +160,7 @@ void main() {
     }
   }
 
-  outColor = vec4(total * fog * boost * detail * uEncode, 1.0);
+  outColor = vec4(clamp(total * fog * boost * detail * uEncode, 0.0, 64.0), 1.0);
 }`;
 
 const DOWNSAMPLE = `#version 300 es
@@ -220,6 +222,10 @@ float smootherstep01(float t) {
   return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
 }
 
+float safePow(float x, float y) {
+  return x > 1e-6 ? pow(x, y) : 0.0;
+}
+
 void main() {
   vec2 uv = gl_FragCoord.xy / uView;
   vec3 light = texelFetch(uScene, ivec2(gl_FragCoord.xy), 0).rgb;
@@ -231,6 +237,9 @@ void main() {
     light += halo * uBloom * (uLightMode > 0.5 ? 0.2 : 1.0);
   }
   light *= uDecode * uGlow * uPresence;
+  if (uDecode > 1.5) {
+    light = max(light - 0.018, 0.0);
+  }
 
   if (uBackdropTransition < 0.5 && uLightMode < 0.5 && uTopGlow > 0.0) {
     float aspect = uView.x / uView.y;
@@ -242,7 +251,7 @@ void main() {
   }
 
   vec3 lit = max(light, 0.0);
-  vec3 mapped = sqrt(1.0 - exp(-1.3 * lit * lit / (lit + 0.025)));
+  vec3 mapped = sqrt(max(vec3(0.0), 1.0 - exp(-1.3 * lit * lit / (lit + 0.025))));
   float peak = max(mapped.r, max(mapped.g, mapped.b));
 
   if (uBackdropTransition > 0.5) {
@@ -252,7 +261,7 @@ void main() {
     // blooming to full luminous brilliance as comets fall into charcoal darkness).
     float t = clamp(1.0 - uv.y, 0.0, 1.0);
     float s = smootherstep01(t);
-    float u = pow(1.0 - s, 1.85);
+    float u = safePow(1.0 - s, 1.85);
 
     // Exact Oklab endpoints: #faf8f2 (top) -> #111216 (bottom)
     float warmth = 4.0 * u * (1.0 - u);
@@ -272,10 +281,10 @@ void main() {
     ), 0.0);
     vec3 srgbBg = mix(
       12.92 * linBg,
-      1.055 * pow(linBg, vec3(1.0 / 2.4)) - 0.055,
+      1.055 * pow(max(linBg, vec3(1e-6)), vec3(1.0 / 2.4)) - 0.055,
       step(vec3(0.0031308), linBg)
     );
-    // Pin exact CSS endpoints at the outer 2% edges so GPU float rounding matches #faf8f2 and #111216 bit-for-bit
+    // Pin exact CSS endpoints at the outer edges so GPU float rounding matches #faf8f2 and #111216 bit-for-bit
     vec3 exactTop = vec3(250.0, 248.0, 242.0) / 255.0;
     vec3 exactBot = vec3(17.0, 18.0, 22.0) / 255.0;
     srgbBg = mix(exactTop, srgbBg, smootherstep01(t / 0.03));
@@ -283,8 +292,10 @@ void main() {
 
     // Stars start whisper-translucent near the cream top and become progressively more visible
     // as they fall into the deepening charcoal-slate lower zone
-    float darkness = 1.0 - u;
-    float starReveal = pow(smootherstep01(clamp(darkness / 0.86, 0.0, 1.0)), 1.35);
+    float darkness = clamp(1.0 - u, 0.0, 1.0);
+    float revealBase = smootherstep01(clamp(darkness / 0.86, 0.0, 1.0));
+    float topMask = smootherstep01(clamp((t - 0.03) / 0.12, 0.0, 1.0));
+    float starReveal = safePow(revealBase, 1.35) * topMask;
     float bottomDissolve = 1.0 - smootherstep01(clamp((t - 0.80) / 0.20, 0.0, 1.0));
     float streakEnv = starReveal * bottomDissolve * uOpacity;
 
@@ -297,6 +308,8 @@ void main() {
     float nightVisibility = smoothstep(0.06, 0.72, darkness);
     vec3 nightGlow = mapped * streakEnv * (0.20 + 0.80 * nightVisibility);
     composed = 1.0 - (1.0 - composed) * (1.0 - clamp(nightGlow, 0.0, 1.0));
+    composed = mix(exactTop, composed, smootherstep01(t / 0.025));
+    composed = mix(composed, exactBot, smootherstep01((t - 0.975) / 0.025));
 
     // Triangular-PDF sub-pixel dithering kills 8-bit gradient banding completely
     float r1 = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
@@ -319,7 +332,7 @@ void main() {
   if (uLightMode > 0.5) {
     float coverage = clamp(smoothstep(0.0, 0.5, peak) * mask * 0.94 + grain, 0.0, 1.0);
     vec3 chroma = sqrt(clamp(lit / max(max(lit.r, max(lit.g, lit.b)), 1e-6), 0.0, 1.0));
-    chroma = pow(chroma, vec3(1.35));
+    chroma = pow(max(chroma, vec3(1e-6)), vec3(1.35));
     chroma /= max(max(chroma.r, max(chroma.g, chroma.b)), 1e-4);
     float saturation = 1.0 - min(chroma.r, min(chroma.g, chroma.b));
     chroma = mix(vec3(0.3), chroma, smoothstep(0.08, 0.35, saturation));

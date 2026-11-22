@@ -251,7 +251,7 @@ export function HeroStage() {
       <section
         id="hero-top"
         aria-label="Nexus"
-        className="relative flex min-h-[min(100svh,920px)] flex-col items-center justify-center overflow-hidden bg-[#faf8f2] px-6 pb-16 pt-28 sm:px-10 sm:pt-32"
+        className="relative flex min-h-[min(90svh,760px)] flex-col items-center justify-center overflow-hidden bg-[#faf8f2] px-6 pb-4 pt-28 sm:min-h-[min(100svh,920px)] sm:px-10 sm:pb-16 sm:pt-32"
       >
         <div className="pointer-events-none absolute inset-0">
           <GoldenNetwork theme="light" />
@@ -280,12 +280,12 @@ export function HeroStage() {
             </span>
           </h1>
 
-          <p className="gal-enter gal-enter-delay-1 mt-5 max-w-[44ch] text-[16.5px] leading-[1.6] text-[#4a4c55] [text-wrap:pretty] sm:text-[18.5px]">
+          <p className="gal-enter gal-enter-delay-1 mt-4 max-w-[44ch] text-[16.5px] leading-[1.6] text-[#4a4c55] [text-wrap:pretty] sm:mt-5 sm:text-[18.5px]">
             Effortlessly connect your everyday workflows together with Nexus Atelier
           </p>
 
           {/* Interactive Apple Liquid Glass Hero Waitlist Pill */}
-          <div className="gal-enter gal-enter-delay-2 mt-8 w-full max-w-[520px]">
+          <div className="gal-enter gal-enter-delay-2 mt-28 w-full max-w-[520px] sm:mt-8">
             {status === "success" ? (
               <div
                 className="apple-glass lp-stage-panel mx-auto flex items-center justify-center gap-3 rounded-full px-5 py-3.5 text-left"
