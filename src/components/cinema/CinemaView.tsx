@@ -100,7 +100,7 @@ import { CinemaExportDialog } from "./CinemaExportDialog";
 import { CinemaInspectorContent, type CinemaInspectorTab } from "./CinemaInspector";
 import { CinemaSidebar, type CinemaSidebarTab } from "./CinemaSidebar";
 import { CinemaStage } from "./CinemaStage";
-import { CinemaTimeline, type CinemaTimelineTool } from "./CinemaTimeline";
+import { CinemaTimeline } from "./CinemaTimeline";
 
 const MAX_HISTORY = 40;
 
@@ -215,7 +215,6 @@ export function CinemaView({
   const [timelineHeight, setTimelineHeight] = useState(248);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [beatSnapEnabled, setBeatSnapEnabled] = useState(true);
-  const [toolMode, setToolMode] = useState<CinemaTimelineTool>("select");
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
 
   // Panels & Modals
@@ -1847,12 +1846,6 @@ export function CinemaView({
       } else if (e.key === ".") {
         e.preventDefault();
         handleStepFrame(1);
-      } else if (e.key === "v" || e.key === "V") {
-        e.preventDefault();
-        setToolMode("select");
-      } else if (e.key === "c" || e.key === "C") {
-        e.preventDefault();
-        setToolMode("cut");
       } else if (e.key === "s" || e.key === "S" || e.key === "x" || e.key === "X") {
         e.preventDefault();
         const targetClip =
@@ -1906,11 +1899,18 @@ export function CinemaView({
         <div className="flex min-w-0 items-center gap-1">
           <Button
             type="button"
-            variant="ghost"
+            variant={sidebarOpen ? "secondary" : "ghost"}
             size="icon-sm"
-            onClick={() => setMobileSidebarOpen(true)}
-            aria-label="Open Cinema tool drawer"
-            className="size-7 rounded-lg lg:hidden"
+            onClick={() => {
+              if (typeof window !== "undefined" && window.innerWidth < 1024) {
+                setMobileSidebarOpen((v) => !v);
+              } else {
+                setSidebarOpen((v) => !v);
+              }
+            }}
+            aria-label={sidebarOpen ? "Collapse Cinema browser" : "Open Cinema browser"}
+            aria-pressed={sidebarOpen}
+            className="size-7 rounded-lg"
           >
             <PanelLeft className="size-4" />
           </Button>
@@ -2264,7 +2264,6 @@ export function CinemaView({
               zoom={timelineZoom}
               snapEnabled={snapEnabled}
               beatSnapEnabled={beatSnapEnabled}
-              toolMode={toolMode}
               selectedClipId={selectedClipId}
               timelineHeight={timelineHeight}
               onResizeHeight={setTimelineHeight}
@@ -2277,7 +2276,6 @@ export function CinemaView({
               onToggleSnap={() => setSnapEnabled((v) => !v)}
               onToggleBeatSnap={() => setBeatSnapEnabled((v) => !v)}
               onAutoCutToBeat={handleAutoCutToBeat}
-              onChangeTool={setToolMode}
               onMoveClip={(clipId, startMs, trackId) =>
                 commitProjectChange((prev) => ({
                   ...prev,

@@ -1,14 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent,
+} from "react";
 import { Plus, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatGainDb } from "@/lib/studio/capture-engine";
 import { STUDIO_STEM_COLORS, normalizeStudioColor } from "@/lib/studio/colors";
 import type { StudioMarkerV1, StudioTrackColor, StudioTrackV1 } from "@/lib/studio/types";
-
-export type StudioTimelineTool = "select" | "cut";
 
 export type LayerMixerState = {
   name?: string;
@@ -90,7 +96,6 @@ export function TimelineWaveform({
   zoom,
   snapEnabled,
   loopEnabled,
-  toolMode,
   selectedTrackId,
   theme,
   onSelectTrack,
@@ -119,7 +124,6 @@ export function TimelineWaveform({
   zoom: number;
   snapEnabled: boolean;
   loopEnabled: boolean;
-  toolMode: StudioTimelineTool;
   selectedTrackId: string | null;
   theme: "dark" | "light";
   onSelectTrack: (trackId: string | null) => void;
@@ -140,11 +144,7 @@ export function TimelineWaveform({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [drag, setDrag] = useState<DragSession | null>(null);
   const [isFileDragOver, setIsFileDragOver] = useState(false);
-  const [hoverInfo, setHoverInfo] = useState<{
-    cursor: string;
-    cutTrackId: string | null;
-    cutMs: number | null;
-  }>({ cursor: "default", cutTrackId: null, cutMs: null });
+  const [hoverCursor, setHoverCursor] = useState("default");
   const [canvasResizeTick, setCanvasResizeTick] = useState(0);
 
   const effectiveLayers = useMemo(() => {
@@ -206,9 +206,11 @@ export function TimelineWaveform({
     const pxPerMs = width / minWidthMs;
 
     ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = isLight ? "rgba(14, 15, 18, 0.015)" : "#050508";
+    ctx.fillRect(0, 0, width, height);
 
     // 1. Top time ruler + subtle loop range indicator
-    ctx.fillStyle = isLight ? "rgba(14, 15, 18, 0.032)" : "rgba(255, 255, 255, 0.025)";
+    ctx.fillStyle = isLight ? "rgba(14, 15, 18, 0.032)" : "#09090d";
     ctx.fillRect(0, 0, width, RULER_HEIGHT);
 
     if (loopEnabled && totalTimelineMs > 0) {
@@ -419,23 +421,6 @@ export function TimelineWaveform({
       }
     }
 
-    // 4. Razor cut preview guide when Split tool hovers over a clip
-    if (toolMode === "cut" && hoverInfo.cutTrackId && hoverInfo.cutMs !== null) {
-      const targetClip = displayTracks.find((t) => t.id === hoverInfo.cutTrackId);
-      if (targetClip) {
-        const yTop = RULER_HEIGHT + (targetClip.layerIndex ?? 0) * LANE_HEIGHT + 4;
-        const cx = clampX(hoverInfo.cutMs * pxPerMs, width);
-        ctx.strokeStyle = isLight ? "#c4161c" : "#fc3a34";
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([4, 3]);
-        ctx.beginPath();
-        ctx.moveTo(cx, yTop);
-        ctx.lineTo(cx, yTop + LANE_HEIGHT - 8);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
-    }
-
     // 5. Chapter & Cinema-linked cue markers along ruler (Gold for cross-node links, Titanium for local)
     for (const m of markers) {
       const mx = clampX(m.atMs * pxPerMs, width);
@@ -491,7 +476,6 @@ export function TimelineWaveform({
     displayTracks,
     drag,
     effectiveLayers,
-    hoverInfo,
     layerMixers,
     loopEnabled,
     markers,
@@ -499,7 +483,6 @@ export function TimelineWaveform({
     playheadMs,
     selectedTrackId,
     theme,
-    toolMode,
     totalTimelineMs,
   ]);
 
@@ -563,6 +546,7 @@ export function TimelineWaveform({
   }
 
   function handlePointerDown(e: PointerEvent<HTMLCanvasElement>) {
+    if (e.button === 2) return;
     const hit = getHitContext(e.clientX, e.clientY);
     if (!hit) return;
 
@@ -583,12 +567,6 @@ export function TimelineWaveform({
 
     if (hit.hitTrack) {
       const tr = hit.hitTrack;
-      if (toolMode === "cut") {
-        onSelectTrack(tr.id);
-        onSplitClipAt(tr.id, hit.ms);
-        return;
-      }
-
       onSelectTrack(tr.id);
       e.currentTarget.setPointerCapture(e.pointerId);
       const origTrimStartMs = tr.trimStartMs ?? 0;
@@ -630,32 +608,30 @@ export function TimelineWaveform({
     onSeek(hit.ms);
   }
 
+  function handleContextMenu(e: ReactMouseEvent<HTMLCanvasElement>) {
+    const hit = getHitContext(e.clientX, e.clientY);
+    if (!hit || hit.y <= RULER_HEIGHT || !hit.hitTrack) return;
+    e.preventDefault();
+    onSelectLayer(clamp(hit.layerIdx, 0, effectiveLayers - 1));
+    onSelectTrack(hit.hitTrack.id);
+    onSplitClipAt(hit.hitTrack.id, hit.ms);
+  }
+
   function handlePointerMove(e: PointerEvent<HTMLCanvasElement>) {
     const hit = getHitContext(e.clientX, e.clientY);
     if (!hit) return;
 
     if (!drag) {
       if (hit.y <= RULER_HEIGHT) {
-        setHoverInfo({ cursor: "ew-resize", cutTrackId: null, cutMs: null });
-        return;
-      }
-      if (toolMode === "cut" && hit.hitTrack) {
-        const canCut =
-          hit.ms > hit.hitTrack.offsetMs + 90 &&
-          hit.ms < hit.hitTrack.offsetMs + hit.hitTrack.durationMs - 90;
-        setHoverInfo({
-          cursor: canCut ? "crosshair" : "not-allowed",
-          cutTrackId: canCut ? hit.hitTrack.id : null,
-          cutMs: canCut ? hit.ms : null,
-        });
+        setHoverCursor("ew-resize");
         return;
       }
       if (hit.hitTrack) {
         const cur = hit.region === "left" || hit.region === "right" ? "ew-resize" : "grab";
-        setHoverInfo({ cursor: cur, cutTrackId: null, cutMs: null });
+        setHoverCursor(cur);
         return;
       }
-      setHoverInfo({ cursor: "default", cutTrackId: null, cutMs: null });
+      setHoverCursor("default");
       return;
     }
 
@@ -928,14 +904,16 @@ export function TimelineWaveform({
               ref={canvasRef}
               style={{
                 height: `${canvasHeight}px`,
-                cursor: drag ? (drag.kind === "move" ? "grabbing" : "ew-resize") : hoverInfo.cursor,
+                cursor: drag ? (drag.kind === "move" ? "grabbing" : "ew-resize") : hoverCursor,
               }}
+              title="Drag to move · Drag edges to trim · Right-click clip to razor cut"
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={finishDrag}
               onPointerCancel={finishDrag}
+              onContextMenu={handleContextMenu}
               onPointerLeave={() => {
-                if (!drag) setHoverInfo({ cursor: "default", cutTrackId: null, cutMs: null });
+                if (!drag) setHoverCursor("default");
               }}
               className="block w-full touch-none select-none"
               aria-label="Multi-track audio arrangement timeline"

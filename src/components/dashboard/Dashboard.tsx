@@ -943,7 +943,11 @@ export function Dashboard({
                 />
               </div>
             ) : (
-              <Link href="/" aria-label="Nexus home" className="pointer-events-auto inline-flex w-[76px] shrink-0 justify-center">
+              <Link
+                href="/"
+                aria-label="Nexus home"
+                className="pointer-events-auto inline-flex w-[76px] shrink-0 justify-center sm:w-auto sm:justify-start sm:pl-[26px]"
+              >
                 <NexusMark className="dash-brand-mark h-7 w-auto" />
               </Link>
             )}

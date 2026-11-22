@@ -8,8 +8,6 @@ import {
   Film,
   Image as ImageIcon,
   Layers,
-  LayoutTemplate,
-  Link2,
   Loader2,
   Mic,
   MonitorPlay,
@@ -18,9 +16,7 @@ import {
   Scissors,
   Search,
   Shapes,
-  SlidersHorizontal,
   Sparkles,
-  Type,
   Upload,
   Video,
   Waves,
@@ -62,28 +58,12 @@ export type CinemaSidebarTab =
   | "canvas"
   | "nodes";
 
-const CORE_SIDEBAR_ITEMS: Array<{
-  id: Exclude<CinemaSidebarTab, "nodes">;
-  label: string;
-  icon: typeof LayoutTemplate;
-}> = [
-  { id: "media", label: "Media", icon: Layers },
-  { id: "templates", label: "Templates", icon: LayoutTemplate },
-  { id: "text", label: "Text", icon: Type },
-  { id: "elements", label: "Elements", icon: Shapes },
-  { id: "stock", label: "Stock", icon: Film },
-  { id: "canvas", label: "Canvas", icon: SlidersHorizontal },
+const PRIMARY_TABS: Array<{ id: "media" | "text" | "elements" | "canvas"; label: string }> = [
+  { id: "media", label: "Media" },
+  { id: "text", label: "Text" },
+  { id: "elements", label: "Elements" },
+  { id: "canvas", label: "Canvas" },
 ];
-
-const TAB_TITLES: Record<CinemaSidebarTab, string> = {
-  media: "Media Bin",
-  templates: "Templates",
-  text: "Typography",
-  elements: "Elements & FX",
-  stock: "Stock Library",
-  canvas: "Canvas Format",
-  nodes: "Nexus Links",
-};
 
 const TOPIC_CHIPS = ["Architecture", "Minimal", "Nature", "Studio", "City", "Light"] as const;
 
@@ -265,6 +245,16 @@ export function CinemaSidebar({
     }
   }
 
+  const isMediaGroup = activeTab === "media" || activeTab === "nodes" || activeTab === "stock";
+  const isElementsGroup = activeTab === "elements" || activeTab === "templates";
+  const primaryActive = isMediaGroup
+    ? "media"
+    : isElementsGroup
+      ? "elements"
+      : activeTab === "text"
+        ? "text"
+        : "canvas";
+
   const drawerBody = (
     <div
       onDragOver={(e) => {
@@ -281,6 +271,90 @@ export function CinemaSidebar({
       }}
       className="cinema-scroll flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-3"
     >
+      {isMediaGroup ? (
+        <div
+          className="mb-3 grid grid-cols-3 gap-0.5 rounded-lg border border-border/75 bg-foreground/[0.04] p-0.5"
+          role="tablist"
+          aria-label="Media source"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "media"}
+            onClick={() => onSelectTab("media")}
+            className={`h-7 rounded-md px-1.5 text-[11px] font-medium transition-colors ${
+              activeTab === "media"
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Project
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "nodes"}
+            onClick={() => onSelectTab("nodes")}
+            className={`inline-flex h-7 items-center justify-center gap-1.5 rounded-md px-1.5 text-[11px] font-medium transition-colors ${
+              activeTab === "nodes"
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <span className="size-1.5 shrink-0 rounded-full bg-[color:var(--nexus-link)]" aria-hidden />
+            <span>Studio</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "stock"}
+            onClick={() => onSelectTab("stock")}
+            className={`h-7 rounded-md px-1.5 text-[11px] font-medium transition-colors ${
+              activeTab === "stock"
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Stock
+          </button>
+        </div>
+      ) : null}
+
+      {isElementsGroup ? (
+        <div
+          className="mb-3 grid grid-cols-2 gap-0.5 rounded-lg border border-border/75 bg-foreground/[0.04] p-0.5"
+          role="tablist"
+          aria-label="Elements category"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "elements"}
+            onClick={() => onSelectTab("elements")}
+            className={`h-7 rounded-md px-2 text-[11px] font-medium transition-colors ${
+              activeTab === "elements"
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Elements &amp; FX
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "templates"}
+            onClick={() => onSelectTab("templates")}
+            className={`h-7 rounded-md px-2 text-[11px] font-medium transition-colors ${
+              activeTab === "templates"
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Templates
+          </button>
+        </div>
+      ) : null}
+
       {activeTab === "media" ? (
         <div className="space-y-3">
           <div className="flex items-center gap-1.5">
@@ -949,119 +1023,72 @@ export function CinemaSidebar({
     </div>
   );
 
+  const segmentedHeader = (
+    <div
+      className="grid flex-1 grid-cols-4 gap-0.5 rounded-lg bg-foreground/[0.06] p-0.5"
+      role="tablist"
+      aria-label="Cinema browser sections"
+    >
+      {PRIMARY_TABS.map((tab) => {
+        const active = primaryActive === tab.id;
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => {
+              if (tab.id === "media") {
+                onSelectTab(isMediaGroup ? activeTab : "media");
+              } else if (tab.id === "elements") {
+                onSelectTab(isElementsGroup ? activeTab : "elements");
+              } else {
+                onSelectTab(tab.id);
+              }
+            }}
+            className={`h-7 rounded-md px-1 text-[11.5px] font-medium transition-colors ${
+              active
+                ? "bg-foreground text-background shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {tab.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   return (
     <>
-      {/* Desktop Rail + Clean Fixed-Width Drawer (>= lg) */}
-      <div className="hidden min-h-0 shrink-0 lg:flex">
+      {/* Unified Apple Pro Left Browser Panel (>= lg) */}
+      {open ? (
         <aside
-          aria-label="Cinema tool rail"
-          className="cinema-chrome-surface flex w-[68px] shrink-0 flex-col justify-between overflow-y-auto overflow-x-hidden border-r border-border/75 py-2"
+          aria-label="Cinema browser"
+          className="cinema-panel-surface hidden w-[296px] min-h-0 shrink-0 flex-col overflow-hidden border-r border-border/75 lg:flex"
         >
-          <div className="flex flex-col items-center gap-1 px-1.5">
-            {CORE_SIDEBAR_ITEMS.map((item) => {
-              const Icon = item.icon;
-              const active = open && activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => onSelectTab(item.id)}
-                  className={`relative flex w-full flex-col items-center justify-center gap-1 rounded-lg py-2 text-[10px] font-medium transition-colors ${
-                    active
-                      ? "bg-foreground/[0.08] text-foreground"
-                      : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground"
-                  }`}
-                >
-                  {active ? (
-                    <span
-                      aria-hidden
-                      className="absolute top-2 bottom-2 left-0 w-[2px] rounded-r-full bg-[color:var(--cinema-playhead)]"
-                    />
-                  ) : null}
-                  <Icon className="size-4 shrink-0" strokeWidth={1.6} />
-                  <span className="max-w-full truncate px-0.5 leading-tight">{item.label}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Bottom Pinned Extensible Nexus Nodes Link Tab */}
-          <div className="border-t border-border/60 px-1.5 pt-2">
+          <div className="flex shrink-0 items-center gap-1.5 border-b border-border/70 px-2.5 py-2">
+            {segmentedHeader}
             <button
               type="button"
-              onClick={() => onSelectTab("nodes")}
-              className={`relative flex w-full flex-col items-center justify-center gap-1 rounded-lg py-2 text-[10px] font-medium transition-colors ${
-                open && activeTab === "nodes"
-                  ? "bg-[color:var(--nexus-link-soft)] text-foreground"
-                  : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground"
-              }`}
+              onClick={onToggleCollapse}
+              aria-label="Collapse Cinema browser"
+              className="flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
             >
-              {open && activeTab === "nodes" ? (
-                <span
-                  aria-hidden
-                  className="absolute top-2 bottom-2 left-0 w-[2px] rounded-r-full bg-[color:var(--nexus-link)]"
-                />
-              ) : null}
-              <div className="relative">
-                <Link2
-                  className="size-4 shrink-0 text-[color:var(--nexus-link)]"
-                  strokeWidth={1.6}
-                />
-                <span
-                  aria-hidden
-                  className="absolute -top-0.5 -right-1 size-1.5 rounded-full bg-[color:var(--nexus-link)]"
-                />
-              </div>
-              <span className="max-w-full truncate px-0.5 leading-tight">Nodes</span>
+              <PanelLeftClose className="size-3.5" strokeWidth={1.6} />
             </button>
           </div>
+          {drawerBody}
         </aside>
-
-        {open ? (
-          <aside
-            aria-label="Cinema drawer"
-            className="cinema-panel-surface flex w-[272px] shrink-0 flex-col overflow-hidden border-r border-border/75"
-          >
-            <div className="flex h-[38px] shrink-0 items-center justify-between border-b border-border/65 px-3">
-              <span className="truncate text-[12px] font-medium text-foreground">
-                {TAB_TITLES[activeTab]}
-              </span>
-              <button
-                type="button"
-                onClick={onToggleCollapse}
-                aria-label="Collapse tool drawer"
-                className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
-              >
-                <PanelLeftClose className="size-3.5" strokeWidth={1.6} />
-              </button>
-            </div>
-            {drawerBody}
-          </aside>
-        ) : null}
-      </div>
+      ) : null}
 
       {/* Tablet / Mobile Drawer Fallback (< lg) */}
       <Sheet open={mobileOpen} onOpenChange={onMobileOpenChange}>
         <SheetContent side="left" className="flex w-[304px] flex-col p-0 sm:max-w-[336px]">
-          <SheetHeader className="border-b border-border/60 px-4 py-3">
-            <SheetTitle className="text-[13.5px] font-medium">{TAB_TITLES[activeTab]}</SheetTitle>
+          <SheetHeader className="border-b border-border/60 px-3 py-2.5">
+            <SheetTitle className="sr-only">Cinema Browser</SheetTitle>
+            <div className="flex items-center gap-2 pr-6">{segmentedHeader}</div>
           </SheetHeader>
-          <div className="flex flex-wrap gap-1 border-b border-border/60 px-3 py-2">
-            {[...CORE_SIDEBAR_ITEMS, { id: "nodes" as const, label: "Nodes", icon: Link2 }].map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onSelectTab(item.id)}
-                className={`rounded-md px-2 py-1 text-[11px] font-medium ${
-                  activeTab === item.id
-                    ? "bg-foreground text-background"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
           {drawerBody}
         </SheetContent>
       </Sheet>

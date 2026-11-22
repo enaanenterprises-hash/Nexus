@@ -19,7 +19,6 @@ import {
   Lock,
   Magnet,
   Maximize2,
-  MousePointer,
   Plus,
   Scissors,
   Sparkles,
@@ -45,8 +44,6 @@ import type {
   CinemaTrackKind,
   CinemaTransitionType,
 } from "@/lib/cinema/types";
-
-export type CinemaTimelineTool = "select" | "cut";
 
 type DragState =
   | { kind: "scrub"; pointerId: number }
@@ -116,7 +113,6 @@ export function CinemaTimeline({
   zoom,
   snapEnabled,
   beatSnapEnabled,
-  toolMode,
   selectedClipId,
   timelineHeight,
   onResizeHeight,
@@ -126,7 +122,6 @@ export function CinemaTimeline({
   onToggleSnap,
   onToggleBeatSnap,
   onAutoCutToBeat,
-  onChangeTool,
   onMoveClip,
   onTrimClip,
   onSplitClipAt,
@@ -152,7 +147,6 @@ export function CinemaTimeline({
   zoom: number;
   snapEnabled: boolean;
   beatSnapEnabled: boolean;
-  toolMode: CinemaTimelineTool;
   selectedClipId: string | null;
   timelineHeight: number;
   onResizeHeight: (h: number) => void;
@@ -162,7 +156,6 @@ export function CinemaTimeline({
   onToggleSnap: () => void;
   onToggleBeatSnap: () => void;
   onAutoCutToBeat: () => void;
-  onChangeTool: (tool: CinemaTimelineTool) => void;
   onMoveClip: (clipId: string, startMs: number, trackId: string) => void;
   onTrimClip: (clipId: string, patch: { startMs: number; trimStartMs: number; durationMs: number }) => void;
   onSplitClipAt: (clipId: string, atMs: number) => void;
@@ -272,11 +265,8 @@ export function CinemaTimeline({
 
   const handleClipPointerDown = (e: ReactPointerEvent<HTMLDivElement>, clip: CinemaClip) => {
     e.stopPropagation();
+    if (e.button === 2) return;
     onSelectClip(clip.id);
-    if (toolMode === "cut") {
-      onSplitClipAt(clip.id, clientXToMs(e.clientX));
-      return;
-    }
     const tr = project.tracks.find((t) => t.id === clip.trackId);
     if (clip.locked || tr?.locked) return;
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -433,46 +423,26 @@ export function CinemaTimeline({
       {/* Compact Apple Pro Timeline Toolbar */}
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/70 px-3 py-1.5">
         <div className="flex flex-wrap items-center gap-1.5">
-          <div className="inline-flex rounded-lg border border-border/80 bg-foreground/[0.03] p-0.5">
-            <button
-              type="button"
-              onClick={() => onChangeTool("select")}
-              className={`inline-flex h-6 items-center gap-1 rounded-md px-2 text-[11px] font-medium transition-colors ${
-                toolMode === "select"
-                  ? "bg-foreground text-background"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <MousePointer className="size-3" />
-              <span>Select</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onChangeTool("cut")}
-              className={`inline-flex h-6 items-center gap-1 rounded-md px-2 text-[11px] font-medium transition-colors ${
-                toolMode === "cut"
-                  ? "bg-[color:var(--cinema-playhead)] text-white"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Scissors className="size-3" />
-              <span>Razor</span>
-            </button>
-          </div>
-
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={!splittableAtPlayhead}
-            onClick={() => {
-              if (splittableAtPlayhead) onSplitClipAt(splittableAtPlayhead.id, playheadMs);
-            }}
-            className="h-7 gap-1 rounded-lg px-2 text-[11px]"
-          >
-            <Scissors className="size-3" />
-            <span>Split</span>
-          </Button>
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={!splittableAtPlayhead}
+                  onClick={() => {
+                    if (splittableAtPlayhead) onSplitClipAt(splittableAtPlayhead.id, playheadMs);
+                  }}
+                  className="h-7 gap-1 rounded-lg px-2 text-[11px]"
+                >
+                  <Scissors className="size-3" />
+                  <span>Split</span>
+                </Button>
+              }
+            />
+            <TooltipContent side="bottom">Split at playhead (S) · Right-click any clip to razor cut</TooltipContent>
+          </Tooltip>
 
           <Button
             type="button"
@@ -546,6 +516,9 @@ export function CinemaTimeline({
               </button>
             </div>
           ) : null}
+          <span className="hidden px-1.5 font-mono text-[10px] text-muted-foreground 2xl:inline">
+            Right-click clip to razor cut
+          </span>
         </div>
 
         <div className="flex items-center gap-1.5">
@@ -935,10 +908,16 @@ export function CinemaTimeline({
                       <div key={clip.id}>
                         <div
                           onPointerDown={(e) => handleClipPointerDown(e, clip)}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (clip.locked || track.locked) return;
+                            onSelectClip(clip.id);
+                            onSplitClipAt(clip.id, clientXToMs(e.clientX));
+                          }}
+                          title="Drag to move · Drag edges to trim · Right-click to razor cut"
                           style={{ left: leftPx, width: widthPx }}
-                          className={`group absolute top-1.5 bottom-1.5 flex items-center overflow-hidden rounded-lg border transition-colors ${
-                            toolMode === "cut" ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"
-                          } ${
+                          className={`group absolute top-1.5 bottom-1.5 flex cursor-grab items-center overflow-hidden rounded-lg border transition-colors active:cursor-grabbing ${
                             isSelected
                               ? "z-10 border-[color:var(--cinema-select)] bg-card shadow-[0_0_0_1px_var(--cinema-select)]"
                               : isStudioLinked

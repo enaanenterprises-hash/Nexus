@@ -159,7 +159,7 @@ export function StudioIoPatchbay({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="flex w-[368px] flex-col gap-0 p-0 sm:max-w-[432px]"
+        className="dark flex w-[368px] flex-col gap-0 border-white/10 bg-[#08080b] p-0 text-[#f4f4f6] sm:max-w-[432px]"
       >
         <SheetHeader className="border-b border-border/70 px-5 py-4">
           <div className="flex items-center justify-between gap-2 pr-6">

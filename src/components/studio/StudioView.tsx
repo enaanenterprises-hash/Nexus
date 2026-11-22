@@ -13,7 +13,6 @@ import {
   Metronome,
   MonitorPlay,
   MoreHorizontal,
-  MousePointer,
   PanelRight,
   Pause,
   Play,
@@ -71,7 +70,6 @@ import type {
   StudioTrackV1,
 } from "@/lib/studio/types";
 import { computePeaksFromBuffer, slicePeaksForRange } from "@/lib/studio/wav";
-import { useTheme } from "@/lib/theme";
 import { StudioCaptureStage } from "./StudioCaptureStage";
 import { StudioCinemaMonitor } from "./StudioCinemaMonitor";
 import { StudioInspectorContent, type StudioInspectorTab } from "./StudioInspector";
@@ -80,7 +78,6 @@ import { StudioRoutingSheet } from "./StudioRoutingSheet";
 import {
   TimelineWaveform,
   type LayerMixerState,
-  type StudioTimelineTool,
 } from "./TimelineWaveform";
 import { useStudioAudio } from "./use-studio-audio";
 
@@ -182,7 +179,6 @@ export function StudioView({
   onRouteTransfer?: (fromId: ExtensionId, toId?: ExtensionId) => void;
   onSendToCinema?: (recording: StudioRecording, mode: "mix" | "stems") => void;
 }) {
-  const { theme } = useTheme();
   const [databaseConfigured, setDatabaseConfigured] = useState(false);
   const [collections, setCollections] = useState<StudioCollection[]>([]);
   const [activeCollectionId, setActiveCollectionId] = useState<string>("");
@@ -210,7 +206,6 @@ export function StudioView({
 
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
   const [markerKind, setMarkerKind] = useState<StudioMarkerKind>("chapter");
-  const [toolMode, setToolMode] = useState<StudioTimelineTool>("select");
   const [timelineZoom, setTimelineZoom] = useState(1);
   const [studioPage, setStudioPage] = useState<"record" | "edit">("record");
 
@@ -1230,12 +1225,6 @@ export function StudioView({
       } else if ((e.key === "m" || e.key === "M") && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
         dropMarkerAtPlayhead();
-      } else if ((e.key === "v" || e.key === "V") && !e.metaKey && !e.ctrlKey) {
-        e.preventDefault();
-        setToolMode("select");
-      } else if ((e.key === "c" || e.key === "C") && !e.metaKey && !e.ctrlKey) {
-        e.preventDefault();
-        setToolMode("cut");
       } else if ((e.key === "x" || e.key === "X") && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
         if (e.shiftKey) {
@@ -1692,7 +1681,7 @@ export function StudioView({
               overdubEnabled={audio.overdubEnabled}
               monitorInput={audio.monitorInput}
               recordSafetyMix={audio.recordSafetyMix}
-              theme={theme}
+              theme="dark"
               sampleTelemetry={audio.sampleTelemetry}
               onAddInput={audio.addInput}
               onRemoveInput={audio.removeInput}
@@ -1859,35 +1848,8 @@ export function StudioView({
                   </div>
                 </div>
 
-                {/* Center: Edit Tools (Move / Razor / Split / Split All / Snap / Undo / Redo) */}
+                {/* Center: Edit Tools (Split / Split All / Snap / Undo / Redo) */}
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <div
-                    className="inline-flex rounded-full border border-border/80 bg-foreground/[0.03] p-0.5"
-                    role="group"
-                    aria-label="Timeline cursor tool"
-                  >
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={toolMode === "select" ? "secondary" : "ghost"}
-                      onClick={() => setToolMode("select")}
-                      className="h-7 gap-1 rounded-full px-2.5 text-[11.5px]"
-                    >
-                      <MousePointer className="size-3.5" />
-                      <span>Select</span>
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={toolMode === "cut" ? "destructive" : "ghost"}
-                      onClick={() => setToolMode("cut")}
-                      className="h-7 gap-1 rounded-full px-2.5 text-[11.5px]"
-                    >
-                      <Scissors className="size-3.5" />
-                      <span>Razor</span>
-                    </Button>
-                  </div>
-
                   <Tooltip>
                     <TooltipTrigger
                       render={
@@ -1906,7 +1868,9 @@ export function StudioView({
                         </Button>
                       }
                     />
-                    <TooltipContent side="bottom">Split selected clip at playhead (X)</TooltipContent>
+                    <TooltipContent side="bottom">
+                      Split selected clip at playhead (X) · Right-click any clip to razor cut
+                    </TooltipContent>
                   </Tooltip>
 
                   <Tooltip>
@@ -1990,6 +1954,10 @@ export function StudioView({
                     />
                     <TooltipContent side="bottom">Redo (Ctrl+Shift+Z)</TooltipContent>
                   </Tooltip>
+
+                  <span className="hidden pl-1 font-mono text-[10px] text-muted-foreground 2xl:inline">
+                    Right-click clip to razor cut
+                  </span>
                 </div>
 
                 {/* Right: Import, Zoom, I/O Patchbay, Inspector Toggle */}
@@ -2090,9 +2058,8 @@ export function StudioView({
                   zoom={timelineZoom}
                   snapEnabled={snapEnabled}
                   loopEnabled={loopEnabled}
-                  toolMode={toolMode}
                   selectedTrackId={selectedTrackId}
-                  theme={theme}
+                  theme="dark"
                   onSelectTrack={(id) => {
                     setSelectedTrackId(id);
                     if (id) setInspectorTab("clip");
@@ -2147,9 +2114,14 @@ export function StudioView({
 
       {/* Left Sessions & Folders Sheet Drawer */}
       <Sheet open={takesDrawerOpen} onOpenChange={setTakesDrawerOpen}>
-        <SheetContent side="left" className="w-[300px] p-0 sm:max-w-[340px]">
-          <SheetHeader className="border-b border-border/60 px-4 py-3">
-            <SheetTitle className="text-[14px] font-medium">Sessions · {activeFolderName}</SheetTitle>
+        <SheetContent
+          side="left"
+          className="dark w-[300px] border-white/10 bg-[#08080b] p-0 text-[#f4f4f6] sm:max-w-[340px]"
+        >
+          <SheetHeader className="border-b border-white/10 px-4 py-3">
+            <SheetTitle className="text-[14px] font-medium text-[#f4f4f6]">
+              Sessions · {activeFolderName}
+            </SheetTitle>
           </SheetHeader>
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="flex items-center justify-between gap-2 border-b border-border/60 p-3">
@@ -2235,8 +2207,8 @@ export function StudioView({
                         key={item.id}
                         className={`group flex items-center justify-between gap-2 rounded-xl border px-2.5 py-2 transition-colors ${
                           selected
-                            ? "border-[color:var(--studio-accent)]/55 bg-[color:var(--studio-accent)]/10"
-                            : "border-transparent hover:border-border/70 hover:bg-muted/35"
+                            ? "border-[color:var(--studio-accent)]/55 bg-[color:var(--studio-accent)]/12"
+                            : "border-white/[0.06] bg-[#0d0d12] hover:border-white/15 hover:bg-[#13131a]"
                         }`}
                       >
                         <button
@@ -2276,7 +2248,10 @@ export function StudioView({
 
       {/* Mobile / Tablet Sheet Inspector Fallback (< xl) */}
       <Sheet open={mobileInspectorOpen} onOpenChange={setMobileInspectorOpen}>
-        <SheetContent side="right" className="flex w-[320px] flex-col p-0 sm:max-w-[360px]">
+        <SheetContent
+          side="right"
+          className="dark flex w-[320px] flex-col border-white/10 bg-[#08080b] p-0 text-[#f4f4f6] sm:max-w-[360px]"
+        >
           <SheetHeader className="sr-only">
             <SheetTitle>Studio Inspector</SheetTitle>
           </SheetHeader>
@@ -2321,7 +2296,7 @@ export function StudioView({
         onOpenChange={setRoutingOpen}
         recording={savedProjectSnapshot}
         hub={hub}
-        theme={theme}
+        theme="dark"
         onRouteTransfer={(targetId) => onRouteTransfer?.(STUDIO_NODE_ID, targetId)}
         onRouteToCinema={onSendToCinema}
       />
