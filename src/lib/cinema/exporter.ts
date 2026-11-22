@@ -412,54 +412,31 @@ class SequentialVideoStreamer {
 
         const deltaSec = targetSec - video.currentTime;
 
-        // 1. Entering clip for the first time or large timeline cut discontinuity: single initial seek
-        if (slot.activeClipId !== clip.id || deltaSec < -0.24 || deltaSec > 0.85) {
+        // 1. Entering clip for the first time or large timeline cut discontinuity: single initial seek (remain paused while Frame 0 initializes VideoEncoder)
+        if (slot.activeClipId !== clip.id || deltaSec < -0.35 || deltaSec > 0.85) {
           slot.activeClipId = clip.id;
+          slot.rateMultiplier = 1.8;
           await seekVideoOnceClean(slot, targetSec);
-          setSafePlaybackRate(video, speed * slot.rateMultiplier);
-          await video.play().catch(() => {});
           return;
         }
 
-        // 2. Video hardware decoder is >1.5 frames ahead of export loop: throttle or pause briefly (ZERO seek)
-        if (deltaSec < -0.032) {
-          slot.rateMultiplier = Math.max(1.4, slot.rateMultiplier * 0.9);
-          if (deltaSec < -0.075) {
-            if (!video.paused) video.pause();
-          } else {
-            setSafePlaybackRate(video, speed * 0.65);
-          }
+        // 2. Video hardware decoder is ahead of or inside the target frame window: pause so it never drifts ahead during canvas/encoder work
+        if (deltaSec <= 0.015) {
+          if (!video.paused) video.pause();
           return;
         }
 
-        // 3. Video hardware decoder is right inside the target frame window: draw immediately in 0ms
-        if (deltaSec <= 0.018) {
-          const proportionalRate = clamp(
-            slot.rateMultiplier + deltaSec * 14,
-            1.4,
-            4.0 / speed,
-          );
-          setSafePlaybackRate(video, speed * proportionalRate);
-          if (video.paused && !video.ended) {
-            void video.play().catch(() => {});
-          }
-          return;
-        }
-
-        // 4. Video hardware decoder needs to step forward by 1 frame (~15-33ms): play forward without seeking
-        slot.rateMultiplier = Math.min(4.0 / speed, slot.rateMultiplier * 1.05);
+        // 3. Video hardware decoder needs to step forward by 1 frame (~15-33ms): play forward until targetSec, then pause immediately
+        slot.rateMultiplier = Math.min(3.2 / speed, slot.rateMultiplier * 1.04);
         setSafePlaybackRate(video, speed * slot.rateMultiplier);
         if (video.paused && !video.ended) {
           await video.play().catch(() => {});
         }
 
-        const advanced = await waitForForwardStreamFrame(slot, targetSec - 0.014, 150);
+        const advanced = await waitForForwardStreamFrame(slot, targetSec - 0.012, 160);
+        if (!video.paused) video.pause();
         if (!advanced && Math.abs(targetSec - video.currentTime) > 0.045) {
           await seekVideoOnceClean(slot, targetSec);
-          if (targetSec < slot.eofAtSec && !video.ended) {
-            setSafePlaybackRate(video, speed * slot.rateMultiplier);
-            void video.play().catch(() => {});
-          }
         }
       }),
     );

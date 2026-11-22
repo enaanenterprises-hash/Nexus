@@ -1,10 +1,10 @@
 /**
- * Zero-dependency ISO-BMFF (MP4 / MOV / fMP4) Video Track Demuxer +
- * Hardware WebCodecs `VideoDecoder` Frame Extractor for Nexus Cinema.
+ * Zero-dependency ISO-BMFF (MP4 / MOV / fMP4) & WebM (Matroska / EBML)
+ * Video Track Demuxer + Hardware WebCodecs `VideoDecoder` Frame Extractor.
  *
- * Bypasses the HTML5 `<video>` media clock (4x speed limit) by demuxing
- * compressed H.264 / HEVC / VP9 / AV1 packets directly from memory into
- * the GPU hardware `VideoDecoder` at 200-500+ fps (10x-25x real-time).
+ * Bypasses the HTML5 `<video>` media clock by demuxing compressed
+ * H.264 / VP8 / VP9 / AV1 packets directly from memory into the GPU
+ * hardware `VideoDecoder` with a 24-slot consumer-evicted lookahead ring buffer.
  */
 
 export interface Mp4VideoSample {
@@ -84,6 +84,24 @@ function findBox(view: DataView, start: number, end: number, type: string): BoxR
   return null;
 }
 
+function normalizeSampleTimestamps(samples: Mp4VideoSample[]): void {
+  if (samples.length === 0) return;
+  samples[0]!.isSync = true;
+
+  let minCtsUs = Infinity;
+  const checkCount = Math.min(16, samples.length);
+  for (let i = 0; i < checkCount; i++) {
+    if (samples[i]!.ctsUs < minCtsUs) {
+      minCtsUs = samples[i]!.ctsUs;
+    }
+  }
+  if (Number.isFinite(minCtsUs) && minCtsUs > 0) {
+    for (let i = 0; i < samples.length; i++) {
+      samples[i]!.ctsUs = Math.max(0, samples[i]!.ctsUs - minCtsUs);
+    }
+  }
+}
+
 function parseVisualSampleEntry(
   buffer: ArrayBuffer,
   view: DataView,
@@ -94,14 +112,12 @@ function parseVisualSampleEntry(
   codedWidth: number;
   codedHeight: number;
 } | null {
-  // FullBox header (4 bytes version/flags) + 4 bytes entry_count
   const entryCountOffset = stsd.payloadStart + 4;
   if (entryCountOffset + 4 > stsd.end) return null;
   const entries = listBoxes(view, stsd.payloadStart + 8, stsd.end);
   const entry = entries[0];
   if (!entry) return null;
 
-  // VisualSampleEntry has 78 bytes of fixed header fields after its 8-byte box header
   const base = entry.payloadStart;
   if (base + 78 > entry.end) return null;
   const codedWidth = view.getUint16(base + 24, false);
@@ -130,6 +146,10 @@ function parseVisualSampleEntry(
     return { codec, description: desc, codedWidth, codedHeight };
   }
 
+  if (entry.type === "vp08") {
+    return { codec: "vp8", codedWidth, codedHeight };
+  }
+
   if (entry.type === "av01") {
     const av1C = children.find((c) => c.type === "av1C");
     const desc = av1C ? new Uint8Array(buffer.slice(av1C.payloadStart, av1C.end)) : undefined;
@@ -154,7 +174,6 @@ function parseStblSamples(
 
   if (!stsz || !stsc || !stts || (!stco && !co64)) return [];
 
-  // 1. Sample sizes (stsz)
   const defaultSampleSize = view.getUint32(stsz.payloadStart + 4, false);
   const sampleCount = view.getUint32(stsz.payloadStart + 8, false);
   if (sampleCount === 0) return [];
@@ -169,7 +188,6 @@ function parseStblSamples(
     }
   }
 
-  // 2. Chunk offsets (stco or co64)
   let chunkOffsets: Float64Array;
   if (stco) {
     const chunkCount = view.getUint32(stco.payloadStart + 4, false);
@@ -187,13 +205,12 @@ function parseStblSamples(
     }
   }
 
-  // 3. Sample-to-chunk runs (stsc)
   const stscCount = view.getUint32(stsc.payloadStart + 4, false);
   const stscRuns: Array<{ firstChunk: number; samplesPerChunk: number }> = [];
   let pStsc = stsc.payloadStart + 8;
   for (let i = 0; i < stscCount && pStsc + 12 <= stsc.end; i++, pStsc += 12) {
     stscRuns.push({
-      firstChunk: view.getUint32(pStsc, false), // 1-based
+      firstChunk: view.getUint32(pStsc, false),
       samplesPerChunk: view.getUint32(pStsc + 4, false),
     });
   }
@@ -218,7 +235,6 @@ function parseStblSamples(
     }
   }
 
-  // 4. Decoding Time-to-Sample (stts)
   const sttsCount = view.getUint32(stts.payloadStart + 4, false);
   const sampleDts = new Float64Array(sampleCount);
   const sampleDur = new Uint32Array(sampleCount);
@@ -236,7 +252,6 @@ function parseStblSamples(
     }
   }
 
-  // 5. Composition Time-to-Sample offset (ctts, optional)
   const sampleCtsOffset = new Int32Array(sampleCount);
   if (ctts) {
     const cttsCount = view.getUint32(ctts.payloadStart + 4, false);
@@ -252,32 +267,35 @@ function parseStblSamples(
     }
   }
 
-  // 6. Sync Sample Table (stss, optional; if omitted, all samples are keyframes)
   let syncSet: Set<number> | null = null;
   if (stss) {
     syncSet = new Set<number>();
     const syncCount = view.getUint32(stss.payloadStart + 4, false);
     let pStss = stss.payloadStart + 8;
     for (let i = 0; i < syncCount && pStss + 4 <= stss.end; i++, pStss += 4) {
-      syncSet.add(view.getUint32(pStss, false) - 1); // convert 1-based to 0-based
+      syncSet.add(view.getUint32(pStss, false) - 1);
     }
   }
 
   const tsScale = 1_000_000 / Math.max(1, timescale);
-  const samples: Mp4VideoSample[] = new Array(sampleCount);
+  const samples: Mp4VideoSample[] = [];
   for (let i = 0; i < sampleCount; i++) {
+    const offset = sampleOffsets[i]!;
+    const size = sampleSizes[i]!;
+    if (size === 0 || offset + size > view.byteLength) continue;
     const dts = sampleDts[i]!;
     const cts = Math.max(0, dts + sampleCtsOffset[i]!);
-    samples[i] = {
-      offset: sampleOffsets[i]!,
-      size: sampleSizes[i]!,
+    samples.push({
+      offset,
+      size,
       dtsUs: Math.round(dts * tsScale),
       ctsUs: Math.round(cts * tsScale),
-      durationUs: Math.max(1000, Math.round(sampleDur[i]! * tsScale)),
+      durationUs: Math.max(1000, Math.round((sampleDur[i] || 1) * tsScale)),
       isSync: syncSet ? syncSet.has(i) : true,
-    };
+    });
   }
 
+  normalizeSampleTimestamps(samples);
   return samples;
 }
 
@@ -288,7 +306,6 @@ function parseFragmentedSamples(
   videoTrackId: number,
   timescale: number,
 ): Mp4VideoSample[] {
-  // Read default values from mvex -> trex if present
   let trexDefaultDuration = 0;
   let trexDefaultSize = 0;
   let trexDefaultFlags = 0;
@@ -332,7 +349,7 @@ function parseFragmentedSamples(
         baseDataOffset = readUint64(view, pTfhd);
         pTfhd += 8;
       }
-      if (tfhdFlags & 0x000002) pTfhd += 4; // sample_description_index
+      if (tfhdFlags & 0x000002) pTfhd += 4;
       if (tfhdFlags & 0x000008) {
         defaultDuration = view.getUint32(pTfhd, false);
         pTfhd += 4;
@@ -419,6 +436,7 @@ function parseFragmentedSamples(
     }
   }
 
+  normalizeSampleTimestamps(samples);
   return samples;
 }
 
@@ -469,9 +487,6 @@ export function parseMp4VideoTrack(buffer: ArrayBuffer): Mp4DemuxedVideoTrack | 
     }
     if (samples.length === 0) continue;
 
-    // Ensure the very first sample is marked as sync
-    samples[0]!.isSync = true;
-
     return {
       trackId,
       codec: visual.codec,
@@ -486,34 +501,345 @@ export function parseMp4VideoTrack(buffer: ArrayBuffer): Mp4DemuxedVideoTrack | 
   return null;
 }
 
+/* -------------------------------------------------------------------------- */
+/* WebM (Matroska / EBML) Video Track Demuxer (`VP8`, `VP9`, `AV1`, `H.264`)   */
+/* -------------------------------------------------------------------------- */
+
+function readEbmlId(
+  bytes: Uint8Array,
+  pos: number,
+  end: number,
+): { id: number; nextPos: number } | null {
+  if (pos >= end) return null;
+  const b0 = bytes[pos]!;
+  if (b0 === 0) return null;
+  let len = 1;
+  let mask = 0x80;
+  while (len <= 4 && (b0 & mask) === 0) {
+    len++;
+    mask >>= 1;
+  }
+  if (len > 4 || pos + len > end) return null;
+  let id = 0;
+  for (let i = 0; i < len; i++) {
+    id = id * 256 + bytes[pos + i]!;
+  }
+  return { id, nextPos: pos + len };
+}
+
+function readEbmlSize(
+  bytes: Uint8Array,
+  pos: number,
+  end: number,
+): { size: number; unknownSize: boolean; nextPos: number } | null {
+  if (pos >= end) return null;
+  const b0 = bytes[pos]!;
+  if (b0 === 0) return null;
+  let len = 1;
+  let mask = 0x80;
+  while (len <= 8 && (b0 & mask) === 0) {
+    len++;
+    mask >>= 1;
+  }
+  if (len > 8 || pos + len > end) return null;
+  let size = b0 & (mask - 1);
+  let allOnes = size === mask - 1;
+  for (let i = 1; i < len; i++) {
+    const bi = bytes[pos + i]!;
+    if (bi !== 0xff) allOnes = false;
+    size = size * 256 + bi;
+  }
+  return { size, unknownSize: allOnes, nextPos: pos + len };
+}
+
+function readEbmlUint(bytes: Uint8Array, start: number, len: number): number {
+  let val = 0;
+  for (let i = 0; i < len; i++) {
+    val = val * 256 + bytes[start + i]!;
+  }
+  return val;
+}
+
+export function parseWebmVideoTrack(buffer: ArrayBuffer): Mp4DemuxedVideoTrack | null {
+  if (buffer.byteLength < 32) return null;
+  const view = new DataView(buffer);
+  // EBML Header Magic ID: 0x1A45DFA3
+  if (view.getUint32(0, false) !== 0x1a45dfa3) return null;
+
+  const bytes = new Uint8Array(buffer);
+  const fileEnd = bytes.length;
+  let pos = 0;
+
+  let timecodeScaleNs = 1_000_000; // Default 1ms per tick
+  let videoTrackNum = -1;
+  let codec = "";
+  let description: Uint8Array | undefined;
+  let codedWidth = 1920;
+  let codedHeight = 1080;
+  const samples: Mp4VideoSample[] = [];
+  let currentClusterTimecode = 0;
+
+  while (pos < fileEnd) {
+    const idRes = readEbmlId(bytes, pos, fileEnd);
+    if (!idRes) break;
+    const sizeRes = readEbmlSize(bytes, idRes.nextPos, fileEnd);
+    if (!sizeRes) break;
+
+    const payloadStart = sizeRes.nextPos;
+    const elementEnd = sizeRes.unknownSize
+      ? fileEnd
+      : Math.min(fileEnd, payloadStart + sizeRes.size);
+    const id = idRes.id;
+
+    // Step inside Segment (0x18538067) or Cluster (0x1F43B675) directly
+    if (id === 0x18538067) {
+      pos = payloadStart;
+      continue;
+    }
+
+    if (id === 0x1f43b675) {
+      currentClusterTimecode = 0;
+      pos = payloadStart;
+      continue;
+    }
+
+    // Segment Info (0x1549A966)
+    if (id === 0x1549a966) {
+      let p = payloadStart;
+      while (p < elementEnd) {
+        const cId = readEbmlId(bytes, p, elementEnd);
+        if (!cId) break;
+        const cSz = readEbmlSize(bytes, cId.nextPos, elementEnd);
+        if (!cSz) break;
+        const cStart = cSz.nextPos;
+        const cEnd = Math.min(elementEnd, cStart + cSz.size);
+        if (cId.id === 0x2ad7b1 && cEnd > cStart) {
+          timecodeScaleNs = readEbmlUint(bytes, cStart, cEnd - cStart) || 1_000_000;
+        }
+        p = cEnd;
+      }
+      pos = elementEnd;
+      continue;
+    }
+
+    // Tracks (0x1654AE6B)
+    if (id === 0x1654ae6b) {
+      let p = payloadStart;
+      while (p < elementEnd) {
+        const teId = readEbmlId(bytes, p, elementEnd);
+        if (!teId) break;
+        const teSz = readEbmlSize(bytes, teId.nextPos, elementEnd);
+        if (!teSz) break;
+        const teStart = teSz.nextPos;
+        const teEnd = Math.min(elementEnd, teStart + teSz.size);
+
+        if (teId.id === 0xae) {
+          let tNum = -1;
+          let tType = -1;
+          let tCodecId = "";
+          let tCodecPriv: Uint8Array | undefined;
+          let tW = 1920;
+          let tH = 1080;
+
+          let q = teStart;
+          while (q < teEnd) {
+            const fId = readEbmlId(bytes, q, teEnd);
+            if (!fId) break;
+            const fSz = readEbmlSize(bytes, fId.nextPos, teEnd);
+            if (!fSz) break;
+            const fStart = fSz.nextPos;
+            const fEnd = Math.min(teEnd, fStart + fSz.size);
+            const fLen = fEnd - fStart;
+
+            if (fId.id === 0xd7) tNum = readEbmlUint(bytes, fStart, fLen);
+            else if (fId.id === 0x83) tType = readEbmlUint(bytes, fStart, fLen);
+            else if (fId.id === 0x86) tCodecId = readAscii(view, fStart, fLen);
+            else if (fId.id === 0x63a2 && fLen > 0) {
+              tCodecPriv = new Uint8Array(buffer.slice(fStart, fEnd));
+            } else if (fId.id === 0xe0) {
+              let v = fStart;
+              while (v < fEnd) {
+                const vId = readEbmlId(bytes, v, fEnd);
+                if (!vId) break;
+                const vSz = readEbmlSize(bytes, vId.nextPos, fEnd);
+                if (!vSz) break;
+                const vStart = vSz.nextPos;
+                const vEnd = Math.min(fEnd, vStart + vSz.size);
+                if (vId.id === 0xb0) tW = readEbmlUint(bytes, vStart, vEnd - vStart) || tW;
+                else if (vId.id === 0xba) tH = readEbmlUint(bytes, vStart, vEnd - vStart) || tH;
+                v = vEnd;
+              }
+            }
+            q = fEnd;
+          }
+
+          if (tType === 1 && tNum > 0 && videoTrackNum === -1) {
+            videoTrackNum = tNum;
+            codedWidth = tW;
+            codedHeight = tH;
+            if (tCodecId === "V_VP8") {
+              codec = "vp8";
+            } else if (tCodecId === "V_VP9") {
+              codec = "vp09.00.10.08";
+            } else if (tCodecId === "V_AV1") {
+              codec = "av01.0.08M.08";
+              description = tCodecPriv;
+            } else if (tCodecId === "V_MPEG4/ISO/AVC" && tCodecPriv && tCodecPriv.length >= 4) {
+              codec = `avc1.${toHex2(tCodecPriv[1]!)}${toHex2(tCodecPriv[2]!)}${toHex2(tCodecPriv[3]!)}`;
+              description = tCodecPriv;
+            }
+          }
+        }
+        p = teEnd;
+      }
+      pos = elementEnd;
+      continue;
+    }
+
+    // Cluster Timecode (0xE7)
+    if (id === 0xe7 && elementEnd > payloadStart) {
+      currentClusterTimecode = readEbmlUint(bytes, payloadStart, elementEnd - payloadStart);
+      pos = elementEnd;
+      continue;
+    }
+
+    // SimpleBlock (0xA3)
+    if (id === 0xa3 && elementEnd - payloadStart > 4) {
+      const trk = readEbmlSize(bytes, payloadStart, elementEnd);
+      if (trk && trk.size === videoTrackNum && trk.nextPos + 3 < elementEnd) {
+        const relTc = view.getInt16(trk.nextPos, false);
+        const flags = bytes[trk.nextPos + 2]!;
+        const lacing = (flags & 0x06) >> 1;
+        if (lacing === 0) {
+          const isKeyframe = (flags & 0x80) !== 0 || samples.length === 0;
+          const frameOffset = trk.nextPos + 3;
+          const frameSize = elementEnd - frameOffset;
+          const ctsUs = Math.max(
+            0,
+            Math.round(((currentClusterTimecode + relTc) * timecodeScaleNs) / 1000),
+          );
+          samples.push({
+            offset: frameOffset,
+            size: frameSize,
+            dtsUs: ctsUs,
+            ctsUs,
+            durationUs: 33_333,
+            isSync: isKeyframe,
+          });
+        }
+      }
+      pos = elementEnd;
+      continue;
+    }
+
+    // BlockGroup (0xA0)
+    if (id === 0xa0) {
+      let p = payloadStart;
+      let hasReferenceBlock = false;
+      let blockStart = -1;
+      let blockEnd = -1;
+      while (p < elementEnd) {
+        const bgId = readEbmlId(bytes, p, elementEnd);
+        if (!bgId) break;
+        const bgSz = readEbmlSize(bytes, bgId.nextPos, elementEnd);
+        if (!bgSz) break;
+        const bStart = bgSz.nextPos;
+        const bEnd = Math.min(elementEnd, bStart + bgSz.size);
+        if (bgId.id === 0xa1) {
+          blockStart = bStart;
+          blockEnd = bEnd;
+        } else if (bgId.id === 0xfb) {
+          hasReferenceBlock = true;
+        }
+        p = bEnd;
+      }
+      if (blockStart > 0 && blockEnd - blockStart > 4) {
+        const trk = readEbmlSize(bytes, blockStart, blockEnd);
+        if (trk && trk.size === videoTrackNum && trk.nextPos + 3 < blockEnd) {
+          const relTc = view.getInt16(trk.nextPos, false);
+          const flags = bytes[trk.nextPos + 2]!;
+          const lacing = (flags & 0x06) >> 1;
+          if (lacing === 0) {
+            const frameOffset = trk.nextPos + 3;
+            const frameSize = blockEnd - frameOffset;
+            const ctsUs = Math.max(
+              0,
+              Math.round(((currentClusterTimecode + relTc) * timecodeScaleNs) / 1000),
+            );
+            samples.push({
+              offset: frameOffset,
+              size: frameSize,
+              dtsUs: ctsUs,
+              ctsUs,
+              durationUs: 33_333,
+              isSync: !hasReferenceBlock || samples.length === 0,
+            });
+          }
+        }
+      }
+      pos = elementEnd;
+      continue;
+    }
+
+    pos = elementEnd;
+  }
+
+  if (!codec || samples.length === 0) return null;
+
+  normalizeSampleTimestamps(samples);
+  for (let i = 0; i + 1 < samples.length; i++) {
+    const delta = samples[i + 1]!.ctsUs - samples[i]!.ctsUs;
+    if (delta > 1000 && delta < 500_000) {
+      samples[i]!.durationUs = delta;
+    }
+  }
+
+  return {
+    trackId: videoTrackNum,
+    codec,
+    description,
+    codedWidth,
+    codedHeight,
+    timescale: 1_000_000,
+    samples,
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Hardware WebCodecs `VideoDecoder` with 24-Slot Consumer-Evicted Ring       */
+/* -------------------------------------------------------------------------- */
+
 interface DecodedCanvasSlot {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
   timestampUs: number;
 }
 
-/**
- * Hardware-accelerated WebCodecs `VideoDecoder` instance for one MP4 video asset.
- *
- * Uses a 3-slot GPU canvas ring buffer and calls `frame.close()` synchronously inside
- * `VideoDecoder`'s `output(frame)` callback so zero `VideoFrame` GPU surfaces are ever
- * held open outside the callback.
- */
+const MAX_RING_SLOTS = 24;
+
 export class Mp4HardwareTrackDecoder {
   private readonly buffer: ArrayBuffer;
   private readonly track: Mp4DemuxedVideoTrack;
+  private readonly maxTrackCtsUs: number;
   private decoder: VideoDecoder | null = null;
   private decoderConfig: VideoDecoderConfig | null = null;
-  private readonly ring: DecodedCanvasSlot[] = [];
+  private readonly slotPool: DecodedCanvasSlot[] = [];
   private readonly filledSlots: DecodedCanvasSlot[] = [];
   private nextSampleIdx = 0;
   private requestedTargetUs = 0;
+  private lastRequestedTargetUs = -1;
+  private flushedAtEof = false;
   private decodeError: Error | null = null;
   private outputNotify: (() => void) | null = null;
 
   constructor(buffer: ArrayBuffer, track: Mp4DemuxedVideoTrack) {
     this.buffer = buffer;
     this.track = track;
+    let maxCts = 0;
+    for (let i = Math.max(0, track.samples.length - 20); i < track.samples.length; i++) {
+      if (track.samples[i]!.ctsUs > maxCts) maxCts = track.samples[i]!.ctsUs;
+    }
+    this.maxTrackCtsUs = maxCts;
   }
 
   static async create(blob: Blob): Promise<Mp4HardwareTrackDecoder | null> {
@@ -528,7 +854,7 @@ export class Mp4HardwareTrackDecoder {
 
     try {
       const buffer = await blob.arrayBuffer();
-      const track = parseMp4VideoTrack(buffer);
+      const track = parseMp4VideoTrack(buffer) ?? parseWebmVideoTrack(buffer);
       if (!track || track.samples.length === 0) return null;
 
       const hwCfg: VideoDecoderConfig = {
@@ -567,17 +893,25 @@ export class Mp4HardwareTrackDecoder {
     }
   }
 
-  private initDecoder(config: VideoDecoderConfig): void {
-    this.decoderConfig = config;
-    for (let i = 0; i < 3; i++) {
+  private acquireSlot(w: number, h: number): DecodedCanvasSlot {
+    let slot = this.slotPool.pop();
+    if (!slot) {
       const canvas = document.createElement("canvas");
-      canvas.width = Math.max(2, this.track.codedWidth);
-      canvas.height = Math.max(2, this.track.codedHeight);
+      canvas.width = Math.max(2, w);
+      canvas.height = Math.max(2, h);
       const ctx =
         canvas.getContext("2d", { alpha: false, willReadFrequently: false }) ??
         canvas.getContext("2d")!;
-      this.ring.push({ canvas, ctx, timestampUs: -1 });
+      slot = { canvas, ctx, timestampUs: -1 };
+    } else if (slot.canvas.width !== w || slot.canvas.height !== h) {
+      slot.canvas.width = Math.max(2, w);
+      slot.canvas.height = Math.max(2, h);
     }
+    return slot;
+  }
+
+  private initDecoder(config: VideoDecoderConfig): void {
+    this.decoderConfig = config;
     this.recreateVideoDecoder();
   }
 
@@ -591,43 +925,53 @@ export class Mp4HardwareTrackDecoder {
       }
     }
     this.decodeError = null;
+    this.flushedAtEof = false;
     this.decoder = new VideoDecoder({
       output: (frame) => {
+        let emittedTs = 0;
         try {
-          const ts = frame.timestamp;
-          // Skip blitting early pre-roll frames when we still have samples before requestedTargetUs
-          if (
-            ts < this.requestedTargetUs - 34_000 &&
-            this.filledSlots.length > 0 &&
-            this.nextSampleIdx < this.track.samples.length
-          ) {
-            return;
+          emittedTs = frame.timestamp;
+          const w = frame.displayWidth || frame.codedWidth || this.track.codedWidth;
+          const h = frame.displayHeight || frame.codedHeight || this.track.codedHeight;
+
+          // When decoding pre-roll frames between a keyframe and `requestedTargetUs`,
+          // keep only the single latest pre-roll frame in filledSlots[0] so pre-roll never
+          // fills the lookahead buffer while still preserving the preceding frame for VFR videos.
+          if (emittedTs < this.requestedTargetUs - 20_000) {
+            if (
+              this.filledSlots.length === 1 &&
+              this.filledSlots[0]!.timestampUs < this.requestedTargetUs - 20_000
+            ) {
+              const slot = this.filledSlots[0]!;
+              if (slot.canvas.width !== w || slot.canvas.height !== h) {
+                slot.canvas.width = w;
+                slot.canvas.height = h;
+              }
+              slot.ctx.drawImage(frame, 0, 0, w, h);
+              slot.timestampUs = emittedTs;
+              return;
+            }
+            if (this.filledSlots.length > 0) {
+              return;
+            }
           }
 
-          let slot: DecodedCanvasSlot;
-          if (this.filledSlots.length < this.ring.length) {
-            slot = this.ring.find((r) => !this.filledSlots.includes(r)) ?? this.ring[0]!;
-          } else {
-            slot = this.filledSlots.shift()!;
-          }
-
-          if (
-            frame.displayWidth > 0 &&
-            frame.displayHeight > 0 &&
-            (slot.canvas.width !== frame.displayWidth || slot.canvas.height !== frame.displayHeight)
-          ) {
-            slot.canvas.width = frame.displayWidth;
-            slot.canvas.height = frame.displayHeight;
-          }
-
-          slot.ctx.drawImage(frame, 0, 0, slot.canvas.width, slot.canvas.height);
-          slot.timestampUs = ts;
+          const slot = this.acquireSlot(w, h);
+          slot.ctx.drawImage(frame, 0, 0, w, h);
+          slot.timestampUs = emittedTs;
           this.filledSlots.push(slot);
-          this.filledSlots.sort((a, b) => a.timestampUs - b.timestampUs);
+          if (this.filledSlots.length > 1) {
+            this.filledSlots.sort((a, b) => a.timestampUs - b.timestampUs);
+          }
         } finally {
           // ALWAYS release the GPU hardware decoder surface immediately
           frame.close();
-          if (this.outputNotify) {
+          if (
+            this.outputNotify &&
+            (emittedTs >= this.requestedTargetUs - 16_000 ||
+              !this.decoder ||
+              this.decoder.decodeQueueSize === 0)
+          ) {
             const cb = this.outputNotify;
             this.outputNotify = null;
             cb();
@@ -662,7 +1006,7 @@ export class Mp4HardwareTrackDecoder {
     return lastSync;
   }
 
-  private waitForDecoderOutput(timeoutMs = 120): Promise<void> {
+  private waitForDecoderBatch(timeoutMs = 60): Promise<void> {
     if (!this.decoder || this.decoder.decodeQueueSize === 0 || this.decodeError) {
       return Promise.resolve();
     }
@@ -683,77 +1027,77 @@ export class Mp4HardwareTrackDecoder {
     });
   }
 
+  private evictPastFrames(targetUs: number): void {
+    while (
+      this.filledSlots.length > 1 &&
+      this.filledSlots[1]!.timestampUs <= targetUs + 12_000
+    ) {
+      const old = this.filledSlots.shift()!;
+      this.slotPool.push(old);
+    }
+  }
+
   /**
    * Decodes forward in hardware up to `targetSec` and returns the GPU-backed
-   * `HTMLCanvasElement` containing the decoded video frame.
+   * `HTMLCanvasElement` containing the exact decoded video frame.
    */
   async decodeFrameAt(targetSec: number): Promise<HTMLCanvasElement | null> {
     if (!this.decoder || this.decodeError) return null;
 
     const { samples } = this.track;
-    const lastSample = samples[samples.length - 1]!;
-    const maxTrackUs = lastSample.ctsUs;
-    const targetUs = Math.max(0, Math.min(maxTrackUs, Math.round(targetSec * 1_000_000)));
+    const targetUs = Math.max(0, Math.min(this.maxTrackCtsUs, Math.round(targetSec * 1_000_000)));
     this.requestedTargetUs = targetUs;
 
-    // 1. Evict older frames in the 3-slot ring buffer when a newer slot has reached targetUs
-    while (
-      this.filledSlots.length > 1 &&
-      this.filledSlots[1]!.timestampUs <= targetUs + 14_000
-    ) {
-      this.filledSlots.shift();
-    }
-
-    // 2. If we jumped backward or jumped forward past an undecoded keyframe, seek to that keyframe
-    const oldestSlotTs = this.filledSlots[0]?.timestampUs ?? -1;
-    const newestSlotTs = this.filledSlots[this.filledSlots.length - 1]?.timestampUs ?? -1;
-    if (oldestSlotTs > targetUs + 80_000) {
-      // Backward jump (e.g. loop or second clip referencing earlier trim)
+    // 1. Detect genuine timeline discontinuity (backward seek or large forward jump past a keyframe)
+    if (this.lastRequestedTargetUs >= 0 && targetUs < this.lastRequestedTargetUs - 45_000) {
       this.recreateVideoDecoder();
-      this.filledSlots.length = 0;
+      while (this.filledSlots.length > 0) {
+        this.slotPool.push(this.filledSlots.pop()!);
+      }
       this.nextSampleIdx = this.findKeyframeBefore(targetUs);
-    } else if (this.nextSampleIdx < samples.length) {
+    } else if (
+      this.nextSampleIdx < samples.length &&
+      (this.lastRequestedTargetUs < 0 || targetUs > this.lastRequestedTargetUs + 350_000)
+    ) {
       const kfIdx = this.findKeyframeBefore(targetUs);
       if (kfIdx > this.nextSampleIdx) {
-        this.filledSlots.length = 0;
+        while (this.filledSlots.length > 0) {
+          this.slotPool.push(this.filledSlots.pop()!);
+        }
         this.nextSampleIdx = kfIdx;
       }
     }
+    this.lastRequestedTargetUs = targetUs;
 
-    // 3. Fast return if we already have the exact frame in our 3-slot ring buffer
-    if (
+    // 2. Evict past frames that targetUs has already moved beyond
+    this.evictPastFrames(targetUs);
+
+    // 3. Fast synchronous return (0.00ms) when the frame is already in our lookahead ring buffer
+    const hasCoveringFrame =
       this.filledSlots.length > 0 &&
-      (Math.abs(this.filledSlots[0]!.timestampUs - targetUs) <= 20_000 ||
+      (Math.abs(this.filledSlots[0]!.timestampUs - targetUs) <= 18_000 ||
         (this.filledSlots.length > 1 &&
           this.filledSlots[0]!.timestampUs <= targetUs + 14_000 &&
-          this.filledSlots[1]!.timestampUs > targetUs) ||
-        (this.nextSampleIdx >= samples.length && newestSlotTs >= maxTrackUs - 40_000))
-    ) {
+          this.filledSlots[1]!.timestampUs > targetUs + 12_000) ||
+        this.flushedAtEof);
+
+    if (hasCoveringFrame) {
       return this.filledSlots[0]!.canvas;
     }
 
-    // 4. Feed compressed MP4 samples into hardware VideoDecoder until we reach targetUs
-    let safetySteps = 0;
-    while (this.nextSampleIdx < samples.length && safetySteps < 600) {
+    // 4. Feed lookahead batches of 12 samples so hardware H.264 DPB never starves
+    let safetyBatches = 0;
+    while (this.nextSampleIdx < samples.length && safetyBatches < 120) {
       if (this.decodeError) return null;
 
-      // Feed a small batch of samples (including up to 2 lookahead samples for B-frame reordering)
-      let fedInBatch = 0;
-      while (
-        this.nextSampleIdx < samples.length &&
-        this.decoder.decodeQueueSize < 10 &&
-        fedInBatch < 8
-      ) {
-        const s = samples[this.nextSampleIdx]!;
-        // Stop feeding once we've fed 3 samples past targetUs
-        if (
-          this.filledSlots.length > 0 &&
-          s.dtsUs > targetUs + 110_000 &&
-          s.ctsUs > targetUs + 110_000
-        ) {
-          break;
-        }
+      const freeSlots =
+        MAX_RING_SLOTS - this.filledSlots.length - this.decoder.decodeQueueSize;
+      if (freeSlots <= 0) break;
 
+      const batchLimit = Math.min(freeSlots, 12);
+      let fed = 0;
+      while (this.nextSampleIdx < samples.length && fed < batchLimit) {
+        const s = samples[this.nextSampleIdx]!;
         const chunkData = new Uint8Array(this.buffer, s.offset, s.size);
         const chunk = new EncodedVideoChunk({
           type: s.isSync ? "key" : "delta",
@@ -763,46 +1107,32 @@ export class Mp4HardwareTrackDecoder {
         });
         this.decoder.decode(chunk);
         this.nextSampleIdx++;
-        fedInBatch++;
-        safetySteps++;
+        fed++;
       }
 
-      await this.waitForDecoderOutput(90);
+      safetyBatches++;
+      await this.waitForDecoderBatch(55);
+      this.evictPastFrames(targetUs);
 
-      while (
-        this.filledSlots.length > 1 &&
-        this.filledSlots[1]!.timestampUs <= targetUs + 14_000
+      const newestTs = this.filledSlots[this.filledSlots.length - 1]?.timestampUs ?? -1;
+      if (
+        newestTs >= targetUs - 14_000 &&
+        (this.filledSlots.length >= 2 ||
+          Math.abs(this.filledSlots[0]!.timestampUs - targetUs) <= 18_000)
       ) {
-        this.filledSlots.shift();
-      }
-
-      const newest = this.filledSlots[this.filledSlots.length - 1]?.timestampUs ?? -1;
-      if (newest >= targetUs - 14_000) {
-        break;
-      }
-
-      if (fedInBatch === 0 && this.decoder.decodeQueueSize === 0) {
         break;
       }
     }
 
-    // Flush decoder if we reached the very end of the sample table and still need final frames
-    if (
-      this.nextSampleIdx >= samples.length &&
-      this.decoder.decodeQueueSize > 0 &&
-      (this.filledSlots[this.filledSlots.length - 1]?.timestampUs ?? -1) < targetUs - 14_000
-    ) {
+    // 5. Flush hardware DPB reorder buffer once when all samples have been fed
+    if (this.nextSampleIdx >= samples.length && !this.flushedAtEof) {
+      this.flushedAtEof = true;
       try {
         await this.decoder.flush();
       } catch {
-        // Ignore flush errors at EOF
+        // Ignore flush error at EOF
       }
-      while (
-        this.filledSlots.length > 1 &&
-        this.filledSlots[1]!.timestampUs <= targetUs + 14_000
-      ) {
-        this.filledSlots.shift();
-      }
+      this.evictPastFrames(targetUs);
     }
 
     return this.filledSlots[0]?.canvas ?? null;
@@ -810,6 +1140,7 @@ export class Mp4HardwareTrackDecoder {
 
   dispose(): void {
     this.filledSlots.length = 0;
+    this.slotPool.length = 0;
     if (this.decoder && this.decoder.state !== "closed") {
       try {
         this.decoder.close();
