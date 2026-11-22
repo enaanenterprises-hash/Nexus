@@ -5,9 +5,11 @@ import {
   computeProjectDurationMs,
   isCinemaFrameStaticSince,
   renderCinemaFrame,
+  type CinemaDrawableMedia,
   type CinemaRenderRuntime,
 } from "./compositor";
 import { loadCinemaBlob } from "./media-db";
+import { Mp4HardwareTrackDecoder } from "./mp4-demuxer";
 import { resolutionForAspectRatio } from "./presets";
 import type { CinemaExportOptions, CinemaExportProgress, CinemaProject, CinemaVideoClip } from "./types";
 
@@ -225,15 +227,18 @@ function setSafePlaybackRate(video: HTMLVideoElement, rate: number): void {
  * reducing decoded frames from ~40,000 down to 420 (30x-50x faster).
  */
 class SequentialVideoStreamer {
+  private readonly project: CinemaProject;
   private readonly videoClips: CinemaVideoClip[];
+  private readonly hwDecoders = new Map<string, Mp4HardwareTrackDecoder>();
   private readonly slots = new Map<string, StreamerSlot>();
-  private readonly baseMedia: ReadonlyMap<string, HTMLVideoElement | HTMLImageElement>;
-  private readonly frameMedia = new Map<string, HTMLVideoElement | HTMLImageElement>();
+  private readonly baseMedia: ReadonlyMap<string, CinemaDrawableMedia>;
+  private readonly frameMedia = new Map<string, CinemaDrawableMedia>();
 
   constructor(
     project: CinemaProject,
-    baseMedia: ReadonlyMap<string, HTMLVideoElement | HTMLImageElement>,
+    baseMedia: ReadonlyMap<string, CinemaDrawableMedia>,
   ) {
+    this.project = project;
     this.baseMedia = baseMedia;
     for (const [k, v] of baseMedia.entries()) {
       this.frameMedia.set(k, v);
@@ -251,6 +256,23 @@ class SequentialVideoStreamer {
     return this.videoClips.length > 0;
   }
 
+  private async loadAssetBlob(assetId: string, fallbackSrc?: string): Promise<Blob | null> {
+    const asset = this.project.assets.find((a) => a.id === assetId);
+    if (asset?.idbKey) {
+      const idbBlob = await loadCinemaBlob(asset.idbKey);
+      if (idbBlob && idbBlob.size > 0) return idbBlob;
+    }
+    const url = fallbackSrc || asset?.url;
+    if (!url) return null;
+    try {
+      const res = await fetch(url);
+      if (res.ok) return await res.blob();
+    } catch {
+      // Ignore fetch failure
+    }
+    return null;
+  }
+
   async init(useOffscreenClone = true): Promise<void> {
     if (this.videoClips.length === 0 || typeof document === "undefined") return;
 
@@ -258,11 +280,27 @@ class SequentialVideoStreamer {
     await Promise.all(
       uniqueAssetIds.map(async (assetId) => {
         const base = this.baseMedia.get(assetId);
-        if (!(base instanceof HTMLVideoElement)) return;
         // Pause stage preview video so CinemaView's "seeked" stage redraw listener stays quiet
-        if (!base.paused) base.pause();
+        if (base instanceof HTMLVideoElement && !base.paused) {
+          base.pause();
+        }
 
-        const src = base.currentSrc || base.src;
+        const src = base instanceof HTMLVideoElement ? base.currentSrc || base.src : undefined;
+
+        // Tier 1: Direct ISO-BMFF (MP4 / MOV / fMP4) Demux + Hardware WebCodecs VideoDecoder (10x-25x real-time)
+        if (useOffscreenClone) {
+          const blob = await this.loadAssetBlob(assetId, src);
+          if (blob) {
+            const hwDecoder = await Mp4HardwareTrackDecoder.create(blob);
+            if (hwDecoder) {
+              this.hwDecoders.set(assetId, hwDecoder);
+              return;
+            }
+          }
+        }
+
+        // Tier 2 Fallback (e.g. WebM containers): Continuous forward hardware <video> streamer (3.5x-4x real-time)
+        if (!(base instanceof HTMLVideoElement)) return;
         let clone: HTMLVideoElement | null = null;
         if (useOffscreenClone && src) {
           clone = await this.createOffscreenVideo(src, base.crossOrigin);
@@ -319,7 +357,7 @@ class SequentialVideoStreamer {
   async syncAt(
     timeMs: number,
     streamForward = true,
-  ): Promise<ReadonlyMap<string, HTMLVideoElement | HTMLImageElement>> {
+  ): Promise<ReadonlyMap<string, CinemaDrawableMedia>> {
     if (this.videoClips.length === 0) return this.baseMedia;
 
     const activeNow = this.videoClips.filter(
@@ -339,11 +377,23 @@ class SequentialVideoStreamer {
 
     await Promise.all(
       activeNow.map(async (clip) => {
+        const speed = clamp(clip.speed || 1, 0.25, 4);
+        const rawTargetSec = Math.max(0, (clip.trimStartMs + (timeMs - clip.startMs) * speed) / 1000);
+
+        // Tier 1: Hardware WebCodecs MP4 VideoDecoder path (no playback clock limit)
+        const hwDecoder = this.hwDecoders.get(clip.assetId);
+        if (hwDecoder) {
+          const decodedCanvas = await hwDecoder.decodeFrameAt(rawTargetSec);
+          if (decodedCanvas) {
+            this.frameMedia.set(clip.assetId, decodedCanvas);
+            return;
+          }
+        }
+
+        // Tier 2: Continuous forward hardware <video> streamer fallback
         const slot = this.slots.get(clip.assetId);
         if (!slot) return;
         const { video } = slot;
-        const speed = clamp(clip.speed || 1, 0.25, 4);
-        const rawTargetSec = (clip.trimStartMs + (timeMs - clip.startMs) * speed) / 1000;
         const finiteDur =
           Number.isFinite(video.duration) && video.duration > 0
             ? Math.max(0, video.duration - 0.02)
@@ -418,6 +468,10 @@ class SequentialVideoStreamer {
   }
 
   dispose(): void {
+    for (const hw of this.hwDecoders.values()) {
+      hw.dispose();
+    }
+    this.hwDecoders.clear();
     for (const slot of this.slots.values()) {
       try {
         if (!slot.video.paused) slot.video.pause();

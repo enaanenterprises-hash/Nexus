@@ -16,8 +16,10 @@ import type {
   CinemaVisualizerClip,
 } from "./types";
 
+export type CinemaDrawableMedia = HTMLVideoElement | HTMLImageElement | HTMLCanvasElement;
+
 export interface CinemaRenderRuntime {
-  mediaElements: ReadonlyMap<string, HTMLVideoElement | HTMLImageElement>;
+  mediaElements: ReadonlyMap<string, CinemaDrawableMedia>;
   frequencyBins?: Float32Array;
   showSafeGuides?: boolean;
   isExport?: boolean;
@@ -345,14 +347,24 @@ function computeClipTransitionEffect(
 
 function drawMediaBox(
   ctx: CanvasRenderingContext2D,
-  el: HTMLVideoElement | HTMLImageElement,
+  el: CinemaDrawableMedia,
   w: number,
   h: number,
   fit: "cover" | "contain",
   kenBurnsFactor = { scale: 1, panX: 0 },
 ): void {
-  const natW = el instanceof HTMLVideoElement ? el.videoWidth || w : el.naturalWidth || w;
-  const natH = el instanceof HTMLVideoElement ? el.videoHeight || h : el.naturalHeight || h;
+  const natW =
+    el instanceof HTMLVideoElement
+      ? el.videoWidth || w
+      : el instanceof HTMLImageElement
+        ? el.naturalWidth || w
+        : el.width || w;
+  const natH =
+    el instanceof HTMLVideoElement
+      ? el.videoHeight || h
+      : el instanceof HTMLImageElement
+        ? el.naturalHeight || h
+        : el.height || h;
   if (natW <= 0 || natH <= 0) return;
 
   const boxAspect = w / Math.max(1, h);

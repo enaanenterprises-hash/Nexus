@@ -120,9 +120,14 @@ export function CinemaCaptureModal({
     setCountdown(null);
 
     const mime =
-      ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"].find(
-        (m) => MediaRecorder.isTypeSupported(m),
-      ) || "video/webm";
+      [
+        "video/mp4;codecs=avc1,mp4a.40.2",
+        "video/mp4;codecs=avc1,opus",
+        "video/mp4",
+        "video/webm;codecs=vp9,opus",
+        "video/webm;codecs=vp8,opus",
+        "video/webm",
+      ].find((m) => MediaRecorder.isTypeSupported(m)) || "video/webm";
 
     chunksRef.current = [];
     const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6_000_000 });
