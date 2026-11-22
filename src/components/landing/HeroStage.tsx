@@ -281,7 +281,7 @@ export function HeroStage() {
           </h1>
 
           <p className="gal-enter gal-enter-delay-1 mt-5 max-w-[44ch] text-[16.5px] leading-[1.6] text-[#4a4c55] [text-wrap:pretty] sm:text-[18.5px]">
-            Your personal assistant, daily dashboard, and everyday tools—connected in one calm workspace.
+            Effortlessly connect your everyday workflows together with Nexus Atelier
           </p>
 
           {/* Interactive Apple Liquid Glass Hero Waitlist Pill */}
