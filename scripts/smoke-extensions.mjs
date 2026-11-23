@@ -463,6 +463,104 @@ assert(
   "computeExtensionLinks does not link extensions with no shared capability",
 );
 
+// Mandatory Command Storage widget, modular Vault registry, Social validation & connectors
+const widgetsMod = await import("../src/lib/command/widgets.ts");
+const storageTypesMod = await import("../src/lib/storage/types.ts");
+const storageActionsMod = await import("../src/lib/storage/actions.ts");
+const socialPlatformsMod = await import("../src/lib/social/platforms.ts");
+const catalogMod = await import("../src/lib/connectors/catalog.ts");
+
+assert(
+  widgetsMod.MANDATORY_WIDGET_IDS.includes("storage") && widgetsMod.isMandatoryWidget("storage"),
+  "storage widget is mandatory",
+);
+assert(!widgetsMod.isMandatoryWidget("weather"), "weather widget remains optional/removable");
+assert(
+  widgetsMod.normalizeOverview([]).includes("storage") &&
+    widgetsMod.normalizeOverview(["weather", "tasks"]).includes("storage"),
+  "normalizeOverview always guarantees mandatory storage box",
+);
+assert(
+  ["cinema-exports", "podcast-audio", "class-notes", "business-analytics"].every((id) =>
+    storageTypesMod.DEFAULT_VAULT_FOLDERS.some((f) => f.id === id),
+  ),
+  "default Storage Vault folders cover media, class notes, and business analytics",
+);
+assert(
+  storageTypesMod.classifyVaultKind("video/mp4", "episode.mp4") === "video" &&
+    storageTypesMod.classifyVaultKind("audio/wav", "mix.wav") === "audio" &&
+    storageTypesMod.classifyVaultKind("text/csv", "q4-revenue.csv") === "dataset" &&
+    storageTypesMod.classifyVaultKind("text/markdown", "lecture-01.md") === "note" &&
+    storageTypesMod.defaultFolderForKind("dataset") === "business-analytics" &&
+    storageTypesMod.defaultFolderForKind("note") === "class-notes",
+  "classifyVaultKind and defaultFolderForKind classify future notes & analytics modules",
+);
+
+const sampleVideoItem = {
+  id: "v-smoke-1",
+  folderId: "cinema-exports",
+  name: "Episode 14 Cut.mp4",
+  mimeType: "video/mp4",
+  kind: "video",
+  sizeBytes: 24_000_000,
+  blobKey: "blob-1",
+  remoteUrl: null,
+  thumbnailDataUrl: null,
+  starred: false,
+  tags: ["podcast"],
+  metadata: { durationMs: 42_000 },
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+};
+const videoActionIds = storageActionsMod.getVaultActionsForItem(sampleVideoItem).map((a) => a.id);
+assert(
+  videoActionIds.includes("core.social.publish") && videoActionIds.includes("dev.nexus.cinema.open"),
+  "video items expose Publish to Social and Open in Cinema actions",
+);
+
+storageActionsMod.registerVaultAction({
+  id: "dev.nexus.analytics.inspect",
+  label: "Inspect in Business Analytics",
+  group: "analyze",
+  kinds: ["dataset"],
+  priority: 15,
+});
+const sampleDatasetItem = {
+  ...sampleVideoItem,
+  id: "d-smoke-1",
+  folderId: "business-analytics",
+  name: "metrics.csv",
+  mimeType: "text/csv",
+  kind: "dataset",
+};
+assert(
+  storageActionsMod.getVaultActionsForItem(sampleDatasetItem).some((a) => a.id === "dev.nexus.analytics.inspect") &&
+    !storageActionsMod.getVaultActionsForItem(sampleVideoItem).some((a) => a.id === "dev.nexus.analytics.inspect"),
+  "custom Storage workflow actions scope dynamically by item kind",
+);
+storageActionsMod.unregisterVaultAction("dev.nexus.analytics.inspect");
+
+const emptyDraft = socialPlatformsMod.createDefaultSocialDraft("Podcast Ep 14");
+assert(!socialPlatformsMod.validateSocialDraft(emptyDraft).ok, "social publish requires non-empty Title & Description");
+const validDraft = { ...emptyDraft, title: "Podcast Ep 14", description: "Behind the build." };
+assert(socialPlatformsMod.validateSocialDraft(validDraft).ok, "valid social draft passes validation");
+const longXDraft = {
+  ...validDraft,
+  platforms: {
+    ...validDraft.platforms,
+    x: { ...validDraft.platforms.x, enabled: true },
+  },
+  description: "x".repeat(290),
+};
+assert(!socialPlatformsMod.validateSocialDraft(longXDraft).ok, "X length limit (280 chars) is enforced when X is enabled");
+
+for (const id of ["tiktok-publish", "instagram-publish", "youtube-publish", "x-publish", "linkedin-publish"]) {
+  assert(
+    Boolean(catalogMod.getConnector(id)) && catalogMod.CONNECTOR_CATALOG.some((c) => c.id === id),
+    `social connector ${id} registered`,
+  );
+}
+
 setStubPro(false);
 
 if (failed > 0) process.exit(1);

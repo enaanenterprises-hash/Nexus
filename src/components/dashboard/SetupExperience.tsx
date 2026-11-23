@@ -49,6 +49,7 @@ import {
   COMMAND_WIDGETS,
   OVERVIEW_COLUMNS,
   OVERVIEW_ROWS,
+  isMandatoryWidget,
   overviewAccepts,
   placeWidgets,
   widgetDef,
@@ -151,8 +152,9 @@ const DEFAULT_SAMPLE_NODES: ExtensionId[] = [
 ];
 
 function computeSuggestedWidgets(connectedConnectorIds: Set<string>): string[] {
-  const candidates: string[] = [];
+  const candidates: string[] = ["storage"];
   for (const w of COMMAND_WIDGETS) {
+    if (w.id === "storage") continue;
     if (connectedConnectorIds.has(w.connectorId) || !w.needsConnection) {
       candidates.push(w.id);
     }
@@ -1422,6 +1424,7 @@ function SetupWidgetsStep({
   }
 
   function removeWidget(id: string) {
+    if (isMandatoryWidget(id)) return;
     onChange(placedIds.filter((item) => item !== id));
   }
 
@@ -1475,7 +1478,7 @@ function SetupWidgetsStep({
           >
             Suggested
           </button>
-          <button type="button" onClick={() => onChange([])} className="setup-text-btn">
+          <button type="button" onClick={() => onChange(["storage"])} className="setup-text-btn">
             Clear
           </button>
         </div>
@@ -1536,15 +1539,21 @@ function SetupWidgetsStep({
                       <span className="setup-board-tile-size">
                         {p.w}×{p.h}
                       </span>
-                      <button
-                        type="button"
-                        draggable={false}
-                        onClick={() => removeWidget(p.id)}
-                        className="setup-board-tile-remove"
-                        aria-label={`Remove ${def?.name ?? p.id}`}
-                      >
-                        <X className="size-3" />
-                      </button>
+                      {!isMandatoryWidget(p.id) ? (
+                        <button
+                          type="button"
+                          draggable={false}
+                          onClick={() => removeWidget(p.id)}
+                          className="setup-board-tile-remove"
+                          aria-label={`Remove ${def?.name ?? p.id}`}
+                        >
+                          <X className="size-3" />
+                        </button>
+                      ) : (
+                        <span className="rounded-full border border-border/70 px-1.5 py-px text-[9.5px] font-medium text-muted-foreground">
+                          Core
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="setup-board-tile-body" aria-hidden>
@@ -1585,12 +1594,13 @@ function SetupWidgetsStep({
         <div className="flex flex-wrap gap-2">
           {COMMAND_WIDGETS.map((w) => {
             const onBoard = placedIds.includes(w.id);
+            const mandatory = Boolean(w.mandatory);
             const canAdd = onBoard || overviewAccepts(placedIds, w.id);
             return (
               <button
                 key={w.id}
                 type="button"
-                disabled={!canAdd}
+                disabled={!canAdd || (onBoard && mandatory)}
                 onClick={() => (onBoard ? removeWidget(w.id) : addWidget(w.id))}
                 className="setup-widget-chip"
                 data-selected={onBoard ? "true" : "false"}
@@ -1598,7 +1608,7 @@ function SetupWidgetsStep({
                 {onBoard ? <Check className="size-3" strokeWidth={2.5} /> : null}
                 <span>{w.name}</span>
                 <span className="setup-chip-dim">
-                  {w.w}×{w.h}
+                  {mandatory ? "Required" : `${w.w}×${w.h}`}
                 </span>
               </button>
             );

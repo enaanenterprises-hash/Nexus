@@ -58,18 +58,40 @@ type Props = {
   visible?: boolean;
   /** Incremented by Dashboard each time Command is opened so greetings cycle reliably. */
   openCount?: number;
-  /** Set by the dashboard after an OAuth round trip, e.g. `{ tab: "connections", service: "strava", notice }`. */
-  request: { tab: CommandTab; service: string | null; notice: string | null; serial: number } | null;
+  /** Set by the dashboard after an OAuth round trip or deep-link (e.g. `{ tab: "overview", widget: "storage", itemId }`). */
+  request: {
+    tab: CommandTab;
+    service: string | null;
+    notice: string | null;
+    widget?: string | null;
+    itemId?: string | null;
+    serial: number;
+  } | null;
+  onOpenCinemaWithVaultItem?: (itemId: string) => void;
+  onOpenStudioWithVaultItem?: (itemId: string) => void;
   onClose: () => void;
 };
 
 /** Nexus Command: curated modular cockpit, live focus telemetry, deterministic automations, and encrypted connections. */
-export function CommandView({ userName, visible = true, openCount = 0, request, onClose }: Props) {
+export function CommandView({
+  userName,
+  visible = true,
+  openCount = 0,
+  request,
+  onOpenCinemaWithVaultItem,
+  onOpenStudioWithVaultItem,
+  onClose,
+}: Props) {
   const command = useCommand();
   const [tab, setTab] = useState<CommandTab>("overview");
   const [notice, setNotice] = useState<string | null>(null);
   const [quickBarOpen, setQuickBarOpen] = useState(false);
-  const [expandRequest, setExpandRequest] = useState<{ widgetId: string; serial: number } | null>(null);
+  const [expandRequest, setExpandRequest] = useState<{
+    widgetId: string;
+    itemId?: string | null;
+    serial: number;
+  } | null>(null);
+  const [connectionFocusId, setConnectionFocusId] = useState<string | null>(null);
   const [greetingIndex, setGreetingIndex] = useState(0);
   const lastOpenCountRef = useRef<number | null>(null);
   const date = useSyncExternalStore(noopSubscribe, todayLabel, () => "");
@@ -114,6 +136,14 @@ export function CommandView({ userName, visible = true, openCount = 0, request, 
     setHandled(request.serial);
     setTab(request.tab);
     setNotice(request.notice);
+    setConnectionFocusId(request.service ?? null);
+    if (request.widget) {
+      setExpandRequest((prev) => ({
+        widgetId: request.widget!,
+        itemId: request.itemId ?? null,
+        serial: (prev?.serial ?? 0) + 1,
+      }));
+    }
   }
 
   const handleApplyPreset = useCallback(
@@ -312,7 +342,12 @@ export function CommandView({ userName, visible = true, openCount = 0, request, 
             command={command}
             expandRequest={expandRequest}
             onApplyPreset={(preset) => void handleApplyPreset(preset)}
-            onConnections={() => setTab("connections")}
+            onConnections={(connectorId) => {
+              if (connectorId) setConnectionFocusId(connectorId);
+              setTab("connections");
+            }}
+            onOpenCinemaWithVaultItem={onOpenCinemaWithVaultItem}
+            onOpenStudioWithVaultItem={onOpenStudioWithVaultItem}
           />
         ) : tab === "automations" ? (
           <AutomationsView
@@ -321,7 +356,11 @@ export function CommandView({ userName, visible = true, openCount = 0, request, 
             onStartQuickFocus={() => void handleStartQuickFocus(25, "Deep work")}
           />
         ) : (
-          <ConnectionsView command={command} focusId={request?.service ?? null} />
+          <ConnectionsView
+            key={connectionFocusId ?? "all"}
+            command={command}
+            focusId={connectionFocusId ?? request?.service ?? null}
+          />
         )}
       </div>
 

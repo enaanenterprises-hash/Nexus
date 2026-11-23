@@ -16,9 +16,12 @@ export interface WidgetDef {
   /** Connector this widget reads. Weather still works with none connected. */
   connectorId: string
   needsConnection: boolean
+  /** Mandatory widgets always remain present on Command Overview and cannot be removed. */
+  mandatory?: boolean
 }
 
 export const COMMAND_WIDGETS: readonly WidgetDef[] = [
+  { id: "storage", name: "Storage", blurb: "Universal file vault, media exports, and multi-platform social publishing.", w: 2, h: 1, connectorId: "storage", needsConnection: false, mandatory: true },
   { id: "gmail", name: "Gmail", blurb: "Inbox, rich formatting compose, and replies.", w: 2, h: 1, connectorId: "gmail", needsConnection: true },
   { id: "calendar", name: "Calendar", blurb: "Full 30-day calendar synced with Google Calendar.", w: 2, h: 2, connectorId: "google-calendar", needsConnection: true },
   { id: "weather", name: "Weather", blurb: "Live forecast, wind, rain & hourly view.", w: 1, h: 1, connectorId: "weather", needsConnection: false },
@@ -32,7 +35,18 @@ export const COMMAND_WIDGETS: readonly WidgetDef[] = [
   { id: "vercel", name: "Vercel", blurb: "Deployments, branches, and build health.", w: 1, h: 1, connectorId: "vercel", needsConnection: true },
 ]
 
+export const MANDATORY_WIDGET_IDS = COMMAND_WIDGETS.filter((w) => w.mandatory).map((w) => w.id)
+
 const BY_ID = new Map(COMMAND_WIDGETS.map((w) => [w.id, w]))
+
+export function isMandatoryWidget(id: string): boolean {
+  return Boolean(BY_ID.get(id)?.mandatory)
+}
+
+export function ensureMandatoryWidgets(ids: readonly string[]): string[] {
+  const missing = MANDATORY_WIDGET_IDS.filter((id) => !ids.includes(id))
+  return missing.length > 0 ? [...missing, ...ids] : [...ids]
+}
 
 export function widgetDef(id: string): WidgetDef | undefined {
   return BY_ID.get(id)
@@ -55,12 +69,13 @@ function fitsAt(grid: boolean[][], x: number, y: number, w: number, h: number) {
   return true
 }
 
-/** Places widgets in order. Ones that do not fit on this page are left out. */
+/** Places widgets in order. Mandatory widgets are always kept first if missing, and anything that does not fit is left out. */
 export function placeWidgets(ids: readonly string[]): PlacedWidget[] {
+  const orderedIds = ensureMandatoryWidgets(ids)
   const grid = Array.from({ length: OVERVIEW_ROWS }, () => Array<boolean>(OVERVIEW_COLUMNS).fill(false))
   const placed: PlacedWidget[] = []
   const seen = new Set<string>()
-  for (const id of ids) {
+  for (const id of orderedIds) {
     if (seen.has(id)) continue
     const def = BY_ID.get(id)
     if (!def) continue
@@ -79,14 +94,15 @@ export function placeWidgets(ids: readonly string[]): PlacedWidget[] {
 }
 
 export function overviewAccepts(current: readonly string[], id: string) {
-  if (current.includes(id) || !BY_ID.has(id)) return false
-  return placeWidgets([...current, id]).some((p) => p.id === id)
+  const normalized = ensureMandatoryWidgets(current)
+  if (normalized.includes(id) || !BY_ID.has(id)) return false
+  return placeWidgets([...normalized, id]).some((p) => p.id === id)
 }
 
-/** Drops unknown ids, duplicates, and anything that does not fit. */
+/** Drops unknown ids, duplicates, and anything that does not fit, while enforcing mandatory widgets. */
 export function normalizeOverview(input: unknown): string[] {
-  if (!Array.isArray(input)) return []
-  return placeWidgets(input.filter((id): id is string => typeof id === "string")).map((p) => p.id)
+  const raw = Array.isArray(input) ? input.filter((id): id is string => typeof id === "string") : []
+  return placeWidgets(ensureMandatoryWidgets(raw)).map((p) => p.id)
 }
 
 /** Computes a valid reordered widget list when dragging one widget onto another or onto the end of the board. */

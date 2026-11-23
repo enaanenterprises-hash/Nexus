@@ -5,7 +5,9 @@ import {
   ChevronDown,
   Download,
   Film,
+  FolderOpen,
   FolderPlus,
+  HardDrive,
   Layers,
   Link2,
   Loader2,
@@ -81,6 +83,7 @@ import {
   type LayerMixerState,
 } from "./TimelineWaveform";
 import { useStudioAudio } from "./use-studio-audio";
+import { resolveVaultItemBlob, saveBlobToVault, useVault } from "@/lib/storage/vault-client";
 
 const DEFAULT_LAYER_MIXER: LayerMixerState = {
   gain: 1,
@@ -165,18 +168,22 @@ export function StudioView({
   hub,
   incomingVoiceover,
   incomingCinemaAudio,
+  incomingVaultItem,
   onClose,
   onReleaseNode,
   onOpenCinema,
+  onOpenCommandStorage,
   onRouteTransfer,
   onSendToCinema,
 }: {
   hub: ExtensionHubSnapshot;
   incomingVoiceover?: { request: CinemaVoiceoverRequest; serial: number } | null;
   incomingCinemaAudio?: { transfer: CinemaExtractedAudioTransfer; serial: number } | null;
+  incomingVaultItem?: { itemId: string; serial: number } | null;
   onClose: () => void;
   onReleaseNode: () => void;
   onOpenCinema?: () => void;
+  onOpenCommandStorage?: (itemId?: string) => void;
   onRouteTransfer?: (fromId: ExtensionId, toId?: ExtensionId) => void;
   onSendToCinema?: (recording: StudioRecording, mode: "mix" | "stems") => void;
 }) {
@@ -235,6 +242,9 @@ export function StudioView({
   const [analyzingBridge, setAnalyzingBridge] = useState<string | null>(null);
   const voiceoverSerialRef = useRef(0);
   const cinemaAudioSerialRef = useRef(0);
+  const vault = useVault();
+  const [savingToVault, setSavingToVault] = useState(false);
+  const vaultItemSerialRef = useRef(0);
 
   // Undo / Redo Stacks
   const [undoStack, setUndoStack] = useState<HistorySnapshot[]>([]);
@@ -908,10 +918,53 @@ export function StudioView({
       const res = await audio.exportMixWav();
       if (res) {
         triggerDownload(res.blob, res.filename);
-        showNotice("Exported mastered multi-track WAV (-1 dBFS peak limited).");
+        void saveBlobToVault({
+          blob: res.blob,
+          name: res.filename,
+          mimeType: res.blob.type || "audio/wav",
+          folderId: "podcast-audio",
+          tags: ["podcast", "studio-mix"],
+          source: "studio",
+          metadata: {
+            durationMs: totalTimelineMs > 0 ? totalTimelineMs : undefined,
+            sourceNodeId: STUDIO_NODE_ID,
+            sourceRecordingId: activeId,
+            excerpt: description.trim() || undefined,
+          },
+        }).catch(() => {
+          // Non-fatal: WAV download already succeeded
+        });
+        showNotice("Exported mastered WAV & archived a copy in Command Storage.");
       }
     } finally {
       setExporting(null);
+    }
+  }
+
+  async function handleSaveMixToStorage() {
+    setSavingToVault(true);
+    try {
+      const res = await audio.exportMixWav();
+      if (!res) return;
+      const saved = await saveBlobToVault({
+        blob: res.blob,
+        name: res.filename,
+        mimeType: res.blob.type || "audio/wav",
+        folderId: "podcast-audio",
+        tags: ["podcast", "studio-mix"],
+        source: "studio",
+        metadata: {
+          durationMs: totalTimelineMs > 0 ? totalTimelineMs : undefined,
+          sourceNodeId: STUDIO_NODE_ID,
+          sourceRecordingId: activeId,
+          excerpt: description.trim() || undefined,
+        },
+      });
+      showNotice(`Saved “${saved.name}” to Command Storage (Podcast & Audio).`);
+    } catch {
+      showNotice("Could not save mix to Command Storage.");
+    } finally {
+      setSavingToVault(false);
     }
   }
 
@@ -1068,6 +1121,35 @@ export function StudioView({
       cancelled = true;
     };
   }, [incomingCinemaAudio, persistDraft, showNotice]);
+
+  // Import audio file opened from Command Storage Vault onto Studio Arrange timeline
+  useEffect(() => {
+    if (!incomingVaultItem) return;
+    if (incomingVaultItem.serial === vaultItemSerialRef.current) return;
+    const item = vault.items.find((entry) => entry.id === incomingVaultItem.itemId);
+    if (!item) return;
+    vaultItemSerialRef.current = incomingVaultItem.serial;
+    let cancelled = false;
+    void (async () => {
+      const blob = await resolveVaultItemBlob(item);
+      if (cancelled) return;
+      if (!blob) {
+        showNotice(`Could not load “${item.name}” binary from Command Storage.`);
+        return;
+      }
+      const file = new File([blob], item.name, {
+        type: item.mimeType || blob.type || "audio/wav",
+      });
+      await importFilesList([file], Math.max(0, activeLayerIndex), 0);
+      if (!cancelled) {
+        setStudioPage("edit");
+        showNotice(`Imported “${item.name}” from Command Storage.`);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeLayerIndex, importFilesList, incomingVaultItem, showNotice, vault.items]);
 
   const decodeMixedWavBuffer = useCallback(async (): Promise<{
     blob: Blob;
@@ -1514,6 +1596,25 @@ export function StudioView({
               <div className="space-y-1">
                 <button
                   type="button"
+                  disabled={tracks.length === 0 || exporting !== null || savingToVault}
+                  onClick={() => void handleSaveMixToStorage()}
+                  className="flex w-full items-start gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-foreground/[0.06] disabled:opacity-45"
+                >
+                  {savingToVault ? (
+                    <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-[#d89b2c]" />
+                  ) : (
+                    <HardDrive className="mt-0.5 size-4 shrink-0 text-[#d89b2c]" />
+                  )}
+                  <div className="min-w-0">
+                    <div className="text-[12.5px] font-medium text-foreground">
+                      {savingToVault ? "Saving to Storage…" : "Save Mix to Storage"}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">Store WAV in Command Vault for Cinema</div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
                   disabled={tracks.length === 0 || exporting !== null}
                   onClick={() => void handleExportMix()}
                   className="flex w-full items-start gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-foreground/[0.06] disabled:opacity-45"
@@ -1557,6 +1658,17 @@ export function StudioView({
                   <Film className="size-4 shrink-0" />
                   <span>Edit in Cinema</span>
                 </button>
+
+                {onOpenCommandStorage ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenCommandStorage()}
+                    className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[12.5px] font-medium text-foreground transition-colors hover:bg-foreground/[0.06]"
+                  >
+                    <FolderOpen className="size-4 shrink-0 text-[#d89b2c]" />
+                    <span>Open Storage Vault</span>
+                  </button>
+                ) : null}
 
                 <button
                   type="button"

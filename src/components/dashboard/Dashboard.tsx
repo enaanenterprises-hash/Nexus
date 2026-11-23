@@ -178,6 +178,16 @@ export function Dashboard({
     tab: CommandTab;
     service: string | null;
     notice: string | null;
+    widget?: string | null;
+    itemId?: string | null;
+    serial: number;
+  } | null>(null);
+  const [cinemaIncomingVaultItem, setCinemaIncomingVaultItem] = useState<{
+    itemId: string;
+    serial: number;
+  } | null>(null);
+  const [studioIncomingVaultItem, setStudioIncomingVaultItem] = useState<{
+    itemId: string;
     serial: number;
   } | null>(null);
   const [selected, setSelected] = useState<SlotId | null>(null);
@@ -218,7 +228,13 @@ export function Dashboard({
   }, []);
 
   const openCommand = useCallback(
-    (request?: { tab: CommandTab; service: string | null; notice: string | null }) => {
+    (request?: {
+      tab: CommandTab;
+      service: string | null;
+      notice: string | null;
+      widget?: string | null;
+      itemId?: string | null;
+    }) => {
       setCommandMounted(true);
       setCommandOpenCount((c) => c + 1);
       setMenuOpen(false);
@@ -1024,6 +1040,24 @@ export function Dashboard({
                 visible={surface.view === "command"}
                 openCount={commandOpenCount}
                 request={commandRequest}
+                onOpenCinemaWithVaultItem={(itemId) => {
+                  setCinemaMounted(true);
+                  setMenuOpen(false);
+                  setSurface({ view: "cinema", panel: null });
+                  setCinemaIncomingVaultItem((prev) => ({
+                    itemId,
+                    serial: (prev?.serial ?? 0) + 1,
+                  }));
+                }}
+                onOpenStudioWithVaultItem={(itemId) => {
+                  setStudioMounted(true);
+                  setMenuOpen(false);
+                  setSurface({ view: "studio", panel: null });
+                  setStudioIncomingVaultItem((prev) => ({
+                    itemId,
+                    serial: (prev?.serial ?? 0) + 1,
+                  }));
+                }}
                 onClose={() => setSurface({ view: "home", panel: null })}
               />
             </div>
@@ -1055,9 +1089,19 @@ export function Dashboard({
                 hub={hub}
                 incomingVoiceover={studioIncomingVoiceover}
                 incomingCinemaAudio={studioIncomingAudio}
+                incomingVaultItem={studioIncomingVaultItem}
                 onClose={() => setSurface({ view: "home", panel: null })}
                 onReleaseNode={() => void release(STUDIO_NODE_ID)}
                 onOpenCinema={openCinema}
+                onOpenCommandStorage={(itemId) =>
+                  openCommand({
+                    tab: "overview",
+                    service: null,
+                    notice: null,
+                    widget: "storage",
+                    itemId: itemId ?? null,
+                  })
+                }
                 onRouteTransfer={(fromId, toId) => triggerNodeTransfer(fromId, toId)}
                 onSendToCinema={(recording: StudioRecording, mode: "mix" | "stems") => {
                   pendingCinemaModeRef.current = mode;
@@ -1079,9 +1123,26 @@ export function Dashboard({
                 incomingSmartCuts={cinemaIncomingSmartCuts}
                 incomingRhythmGrid={cinemaIncomingRhythmGrid}
                 incomingRepairedAudio={cinemaIncomingRepaired}
+                incomingVaultItem={cinemaIncomingVaultItem}
                 onClose={() => setSurface({ view: "home", panel: null })}
                 onReleaseNode={() => void release(CINEMA_NODE_ID)}
                 onOpenStudio={openStudio}
+                onOpenCommandStorage={(itemId) =>
+                  openCommand({
+                    tab: "overview",
+                    service: null,
+                    notice: null,
+                    widget: "storage",
+                    itemId: itemId ?? null,
+                  })
+                }
+                onOpenCommandConnections={(connectorId) =>
+                  openCommand({
+                    tab: "connections",
+                    service: connectorId ?? null,
+                    notice: null,
+                  })
+                }
                 onRouteTransfer={(fromId, toId) => triggerNodeTransfer(fromId, toId)}
               />
             </div>

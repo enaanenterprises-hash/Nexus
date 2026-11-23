@@ -18,6 +18,7 @@ import {
   Redo2,
   Save,
   Scissors,
+  Send,
   Trash2,
   Type,
   Undo2,
@@ -102,6 +103,10 @@ import { CinemaInspectorContent, type CinemaInspectorTab } from "./CinemaInspect
 import { CinemaSidebar, type CinemaSidebarTab } from "./CinemaSidebar";
 import { CinemaStage } from "./CinemaStage";
 import { CinemaTimeline } from "./CinemaTimeline";
+import { commandApi } from "@/components/command/command-client";
+import { SocialPublishStudio } from "@/components/storage/SocialPublishStudio";
+import type { VaultItem } from "@/lib/storage/types";
+import { findVaultItemByProjectId, resolveVaultItemBlob, useVault } from "@/lib/storage/vault-client";
 
 const MAX_HISTORY = 40;
 
@@ -283,9 +288,12 @@ export function CinemaView({
   incomingSmartCuts,
   incomingRhythmGrid,
   incomingRepairedAudio,
+  incomingVaultItem,
   onClose,
   onReleaseNode,
   onOpenStudio,
+  onOpenCommandStorage,
+  onOpenCommandConnections,
   onRouteTransfer,
 }: {
   hub: ExtensionHubSnapshot;
@@ -307,9 +315,15 @@ export function CinemaView({
     transfer: StudioAudioRepairedTransfer;
     serial: number;
   } | null;
+  incomingVaultItem?: {
+    itemId: string;
+    serial: number;
+  } | null;
   onClose: () => void;
   onReleaseNode: () => void;
   onOpenStudio: () => void;
+  onOpenCommandStorage?: (itemId?: string) => void;
+  onOpenCommandConnections?: (connectorId?: string) => void;
   onRouteTransfer?: (fromId: ExtensionId, toId?: ExtensionId) => void;
 }) {
   const [databaseConfigured, setDatabaseConfigured] = useState(false);
@@ -374,6 +388,11 @@ export function CinemaView({
   const [newFolderName, setNewFolderName] = useState("");
   const [exportOpen, setExportOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
+  const vault = useVault();
+  const [publishAfterExport, setPublishAfterExport] = useState(false);
+  const [publishTargetItem, setPublishTargetItem] = useState<VaultItem | null>(null);
+  const [connectedConnectors, setConnectedConnectors] = useState<string[]>([]);
+  const handledVaultSerialRef = useRef<number>(0);
 
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -674,6 +693,28 @@ export function CinemaView({
       });
     }
   }, [playing, visible]);
+
+  // Keep Command social connection status fresh so Publish Studio displays connected indicators
+  useEffect(() => {
+    if (!visible && !publishTargetItem) return;
+    let alive = true;
+    void commandApi
+      .state()
+      .then((s) => {
+        if (!alive) return;
+        setConnectedConnectors(
+          s.connections
+            .filter((c) => c.status === "ok" && c.hasCredentials)
+            .map((c) => c.connectorId),
+        );
+      })
+      .catch(() => {
+        // Ignore offline/signed-out checks; SocialPublishStudio prompts gently.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [publishTargetItem, visible]);
 
   const syncVideoElements = useCallback(
     (ms: number, isPlayingMode: boolean, fastScrub = false) => {
@@ -1006,6 +1047,34 @@ export function CinemaView({
     },
     [addAssetToTimeline],
   );
+
+  // Import media opened directly from Command Storage Vault onto active timeline
+  useEffect(() => {
+    if (!incomingVaultItem) return;
+    if (incomingVaultItem.serial === handledVaultSerialRef.current) return;
+    const item = vault.items.find((entry) => entry.id === incomingVaultItem.itemId);
+    if (!item) return;
+    handledVaultSerialRef.current = incomingVaultItem.serial;
+    let cancelled = false;
+    void (async () => {
+      const blob = await resolveVaultItemBlob(item);
+      if (cancelled) return;
+      if (!blob) {
+        showNotice(`Could not load “${item.name}” binary from Command Storage.`);
+        return;
+      }
+      const file = new File([blob], item.name, {
+        type: item.mimeType || blob.type || "application/octet-stream",
+      });
+      await handleUploadFiles([file]);
+      if (!cancelled) {
+        showNotice(`Imported “${item.name}” from Command Storage.`);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [handleUploadFiles, incomingVaultItem, showNotice, vault.items]);
 
   const handleImportStudioRecording = useCallback(
     async (recording: StudioRecording, mode: "mix" | "stems" | "captions" | "markers") => {
@@ -2316,11 +2385,36 @@ export function CinemaView({
           <Button
             type="button"
             size="sm"
+            variant="outline"
             onClick={() => {
               if (playing) {
                 setPlayheadMs(Math.round(playheadRef.current));
                 setPlaying(false);
               }
+              const existing = findVaultItemByProjectId(project.id);
+              if (existing) {
+                setPublishAfterExport(false);
+                setPublishTargetItem(existing);
+              } else {
+                setPublishAfterExport(true);
+                setExportOpen(true);
+              }
+            }}
+            className="h-7 gap-1.5 rounded-lg border-[#f0b54a]/40 bg-[#f0b54a]/12 px-2.5 text-[11.5px] font-medium text-[#f0b54a] hover:bg-[#f0b54a]/22 hover:text-[#f0b54a]"
+          >
+            <Send className="size-3.5" />
+            <span>Publish</span>
+          </Button>
+
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => {
+              if (playing) {
+                setPlayheadMs(Math.round(playheadRef.current));
+                setPlaying(false);
+              }
+              setPublishAfterExport(false);
               setExportOpen(true);
             }}
             className="h-7 gap-1.5 rounded-lg bg-foreground px-3 text-[11.5px] font-medium text-background hover:opacity-90"
@@ -2459,6 +2553,7 @@ export function CinemaView({
               commitProjectChange((prev) => ({ ...prev, background }))
             }
             onOpenStudioView={onOpenStudio}
+            onOpenCommandStorage={onOpenCommandStorage ? () => onOpenCommandStorage() : undefined}
           />
         ) : null}
 
@@ -2850,13 +2945,36 @@ export function CinemaView({
 
       <CinemaExportDialog
         open={exportOpen}
-        onOpenChange={setExportOpen}
+        onOpenChange={(open) => {
+          setExportOpen(open);
+          if (!open) setPublishAfterExport(false);
+        }}
         project={project}
         playheadMs={playheadMs}
         theme="dark"
+        publishAfterExport={publishAfterExport}
         mediaElementsRef={mediaElementsRef}
         audioBuffersRef={audioBuffersRef}
         onSendMasterWavToStudio={handleSendMasterWavToStudio}
+        onPublishVaultItem={(item) => {
+          setExportOpen(false);
+          setPublishAfterExport(false);
+          setPublishTargetItem(item);
+        }}
+        onOpenCommandStorage={onOpenCommandStorage ? (itemId) => onOpenCommandStorage(itemId) : undefined}
+      />
+
+      <SocialPublishStudio
+        open={publishTargetItem !== null}
+        onOpenChange={(open) => {
+          if (!open) setPublishTargetItem(null);
+        }}
+        item={publishTargetItem}
+        connectedConnectorIds={connectedConnectors}
+        onOpenConnections={(connectorId) => {
+          setPublishTargetItem(null);
+          onOpenCommandConnections?.(connectorId);
+        }}
       />
 
       <CinemaCaptureModal

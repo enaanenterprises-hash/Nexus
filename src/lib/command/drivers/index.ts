@@ -4,6 +4,13 @@ import { githubDriver } from "./github"
 import { gmailDriver, gmailSendDriver, googleCalendarDriver, googleTasksDriver } from "./google"
 import { marketsDriver } from "./markets"
 import { skyDriver } from "./sky"
+import {
+  instagramPublishDriver,
+  linkedinPublishDriver,
+  tiktokPublishDriver,
+  xPublishDriver,
+  youtubePublishDriver,
+} from "./social"
 import { spotifyDriver } from "./spotify"
 import { stravaDriver } from "./strava"
 import { telegramDriver } from "./telegram"
@@ -29,5 +36,10 @@ export const COMMAND_DRIVERS: DriverRegistry = Object.fromEntries(
     spotifyDriver,
     marketsDriver,
     f1Driver,
+    tiktokPublishDriver,
+    instagramPublishDriver,
+    youtubePublishDriver,
+    xPublishDriver,
+    linkedinPublishDriver,
   ].map((d) => [d.id, d]),
 )

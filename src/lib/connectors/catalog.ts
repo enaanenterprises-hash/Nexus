@@ -525,6 +525,98 @@ export const CONNECTOR_CATALOG: readonly ConnectorManifest[] = (
     actions: [],
     live: { status: "available", api: "Jolpica F1 (Ergast successor, no key)" },
   },
+
+  // ——— Social publishing ———
+  {
+    id: "tiktok-publish",
+    name: "TikTok Publishing",
+    category: "social",
+    description: "Direct video & post publishing via the TikTok Content Posting API.",
+    monogram: "TT",
+    auth: {
+      type: "api_key",
+      docsUrl: "https://developers.tiktok.com/doc/content-posting-api-get-started",
+      fields: [
+        { key: "accessToken", label: "Access token", secret: true, placeholder: "act.…", help: "OAuth 2.0 token with video.publish scope." },
+        { key: "openId", label: "Open ID", secret: false, optional: true, help: "Creator handle or TikTok open_id for display." },
+      ],
+    },
+    produces: [],
+    actions: ["social.publish"],
+    live: { status: "available", api: "TikTok Content Posting API v2" },
+  },
+  {
+    id: "instagram-publish",
+    name: "Instagram Publishing",
+    category: "social",
+    description: "Publish Reels and Feed videos via the Instagram Graph API.",
+    monogram: "IG",
+    auth: {
+      type: "api_key",
+      docsUrl: "https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media",
+      fields: [
+        { key: "accessToken", label: "Graph access token", secret: true, placeholder: "EAAB…", help: "Token with instagram_content_publish permission." },
+        { key: "igUserId", label: "Instagram Business Account ID", secret: false, placeholder: "1784140…", help: "Numeric IG user id linked to your Page." },
+      ],
+    },
+    produces: [],
+    actions: ["social.publish"],
+    live: { status: "available", api: "Instagram Graph API v21.0" },
+  },
+  {
+    id: "youtube-publish",
+    name: "YouTube Studio Upload",
+    category: "social",
+    description: "Upload Shorts and 16:9 videos through YouTube Data API v3.",
+    monogram: "YT",
+    auth: {
+      type: "api_key",
+      docsUrl: "https://developers.google.com/youtube/v3/docs/videos/insert",
+      fields: [
+        { key: "accessToken", label: "OAuth bearer token", secret: true, placeholder: "ya29.…", help: "Token with https://www.googleapis.com/auth/youtube.upload scope." },
+        { key: "channelHandle", label: "Channel handle", secret: false, optional: true, placeholder: "@yourchannel" },
+      ],
+    },
+    produces: [],
+    actions: ["social.publish"],
+    live: { status: "available", api: "YouTube Data API v3" },
+  },
+  {
+    id: "x-publish",
+    name: "X Publishing",
+    category: "social",
+    description: "Publish video posts and announcements directly via the X v2 API.",
+    monogram: "X",
+    auth: {
+      type: "api_key",
+      docsUrl: "https://developer.x.com/en/docs/x-api/tweets/manage-tweets/introduction",
+      fields: [
+        { key: "accessToken", label: "OAuth 2.0 user bearer token", secret: true, help: "User-context token with tweet.write and media.write scopes." },
+        { key: "handle", label: "Account handle", secret: false, optional: true, placeholder: "@username" },
+      ],
+    },
+    produces: [],
+    actions: ["social.publish"],
+    live: { status: "available", api: "X API v2" },
+  },
+  {
+    id: "linkedin-publish",
+    name: "LinkedIn Publishing",
+    category: "social",
+    description: "Publish creator updates and video uploads via LinkedIn REST API.",
+    monogram: "IN",
+    auth: {
+      type: "api_key",
+      docsUrl: "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/videos-api",
+      fields: [
+        { key: "accessToken", label: "OAuth bearer token", secret: true, help: "Token with w_member_social permission." },
+        { key: "personUrn", label: "Author URN", secret: false, optional: true, placeholder: "urn:li:person:…", help: "Optional if auto-resolved via /v2/userinfo." },
+      ],
+    },
+    produces: [],
+    actions: ["social.publish"],
+    live: { status: "available", api: "LinkedIn Marketing / Videos REST API" },
+  },
   ] satisfies ConnectorManifest[]
 ).map(defineConnector);
 

@@ -1,8 +1,11 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { Download, Film, Image as ImageIcon, Loader2, Waves, X } from "lucide-react";
+import { Download, Film, FolderOpen, HardDrive, Image as ImageIcon, Loader2, Send, Waves, X } from "lucide-react";
+import { CINEMA_NODE_ID } from "@/extensions/cinema/node";
 import { Button } from "@/components/ui/button";
+import { saveBlobToVault } from "@/lib/storage/vault-client";
+import type { VaultItem } from "@/lib/storage/types";
 import {
   Dialog,
   DialogContent,
@@ -55,18 +58,24 @@ export function CinemaExportDialog({
   project,
   playheadMs,
   theme,
+  publishAfterExport = false,
   mediaElementsRef,
   audioBuffersRef,
   onSendMasterWavToStudio,
+  onPublishVaultItem,
+  onOpenCommandStorage,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   project: CinemaProject;
   playheadMs: number;
   theme: "dark" | "light";
+  publishAfterExport?: boolean;
   mediaElementsRef: React.RefObject<Map<string, HTMLVideoElement | HTMLImageElement>>;
   audioBuffersRef: React.RefObject<Map<string, AudioBuffer>>;
   onSendMasterWavToStudio: (blob: Blob) => Promise<void>;
+  onPublishVaultItem?: (item: VaultItem) => void;
+  onOpenCommandStorage?: (itemId: string) => void;
 }) {
   const defaultResolution: CinemaExportResolution = useMemo(() => {
     const primaryVideo = project.assets.find((a) => a.kind === "video");
@@ -84,11 +93,13 @@ export function CinemaExportDialog({
   const resolution = resolutionOverride ?? defaultResolution;
   const [fps, setFps] = useState<24 | 30 | 60>(project.fps);
   const [quality, setQuality] = useState<"high" | "balanced">("high");
+  const [saveToStorage, setSaveToStorage] = useState(true);
 
   const [exporting, setExporting] = useState(false);
   const [progress, setProgress] = useState<CinemaExportProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<CinemaExportResult | null>(null);
+  const [savedVaultItem, setSavedVaultItem] = useState<VaultItem | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const predictedMode = useMemo(
@@ -99,6 +110,7 @@ export function CinemaExportDialog({
   async function startExport() {
     setError(null);
     setLastResult(null);
+    setSavedVaultItem(null);
     setExporting(true);
     const controller = new AbortController();
     abortRef.current = controller;
@@ -124,8 +136,33 @@ export function CinemaExportDialog({
       if (format === "wav-studio") {
         await onSendMasterWavToStudio(result.blob);
       }
+
+      let storedItem: VaultItem | null = null;
+      if (saveToStorage) {
+        storedItem = await saveBlobToVault({
+          blob: result.blob,
+          name: result.filename,
+          mimeType: result.blob.type,
+          folderId: format === "wav-studio" ? "podcast-audio" : "cinema-exports",
+          source: "cinema",
+          metadata: {
+            sourceNodeId: CINEMA_NODE_ID,
+            sourceProjectId: project.id,
+            aspectRatio: project.aspectRatio,
+            fps,
+            durationMs: computeProjectDurationMs(project),
+          },
+        });
+        setSavedVaultItem(storedItem);
+      }
+
       downloadBlob(result.blob, result.filename);
       setLastResult(result);
+
+      if (publishAfterExport && storedItem && (storedItem.kind === "video" || storedItem.kind === "image")) {
+        onOpenChange(false);
+        onPublishVaultItem?.(storedItem);
+      }
     } catch (err) {
       if ((err as DOMException)?.name === "AbortError") {
         setError("Export cancelled.");
@@ -301,13 +338,63 @@ export function CinemaExportDialog({
           ) : null}
 
           {lastResult && !exporting ? (
-            <p className="rounded-xl border border-[color:var(--cinema-select)]/45 bg-[color:var(--cinema-select-soft)] px-3 py-2 text-[12px] text-foreground tabular-nums">
-              Saved <strong>{lastResult.filename}</strong> ·{" "}
-              {(lastResult.elapsedMs / 1000).toFixed(2)}s ·{" "}
-              {(lastResult.blob.size / (1024 * 1024)).toFixed(2)} MB
-              {format === "wav-studio" ? " & staged for Recording Studio." : "."}
-            </p>
+            <div className="space-y-2.5 rounded-xl border border-[color:var(--cinema-select)]/45 bg-[color:var(--cinema-select-soft)] px-3.5 py-2.5 text-[12px] text-foreground">
+              <p className="tabular-nums">
+                Saved <strong>{lastResult.filename}</strong> ·{" "}
+                {(lastResult.elapsedMs / 1000).toFixed(2)}s ·{" "}
+                {(lastResult.blob.size / (1024 * 1024)).toFixed(2)} MB
+                {savedVaultItem ? " in Command Storage" : ""}
+                {format === "wav-studio" ? " & staged for Recording Studio." : "."}
+              </p>
+              {savedVaultItem && (savedVaultItem.kind === "video" || savedVaultItem.kind === "image") ? (
+                <div className="flex flex-wrap gap-2">
+                  {onPublishVaultItem ? (
+                    <Button
+                      type="button"
+                      size="xs"
+                      onClick={() => {
+                        onOpenChange(false);
+                        onPublishVaultItem(savedVaultItem);
+                      }}
+                      className="h-7 gap-1.5 rounded-full bg-foreground px-3 text-[11px] font-medium text-background hover:opacity-90"
+                    >
+                      <Send className="size-3 text-[color:var(--land-gold)]" />
+                      <span>Publish to Social…</span>
+                    </Button>
+                  ) : null}
+                  {onOpenCommandStorage ? (
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="outline"
+                      onClick={() => {
+                        onOpenChange(false);
+                        onOpenCommandStorage(savedVaultItem.id);
+                      }}
+                      className="h-7 gap-1.5 rounded-full px-3 text-[11px]"
+                    >
+                      <FolderOpen className="size-3" />
+                      <span>Open in Storage</span>
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           ) : null}
+
+          <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-border/75 bg-muted/25 px-3 py-2 text-[12px]">
+            <span className="flex items-center gap-2 text-foreground">
+              <HardDrive className="size-3.5 text-[color:var(--land-gold)]" />
+              <span>Save export to Command Storage Vault</span>
+            </span>
+            <input
+              type="checkbox"
+              checked={saveToStorage}
+              disabled={exporting}
+              onChange={(e) => setSaveToStorage(e.target.checked)}
+              className="size-4 accent-[color:var(--land-gold)]"
+            />
+          </label>
 
           <Separator />
 

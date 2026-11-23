@@ -5,6 +5,41 @@ import { CircleDot, GitCommitHorizontal, GitPullRequest, Sun } from "lucide-reac
 /** Visual miniature preview of each Command widget for galleries and setup boards. */
 export function WidgetVisualPreview({ id }: { id: string }) {
   switch (id) {
+    case "storage":
+      return (
+        <div className="space-y-1.5 pt-0.5 text-foreground">
+          <div className="flex items-center justify-between gap-2 text-[10.5px] text-muted-foreground">
+            <span className="truncate font-medium text-foreground">Command Vault</span>
+            <span className="shrink-0 font-mono text-[10px] text-[color:var(--land-gold)] tabular-nums">4 files · 142 MB</span>
+          </div>
+          <div className="h-px w-full overflow-hidden rounded-full bg-border/60">
+            <div className="h-full w-2/5 rounded-full bg-[color:var(--land-gold)]" />
+          </div>
+          <div className="grid grid-cols-3 gap-1.5">
+            <div className="rounded-lg border border-border/60 bg-muted/45 px-2 py-1.5">
+              <div className="flex items-center justify-between text-[9.5px] text-muted-foreground">
+                <span>MP4</span>
+                <span className="font-mono tabular-nums">01:24</span>
+              </div>
+              <p className="mt-1 truncate text-[10.5px] font-medium text-foreground">Podcast Cut</p>
+            </div>
+            <div className="rounded-lg border border-border/60 bg-muted/45 px-2 py-1.5">
+              <div className="flex items-center justify-between text-[9.5px] text-muted-foreground">
+                <span>WAV</span>
+                <span className="font-mono tabular-nums">42:10</span>
+              </div>
+              <p className="mt-1 truncate text-[10.5px] font-medium text-foreground">Studio Master</p>
+            </div>
+            <div className="rounded-lg border border-border/60 bg-muted/45 px-2 py-1.5">
+              <div className="flex items-center justify-between text-[9.5px] text-muted-foreground">
+                <span>CSV</span>
+                <span className="font-mono tabular-nums">Q4</span>
+              </div>
+              <p className="mt-1 truncate text-[10.5px] font-medium text-foreground">Metrics</p>
+            </div>
+          </div>
+        </div>
+      );
     case "gmail":
       return (
         <div className="space-y-1.5 pt-0.5 text-foreground">

@@ -5,6 +5,7 @@ import {
   CINEMA_SCHEMA_STATEMENTS,
   COMMAND_SCHEMA_STATEMENTS,
   RESEARCH_SCHEMA_STATEMENTS,
+  STORAGE_SCHEMA_STATEMENTS,
   STUDIO_SCHEMA_STATEMENTS,
   USER_STATE_SCHEMA_STATEMENTS,
   WAITLIST_SCHEMA_STATEMENTS,
@@ -22,6 +23,7 @@ let cinemaReady: Promise<void> | null = null
 let commandReady: Promise<void> | null = null
 let waitlistReady: Promise<void> | null = null
 let userStateReady: Promise<void> | null = null
+let storageReady: Promise<void> | null = null
 
 export function databaseUrl() {
   const url = process.env["DATABASE_URL"]?.trim()
@@ -155,4 +157,19 @@ export function ensureUserStateSchema() {
     throw error
   })
   return userStateReady
+}
+
+/** Creates the Storage Vault & Social Publish tables (after Auth.js tables). */
+export function ensureStorageSchema() {
+  storageReady ??= (async () => {
+    await ensureAuthSchema()
+    const connection = getSql()
+    for (const statement of STORAGE_SCHEMA_STATEMENTS) {
+      await connection.unsafe(statement)
+    }
+  })().catch((error: unknown) => {
+    storageReady = null
+    throw error
+  })
+  return storageReady
 }

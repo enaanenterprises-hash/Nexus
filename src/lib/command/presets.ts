@@ -10,26 +10,26 @@ export const COMMAND_BOARD_PRESETS: readonly CommandBoardPreset[] = [
   {
     id: "daily-atelier",
     name: "Daily Atelier",
-    tagline: "Schedule, inbox, forecast, and tasks",
-    widgets: ["calendar", "gmail", "weather", "tasks"],
+    tagline: "Storage, schedule, forecast, and tasks",
+    widgets: ["storage", "calendar", "weather", "tasks"],
+  },
+  {
+    id: "creator-desk",
+    name: "Creator Desk",
+    tagline: "Storage Vault, inbox, and studio calendar",
+    widgets: ["storage", "gmail", "calendar"],
   },
   {
     id: "builder-desk",
     name: "Builder Desk",
-    tagline: "GitHub, mail, deploys, tasks, and uptime",
-    widgets: ["github", "gmail", "vercel", "tasks", "uptime"],
-  },
-  {
-    id: "live-telemetry",
-    name: "Live Telemetry",
-    tagline: "F1, markets, weather, sky, and Strava",
-    widgets: ["f1", "crypto", "weather", "sky", "strava"],
+    tagline: "Storage, GitHub, mail, deploys, and tasks",
+    widgets: ["storage", "github", "gmail", "vercel", "tasks"],
   },
   {
     id: "minimal-focus",
     name: "Minimal Focus",
-    tagline: "Calendar, weather, and tasks with room to breathe",
-    widgets: ["calendar", "weather", "tasks"],
+    tagline: "Storage, calendar, and tasks with room to breathe",
+    widgets: ["storage", "calendar", "tasks"],
   },
 ];
 

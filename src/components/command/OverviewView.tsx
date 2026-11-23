@@ -20,6 +20,7 @@ import {
   COMMAND_WIDGETS,
   OVERVIEW_COLUMNS,
   OVERVIEW_ROWS,
+  isMandatoryWidget,
   overviewAccepts,
   placeWidgets,
   reorderOverviewWidgets,
@@ -29,6 +30,7 @@ import {
 import type { CommandController } from "./use-command";
 import { WidgetVisualPreview } from "./WidgetVisualPreview";
 import { GmailWidget } from "./widgets/GmailWidget";
+import { StorageWidget } from "./widgets/StorageWidget";
 import { WidgetSlotDragProvider } from "./widgets/frame";
 import {
   CalendarWidget,
@@ -81,11 +83,15 @@ export function OverviewView({
   expandRequest = null,
   onApplyPreset,
   onConnections,
+  onOpenCinemaWithVaultItem,
+  onOpenStudioWithVaultItem,
 }: {
   command: CommandController;
-  expandRequest?: { widgetId: string; serial: number } | null;
+  expandRequest?: { widgetId: string; itemId?: string | null; serial: number } | null;
   onApplyPreset?: (preset: CommandBoardPreset) => void;
-  onConnections: () => void;
+  onConnections: (connectorId?: string) => void;
+  onOpenCinemaWithVaultItem?: (itemId: string) => void;
+  onOpenStudioWithVaultItem?: (itemId: string) => void;
 }) {
   const overviewIds = command.state?.overview;
   const ids = useMemo(() => overviewIds ?? [], [overviewIds]);
@@ -93,6 +99,7 @@ export function OverviewView({
   const [open, setOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [pendingMailId, setPendingMailId] = useState<string | null>(null);
+  const [pendingStorageItemId, setPendingStorageItemId] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
   const dragRef = useRef<DragState | null>(null);
   const idsRef = useRef(ids);
@@ -106,17 +113,18 @@ export function OverviewView({
     dragRef.current = drag;
   }, [drag]);
 
-  // Honor external Spotlight ⌘K jump-to-widget requests cleanly
+  // Honor external Spotlight ⌘K jump-to-widget and Storage deep-link requests cleanly
   useEffect(() => {
     if (!expandRequest || expandRequest.serial === handledExpandRef.current) return;
     handledExpandRef.current = expandRequest.serial;
-    const { widgetId } = expandRequest;
+    const { widgetId, itemId } = expandRequest;
     const current = idsRef.current;
     if (!current.includes(widgetId) && overviewAccepts(current, widgetId)) {
       void command.setOverview(placeWidgets([...current, widgetId]).map((w) => w.id));
     }
     const frame = window.requestAnimationFrame(() => {
       setPendingMailId(null);
+      setPendingStorageItemId(widgetId === "storage" ? (itemId ?? null) : null);
       setExpandedId(widgetId);
     });
     return () => window.cancelAnimationFrame(frame);
@@ -141,6 +149,7 @@ export function OverviewView({
   const collapse = useCallback(() => {
     setExpandedId(null);
     setPendingMailId(null);
+    setPendingStorageItemId(null);
   }, []);
 
   const isDraggingSession = drag !== null;
@@ -266,6 +275,7 @@ export function OverviewView({
   }
 
   function remove(id: string) {
+    if (isMandatoryWidget(id)) return;
     if (expandedId === id) collapse();
     void command.setOverview(ids.filter((widget) => widget !== id));
   }
@@ -322,9 +332,12 @@ export function OverviewView({
             command={command}
             expanded
             initialMailId={expandedWidget.id === "gmail" ? pendingMailId : null}
+            initialStorageItemId={expandedWidget.id === "storage" ? pendingStorageItemId : null}
             onCollapse={collapse}
             onRemove={() => remove(expandedWidget.id)}
             onConnections={onConnections}
+            onOpenCinemaWithVaultItem={onOpenCinemaWithVaultItem}
+            onOpenStudioWithVaultItem={onOpenStudioWithVaultItem}
           />
         </div>
       ) : (
@@ -349,7 +362,13 @@ export function OverviewView({
                   expanded={false}
                   onExpand={() => {
                     setPendingMailId(null);
+                    setPendingStorageItemId(null);
                     setExpandedId(widget.id);
+                  }}
+                  onExpandStorageWithItem={(itemId) => {
+                    setPendingMailId(null);
+                    setPendingStorageItemId(itemId);
+                    setExpandedId("storage");
                   }}
                   onOpenMessageFromPreview={(msgId) => {
                     setPendingMailId(msgId);
@@ -357,6 +376,8 @@ export function OverviewView({
                   }}
                   onRemove={() => remove(widget.id)}
                   onConnections={onConnections}
+                  onOpenCinemaWithVaultItem={onOpenCinemaWithVaultItem}
+                  onOpenStudioWithVaultItem={onOpenStudioWithVaultItem}
                 />
               </WidgetSlotDragProvider>
             );
@@ -470,7 +491,7 @@ export function OverviewView({
                           variant={alreadyAdded ? "secondary" : "outline"}
                           className="ml-auto h-5 shrink-0 px-2 text-[10.5px] font-semibold tabular-nums"
                         >
-                          {alreadyAdded ? "Added" : !accepted ? "No room" : `${widget.w}×${widget.h}`}
+                          {widget.mandatory ? "Required" : alreadyAdded ? "Added" : !accepted ? "No room" : `${widget.w}×${widget.h}`}
                         </Badge>
                       </header>
                       <div className="cmd-widget-body">
@@ -494,25 +515,48 @@ function WidgetSlot({
   command,
   expanded,
   initialMailId = null,
+  initialStorageItemId = null,
   onExpand,
+  onExpandStorageWithItem,
   onCollapse,
   onOpenMessageFromPreview,
   onRemove,
   onConnections,
+  onOpenCinemaWithVaultItem,
+  onOpenStudioWithVaultItem,
 }: {
   id: string;
   style?: CSSProperties;
   command: CommandController;
   expanded: boolean;
   initialMailId?: string | null;
+  initialStorageItemId?: string | null;
   onExpand?: () => void;
+  onExpandStorageWithItem?: (itemId: string) => void;
   onCollapse?: () => void;
   onOpenMessageFromPreview?: (messageId: string) => void;
   onRemove: () => void;
-  onConnections: () => void;
+  onConnections: (connectorId?: string) => void;
+  onOpenCinemaWithVaultItem?: (itemId: string) => void;
+  onOpenStudioWithVaultItem?: (itemId: string) => void;
 }) {
   const props = { command, expanded, onExpand, onCollapse, onRemove, onConnections, style };
   switch (id) {
+    case "storage":
+      return (
+        <StorageWidget
+          command={command}
+          expanded={expanded}
+          initialItemId={initialStorageItemId}
+          onExpand={onExpand}
+          onExpandWithItem={onExpandStorageWithItem}
+          onCollapse={onCollapse}
+          onConnections={onConnections}
+          onOpenCinemaWithItem={onOpenCinemaWithVaultItem}
+          onOpenStudioWithItem={onOpenStudioWithVaultItem}
+          style={style}
+        />
+      );
     case "gmail":
       return (
         <GmailWidget

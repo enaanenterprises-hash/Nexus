@@ -6,6 +6,7 @@ import type { ConnectionStatus, ConnectionView } from "@/lib/connectors/types"
 import { BUILT_IN_RECIPES } from "./automation/recipes"
 import type { AutomationRun, FocusSession, StepResult } from "./automation/types"
 import { itemTime, type CommandItem, type CommandKind } from "./kinds"
+import { normalizeOverview } from "./widgets"
 
 /** Every query is scoped by `userId`. */
 
@@ -299,12 +300,12 @@ export async function finishFocus(userId: string, id: string, now = new Date()):
 
 // ——— Overview ———
 
-/** Widget ids on the one overview page. Empty for a new user. */
+/** Widget ids on the one overview page. Always includes mandatory Command boxes such as Storage. */
 export async function overviewWidgets(userId: string): Promise<string[]> {
   const sql = await db()
   const [row] = await sql`SELECT "widgets" FROM command_overview WHERE "userId" = ${userId}`
   const raw = row?.["widgets"]
-  return Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string") : []
+  return normalizeOverview(Array.isArray(raw) ? raw : [])
 }
 
 export async function saveOverview(userId: string, widgets: string[]) {

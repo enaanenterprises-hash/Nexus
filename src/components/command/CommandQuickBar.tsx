@@ -140,6 +140,19 @@ export function CommandQuickBar({
 
     list.push(
       {
+        id: "nav-storage",
+        group: "Widgets",
+        title: "Open Storage Vault",
+        subtitle: "Browse files, video exports, podcasts & multi-platform social publishing",
+        keywords: "storage files vault media social export tiktok instagram youtube",
+        icon: "widget",
+        run: () => {
+          onClose();
+          onSelectTab("overview");
+          onExpandWidget("storage");
+        },
+      },
+      {
         id: "nav-overview",
         group: "Navigate",
         title: "Go to Overview board",

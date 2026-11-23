@@ -267,3 +267,53 @@ export const USER_STATE_SCHEMA_STATEMENTS = [
     "updatedAt" timestamptz NOT NULL DEFAULT now()
   )`,
 ] as const
+
+/**
+ * Command Storage Vault & Social Publish history, scoped per user.
+ * Holds videos, Studio mixes, class notes, datasets, and extension payloads.
+ */
+export const STORAGE_SCHEMA_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS "storage_folder" (
+    "id" text NOT NULL,
+    "userId" text NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
+    "name" text NOT NULL,
+    "parentId" text,
+    "description" text,
+    "system" boolean NOT NULL DEFAULT false,
+    "createdAt" timestamptz NOT NULL DEFAULT now(),
+    "updatedAt" timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT "storage_folder_pk" PRIMARY KEY ("userId", "id")
+  )`,
+  `CREATE TABLE IF NOT EXISTS "storage_item" (
+    "id" text NOT NULL,
+    "userId" text NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
+    "folderId" text,
+    "name" text NOT NULL,
+    "mimeType" text NOT NULL,
+    "kind" text NOT NULL,
+    "sizeBytes" bigint NOT NULL DEFAULT 0,
+    "blobKey" text,
+    "remoteUrl" text,
+    "thumbnailDataUrl" text,
+    "starred" boolean NOT NULL DEFAULT false,
+    "tags" text[] NOT NULL DEFAULT '{}',
+    "metadata" jsonb NOT NULL DEFAULT '{}',
+    "createdAt" timestamptz NOT NULL DEFAULT now(),
+    "updatedAt" timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT "storage_item_pk" PRIMARY KEY ("userId", "id")
+  )`,
+  `CREATE INDEX IF NOT EXISTS "storage_item_userId_idx" ON "storage_item" ("userId", "updatedAt" DESC)`,
+  `CREATE INDEX IF NOT EXISTS "storage_item_folderId_idx" ON "storage_item" ("userId", "folderId")`,
+  `CREATE TABLE IF NOT EXISTS "social_publish_job" (
+    "id" text PRIMARY KEY NOT NULL,
+    "userId" text NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
+    "itemId" text,
+    "title" text NOT NULL,
+    "description" text NOT NULL,
+    "hashtags" text NOT NULL DEFAULT '',
+    "platforms" jsonb NOT NULL DEFAULT '{}',
+    "results" jsonb NOT NULL DEFAULT '[]',
+    "createdAt" timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS "social_publish_job_userId_idx" ON "social_publish_job" ("userId", "createdAt" DESC)`,
+] as const

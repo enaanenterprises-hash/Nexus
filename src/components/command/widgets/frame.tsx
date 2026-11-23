@@ -34,6 +34,7 @@ export function WidgetFrame({
   hint,
   actions,
   expanded = false,
+  removable = true,
   dragging = false,
   dropTarget = false,
   onDragStartPointer,
@@ -49,6 +50,7 @@ export function WidgetFrame({
   hint?: string;
   actions?: ReactNode;
   expanded?: boolean;
+  removable?: boolean;
   dragging?: boolean;
   dropTarget?: boolean;
   onDragStartPointer?: (event: PointerEvent<HTMLElement>) => void;
@@ -164,23 +166,32 @@ export function WidgetFrame({
               <TooltipContent side="bottom">Back to overview</TooltipContent>
             </Tooltip>
           ) : null}
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  className="cmd-widget-remove size-6 rounded-md opacity-60 transition-opacity group-hover/widget:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
-                  onClick={onRemove}
-                  aria-label={`Remove ${title}`}
-                >
-                  <X className="size-3.5" />
-                </Button>
-              }
-            />
-            <TooltipContent side="bottom">Remove widget</TooltipContent>
-          </Tooltip>
+          {removable ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    className="cmd-widget-remove size-6 rounded-md opacity-60 transition-opacity group-hover/widget:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+                    onClick={onRemove}
+                    aria-label={`Remove ${title}`}
+                  >
+                    <X className="size-3.5" />
+                  </Button>
+                }
+              />
+              <TooltipContent side="bottom">Remove widget</TooltipContent>
+            </Tooltip>
+          ) : (
+            <span
+              className="rounded-full border border-border/70 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+              title="Core box pinned in Command"
+            >
+              Core
+            </span>
+          )}
         </div>
       </header>
       <div className={`cmd-widget-body ${expanded ? "cmd-widget-body--expanded" : ""}`}>{children}</div>

@@ -9,6 +9,7 @@ import type { CommandKind } from "../command/kinds";
 
 export const CONNECTOR_CATEGORIES = {
   comms: { label: "Communications & scheduling", short: "Schedule" },
+  social: { label: "Social publishing", short: "Social" },
   dev: { label: "Engineering & DevOps", short: "DevOps" },
   academics: { label: "Academics & projects", short: "Projects" },
   fitness: { label: "Fitness & recovery", short: "Body" },

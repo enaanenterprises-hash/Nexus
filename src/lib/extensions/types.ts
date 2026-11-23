@@ -131,6 +131,14 @@ export type NexusEventMap = {
   "command:automation-ran": { run: AutomationRun };
   "command:connection-changed": { connectorId: string; connected: boolean };
   "command:focus-changed": { focus: FocusSession | null };
+  "storage:item-saved": {
+    itemId: string;
+    kind: string;
+    name: string;
+    folderId: string | null;
+    source: string;
+  };
+  "storage:item-deleted": { itemId: string; name: string };
 };
 
 export type NexusEventType = keyof NexusEventMap;

@@ -6,12 +6,15 @@ import {
   Captions,
   Check,
   Film,
+  FolderOpen,
+  HardDrive,
   Image as ImageIcon,
   Layers,
   Loader2,
   Mic,
   MonitorPlay,
   MoreHorizontal,
+  Music,
   PanelLeftClose,
   Plus,
   Scissors,
@@ -22,6 +25,8 @@ import {
   Video,
   Waves,
 } from "lucide-react";
+import { resolveVaultItemBlob, useVault } from "@/lib/storage/vault-client";
+import type { VaultItem } from "@/lib/storage/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -97,6 +102,7 @@ export const CinemaSidebar = memo(function CinemaSidebar({
   onChangeFps,
   onChangeBackground,
   onOpenStudioView,
+  onOpenCommandStorage,
 }: {
   open: boolean;
   activeTab: CinemaSidebarTab;
@@ -125,7 +131,27 @@ export const CinemaSidebar = memo(function CinemaSidebar({
   onChangeFps: (fps: 24 | 30 | 60) => void;
   onChangeBackground: (bg: CinemaBackground) => void;
   onOpenStudioView: () => void;
+  onOpenCommandStorage?: () => void;
 }) {
+  const vault = useVault();
+  const [importingVaultId, setImportingVaultId] = useState<string | null>(null);
+  const vaultMedia = vault.items.filter(
+    (item) => item.kind === "video" || item.kind === "audio" || item.kind === "image",
+  );
+
+  async function importFromVault(item: VaultItem) {
+    setImportingVaultId(item.id);
+    try {
+      const blob = await resolveVaultItemBlob(item);
+      if (!blob) return;
+      const file = new File([blob], item.name, {
+        type: item.mimeType || blob.type || "application/octet-stream",
+      });
+      await onUploadFiles([file]);
+    } finally {
+      setImportingVaultId(null);
+    }
+  }
   // Recording Studio Bridge State (inside the dedicated Nexus Links panel)
   const [studioDb, setStudioDb] = useState(false);
   const [studioCols, setStudioCols] = useState<StudioCollection[]>([]);
@@ -420,6 +446,83 @@ export const CinemaSidebar = memo(function CinemaSidebar({
               })}
             </div>
           ) : null}
+
+          <div className="mt-4 border-t border-border/60 pt-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <HardDrive className="size-3.5 shrink-0 text-[#d89b2c]" />
+                <span className="truncate text-[11.5px] font-semibold text-foreground">
+                  Command Storage
+                </span>
+                <span className="rounded-full border border-border/60 bg-background/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground tabular-nums">
+                  {vaultMedia.length}
+                </span>
+              </div>
+              {onOpenCommandStorage ? (
+                <button
+                  type="button"
+                  onClick={onOpenCommandStorage}
+                  className="inline-flex h-6 items-center gap-1 rounded-md border border-border/60 px-2 text-[10.5px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
+                >
+                  <FolderOpen className="size-3" />
+                  <span>Vault</span>
+                </button>
+              ) : null}
+            </div>
+
+            {vaultMedia.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border/60 bg-background/40 px-3 py-3 text-[11px] leading-relaxed text-muted-foreground">
+                No videos, images, or mixes in Command Storage yet. Export from Studio or Cinema to reuse assets across Nexus.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-1.5">
+                {vaultMedia.slice(0, 12).map((item) => {
+                  const busy = importingVaultId === item.id;
+                  const durationMs = item.metadata.durationMs;
+                  const durLabel =
+                    typeof durationMs === "number" && durationMs > 0
+                      ? `${Math.max(1, Math.round(durationMs / 1000))}s`
+                      : item.sizeBytes >= 1024 * 1024
+                        ? `${(item.sizeBytes / (1024 * 1024)).toFixed(1)} MB`
+                        : `${Math.max(1, Math.round(item.sizeBytes / 1024))} KB`;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      disabled={busy || importingVaultId !== null}
+                      onClick={() => void importFromVault(item)}
+                      className="group flex min-h-11 w-full items-center gap-2.5 rounded-xl border border-border/60 bg-background/50 p-1.5 text-left transition-colors hover:border-[#f0b54a]/50 hover:bg-background/90 disabled:opacity-55"
+                    >
+                      <div className="relative flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/50 bg-black/50">
+                        {item.thumbnailDataUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={item.thumbnailDataUrl}
+                            alt={item.name}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : item.kind === "audio" ? (
+                          <Music className="size-4 text-[#f0b54a]" />
+                        ) : (
+                          <HardDrive className="size-4 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[11.5px] font-medium text-foreground">
+                          {item.name}
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground tabular-nums">
+                          <span className="capitalize">{item.kind}</span>
+                          <span>·</span>
+                          <span>{busy ? "Adding…" : durLabel}</span>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       ) : null}
 
