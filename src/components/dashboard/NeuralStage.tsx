@@ -84,6 +84,7 @@ export const NeuralStage = memo(function NeuralStage({
         snap={signal.snap}
         transfer={signal.transfer ?? null}
         paused={signal.paused}
+        fromSetupExplosion={Boolean(signal.fromSetupExplosion)}
         showcaseAll={Boolean(signal.showcaseAll)}
         mode="stage"
         onSelectNode={onSelectSocket}

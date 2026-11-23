@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { ExtensionLink } from "@/lib/extensions";
 import {
   add,
@@ -12,6 +12,7 @@ import {
   polar,
   radialGlow,
   seededHelpers,
+  sub,
   type Vec,
 } from "@/lib/network/geometry";
 import {
@@ -38,6 +39,7 @@ export interface BranchingNetworkCanvasProps {
   snap?: { index: number; serial: number } | null;
   transfer?: { fromSocket: number; toSocket: number; label: string; serial: number } | null;
   paused?: boolean;
+  fromSetupExplosion?: boolean;
   mode?: "stage" | "embedded";
   bottomClearance?: number;
   showcaseAll?: boolean;
@@ -91,7 +93,40 @@ type CometPulse = {
   targetIdx: number;
   progress: number;
   duration: number;
+  intensity?: number;
+  bloomOnArrive?: boolean;
 };
+
+type ClickRipple = {
+  x: number;
+  y: number;
+  progress: number;
+  duration: number;
+  maxRadius: number;
+  strength: number;
+  doubleRing?: boolean;
+};
+
+type WaveImpulse = {
+  x: number;
+  y: number;
+  progress: number;
+  duration: number;
+  maxRadius: number;
+  amplitude: number;
+};
+
+/** Deterministic harmonic drift table for up to 120 slots so adjacent branches weave softly out of phase. */
+const NODE_DRIFT_SEEDS = (() => {
+  const { rnd, between } = seededHelpers(20261128);
+  return Array.from({ length: 120 }, () => ({
+    phaseX: rnd() * Math.PI * 2,
+    phaseY: rnd() * Math.PI * 2,
+    freqX: between(0.24, 0.44),
+    freqY: between(0.19, 0.36),
+    tailPhase: rnd() * Math.PI * 2,
+  }));
+})();
 
 /** 6-tier optical filament palette shared with Welcome page's GoldenNetwork engine. */
 const DARK_BUCKETS = [
@@ -203,13 +238,53 @@ function swayControlPoints(
   const len = Math.max(12, Math.hypot(dx, dy));
   const nx = -dy / len;
   const ny = dx / len;
-  const wave = Math.sin(time * 0.45 + strand.phase) * strand.sway;
-  const shift1 = (strand.offsetScale + wave * 0.045) * len * ampScale;
-  const shift2 = (strand.offsetScale * 0.65 - wave * 0.035) * len * ampScale;
+  const wave =
+    (Math.sin(time * 0.72 + strand.phase) * 0.068 +
+      Math.sin(time * 0.34 - strand.phase * 1.4) * 0.032) *
+    strand.sway;
+  const shift1 = (strand.offsetScale + wave) * len * ampScale;
+  const shift2 = (strand.offsetScale * 0.65 - wave * 0.78) * len * ampScale;
   return [
     { x: c1.x + nx * shift1, y: c1.y + ny * shift1 },
     { x: c2.x + nx * shift2, y: c2.y + ny * shift2 },
   ];
+}
+
+function displaceCurvePoints(
+  p0Base: Vec,
+  c1Base: Vec,
+  c2Base: Vec,
+  p3Base: Vec,
+  p0Live: Vec,
+  p3Live: Vec,
+  ptrSmooth: Vec,
+  ptrPresence: number,
+): [Vec, Vec, Vec, Vec] {
+  const d0 = sub(p0Live, p0Base);
+  const d3 = sub(p3Live, p3Base);
+  let c1x = c1Base.x + d0.x * 0.72 + d3.x * 0.28;
+  let c1y = c1Base.y + d0.y * 0.72 + d3.y * 0.28;
+  let c2x = c2Base.x + d0.x * 0.28 + d3.x * 0.72;
+  let c2y = c2Base.y + d0.y * 0.28 + d3.y * 0.72;
+
+  if (ptrPresence > 0.01) {
+    const midX = (c1x + c2x) * 0.5;
+    const midY = (c1y + c2y) * 0.5;
+    const dx = ptrSmooth.x - midX;
+    const dy = ptrSmooth.y - midY;
+    const dist = Math.hypot(dx, dy);
+    if (dist > 1 && dist < 150) {
+      const k = Math.pow(1 - dist / 150, 2) * 5.2 * ptrPresence;
+      const pullX = (dx / dist) * k;
+      const pullY = (dy / dist) * k;
+      c1x += pullX;
+      c1y += pullY;
+      c2x += pullX;
+      c2y += pullY;
+    }
+  }
+
+  return [p0Live, { x: c1x, y: c1y }, { x: c2x, y: c2y }, p3Live];
 }
 
 function forwardSegmentsFromCore(layout: BranchNetworkLayout, nodeIndex: number): Vec[][] {
@@ -401,9 +476,12 @@ function drawGoldenFluidCore(
   energy: number,
   ignitionPulse: number,
   isLight: boolean,
+  cursorOffset: Vec = { x: 0, y: 0 },
+  coreScale = 1,
 ) {
+  if (coreScale <= 0.02) return;
   ctx.save();
-  const R = baseR * (1 + ignitionPulse * 0.18 + 0.025 * Math.sin(time * 1.8));
+  const R = baseR * coreScale * (1 + ignitionPulse * 0.16 + 0.025 * Math.sin(time * 1.8));
   const breathe = 1 + 0.055 * Math.sin(time * 0.95) + energy * 0.14 + ignitionPulse * 0.28;
 
   // 1. Soft atmospheric halo behind the fluid golden sphere
@@ -423,8 +501,8 @@ function drawGoldenFluidCore(
   ctx.globalCompositeOperation = "source-over";
   traceFluidOrbPath(ctx, core.x, core.y, R, time, energy, 0, 1);
 
-  const fx = core.x - R * 0.22 + Math.cos(time * 0.72) * R * 0.13;
-  const fy = core.y - R * 0.24 + Math.sin(time * 0.64) * R * 0.13;
+  const fx = core.x - R * 0.22 + Math.cos(time * 0.72) * R * 0.13 + cursorOffset.x * R * 0.18;
+  const fy = core.y - R * 0.24 + Math.sin(time * 0.64) * R * 0.13 + cursorOffset.y * R * 0.18;
   const bodyGrad = ctx.createRadialGradient(fx, fy, R * 0.06, core.x, core.y, R * 1.12);
   if (isLight) {
     bodyGrad.addColorStop(0, "#fffdf2");
@@ -546,6 +624,7 @@ export function BranchingNetworkCanvas({
   snap = null,
   transfer = null,
   paused = false,
+  fromSetupExplosion = false,
   mode = "stage",
   bottomClearance,
   showcaseAll = false,
@@ -561,6 +640,7 @@ export function BranchingNetworkCanvas({
     height: mode === "embedded" ? 420 : 800,
   });
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const [overCore, setOverCore] = useState(false);
 
   const layout = useMemo(
     () =>
@@ -605,11 +685,28 @@ export function BranchingNetworkCanvas({
   const cascade = useMemo(() => computeCascadeTimings(layout), [layout]);
 
   const cometsRef = useRef<CometPulse[]>([]);
+  const ripplesRef = useRef<ClickRipple[]>([]);
+  const impulsesRef = useRef<WaveImpulse[]>([]);
+  const introProgressRef = useRef<number>(0);
   const revealProgressRef = useRef<number>(showcaseAll ? 1 : 0);
   const reduceMotionRef = useRef(false);
   const elapsedRef = useRef(0);
+  const corePulseRef = useRef<number>(fromSetupExplosion ? 0.85 : 0);
+  const prevPausedRef = useRef(paused);
   const lastSnapSerialRef = useRef<number>(snap?.serial ?? 0);
   const lastTransferSerialRef = useRef<number>(transfer?.serial ?? 0);
+  const prevActiveNodeRef = useRef<number | null>(activeNodeIndex);
+  const pressedNodeIdxRef = useRef<number | null>(null);
+  const pointerTargetRef = useRef<Vec>({ x: 0, y: 0 });
+  const pointerSmoothRef = useRef<Vec>({ x: 0, y: 0 });
+  const pointerActiveRef = useRef(false);
+  const pointerPresenceRef = useRef(0);
+  const lastHoverSparkAtRef = useRef(0);
+  const liveCoreRef = useRef<Vec>(layout.core);
+  const liveNodesRef = useRef<Vec[]>([]);
+  const nodeHoverRef = useRef<number[]>([]);
+  const nodePressRef = useRef<number[]>([]);
+  const nodeFlashRef = useRef<number[]>([]);
 
   const stateRef = useRef({
     theme,
@@ -619,6 +716,7 @@ export function BranchingNetworkCanvas({
     activeNodeIndex,
     hoveredIdx,
     paused,
+    fromSetupExplosion,
     showcaseAll,
     layout,
     cascade,
@@ -635,6 +733,7 @@ export function BranchingNetworkCanvas({
       activeNodeIndex,
       hoveredIdx,
       paused,
+      fromSetupExplosion,
       showcaseAll,
       layout,
       cascade,
@@ -643,35 +742,107 @@ export function BranchingNetworkCanvas({
     };
   });
 
+  const enqueueComet = (pulse: CometPulse) => {
+    if (reduceMotionRef.current) return;
+    if (cometsRef.current.length >= 14) cometsRef.current.shift();
+    cometsRef.current.push(pulse);
+  };
+
+  const enqueueRipple = (ripple: ClickRipple) => {
+    if (reduceMotionRef.current) return;
+    if (ripplesRef.current.length >= 8) ripplesRef.current.shift();
+    ripplesRef.current.push(ripple);
+  };
+
+  const enqueueImpulse = (impulse: WaveImpulse) => {
+    if (reduceMotionRef.current) return;
+    if (impulsesRef.current.length >= 4) impulsesRef.current.shift();
+    impulsesRef.current.push(impulse);
+  };
+
+  // Gentle welcome breath on Core when returning home from a full-screen surface
+  useEffect(() => {
+    if (!paused && prevPausedRef.current && !reduceMotionRef.current) {
+      corePulseRef.current = Math.max(corePulseRef.current, 0.45);
+    }
+    prevPausedRef.current = paused;
+  }, [paused]);
+
+  // Snap activation: pulse Core, send bright comet outward, and ignite node bloom on arrival
   useEffect(() => {
     if (snap && snap.serial !== lastSnapSerialRef.current) {
       lastSnapSerialRef.current = snap.serial;
-      const outward = forwardSegmentsFromCore(layout, snap.index);
-      if (outward.length > 0) {
-        cometsRef.current.push({
-          segments: outward,
-          targetIdx: snap.index,
-          progress: 0,
-          duration: 0.85,
-        });
+      if (!reduceMotionRef.current) {
+        corePulseRef.current = Math.max(corePulseRef.current, 0.9);
+        const outward = forwardSegmentsFromCore(layout, snap.index);
+        if (outward.length > 0) {
+          if (cometsRef.current.length >= 14) cometsRef.current.shift();
+          cometsRef.current.push({
+            segments: outward,
+            targetIdx: snap.index,
+            progress: 0,
+            duration: 0.82,
+            intensity: 1,
+            bloomOnArrive: true,
+          });
+        }
       }
     }
   }, [snap, layout]);
 
+  // Explicit node-to-node / Core transfer comet
   useEffect(() => {
     if (transfer && transfer.serial !== lastTransferSerialRef.current) {
       lastTransferSerialRef.current = transfer.serial;
-      const segs = buildCometSegments(layout, transfer.fromSocket, transfer.toSocket);
-      if (segs) {
-        cometsRef.current.push({
-          segments: segs,
-          targetIdx: transfer.toSocket,
-          progress: 0,
-          duration: 1.05,
-        });
+      if (!reduceMotionRef.current) {
+        const segs = buildCometSegments(layout, transfer.fromSocket, transfer.toSocket);
+        if (segs) {
+          if (cometsRef.current.length >= 14) cometsRef.current.shift();
+          cometsRef.current.push({
+            segments: segs,
+            targetIdx: transfer.toSocket,
+            progress: 0,
+            duration: 1.0,
+            intensity: 1,
+            bloomOnArrive: transfer.toSocket >= 0,
+          });
+        }
       }
     }
   }, [transfer, layout]);
+
+  // Node focus / activation flash + soft resonance ring
+  useEffect(() => {
+    if (activeNodeIndex !== null && activeNodeIndex !== prevActiveNodeRef.current) {
+      nodeFlashRef.current[activeNodeIndex] = Math.max(nodeFlashRef.current[activeNodeIndex] ?? 0, 0.85);
+      if (!reduceMotionRef.current) {
+        const pt = liveNodesRef.current[activeNodeIndex] ?? layout.nodes[activeNodeIndex]?.pos;
+        if (pt) {
+          if (ripplesRef.current.length >= 8) ripplesRef.current.shift();
+          ripplesRef.current.push({
+            x: pt.x,
+            y: pt.y,
+            progress: 0,
+            duration: 0.72,
+            maxRadius: 42,
+            strength: 0.65,
+          });
+        }
+        const outward = forwardSegmentsFromCore(layout, activeNodeIndex);
+        if (outward.length > 0) {
+          if (cometsRef.current.length >= 14) cometsRef.current.shift();
+          cometsRef.current.push({
+            segments: outward,
+            targetIdx: activeNodeIndex,
+            progress: 0,
+            duration: 0.72,
+            intensity: 0.62,
+          });
+        }
+      }
+    }
+    prevActiveNodeRef.current = activeNodeIndex;
+  }, [activeNodeIndex, layout]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -707,15 +878,25 @@ export function BranchingNetworkCanvas({
       const isLight = cur.theme === "light";
       const buckets = isLight ? LIGHT_BUCKETS : DARK_BUCKETS;
       const { width: W, height: H, core, scale: S } = lyt;
+      const reduceMotion = reduceMotionRef.current;
       const focusIdx = cur.hoveredIdx !== null ? cur.hoveredIdx : cur.activeNodeIndex;
       const focusEdges =
         focusIdx !== null && focusIdx !== undefined ? lyt.ancestorEdges.get(focusIdx) : undefined;
       const focusPeers =
         focusIdx !== null && focusIdx !== undefined ? lyt.adjacency.get(focusIdx) : undefined;
 
-      // Advance or retract the progressive topological showcase wavefront
+      // 0a. Advance first-open progressive canopy unfurl & "Preview All" cascade reveal
+      const introDuration = cur.fromSetupExplosion ? 0.95 : 1.65;
+      if (reduceMotion) {
+        introProgressRef.current = 1;
+      } else if (dt > 0 && introProgressRef.current < 1) {
+        introProgressRef.current = Math.min(1, introProgressRef.current + dt / introDuration);
+      }
+      const intro = introProgressRef.current;
+      const isIntroPlaying = intro < 0.996;
+
       const targetReveal = cur.showcaseAll ? 1 : 0;
-      if (reduceMotionRef.current) {
+      if (reduceMotion) {
         revealProgressRef.current = targetReveal;
       } else if (dt > 0) {
         if (targetReveal > revealProgressRef.current) {
@@ -726,8 +907,182 @@ export function BranchingNetworkCanvas({
       }
       const reveal = revealProgressRef.current;
       const isCascading = reveal > 0.002;
-      const ignitionPulse =
+      const showcasePulse =
         cur.showcaseAll && reveal < 0.34 ? Math.sin(clamp(reveal / 0.34, 0, 1) * Math.PI) : 0;
+      const introCorePulse =
+        isIntroPlaying && intro < 0.45 ? Math.sin(clamp(intro / 0.45, 0, 1) * Math.PI) * 0.55 : 0;
+
+      if (dt > 0 && corePulseRef.current > 0) {
+        corePulseRef.current = Math.max(0, corePulseRef.current - dt * 1.45);
+      }
+      const ignitionPulse = Math.max(showcasePulse, introCorePulse, corePulseRef.current);
+
+      // 0b. Smooth cursor tracking + radial click impulses + per-node spring filters
+      const targetPresence = pointerActiveRef.current && !reduceMotion ? 1 : 0;
+      const presenceRate = dt > 0 ? 1 - Math.exp(-dt * 8) : 1;
+      pointerPresenceRef.current += (targetPresence - pointerPresenceRef.current) * presenceRate;
+      const ptrPresence = pointerPresenceRef.current;
+
+      if (pointerActiveRef.current) {
+        const ptrRate = dt > 0 ? 1 - Math.exp(-dt * 14) : 1;
+        pointerSmoothRef.current = {
+          x: pointerSmoothRef.current.x + (pointerTargetRef.current.x - pointerSmoothRef.current.x) * ptrRate,
+          y: pointerSmoothRef.current.y + (pointerTargetRef.current.y - pointerSmoothRef.current.y) * ptrRate,
+        };
+      }
+      const ptrSmooth = pointerSmoothRef.current;
+
+      if (impulsesRef.current.length > 0 && dt > 0) {
+        const nextImpulses: WaveImpulse[] = [];
+        for (const imp of impulsesRef.current) {
+          imp.progress += dt / imp.duration;
+          if (imp.progress < 1) nextImpulses.push(imp);
+        }
+        impulsesRef.current = nextImpulses;
+      }
+
+      if (ripplesRef.current.length > 0 && dt > 0) {
+        const nextRipples: ClickRipple[] = [];
+        for (const rp of ripplesRef.current) {
+          rp.progress += dt / rp.duration;
+          if (rp.progress < 1) nextRipples.push(rp);
+        }
+        ripplesRef.current = nextRipples;
+      }
+
+      const hoverArr = nodeHoverRef.current;
+      const pressArr = nodePressRef.current;
+      const flashArr = nodeFlashRef.current;
+      const hoverLerp = dt > 0 ? 1 - Math.exp(-dt * 11) : 1;
+      const pressLerp = dt > 0 ? 1 - Math.exp(-dt * 24) : 1;
+      for (let i = 0; i < lyt.nodes.length; i++) {
+        const targetHov =
+          cur.hoveredIdx === i || cur.activeNodeIndex === i ? 1 : focusPeers?.has(i) ? 0.52 : 0;
+        hoverArr[i] = (hoverArr[i] ?? 0) + (targetHov - (hoverArr[i] ?? 0)) * hoverLerp;
+
+        const targetPress = pressedNodeIdxRef.current === i ? 1 : 0;
+        pressArr[i] = (pressArr[i] ?? 0) + (targetPress - (pressArr[i] ?? 0)) * pressLerp;
+
+        flashArr[i] = Math.max(0, (flashArr[i] ?? 0) - (dt > 0 ? dt * 1.55 : 0));
+      }
+
+      // 0c. Compute live drifting + cursor-reactive positions for Core and all 50 nodes
+      let liveCore: Vec = core;
+      const liveNodes: Vec[] = Array(lyt.nodes.length);
+
+      if (reduceMotion) {
+        for (let i = 0; i < lyt.nodes.length; i++) liveNodes[i] = lyt.nodes[i]!.pos;
+      } else {
+        const ptrNormX = clamp((ptrSmooth.x - W * 0.5) / Math.max(1, W * 0.5), -1, 1);
+        const ptrNormY = clamp((ptrSmooth.y - H * 0.5) / Math.max(1, H * 0.5), -1, 1);
+
+        liveCore = {
+          x: core.x + Math.sin(time * 0.34) * 1.4 - ptrNormX * 2.4 * ptrPresence,
+          y: core.y + Math.cos(time * 0.29) * 1.1 - ptrNormY * 2.0 * ptrPresence,
+        };
+
+        const tierAmpScale = lyt.compact ? 0.72 : 1;
+        for (let i = 0; i < lyt.nodes.length; i++) {
+          const bNode = lyt.nodes[i]!;
+          const seed = NODE_DRIFT_SEEDS[i % NODE_DRIFT_SEEDS.length]!;
+          const tierAmp = (bNode.tier === 1 ? 2.1 : bNode.tier === 2 ? 3.7 : 5.4) * tierAmpScale;
+          let dx = Math.sin(time * seed.freqX + seed.phaseX) * tierAmp;
+          let dy = Math.cos(time * seed.freqY + seed.phaseY) * tierAmp * 0.92;
+
+          // Subtle depth parallax opposite cursor offset
+          const pDepth = bNode.tier === 1 ? 3.4 : bNode.tier === 2 ? 4.9 : 6.6;
+          dx -= ptrNormX * pDepth * ptrPresence;
+          dy -= ptrNormY * pDepth * 0.85 * ptrPresence;
+
+          const baseX = bNode.pos.x + dx;
+          const baseY = bNode.pos.y + dy;
+
+          // Quadratic magnetic lean toward cursor within 145px
+          if (ptrPresence > 0.01) {
+            const mdx = ptrSmooth.x - baseX;
+            const mdy = ptrSmooth.y - baseY;
+            const mDist = Math.hypot(mdx, mdy);
+            if (mDist > 1 && mDist < 145) {
+              const t = 1 - mDist / 145;
+              const pull =
+                t * t * (bNode.tier === 1 ? 2.4 : bNode.tier === 2 ? 4.2 : 5.6) * ptrPresence;
+              dx += (mdx / mDist) * pull;
+              dy += (mdy / mDist) * pull;
+            }
+          }
+
+          // Radial click wave impulse displacement
+          for (const imp of impulsesRef.current) {
+            const waveR = imp.maxRadius * imp.progress;
+            const idx = baseX - imp.x;
+            const idy = baseY - imp.y;
+            const iDist = Math.hypot(idx, idy);
+            if (iDist > 1 && Math.abs(iDist - waveR) < 56) {
+              const prof = Math.cos(((iDist - waveR) / 56) * Math.PI * 0.5) * (1 - imp.progress);
+              const push = imp.amplitude * prof;
+              dx += (idx / iDist) * push;
+              dy += (idy / iDist) * push;
+            }
+          }
+
+          liveNodes[i] = { x: bNode.pos.x + dx, y: bNode.pos.y + dy };
+        }
+      }
+
+      liveCoreRef.current = liveCore;
+      liveNodesRef.current = liveNodes;
+
+      const liveEdgeCurve = (edge: BranchEdge): [Vec, Vec, Vec, Vec] => {
+        const p0L = edge.fromIndex === "core" ? liveCore : (liveNodes[edge.fromIndex] ?? edge.p0);
+        const p3L = liveNodes[edge.toIndex] ?? edge.p3;
+        return displaceCurvePoints(
+          edge.p0,
+          edge.c1,
+          edge.c2,
+          edge.p3,
+          p0L,
+          p3L,
+          ptrSmooth,
+          ptrPresence,
+        );
+      };
+
+      const liveBridgeCurve = (br: SynapseBridge): [Vec, Vec, Vec, Vec] => {
+        const p0L = liveNodes[br.fromIndex] ?? br.p0;
+        const p3L = liveNodes[br.toIndex] ?? br.p3;
+        return displaceCurvePoints(
+          br.p0,
+          br.c1,
+          br.c2,
+          br.p3,
+          p0L,
+          p3L,
+          ptrSmooth,
+          ptrPresence,
+        );
+      };
+
+      const liveTailTip = (destNode: (typeof lyt.nodes)[number]): Vec | null => {
+        if (!destNode.tailTip) return null;
+        const lPos = liveNodes[destNode.index] ?? destNode.pos;
+        const dx = lPos.x - destNode.pos.x;
+        const dy = lPos.y - destNode.pos.y;
+        if (reduceMotion) return { x: destNode.tailTip.x + dx, y: destNode.tailTip.y + dy };
+        const seed = NODE_DRIFT_SEEDS[destNode.index % NODE_DRIFT_SEEDS.length]!;
+        return {
+          x: destNode.tailTip.x + dx * 1.15 + Math.sin(time * 0.42 + seed.tailPhase) * 3.1,
+          y: destNode.tailTip.y + dy * 1.15 + Math.cos(time * 0.36 + seed.tailPhase) * 2.6,
+        };
+      };
+
+      // Soft idle outward canopy breathing wave every ~6s
+      const breathWavePos = reduceMotion ? -1 : (time * 0.165) % 1;
+      const breathBoostFor = (arrival: number) => {
+        if (breathWavePos < 0) return 0;
+        const dist = Math.abs(arrival - breathWavePos);
+        const wrapDist = Math.min(dist, 1 - dist);
+        return wrapDist < 0.24 ? Math.exp(-Math.pow(wrapDist / 0.11, 2)) * 0.16 : 0;
+      };
 
       const breathe = 1 + 0.045 * Math.sin(time * 0.65) + 0.12 * cur.energy + ignitionPulse * 0.12;
 
@@ -740,16 +1095,35 @@ export function BranchingNetworkCanvas({
       // Atmosphere glow matching GoldenNetwork
       const lightRadius = Math.max(S * 1.15, Math.max(W, H) * 0.72);
       if (isLight) {
-        radialGlow(ctx, core, S * 0.58 * breathe, [
+        radialGlow(ctx, liveCore, S * 0.58 * breathe, [
           [0, "rgba(255, 214, 88, 0.34)"],
           [0.42, "rgba(248, 192, 48, 0.14)"],
           [1, "rgba(250, 248, 242, 0)"],
         ]);
       } else {
         ctx.globalCompositeOperation = "lighter";
-        radialGlow(ctx, core, S * 0.52 * breathe, [
+        radialGlow(ctx, liveCore, S * 0.52 * breathe, [
           [0, "rgba(255, 198, 92, 0.24)"],
           [0.4, "rgba(220, 138, 36, 0.09)"],
+          [1, "rgba(0, 0, 0, 0)"],
+        ]);
+      }
+
+      // Whisper optical torch glow beneath hovered pointer
+      if (ptrPresence > 0.02) {
+        radialGlow(ctx, ptrSmooth, lyt.compact ? 115 : 148, [
+          [
+            0,
+            isLight
+              ? `rgba(228, 162, 24, ${(0.09 * ptrPresence).toFixed(3)})`
+              : `rgba(255, 212, 118, ${(0.08 * ptrPresence).toFixed(3)})`,
+          ],
+          [
+            0.5,
+            isLight
+              ? `rgba(228, 162, 24, ${(0.03 * ptrPresence).toFixed(3)})`
+              : `rgba(240, 178, 62, ${(0.025 * ptrPresence).toFixed(3)})`,
+          ],
           [1, "rgba(0, 0, 0, 0)"],
         ]);
       }
@@ -763,7 +1137,7 @@ export function BranchingNetworkCanvas({
         const b = buckets[bucketIndex]!;
         const a = clamp(b.alpha * alphaScale, 0, 1);
         if (a <= 0.008) return;
-        const grad = ctx.createRadialGradient(core.x, core.y, 0, core.x, core.y, lightRadius);
+        const grad = ctx.createRadialGradient(liveCore.x, liveCore.y, 0, liveCore.x, liveCore.y, lightRadius);
         if (isLight) {
           grad.addColorStop(0, `rgba(${b.color}, ${Math.min(0.88, a * 1.35)})`);
           grad.addColorStop(0.55, `rgba(${b.color}, ${a * 0.85})`);
@@ -783,21 +1157,23 @@ export function BranchingNetworkCanvas({
 
       // 1. GoldenNetwork basal & upward Core filigree sweeps (batched by 6 buckets)
       const sweepScale = Math.max(W * 0.54, H * 0.48);
+      const sweepIntro = reduceMotion ? 1 : smoothstep(0.02, 0.58, intro);
       const baseSweep = isLight ? 0.42 : 0.34;
       const litSweep = isLight ? 0.62 : 0.52;
-      const sweepStrength = baseSweep + (litSweep - baseSweep) * smoothstep(0, 0.45, reveal);
+      const sweepStrength =
+        (baseSweep + (litSweep - baseSweep) * smoothstep(0, 0.45, reveal)) * sweepIntro;
       for (let bIdx = 0; bIdx < buckets.length; bIdx++) {
         strokeBatched(bIdx, sweepStrength, () => {
           for (const sw of strands.sweeps) {
             if (sw.bucket !== bIdx) continue;
-            const swayA = Math.sin(time * 0.22 + sw.phase) * sw.sway;
-            const swayB = Math.sin(time * 0.17 + sw.phase * 1.5) * sw.sway;
-            const pinch = { x: core.x + sw.waistX * S, y: core.y + sw.waistY * S };
-            const p0 = add(core, polar(sw.srcRadius * sweepScale, sw.srcAngle + 0.03 * swayB));
+            const swayA = Math.sin(time * 0.28 + sw.phase) * sw.sway;
+            const swayB = Math.sin(time * 0.21 + sw.phase * 1.5) * sw.sway;
+            const pinch = { x: liveCore.x + sw.waistX * S, y: liveCore.y + sw.waistY * S };
+            const p0 = add(liveCore, polar(sw.srcRadius * sweepScale, sw.srcAngle + 0.038 * swayB));
             const c1 = add(p0, polar(sw.srcRadius * sweepScale * 0.4, sw.srcAngle + Math.PI + 0.25));
-            const c2 = add(pinch, polar(sweepScale * 0.22, sw.srcAngle + 0.04 * swayA));
-            const p3 = add(core, polar(sw.dstRadius * sweepScale, sw.dstAngle + 0.05 * swayB));
-            const d1 = add(pinch, polar(sweepScale * 0.24, sw.dstAngle - 0.06 * swayA));
+            const c2 = add(pinch, polar(sweepScale * 0.22, sw.srcAngle + 0.045 * swayA));
+            const p3 = add(liveCore, polar(sw.dstRadius * sweepScale, sw.dstAngle + 0.055 * swayB));
+            const d1 = add(pinch, polar(sweepScale * 0.24, sw.dstAngle - 0.065 * swayA));
             const d2 = add(p3, polar(sw.dstRadius * sweepScale * 0.38, sw.dstAngle + Math.PI));
             ctx.moveTo(p0.x, p0.y);
             ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, pinch.x, pinch.y);
@@ -808,16 +1184,14 @@ export function BranchingNetworkCanvas({
 
       // 2. Branch edges + feathered outer tails
       const hasFocus = focusIdx !== null && focusIdx !== undefined;
-      const ambientEdgeAlpha = hasFocus
-        ? isLight
-          ? 0.34
-          : 0.26
-        : isLight
-          ? 0.56
-          : 0.48;
+      const idleBreathGlobal = reduceMotion ? 0 : 0.05 * Math.sin(time * 0.95);
+      const ambientEdgeAlpha =
+        (hasFocus ? (isLight ? 0.34 : 0.26) : isLight ? 0.56 : 0.48) + idleBreathGlobal;
       const activeEdgeAlpha = isLight ? 1.15 : 1.35;
 
-      // Base ambient + live occupied paths (remains anchored beneath any expanding preview wave)
+      const tipSparks: Vec[] = [];
+
+      // Base ambient + live occupied paths (unfurled progressively on first open)
       if (reveal < 0.995) {
         const baseFade = 1 - reveal * 0.35;
         for (const isActivePass of [false, true]) {
@@ -833,26 +1207,49 @@ export function BranchingNetworkCanvas({
                   const highlighted = isLivePath || isAnc;
                   if (highlighted !== isActivePass) continue;
 
+                  const [t0, t1] = cur.cascade.edgeTiming[eIdx] ?? [0, 0.25];
+                  const introFlow = isIntroPlaying ? smoothstep(t0, t1, intro) : 1;
+                  if (introFlow <= 0.005) continue;
+
+                  const [lp0, lc1, lc2, lp3] = liveEdgeCurve(edge);
+                  if (isIntroPlaying && !isCascading && bIdx === 0 && introFlow > 0.02 && introFlow < 0.985) {
+                    tipSparks.push(bezier(lp0, lc1, lc2, lp3, introFlow));
+                  }
+
                   const tierBundle = strands.trunkStrands[edge.tier - 1]!;
                   for (const st of tierBundle) {
                     if (st.bucket !== bIdx) continue;
-                    const [c1, c2] = swayControlPoints(edge.p0, edge.c1, edge.c2, edge.p3, st, time, 1.0);
-                    ctx.moveTo(edge.p0.x, edge.p0.y);
-                    ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, edge.p3.x, edge.p3.y);
+                    const [c1, c2] = swayControlPoints(lp0, lc1, lc2, lp3, st, time, 1.0);
+                    if (introFlow >= 0.995) {
+                      ctx.moveTo(lp0.x, lp0.y);
+                      ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, lp3.x, lp3.y);
+                    } else {
+                      const [sp0, sc1, sc2, sp3] = splitBezier(lp0, c1, c2, lp3, introFlow);
+                      ctx.moveTo(sp0.x, sp0.y);
+                      ctx.bezierCurveTo(sc1.x, sc1.y, sc2.x, sc2.y, sp3.x, sp3.y);
+                    }
 
-                    const destNode = lyt.nodes[edge.toIndex];
-                    if (destNode?.tailTip && Math.abs(st.offsetScale) < 0.08) {
-                      const t0 = destNode.pos;
-                      const t3 = destNode.tailTip;
-                      const tc1 = add(
-                        t0,
-                        polar(Math.hypot(t3.x - t0.x, t3.y - t0.y) * 0.42, destNode.angle + st.offsetScale),
-                      );
-                      const tc2 = add(
-                        t0,
-                        polar(Math.hypot(t3.x - t0.x, t3.y - t0.y) * 0.78, destNode.angle - st.offsetScale),
-                      );
-                      ctx.bezierCurveTo(tc1.x, tc1.y, tc2.x, tc2.y, t3.x, t3.y);
+                    if (introFlow >= 0.96) {
+                      const destNode = lyt.nodes[edge.toIndex];
+                      const tail3 = destNode ? liveTailTip(destNode) : null;
+                      if (destNode && tail3 && Math.abs(st.offsetScale) < 0.08) {
+                        const tailFlow = isIntroPlaying
+                          ? smoothstep(t1 - 0.02, Math.min(0.99, t1 + 0.13), intro)
+                          : 1;
+                        if (tailFlow > 0.01) {
+                          const tail0 = lp3;
+                          const tLen = Math.hypot(tail3.x - tail0.x, tail3.y - tail0.y);
+                          const tc1 = add(tail0, polar(tLen * 0.42, destNode.angle + st.offsetScale));
+                          const tc2 = add(tail0, polar(tLen * 0.78, destNode.angle - st.offsetScale));
+                          if (tailFlow >= 0.995) {
+                            ctx.bezierCurveTo(tc1.x, tc1.y, tc2.x, tc2.y, tail3.x, tail3.y);
+                          } else {
+                            const [tp0, tpc1, tpc2, tp3] = splitBezier(tail0, tc1, tc2, tail3, tailFlow);
+                            ctx.moveTo(tp0.x, tp0.y);
+                            ctx.bezierCurveTo(tpc1.x, tpc1.y, tpc2.x, tpc2.y, tp3.x, tp3.y);
+                          }
+                        }
+                      }
                     }
                   }
                 }
@@ -863,8 +1260,29 @@ export function BranchingNetworkCanvas({
         }
       }
 
-      // Progressive golden cascade wave pass (grows progressively outward from Core -> Tier 1 -> Tier 2 -> Tier 3)
-      const tipSparks: Vec[] = [];
+      // Cursor-proximity warm silk highlight on nearby filaments (lightweight single pass)
+      if (ptrPresence > 0.06 && !isIntroPlaying) {
+        strokeBatched(
+          0,
+          (isLight ? 0.55 : 0.62) * ptrPresence,
+          () => {
+            for (let eIdx = 0; eIdx < lyt.edges.length; eIdx++) {
+              const edge = lyt.edges[eIdx]!;
+              const [lp0, lc1, lc2, lp3] = liveEdgeCurve(edge);
+              const midX = (lp0.x + lp3.x) * 0.5;
+              const midY = (lp0.y + lp3.y) * 0.5;
+              if (Math.hypot(midX - ptrSmooth.x, midY - ptrSmooth.y) > 155) continue;
+              const st = strands.trunkStrands[edge.tier - 1]![0]!;
+              const [c1, c2] = swayControlPoints(lp0, lc1, lc2, lp3, st, time, 1.0);
+              ctx.moveTo(lp0.x, lp0.y);
+              ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, lp3.x, lp3.y);
+            }
+          },
+          1.35,
+        );
+      }
+
+      // Progressive golden cascade wave pass (Preview All illumination)
       if (isCascading) {
         const cascadePasses = hasFocus ? [false, true] : [true];
         for (const isFocusPass of cascadePasses) {
@@ -892,49 +1310,40 @@ export function BranchingNetworkCanvas({
                   if (highlighted !== isFocusPass) continue;
 
                   const [t0, t1] = cur.cascade.edgeTiming[eIdx] ?? [0, 0.25];
-                  const edgeFlow = smoothstep(t0, t1, reveal);
+                  const introFlow = isIntroPlaying ? smoothstep(t0, t1, intro) : 1;
+                  const edgeFlow = Math.min(introFlow, smoothstep(t0, t1, reveal));
                   if (edgeFlow <= 0.005) continue;
 
+                  const [lp0, lc1, lc2, lp3] = liveEdgeCurve(edge);
                   const isAnimatingEdge = edgeFlow > 0.02 && edgeFlow < 0.985;
                   if (bIdx === 0 && isAnimatingEdge) {
-                    tipSparks.push(bezier(edge.p0, edge.c1, edge.c2, edge.p3, edgeFlow));
+                    tipSparks.push(bezier(lp0, lc1, lc2, lp3, edgeFlow));
                   }
 
                   const tierBundle = strands.trunkStrands[edge.tier - 1]!;
                   for (const st of tierBundle) {
                     if (st.bucket !== bIdx) continue;
-                    const [c1, c2] = swayControlPoints(edge.p0, edge.c1, edge.c2, edge.p3, st, time, 1.0);
+                    const [c1, c2] = swayControlPoints(lp0, lc1, lc2, lp3, st, time, 1.0);
                     if (edgeFlow >= 0.995) {
-                      ctx.moveTo(edge.p0.x, edge.p0.y);
-                      ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, edge.p3.x, edge.p3.y);
+                      ctx.moveTo(lp0.x, lp0.y);
+                      ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, lp3.x, lp3.y);
                     } else {
-                      const [sp0, sc1, sc2, sp3] = splitBezier(edge.p0, c1, c2, edge.p3, edgeFlow);
+                      const [sp0, sc1, sc2, sp3] = splitBezier(lp0, c1, c2, lp3, edgeFlow);
                       ctx.moveTo(sp0.x, sp0.y);
                       ctx.bezierCurveTo(sc1.x, sc1.y, sc2.x, sc2.y, sp3.x, sp3.y);
                     }
 
-                    // Feathered outer leaf tails unfurl immediately after each branch node ignites
                     if (edgeFlow >= 0.96) {
                       const destNode = lyt.nodes[edge.toIndex];
-                      if (destNode?.tailTip && Math.abs(st.offsetScale) < 0.08) {
-                        const tailFlow = smoothstep(t1 - 0.02, Math.min(0.99, t1 + 0.13), reveal);
+                      const tail3 = destNode ? liveTailTip(destNode) : null;
+                      if (destNode && tail3 && Math.abs(st.offsetScale) < 0.08) {
+                        const effectiveT = isIntroPlaying ? Math.min(intro, reveal) : reveal;
+                        const tailFlow = smoothstep(t1 - 0.02, Math.min(0.99, t1 + 0.13), effectiveT);
                         if (tailFlow > 0.01) {
-                          const tail0 = destNode.pos;
-                          const tail3 = destNode.tailTip;
-                          const tc1 = add(
-                            tail0,
-                            polar(
-                              Math.hypot(tail3.x - tail0.x, tail3.y - tail0.y) * 0.42,
-                              destNode.angle + st.offsetScale,
-                            ),
-                          );
-                          const tc2 = add(
-                            tail0,
-                            polar(
-                              Math.hypot(tail3.x - tail0.x, tail3.y - tail0.y) * 0.78,
-                              destNode.angle - st.offsetScale,
-                            ),
-                          );
+                          const tail0 = lp3;
+                          const tLen = Math.hypot(tail3.x - tail0.x, tail3.y - tail0.y);
+                          const tc1 = add(tail0, polar(tLen * 0.42, destNode.angle + st.offsetScale));
+                          const tc2 = add(tail0, polar(tLen * 0.78, destNode.angle - st.offsetScale));
                           if (tailFlow >= 0.995) {
                             ctx.bezierCurveTo(tc1.x, tc1.y, tc2.x, tc2.y, tail3.x, tail3.y);
                           } else {
@@ -956,9 +1365,7 @@ export function BranchingNetworkCanvas({
 
       // 3. Inter-Node Bridges (latent branch mesh vs live capability links + hover focus + cascade reveal)
       const bridgeIsHighlighted = (b: SynapseBridge) =>
-        b.isLive ||
-        b.fromIndex === focusIdx ||
-        b.toIndex === focusIdx;
+        b.isLive || b.fromIndex === focusIdx || b.toIndex === focusIdx;
 
       if (reveal < 0.995) {
         const baseFade = 1 - reveal * 0.35;
@@ -971,14 +1378,26 @@ export function BranchingNetworkCanvas({
               bIdx,
               bridgeAlpha,
               () => {
-                for (const br of lyt.bridges) {
+                for (let brIdx = 0; brIdx < lyt.bridges.length; brIdx++) {
+                  const br = lyt.bridges[brIdx]!;
                   if (bridgeIsHighlighted(br) !== isHigh) continue;
+                  const [b0, b1] = cur.cascade.bridgeTiming[brIdx] ?? [0.4, 0.7];
+                  const introBridge = isIntroPlaying ? smoothstep(b0, b1, intro) : 1;
+                  if (introBridge <= 0.005) continue;
+
+                  const [bp0, bc1, bc2, bp3] = liveBridgeCurve(br);
                   const list = br.isLive ? strands.bridgeStrands.slice(0, 5) : strands.bridgeStrands.slice(0, 2);
                   for (const st of list) {
                     if (st.bucket !== bIdx) continue;
-                    const [c1, c2] = swayControlPoints(br.p0, br.c1, br.c2, br.p3, st, time, 0.85);
-                    ctx.moveTo(br.p0.x, br.p0.y);
-                    ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, br.p3.x, br.p3.y);
+                    const [c1, c2] = swayControlPoints(bp0, bc1, bc2, bp3, st, time, 0.85);
+                    if (introBridge >= 0.995) {
+                      ctx.moveTo(bp0.x, bp0.y);
+                      ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, bp3.x, bp3.y);
+                    } else {
+                      const [sp0, sc1, sc2, sp3] = splitBezier(bp0, c1, c2, bp3, introBridge);
+                      ctx.moveTo(sp0.x, sp0.y);
+                      ctx.bezierCurveTo(sc1.x, sc1.y, sc2.x, sc2.y, sp3.x, sp3.y);
+                    }
                   }
                 }
               },
@@ -1011,22 +1430,24 @@ export function BranchingNetworkCanvas({
                   const br = lyt.bridges[brIdx]!;
                   if (bridgeIsHighlighted(br) !== isHigh) continue;
                   const [b0, b1] = cur.cascade.bridgeTiming[brIdx] ?? [0.4, 0.7];
-                  const bridgeFlow = smoothstep(b0, b1, reveal);
+                  const introBridge = isIntroPlaying ? smoothstep(b0, b1, intro) : 1;
+                  const bridgeFlow = Math.min(introBridge, smoothstep(b0, b1, reveal));
                   if (bridgeFlow <= 0.005) continue;
 
+                  const [bp0, bc1, bc2, bp3] = liveBridgeCurve(br);
                   if (bIdx === 0 && bridgeFlow > 0.02 && bridgeFlow < 0.985) {
-                    tipSparks.push(bezier(br.p0, br.c1, br.c2, br.p3, bridgeFlow));
+                    tipSparks.push(bezier(bp0, bc1, bc2, bp3, bridgeFlow));
                   }
 
                   const list = strands.bridgeStrands.slice(0, br.isLive ? 5 : 3);
                   for (const st of list) {
                     if (st.bucket !== bIdx) continue;
-                    const [c1, c2] = swayControlPoints(br.p0, br.c1, br.c2, br.p3, st, time, 0.85);
+                    const [c1, c2] = swayControlPoints(bp0, bc1, bc2, bp3, st, time, 0.85);
                     if (bridgeFlow >= 0.995) {
-                      ctx.moveTo(br.p0.x, br.p0.y);
-                      ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, br.p3.x, br.p3.y);
+                      ctx.moveTo(bp0.x, bp0.y);
+                      ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, bp3.x, bp3.y);
                     } else {
-                      const [sp0, sc1, sc2, sp3] = splitBezier(br.p0, c1, c2, br.p3, bridgeFlow);
+                      const [sp0, sc1, sc2, sp3] = splitBezier(bp0, c1, c2, bp3, bridgeFlow);
                       ctx.moveTo(sp0.x, sp0.y);
                       ctx.bezierCurveTo(sc1.x, sc1.y, sc2.x, sc2.y, sp3.x, sp3.y);
                     }
@@ -1056,15 +1477,20 @@ export function BranchingNetworkCanvas({
         }
       }
 
-      // 4. Twinkling Golden Micro-Dust & Flowing Energy Beads
+      // 4. Drifting Golden Micro-Dust & Tapered Energy Streaks
       if (lyt.edges.length > 0) {
         ctx.fillStyle = isLight ? "rgb(212, 146, 16)" : "rgb(255, 214, 140)";
         for (const d of strands.dust) {
           const eIdx = d.edgeIdx % lyt.edges.length;
           const edge = lyt.edges[eIdx]!;
-          const pt = bezier(edge.p0, edge.c1, edge.c2, edge.p3, d.t);
-          const twinkle = 0.45 + 0.55 * Math.sin(time * 1.4 + d.phase);
           const [t0, t1] = cur.cascade.edgeTiming[eIdx] ?? [0, 0.25];
+          const introEdge = isIntroPlaying ? smoothstep(t0, t1, intro) : 1;
+          if (introEdge < d.t) continue;
+          const [lp0, lc1, lc2, lp3] = liveEdgeCurve(edge);
+          const pt = bezier(lp0, lc1, lc2, lp3, d.t);
+          const twinkle = 0.45 + 0.55 * Math.sin(time * 1.4 + d.phase);
+          const driftX = reduceMotion ? 0 : Math.sin(time * 0.78 + d.phase) * 4.8;
+          const driftY = reduceMotion ? 0 : Math.cos(time * 0.64 + d.phase * 1.3) * 4.2;
           const edgeFlow = isCascading ? smoothstep(t0, t1, reveal) : 0;
           const cascadeBoost = isCascading && d.t <= edgeFlow ? edgeFlow : 0;
           const activeBoost =
@@ -1072,16 +1498,19 @@ export function BranchingNetworkCanvas({
               ? Math.max(cur.occupiedEdgeSet.has(eIdx) ? 1.12 : 0.65, 0.65 + cascadeBoost * 0.48)
               : 0.65;
           ctx.globalAlpha = d.alpha * twinkle * activeBoost * (isLight ? 0.68 : 0.9);
-          ctx.fillRect(pt.x + d.ox, pt.y + d.oy, d.size, d.size);
+          ctx.fillRect(pt.x + d.ox + driftX, pt.y + d.oy + driftY, d.size, d.size);
         }
       }
 
+      ctx.strokeStyle = isLight ? "rgba(198, 128, 10, 0.72)" : "rgba(255, 236, 184, 0.78)";
       ctx.fillStyle = isLight ? "rgb(198, 128, 10)" : "rgb(255, 244, 214)";
-      const speedMul = 0.85 + cur.energy * 1.4;
+      const speedMul = 0.88 + cur.energy * 1.4;
       for (const bead of strands.beads) {
         const rawU = (bead.u + time * bead.speed * speedMul * bead.dir) % 1;
         const beadU = rawU < 0 ? rawU + 1 : rawU;
+        const tailU = clamp(beadU - 0.032 * bead.dir, 0, 1);
         let pos: Vec | null = null;
+        let tailPos: Vec | null = null;
         let flowGate = 1;
         if (bead.kind === "bridge" && lyt.bridges.length > 0) {
           const liveBridges = lyt.bridges.filter((b) => b.isLive);
@@ -1089,12 +1518,16 @@ export function BranchingNetworkCanvas({
           const pool = !useAllBridges && liveBridges.length > 0 && bead.idx % 2 === 0 ? liveBridges : lyt.bridges;
           const chosenIdx = bead.idx % pool.length;
           const br = pool[chosenIdx]!;
-          if (isCascading && !br.isLive) {
-            const origIdx = lyt.bridges.indexOf(br);
-            const [b0, b1] = cur.cascade.bridgeTiming[origIdx] ?? [0.4, 0.7];
-            flowGate = smoothstep(b0, b1, reveal);
-          }
-          pos = bezier(br.p0, br.c1, br.c2, br.p3, beadU);
+          const origIdx = lyt.bridges.indexOf(br);
+          const [b0, b1] = cur.cascade.bridgeTiming[origIdx] ?? [0.4, 0.7];
+          const introGate = isIntroPlaying ? smoothstep(b0, b1, intro) : 1;
+          flowGate =
+            isCascading && !br.isLive
+              ? Math.min(introGate, smoothstep(b0, b1, reveal))
+              : introGate;
+          const [bp0, bc1, bc2, bp3] = liveBridgeCurve(br);
+          pos = bezier(bp0, bc1, bc2, bp3, beadU);
+          tailPos = bezier(bp0, bc1, bc2, bp3, tailU);
         } else if (lyt.edges.length > 0) {
           const liveIdxList = Array.from(cur.occupiedEdgeSet);
           const useAllEdges = reveal > 0.25;
@@ -1103,34 +1536,65 @@ export function BranchingNetworkCanvas({
               ? liveIdxList[bead.idx % liveIdxList.length]!
               : bead.idx % lyt.edges.length;
           const edge = lyt.edges[eIdx]!;
-          if (isCascading && !cur.occupiedEdgeSet.has(eIdx)) {
-            const [t0, t1] = cur.cascade.edgeTiming[eIdx] ?? [0, 0.25];
-            flowGate = smoothstep(t0, t1, reveal);
-          }
-          pos = bezier(edge.p0, edge.c1, edge.c2, edge.p3, beadU);
+          const [t0, t1] = cur.cascade.edgeTiming[eIdx] ?? [0, 0.25];
+          const introGate = isIntroPlaying ? smoothstep(t0, t1, intro) : 1;
+          flowGate =
+            isCascading && !cur.occupiedEdgeSet.has(eIdx)
+              ? Math.min(introGate, smoothstep(t0, t1, reveal))
+              : introGate;
+          const [lp0, lc1, lc2, lp3] = liveEdgeCurve(edge);
+          pos = bezier(lp0, lc1, lc2, lp3, beadU);
+          tailPos = bezier(lp0, lc1, lc2, lp3, tailU);
         }
         if (!pos || flowGate <= 0.05) continue;
         const baseBeadAlpha =
           bead.alpha * flowGate * (reveal > 0.5 ? (isLight ? 0.86 : 0.96) : isLight ? 0.78 : 0.92);
+        if (tailPos && !reduceMotion) {
+          ctx.globalAlpha = baseBeadAlpha * 0.45;
+          ctx.lineWidth = Math.max(0.75, bead.size * 0.75);
+          ctx.lineCap = "round";
+          ctx.beginPath();
+          ctx.moveTo(tailPos.x, tailPos.y);
+          ctx.lineTo(pos.x, pos.y);
+          ctx.stroke();
+        }
         ctx.globalAlpha = baseBeadAlpha;
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, bead.size, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      // 5. Snap & Transfer Comets gliding across the branching canopy / inter-node bridges
+      // 5. Snap, Hover, Core Resonance & Transfer Comets gliding across branches
       if (cometsRef.current.length > 0) {
         const remaining: CometPulse[] = [];
         for (const comet of cometsRef.current) {
           comet.progress += dt > 0 ? dt / comet.duration : 0;
-          if (comet.progress >= 1) continue;
+          if (comet.progress >= 1) {
+            if (comet.bloomOnArrive && comet.targetIdx >= 0) {
+              flashArr[comet.targetIdx] = 1.0;
+              const arrPos = liveNodes[comet.targetIdx] ?? lyt.nodes[comet.targetIdx]?.pos;
+              if (arrPos) {
+                if (ripplesRef.current.length >= 8) ripplesRef.current.shift();
+                ripplesRef.current.push({
+                  x: arrPos.x,
+                  y: arrPos.y,
+                  progress: 0,
+                  duration: 0.92,
+                  maxRadius: 56,
+                  strength: 1,
+                  doubleRing: true,
+                });
+              }
+            }
+            continue;
+          }
           remaining.push(comet);
-          const env = Math.sin(Math.PI * comet.progress);
+          const inten = comet.intensity ?? 1;
+          const env = Math.sin(Math.PI * comet.progress) * inten;
           const head = pointOnPath(comet.segments, comet.progress);
 
-          // Glowing comet head + short tail
-          ctx.globalAlpha = env * 0.95;
-          radialGlow(ctx, head, 18, [
+          ctx.globalAlpha = clamp(env * 0.95, 0, 1);
+          radialGlow(ctx, head, 18 * (0.7 + 0.3 * inten), [
             [0, isLight ? "rgba(198, 128, 10, 0.95)" : "rgba(255, 250, 232, 0.98)"],
             [0.35, "rgba(240, 181, 74, 0.55)"],
             [1, "rgba(240, 181, 74, 0)"],
@@ -1138,19 +1602,80 @@ export function BranchingNetworkCanvas({
           for (let t = 1; t <= 4; t++) {
             const tu = clamp(comet.progress - t * 0.032, 0, 1);
             const tp = pointOnPath(comet.segments, tu);
-            ctx.globalAlpha = env * (0.7 - t * 0.14);
+            ctx.globalAlpha = clamp(env * (0.7 - t * 0.14), 0, 1);
             ctx.fillStyle = isLight ? "#c88d18" : "#fff7e0";
             ctx.beginPath();
-            ctx.arc(tp.x, tp.y, 2.8 - t * 0.45, 0, Math.PI * 2);
+            ctx.arc(tp.x, tp.y, (2.8 - t * 0.45) * (0.72 + 0.28 * inten), 0, Math.PI * 2);
             ctx.fill();
           }
         }
         cometsRef.current = remaining;
       }
 
-      // 6. Central Fluid Golden Singularity Orb (no Nexus logo) + expanding wavefront ring
+      // 6. Expanding Golden Water-Drop & Node Resonance Ripples
+      if (ripplesRef.current.length > 0) {
+        ctx.save();
+        ctx.globalCompositeOperation = isLight ? "source-over" : "lighter";
+        for (const rp of ripplesRef.current) {
+          const easeT = 1 - Math.pow(1 - clamp(rp.progress, 0, 1), 2.2);
+          const fade = Math.pow(1 - clamp(rp.progress, 0, 1), 1.4) * rp.strength;
+          if (fade <= 0.01) continue;
+          const radius = 6 + rp.maxRadius * easeT;
+          ctx.globalAlpha = fade * (isLight ? 0.58 : 0.72);
+          ctx.lineWidth = Math.max(0.8, 1.55 * (1 - rp.progress * 0.6));
+          ctx.strokeStyle = isLight ? "rgba(192, 124, 12, 0.85)" : "rgba(255, 224, 146, 0.9)";
+          ctx.beginPath();
+          ctx.arc(rp.x, rp.y, radius, 0, Math.PI * 2);
+          ctx.stroke();
+
+          if (rp.doubleRing && rp.progress > 0.12) {
+            const r2 = Math.max(4, radius * 0.68);
+            ctx.globalAlpha = fade * (isLight ? 0.4 : 0.48);
+            ctx.lineWidth = 1.0;
+            ctx.beginPath();
+            ctx.arc(rp.x, rp.y, r2, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
+      }
+
+      // 7. Central Fluid Golden Singularity Orb + opening & showcase wave rings
       ctx.globalAlpha = 1;
-      drawGoldenFluidCore(ctx, core, lyt.compact ? 15.5 : 19, time, cur.energy, ignitionPulse, isLight);
+      const cursorOffset: Vec =
+        ptrPresence > 0.01
+          ? {
+              x: clamp((ptrSmooth.x - liveCore.x) / 200, -1, 1) * ptrPresence,
+              y: clamp((ptrSmooth.y - liveCore.y) / 200, -1, 1) * ptrPresence,
+            }
+          : { x: 0, y: 0 };
+      const coreIntroScale = reduceMotion ? 1 : 0.55 + 0.45 * smoothstep(0, 0.34, intro);
+      drawGoldenFluidCore(
+        ctx,
+        liveCore,
+        lyt.compact ? 15.5 : 19,
+        time,
+        cur.energy,
+        ignitionPulse,
+        isLight,
+        cursorOffset,
+        coreIntroScale,
+      );
+
+      if (isIntroPlaying && intro > 0.02 && intro < 0.68 && !reduceMotion) {
+        const wT = smoothstep(0.02, 0.68, intro);
+        const wR = 16 + S * 0.48 * wT;
+        ctx.save();
+        ctx.globalCompositeOperation = isLight ? "source-over" : "lighter";
+        ctx.globalAlpha = (1 - wT) * 0.42;
+        ctx.beginPath();
+        ctx.arc(liveCore.x, liveCore.y, wR, 0, Math.PI * 2);
+        ctx.lineWidth = 1.35 * (1 - wT * 0.5);
+        ctx.strokeStyle = isLight ? "rgba(202, 134, 14, 0.85)" : "rgba(255, 224, 136, 0.9)";
+        ctx.stroke();
+        ctx.restore();
+      }
+
       if (cur.showcaseAll && reveal > 0.01 && reveal < 0.58) {
         const waveT = smoothstep(0.01, 0.58, reveal);
         const waveR = 18 + S * 0.62 * waveT;
@@ -1158,19 +1683,20 @@ export function BranchingNetworkCanvas({
         ctx.globalCompositeOperation = isLight ? "source-over" : "lighter";
         ctx.globalAlpha = (1 - waveT) * 0.48;
         ctx.beginPath();
-        ctx.arc(core.x, core.y, waveR, 0, Math.PI * 2);
+        ctx.arc(liveCore.x, liveCore.y, waveR, 0, Math.PI * 2);
         ctx.lineWidth = 1.6 * (1 - waveT * 0.55);
         ctx.strokeStyle = isLight ? "rgba(202, 134, 14, 0.85)" : "rgba(255, 224, 136, 0.9)";
         ctx.stroke();
         ctx.restore();
       }
 
-      // 7. Uncluttered 50 Node Jewels with smooth localized wavefront ignition ripples
+      // 8. Uncluttered 50 Node Jewels with smooth hover springs, press bounce & entrance bloom
       const goldHex = isLight ? "#b4780d" : "#f0b54a";
       const dormantInk = isLight ? "rgba(110, 92, 54, 0.55)" : "rgba(218, 198, 152, 0.52)";
 
       for (let i = 0; i < lyt.nodes.length; i++) {
         const bNode = lyt.nodes[i]!;
+        const livePos = liveNodes[i] ?? bNode.pos;
         const meta = cur.nodes[i] ?? {
           status: "locked" as const,
           monogram: "",
@@ -1184,31 +1710,59 @@ export function BranchingNetworkCanvas({
         const emphasized = isOcc || isHov || isAct || isPeer;
 
         const arrival = cur.cascade.nodeArrival[i] ?? 0.5;
-        const nodeLit = isCascading ? smoothstep(arrival - 0.035, arrival + 0.085, reveal) : 0;
+        const nodeIntro = reduceMotion ? 1 : smoothstep(arrival - 0.045, arrival + 0.09, intro);
+        if (nodeIntro <= 0.01) continue;
 
-        // Draw underlying occupied / open / dormant node until the golden preview wave overtakes it
+        const hoverSpring = hoverArr[i] ?? 0;
+        const pressSpring = pressArr[i] ?? 0;
+        const flash = flashArr[i] ?? 0;
+        const idleBreath = breathBoostFor(arrival);
+        const introElastic =
+          0.42 + 0.58 * nodeIntro + (isIntroPlaying && nodeIntro < 0.99 ? 0.14 * Math.sin(nodeIntro * Math.PI) : 0);
+        const tactileScale = introElastic * (1 - pressSpring * 0.12 + flash * 0.15 + hoverSpring * 0.14);
+
+        const nodeLit = isCascading
+          ? Math.min(nodeIntro, smoothstep(arrival - 0.035, arrival + 0.085, reveal))
+          : 0;
+
+        // Draw underlying occupied / open / dormant node
         if (nodeLit < 0.98) {
-          ctx.globalAlpha = 1 - nodeLit;
+          ctx.globalAlpha = (1 - nodeLit) * nodeIntro;
           if (isOcc) {
-            const r = bNode.tier === 1 ? (lyt.compact ? 11 : 13) : lyt.compact ? 9.5 : 11;
-            radialGlow(ctx, bNode.pos, r * (isHov || isAct ? 2.8 : 2.1), [
-              [0, isLight ? "rgba(248, 192, 46, 0.34)" : "rgba(240, 181, 74, 0.36)"],
-              [1, "rgba(0, 0, 0, 0)"],
-            ]);
+            const baseR = bNode.tier === 1 ? (lyt.compact ? 11 : 13) : lyt.compact ? 9.5 : 11;
+            const r = baseR * tactileScale;
+            radialGlow(
+              ctx,
+              livePos,
+              r * (2.1 + hoverSpring * 0.7 + flash * 0.9 + idleBreath * 1.4),
+              [
+                [0, isLight ? "rgba(248, 192, 46, 0.36)" : "rgba(240, 181, 74, 0.4)"],
+                [1, "rgba(0, 0, 0, 0)"],
+              ],
+            );
 
-            if (isHov || isAct || isPeer) {
+            if (hoverSpring > 0.08 || isAct || isPeer) {
               ctx.beginPath();
-              ctx.arc(bNode.pos.x, bNode.pos.y, r + 4.5, 0, Math.PI * 2);
+              ctx.arc(livePos.x, livePos.y, r + 4.5, 0, Math.PI * 2);
               ctx.strokeStyle = isLight ? "rgba(180, 120, 13, 0.48)" : "rgba(255, 224, 152, 0.55)";
               ctx.lineWidth = 1;
               ctx.stroke();
             }
 
+            if (hoverSpring > 0.15 && !reduceMotion) {
+              const arcStart = time * 1.15 + i * 0.6;
+              ctx.beginPath();
+              ctx.arc(livePos.x, livePos.y, r + 7.2, arcStart, arcStart + Math.PI * 0.7);
+              ctx.strokeStyle = isLight ? "rgba(180, 120, 13, 0.42)" : "rgba(240, 181, 74, 0.52)";
+              ctx.lineWidth = 1;
+              ctx.stroke();
+            }
+
             ctx.beginPath();
-            ctx.arc(bNode.pos.x, bNode.pos.y, r, 0, Math.PI * 2);
+            ctx.arc(livePos.x, livePos.y, r, 0, Math.PI * 2);
             ctx.fillStyle = isLight ? "rgba(255, 255, 255, 0.94)" : "rgba(11, 11, 16, 0.92)";
             ctx.fill();
-            ctx.lineWidth = isHov || isAct ? 1.7 : 1.35;
+            ctx.lineWidth = isHov || isAct ? 1.7 : 1.35 + flash * 0.5;
             ctx.strokeStyle = goldHex;
             ctx.stroke();
 
@@ -1217,35 +1771,43 @@ export function BranchingNetworkCanvas({
               ctx.font = `600 ${bNode.tier === 1 ? 10 : 9}px var(--font-sans, sans-serif)`;
               ctx.textAlign = "center";
               ctx.textBaseline = "middle";
-              ctx.fillText(meta.monogram.slice(0, 2), bNode.pos.x, bNode.pos.y + 0.5);
+              ctx.fillText(meta.monogram.slice(0, 2), livePos.x, livePos.y + 0.5);
             }
           } else if (isOpen) {
-            const r = isHov || isAct ? 8.5 : 6.2;
+            const r = (6.2 + hoverSpring * 2.2) * tactileScale;
+            if (hoverSpring > 0.08 || flash > 0.05) {
+              radialGlow(ctx, livePos, r * (2.6 + flash), [
+                [0, isLight ? "rgba(248, 192, 46, 0.24)" : "rgba(240, 181, 74, 0.28)"],
+                [1, "rgba(0, 0, 0, 0)"],
+              ]);
+            }
             ctx.beginPath();
-            ctx.arc(bNode.pos.x, bNode.pos.y, r, 0, Math.PI * 2);
+            ctx.arc(livePos.x, livePos.y, r, 0, Math.PI * 2);
             ctx.fillStyle = isLight ? "rgba(255, 252, 244, 0.92)" : "rgba(12, 12, 16, 0.86)";
             ctx.fill();
             ctx.lineWidth = isHov || isAct ? 1.45 : 1.1;
-            ctx.strokeStyle = isHov || isPeer ? goldHex : isLight ? "rgba(180, 120, 13, 0.65)" : "rgba(240, 181, 74, 0.62)";
+            ctx.strokeStyle =
+              isHov || isPeer ? goldHex : isLight ? "rgba(180, 120, 13, 0.65)" : "rgba(240, 181, 74, 0.62)";
             ctx.stroke();
 
             ctx.beginPath();
-            ctx.arc(bNode.pos.x, bNode.pos.y, 1.8, 0, Math.PI * 2);
+            ctx.arc(livePos.x, livePos.y, 1.8 * tactileScale, 0, Math.PI * 2);
             ctx.fillStyle = goldHex;
             ctx.fill();
           } else {
-            const r = isHov || isAct ? 6.5 : isPeer ? 4.8 : bNode.tier === 1 ? 4.2 : bNode.tier === 2 ? 3.5 : 2.9;
-            if (emphasized) {
+            const baseDormant = bNode.tier === 1 ? 4.2 : bNode.tier === 2 ? 3.5 : 2.9;
+            const r = (baseDormant + hoverSpring * 2.3) * tactileScale;
+            if (emphasized || flash > 0.05) {
               ctx.beginPath();
-              ctx.arc(bNode.pos.x, bNode.pos.y, r + 4, 0, Math.PI * 2);
+              ctx.arc(livePos.x, livePos.y, r + 4, 0, Math.PI * 2);
               ctx.strokeStyle = isLight ? "rgba(180, 120, 13, 0.35)" : "rgba(240, 181, 74, 0.38)";
               ctx.lineWidth = 1;
               ctx.stroke();
             }
             ctx.beginPath();
-            ctx.arc(bNode.pos.x, bNode.pos.y, r, 0, Math.PI * 2);
+            ctx.arc(livePos.x, livePos.y, r, 0, Math.PI * 2);
             ctx.fillStyle =
-              isHov || isAct
+              isHov || isAct || flash > 0.35
                 ? goldHex
                 : isPeer
                   ? isLight
@@ -1276,19 +1838,28 @@ export function BranchingNetworkCanvas({
                   ? 6.0
                   : 3.9;
           const bloom = 1 + 0.32 * Math.sin(nodeLit * Math.PI);
-          const r = baseR * (0.58 + 0.42 * nodeLit) * bloom;
+          const r =
+            baseR *
+            (0.58 + 0.42 * nodeLit) *
+            bloom *
+            (1 - pressSpring * 0.12 + flash * 0.15 + hoverSpring * 0.1);
 
           ctx.globalAlpha = nodeLit;
-          radialGlow(ctx, bNode.pos, r * (isHov || isAct || isPeer ? 3.8 : 2.6), [
-            [0, isLight ? "rgba(248, 186, 36, 0.44)" : "rgba(255, 224, 130, 0.48)"],
-            [1, "rgba(0, 0, 0, 0)"],
-          ]);
+          radialGlow(
+            ctx,
+            livePos,
+            r * (2.6 + hoverSpring * 1.1 + flash * 1.0 + idleBreath * 1.8),
+            [
+              [0, isLight ? "rgba(248, 186, 36, 0.44)" : "rgba(255, 224, 130, 0.48)"],
+              [1, "rgba(0, 0, 0, 0)"],
+            ],
+          );
 
           if (nodeLit < 0.99) {
             ctx.save();
             ctx.globalAlpha = (1 - nodeLit) * 0.78;
             ctx.beginPath();
-            ctx.arc(bNode.pos.x, bNode.pos.y, baseR + 3 + nodeLit * 13, 0, Math.PI * 2);
+            ctx.arc(livePos.x, livePos.y, baseR + 3 + nodeLit * 13, 0, Math.PI * 2);
             ctx.strokeStyle = isLight ? "rgba(180, 118, 12, 0.85)" : "rgba(255, 232, 166, 0.9)";
             ctx.lineWidth = 1.15;
             ctx.stroke();
@@ -1297,14 +1868,14 @@ export function BranchingNetworkCanvas({
 
           if (isHov || isAct || isPeer) {
             ctx.beginPath();
-            ctx.arc(bNode.pos.x, bNode.pos.y, r + 4, 0, Math.PI * 2);
+            ctx.arc(livePos.x, livePos.y, r + 4, 0, Math.PI * 2);
             ctx.strokeStyle = isLight ? "rgba(154, 105, 16, 0.55)" : "rgba(255, 232, 166, 0.65)";
             ctx.lineWidth = 1;
             ctx.stroke();
           }
 
           ctx.beginPath();
-          ctx.arc(bNode.pos.x, bNode.pos.y, r, 0, Math.PI * 2);
+          ctx.arc(livePos.x, livePos.y, r, 0, Math.PI * 2);
           ctx.fillStyle = isLight
             ? isHov || isAct
               ? "#f5c23b"
@@ -1329,6 +1900,7 @@ export function BranchingNetworkCanvas({
 
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     reduceMotionRef.current = reduceMotion;
+    if (reduceMotion) introProgressRef.current = 1;
     let frame = 0;
     let last = 0;
     let active = !paused;
@@ -1385,6 +1957,7 @@ export function BranchingNetworkCanvas({
     if (!canvas || !ctx) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       reduceMotionRef.current = true;
+      introProgressRef.current = 1;
       revealProgressRef.current = showcaseAll ? 1 : 0;
     }
     fitCanvas(canvas, ctx);
@@ -1399,7 +1972,7 @@ export function BranchingNetworkCanvas({
     let bestIdx: number | null = null;
     let bestDist = layout.compact ? 22 : 20;
     for (let i = 0; i < layout.nodes.length; i++) {
-      const pt = layout.nodes[i]!.pos;
+      const pt = liveNodesRef.current[i] ?? layout.nodes[i]!.pos;
       const d = Math.hypot(pt.x - x, pt.y - y);
       if (d <= bestDist) {
         bestDist = d;
@@ -1409,26 +1982,180 @@ export function BranchingNetworkCanvas({
     return bestIdx;
   };
 
+  const isNearCore = (x: number, y: number): boolean => {
+    const corePt = liveCoreRef.current ?? layout.core;
+    return Math.hypot(corePt.x - x, corePt.y - y) <= (layout.compact ? 28 : 34);
+  };
+
   const handlePointerMove = (e: MouseEvent<HTMLDivElement>) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (rect) {
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      if (!pointerActiveRef.current) {
+        pointerSmoothRef.current = { x, y };
+      }
+      pointerTargetRef.current = { x, y };
+      pointerActiveRef.current = true;
+      const hitCore = isNearCore(x, y);
+      if (hitCore !== overCore) setOverCore(hitCore);
+    }
+
     const hit = hitTest(e.clientX, e.clientY);
     if (hit !== hoveredIdx) {
       setHoveredIdx(hit);
       onHoverNode?.(hit);
+      if (hit !== null && !reduceMotionRef.current) {
+        const nowMs = performance.now();
+        if (nowMs - lastHoverSparkAtRef.current > 240) {
+          lastHoverSparkAtRef.current = nowMs;
+          const outward = forwardSegmentsFromCore(layout, hit);
+          if (outward.length > 0) {
+            enqueueComet({
+              segments: outward,
+              targetIdx: hit,
+              progress: 0,
+              duration: 0.68,
+              intensity: 0.52,
+            });
+          }
+        }
+      }
     }
   };
 
   const handlePointerLeave = () => {
+    pointerActiveRef.current = false;
+    pressedNodeIdxRef.current = null;
+    if (overCore) setOverCore(false);
     if (hoveredIdx !== null) {
       setHoveredIdx(null);
       onHoverNode?.(null);
     }
   };
 
-  const handleCanvasClick = (e: MouseEvent<HTMLDivElement>) => {
+  const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     const hit = hitTest(e.clientX, e.clientY);
+    pressedNodeIdxRef.current = hit;
     if (hit !== null) {
-      onSelectNode?.(hit);
+      nodePressRef.current[hit] = 1;
     }
+  };
+
+  const handlePointerUp = () => {
+    pressedNodeIdxRef.current = null;
+  };
+
+  const handleCanvasClick = (e: MouseEvent<HTMLDivElement>) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const hit = hitTest(e.clientX, e.clientY);
+
+    if (hit !== null) {
+      const hitPt = liveNodesRef.current[hit] ?? layout.nodes[hit]!.pos;
+      nodeFlashRef.current[hit] = 1.0;
+      enqueueRipple({
+        x: hitPt.x,
+        y: hitPt.y,
+        progress: 0,
+        duration: 0.85,
+        maxRadius: 52,
+        strength: 0.95,
+        doubleRing: nodes[hit]?.status === "occupied",
+      });
+      enqueueImpulse({
+        x: hitPt.x,
+        y: hitPt.y,
+        progress: 0,
+        duration: 0.7,
+        maxRadius: 150,
+        amplitude: 3.4,
+      });
+      const outward = forwardSegmentsFromCore(layout, hit);
+      if (outward.length > 0) {
+        enqueueComet({
+          segments: outward,
+          targetIdx: hit,
+          progress: 0,
+          duration: 0.72,
+          intensity: 0.88,
+        });
+      }
+      // Subtle fan out along up to 2 connected bridges on click
+      const bridgesFromHit = layout.bridges.filter(
+        (b) => (b.fromIndex === hit || b.toIndex === hit) && b.isLive,
+      );
+      for (const br of bridgesFromHit.slice(0, 2)) {
+        const seg =
+          br.fromIndex === hit
+            ? [[br.p0, br.c1, br.c2, br.p3]]
+            : [[br.p3, br.c2, br.c1, br.p0]];
+        enqueueComet({
+          segments: seg,
+          targetIdx: br.fromIndex === hit ? br.toIndex : br.fromIndex,
+          progress: 0,
+          duration: 0.78,
+          intensity: 0.64,
+        });
+      }
+      onSelectNode?.(hit);
+      return;
+    }
+
+    if (isNearCore(x, y)) {
+      const corePt = liveCoreRef.current ?? layout.core;
+      corePulseRef.current = 1.0;
+      enqueueRipple({
+        x: corePt.x,
+        y: corePt.y,
+        progress: 0,
+        duration: 1.05,
+        maxRadius: layout.compact ? 150 : 210,
+        strength: 0.92,
+        doubleRing: true,
+      });
+      enqueueImpulse({
+        x: corePt.x,
+        y: corePt.y,
+        progress: 0,
+        duration: 0.85,
+        maxRadius: 250,
+        amplitude: 4.5,
+      });
+      for (let t = 0; t < Math.min(5, layout.nodes.length); t++) {
+        const seg = forwardSegmentsFromCore(layout, t);
+        if (seg.length > 0) {
+          enqueueComet({
+            segments: seg,
+            targetIdx: t,
+            progress: 0,
+            duration: 0.88,
+            intensity: 0.65,
+          });
+        }
+      }
+      return;
+    }
+
+    // Empty space subtle water-drop ripple + local filament wave impulse
+    enqueueRipple({
+      x,
+      y,
+      progress: 0,
+      duration: 0.78,
+      maxRadius: 84,
+      strength: 0.56,
+    });
+    enqueueImpulse({
+      x,
+      y,
+      progress: 0,
+      duration: 0.72,
+      maxRadius: 170,
+      amplitude: 3.5,
+    });
   };
 
   // Single floating Liquid Glass tooltip for whichever node is hovered
@@ -1478,9 +2205,12 @@ export function BranchingNetworkCanvas({
       ref={containerRef}
       onMouseMove={handlePointerMove}
       onMouseLeave={handlePointerLeave}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
       onClick={handleCanvasClick}
       className={`relative h-full w-full select-none overflow-hidden ${
-        hoveredIdx !== null ? "cursor-pointer" : "cursor-default"
+        hoveredIdx !== null || overCore ? "cursor-pointer" : "cursor-default"
       } ${className}`}
     >
       <canvas ref={canvasRef} className="block h-full w-full" aria-hidden="true" />
