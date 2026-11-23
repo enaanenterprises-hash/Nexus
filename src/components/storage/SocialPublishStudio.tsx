@@ -49,6 +49,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { connectGoogleService } from "@/lib/command/google-connect";
 import {
   SOCIAL_PLATFORMS,
   SOCIAL_PLATFORM_IDS,
@@ -60,6 +61,7 @@ import {
   type PlatformFramingConfig,
   type SocialAspectMode,
   type SocialPlatformId,
+  type SocialPlatformSpec,
   type SocialPublishDraft,
   type SocialPublishRecord,
   type SocialVisibility,
@@ -92,6 +94,8 @@ export function SocialPublishStudio({
   onOpenChange,
   item,
   connectedConnectorIds = [],
+  connectedAccounts = {},
+  connectorAvailability,
   onOpenConnections,
   onPublished,
 }: {
@@ -99,6 +103,8 @@ export function SocialPublishStudio({
   onOpenChange: (open: boolean) => void;
   item: VaultItem | null;
   connectedConnectorIds?: readonly string[];
+  connectedAccounts?: Record<string, string>;
+  connectorAvailability?: Record<string, { connectable: boolean; missing: string[] }>;
   onOpenConnections?: (connectorId: string) => void;
   onPublished?: (record: SocialPublishRecord) => void;
 }) {
@@ -110,6 +116,8 @@ export function SocialPublishStudio({
         open={open}
         item={item}
         connectedConnectorIds={connectedConnectorIds}
+        connectedAccounts={connectedAccounts}
+        connectorAvailability={connectorAvailability}
         onOpenConnections={onOpenConnections}
         onPublished={onPublished}
       />
@@ -121,12 +129,16 @@ function SocialPublishContent({
   open,
   item,
   connectedConnectorIds = [],
+  connectedAccounts = {},
+  connectorAvailability,
   onOpenConnections,
   onPublished,
 }: {
   open: boolean;
   item: VaultItem;
   connectedConnectorIds?: readonly string[];
+  connectedAccounts?: Record<string, string>;
+  connectorAvailability?: Record<string, { connectable: boolean; missing: string[] }>;
   onOpenConnections?: (connectorId: string) => void;
   onPublished?: (record: SocialPublishRecord) => void;
 }) {
@@ -279,6 +291,36 @@ function SocialPublishContent({
     dragPanRef.current = null;
   }
 
+  const [signingInId, setSigningInId] = useState<string | null>(null);
+
+  async function handleSignInPlatform(spec: SocialPlatformSpec) {
+    setSigningInId(spec.connectorId);
+    try {
+      await vault.saveSocialDraft(item.id, draft);
+      const avail = connectorAvailability?.[spec.connectorId];
+      if (avail && !avail.connectable) {
+        setSigningInId(null);
+        onOpenConnections?.(spec.connectorId);
+        return;
+      }
+      if (spec.id === "youtube") {
+        await connectGoogleService("youtube-publish", {
+          widget: "storage",
+          itemId: item.id,
+        });
+        return;
+      }
+      // Full browser navigation required for 302 redirect to external OAuth consent screen
+      /* eslint-disable-next-line @next/next/no-location-assign-relative-destination */
+      window.location.assign(
+        `/api/command/oauth/${encodeURIComponent(spec.connectorId)}/start?widget=storage&itemId=${encodeURIComponent(item.id)}`,
+      );
+    } catch {
+      setSigningInId(null);
+      setStatusNotice(`Could not start ${spec.name} sign-in. Try again in a moment.`);
+    }
+  }
+
   async function handleSaveDraft() {
     if (!item) return;
     setSavingDraft(true);
@@ -346,11 +388,11 @@ function SocialPublishContent({
         setStatusNotice(`Published cleanly across all ${liveCount} selected platforms.`);
       } else if (credCount > 0 && liveCount === 0) {
         setStatusNotice(
-          `Saved framing & copy for ${credCount} platform${credCount === 1 ? "" : "s"}. Add your API keys in Command → Connections to push live.`,
+          `Saved framing & copy for ${credCount} platform${credCount === 1 ? "" : "s"}. Sign in to each account below to publish directly.`,
         );
       } else {
         setStatusNotice(
-          `Completed dispatch: ${liveCount} published, ${credCount} awaiting API credentials.`,
+          `Completed dispatch: ${liveCount} published, ${credCount} awaiting account sign-in.`,
         );
       }
     } catch (err) {
@@ -917,20 +959,24 @@ function SocialPublishContent({
                   ) : null}
                 </div>
 
-                {/* API Connection Ledger */}
+                {/* Connected Social Accounts */}
                 <div className="space-y-2 rounded-2xl border border-border/80 bg-background/50 p-3">
                   <div className="flex items-center justify-between text-[11.5px]">
-                    <span className="font-medium text-foreground">API Connections</span>
+                    <span className="font-medium text-foreground">Connected Accounts</span>
                     <span className="text-muted-foreground tabular-nums">
                       {enabledPlatforms.filter((id) => connectedSet.has(getSocialPlatform(id).connectorId)).length}/
-                      {enabledPlatforms.length} linked
+                      {enabledPlatforms.length} signed in
                     </span>
                   </div>
                   <div className="space-y-1.5">
                     {enabledPlatforms.map((pid) => {
                       const spec = getSocialPlatform(pid);
                       const isConnected = connectedSet.has(spec.connectorId);
+                      const accountLabel = connectedAccounts[spec.connectorId];
+                      const avail = connectorAvailability?.[spec.connectorId];
+                      const serverNeedsOAuth = avail ? !avail.connectable : false;
                       const res = lastRecord?.platforms.find((r) => r.platformId === pid);
+                      const isSigningThis = signingInId === spec.connectorId;
                       return (
                         <div
                           key={pid}
@@ -950,11 +996,13 @@ function SocialPublishContent({
                                 ? res.status === "published"
                                   ? "Published"
                                   : res.status === "needs_credentials"
-                                    ? "Key needed"
+                                    ? "Sign in required"
                                     : "Attention"
                                 : isConnected
-                                  ? "Ready"
-                                  : "No key"}
+                                  ? accountLabel || "Signed in"
+                                  : serverNeedsOAuth
+                                    ? "Setup pending"
+                                    : "Not signed in"}
                             </span>
                           </div>
                           {res?.postUrl ? (
@@ -966,14 +1014,25 @@ function SocialPublishContent({
                             >
                               View <ExternalLink className="size-3" />
                             </a>
-                          ) : !isConnected && onOpenConnections ? (
+                          ) : !isConnected ? (
                             <button
                               type="button"
-                              onClick={() => onOpenConnections(spec.connectorId)}
-                              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border/80 px-2 py-0.5 text-[10.5px] font-medium text-foreground hover:bg-muted"
+                              disabled={signingInId !== null}
+                              onClick={() => void handleSignInPlatform(spec)}
+                              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[color:var(--land-gold)]/55 bg-[color:var(--land-gold)]/15 px-2.5 py-0.5 text-[11px] font-medium text-foreground transition-colors hover:bg-[color:var(--land-gold)]/25 disabled:opacity-55"
                             >
-                              <Link2 className="size-3" />
-                              Connect
+                              {isSigningThis ? (
+                                <Loader2 className="size-3 animate-spin" />
+                              ) : (
+                                <Link2 className="size-3 text-[color:var(--land-gold)]" />
+                              )}
+                              <span>
+                                {isSigningThis
+                                  ? "Opening…"
+                                  : serverNeedsOAuth
+                                    ? "Setup"
+                                    : "Sign in"}
+                              </span>
                             </button>
                           ) : null}
                         </div>

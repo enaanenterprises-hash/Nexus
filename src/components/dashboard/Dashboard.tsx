@@ -106,6 +106,7 @@ const OAUTH_ERRORS: Record<string, string> = {
   denied: "Access was not granted.",
   state: "The sign-in expired. Try connecting again.",
   exchange: "The service didn't accept the sign-in. Try again.",
+  no_ig_business: "Link an Instagram Creator or Business account to a Facebook Page, then try again.",
   unknown: "Unknown service.",
 };
 
@@ -590,6 +591,8 @@ export function Dashboard({
     if (!initialSetupDone || initialSetupStep) return;
 
     const ids = (params.get("service") ?? "").split(",").filter(Boolean);
+    const widget = params.get("widget");
+    const itemId = params.get("itemId");
     const name = ids.length ? ids.map((id) => getConnector(id)?.name ?? id).join(" and ") : "The service";
     const notice =
       outcome === "connected"
@@ -602,6 +605,8 @@ export function Dashboard({
         tab: outcome === "connected" ? "overview" : "connections",
         service: ids[0] ?? null,
         notice,
+        widget: outcome === "connected" ? widget : null,
+        itemId: outcome === "connected" ? itemId : null,
       });
     });
     return () => {

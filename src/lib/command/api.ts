@@ -6,7 +6,7 @@ import { databaseUrl } from "@/lib/db/client"
 import { json, jsonError } from "@/lib/research/route-helpers"
 import { BUILT_IN_RECIPES } from "./automation/recipes"
 import { COMMAND_DRIVERS } from "./drivers"
-import { missingOAuthEnv } from "./drivers/oauth"
+import { isOAuthApp, missingOAuthEnv } from "./drivers/oauth"
 import type { CommandResult } from "./service"
 import * as store from "./store"
 
@@ -40,7 +40,7 @@ export function connectorAvailability() {
     CONNECTOR_CATALOG.map((m) => {
       if (m.live.status !== "available" || !COMMAND_DRIVERS[m.id]) return [m.id, { connectable: false, missing: [] as string[] }]
       const provider = m.auth.type === "oauth" ? m.auth.provider : null
-      const missing = provider === "google" || provider === "strava" || provider === "spotify" ? missingOAuthEnv(provider) : []
+      const missing = provider && isOAuthApp(provider) ? missingOAuthEnv(provider) : []
       if (m.auth.type !== "none" && !vaultReady()) missing.push("NEXUS_CREDENTIALS_KEY")
       return [m.id, { connectable: missing.length === 0, missing }]
     }),

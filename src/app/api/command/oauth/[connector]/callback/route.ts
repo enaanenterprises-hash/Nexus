@@ -1,9 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { requireCommandUser } from "@/lib/command/api"
-import { exchangeCode } from "@/lib/command/drivers/oauth"
+import { exchangeCodeAndEnrich } from "@/lib/command/drivers/oauth"
+import { DriverError } from "@/lib/command/drivers/types"
 import { describeError } from "@/lib/command/service"
 import { saveConnection } from "@/lib/command/store"
-import { OAUTH_STATE_COOKIE, dashboardUrl, oauthAppFor, redirectUri } from "@/lib/command/oauth-routes"
+import {
+  OAUTH_STATE_COOKIE,
+  dashboardUrl,
+  decodeOAuthStateCookie,
+  oauthAppFor,
+  redirectUri,
+} from "@/lib/command/oauth-routes"
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ connector: string }> }) {
   const user = await requireCommandUser()
@@ -16,19 +23,32 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return response
   }
   const app = oauthAppFor(connector)
-  const expected = request.cookies.get(OAUTH_STATE_COOKIE)?.value
+  const statePayload = decodeOAuthStateCookie(request.cookies.get(OAUTH_STATE_COOKIE)?.value)
   const code = url.searchParams.get("code")
   if (!app) return fail("unknown")
   if (url.searchParams.get("error")) return fail("denied")
-  if (!code || !expected || expected !== `${connector}.${url.searchParams.get("state")}`) return fail("state")
+  if (!code || !statePayload || statePayload.connector !== connector || statePayload.state !== url.searchParams.get("state")) {
+    return fail("state")
+  }
   try {
-    const credentials = await exchangeCode(app.app, code, redirectUri(request, connector))
-    await saveConnection(user.userId, connector, { credentials })
+    const { credentials, settings } = await exchangeCodeAndEnrich(
+      app.app,
+      code,
+      redirectUri(request, connector),
+      statePayload.verifier,
+    )
+    await saveConnection(user.userId, connector, { credentials, settings })
   } catch (error) {
     console.error("[command] oauth callback failed", describeError(error).message)
+    if (error instanceof DriverError && error.message.toLowerCase().includes("instagram creator or business")) {
+      return fail("no_ig_business")
+    }
     return fail("exchange")
   }
-  const response = NextResponse.redirect(dashboardUrl(request, { command: "connected", service: connector }))
+  const successParams: Record<string, string> = { command: "connected", service: connector }
+  if (statePayload.widget) successParams["widget"] = statePayload.widget
+  if (statePayload.itemId) successParams["itemId"] = statePayload.itemId
+  const response = NextResponse.redirect(dashboardUrl(request, successParams))
   response.cookies.delete({ name: OAUTH_STATE_COOKIE, path: "/api/command/oauth" })
   return response
 }

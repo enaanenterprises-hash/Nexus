@@ -62,9 +62,21 @@ export function StorageWidget({
   const [draggingOver, setDraggingOver] = useState(false);
 
   const connectedConnectorIds = useMemo(
-    () => (command.state?.connections ?? []).map((c) => c.connectorId),
+    () =>
+      (command.state?.connections ?? [])
+        .filter((c) => c.status === "ok" && c.hasCredentials)
+        .map((c) => c.connectorId),
     [command.state?.connections],
   );
+
+  const connectedAccounts = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const c of command.state?.connections ?? []) {
+      const label = c.settings?.["accountLabel"]?.trim();
+      if (c.status === "ok" && c.hasCredentials && label) out[c.connectorId] = label;
+    }
+    return out;
+  }, [command.state?.connections]);
 
   const totalBytes = useMemo(
     () => vault.items.reduce((sum, item) => sum + item.sizeBytes, 0),
@@ -131,6 +143,8 @@ export function StorageWidget({
         <StorageVaultView
           initialItemId={initialItemId}
           connectedConnectorIds={connectedConnectorIds}
+          connectedAccounts={connectedAccounts}
+          connectorAvailability={command.state?.availability}
           onOpenCinemaWithItem={onOpenCinemaWithItem}
           onOpenStudioWithItem={onOpenStudioWithItem}
           onOpenConnections={(connectorId) => onConnections?.(connectorId)}

@@ -109,10 +109,14 @@ If a required variable is missing, the sign-in page says which ones, and nothing
 | `NEXUS_CREDENTIALS_KEY` | Recommended | 32 random bytes, base64 (`openssl rand -base64 32`). Encrypts Command connector tokens (AES-256-GCM). Without it the key is derived from `AUTH_SECRET`, so rotating `AUTH_SECRET` would force every token-based service to reconnect. |
 | `STRAVA_CLIENT_ID` / `STRAVA_CLIENT_SECRET` | For Strava | [Strava API application](https://www.strava.com/settings/api). |
 | `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` | For Spotify | [Spotify app](https://developer.spotify.com/dashboard). Playback control needs Spotify Premium. |
+| `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET` | For TikTok | [TikTok for Developers](https://developers.tiktok.com/) app with Login Kit + Content Posting API (`{AUTH_URL}/api/command/oauth/tiktok-publish/callback`). Users just sign in. |
+| `META_APP_ID` / `META_APP_SECRET` | For Instagram | [Meta for Developers](https://developers.facebook.com/) app with Facebook Login + Instagram Graph API (`{AUTH_URL}/api/command/oauth/instagram-publish/callback`). Users sign in to link their Creator/Business account. |
+| `X_CLIENT_ID` / `X_CLIENT_SECRET` | For X | [X Developer Portal](https://developer.x.com/) OAuth 2.0 app with tweet/media write (`{AUTH_URL}/api/command/oauth/x-publish/callback`). Users just sign in. |
+| `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET` | For LinkedIn | [LinkedIn Developers](https://www.linkedin.com/developers/) app with Share on LinkedIn + OpenID (`{AUTH_URL}/api/command/oauth/linkedin-publish/callback`). Users just sign in. |
 
 ### Google Cloud OAuth
 
-1. In [Google Cloud Console](https://console.cloud.google.com/apis/credentials), configure the OAuth consent screen (External is fine). While the app is in Testing, add the Google account you will sign in with as a test user.
+1. In [Google Cloud Console](https://console.cloud.google.com/apis/credentials), configure the OAuth consent screen (External is fine). While the app is in Testing, add the Google account you will sign in with as a test user. Enable the **YouTube Data API v3** if you want users to publish videos to YouTube cleanly.
 2. Create credentials → **OAuth client ID** → **Web application**.
 3. Authorized JavaScript origins:
    - `http://localhost:3000`

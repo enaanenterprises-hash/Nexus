@@ -555,9 +555,14 @@ const longXDraft = {
 assert(!socialPlatformsMod.validateSocialDraft(longXDraft).ok, "X length limit (280 chars) is enforced when X is enabled");
 
 for (const id of ["tiktok-publish", "instagram-publish", "youtube-publish", "x-publish", "linkedin-publish"]) {
+  const manifestEntry = catalogMod.getConnector(id);
   assert(
-    Boolean(catalogMod.getConnector(id)) && catalogMod.CONNECTOR_CATALOG.some((c) => c.id === id),
+    Boolean(manifestEntry) && catalogMod.CONNECTOR_CATALOG.some((c) => c.id === id),
     `social connector ${id} registered`,
+  );
+  assert(
+    manifestEntry?.auth.type === "oauth" && manifestEntry.auth.scopes.length > 0,
+    `social connector ${id} uses end-user OAuth sign-in`,
   );
 }
 

@@ -123,12 +123,16 @@ function downloadBlob(blob: Blob, filename: string) {
 export function StorageVaultView({
   initialItemId = null,
   connectedConnectorIds = [],
+  connectedAccounts = {},
+  connectorAvailability,
   onOpenCinemaWithItem,
   onOpenStudioWithItem,
   onOpenConnections,
 }: {
   initialItemId?: string | null;
   connectedConnectorIds?: readonly string[];
+  connectedAccounts?: Record<string, string>;
+  connectorAvailability?: Record<string, { connectable: boolean; missing: string[] }>;
   onOpenCinemaWithItem?: (itemId: string) => void;
   onOpenStudioWithItem?: (itemId: string) => void;
   onOpenConnections?: (connectorId: string) => void;
@@ -866,6 +870,8 @@ export function StorageVaultView({
         }}
         item={publishItem}
         connectedConnectorIds={connectedConnectorIds}
+        connectedAccounts={connectedAccounts}
+        connectorAvailability={connectorAvailability}
         onOpenConnections={onOpenConnections}
         onPublished={() => setNotice("Updated social publishing status in Command Storage.")}
       />

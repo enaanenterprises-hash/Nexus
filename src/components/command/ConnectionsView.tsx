@@ -230,14 +230,17 @@ function ConnectorRow({
       : connection.status === "needs_auth"
         ? "alert"
         : "warn";
+  const accountLabel = connection?.settings?.["accountLabel"]?.trim();
   const status = !connection
     ? availability?.connectable
       ? AUTH_LABEL[m.auth.type]
       : "Needs server setup"
     : connection.status === "ok"
-      ? connection.lastSyncAt
-        ? `Synced ${relative(connection.lastSyncAt, now)}`
-        : "Connected"
+      ? accountLabel
+        ? `Connected · ${accountLabel}`
+        : connection.lastSyncAt
+          ? `Synced ${relative(connection.lastSyncAt, now)}`
+          : "Connected"
       : connection.status === "needs_auth"
         ? "Reconnect"
         : "Error";
@@ -366,7 +369,7 @@ function ConnectorForm({
           ))}
 
           <div className="flex flex-wrap items-center gap-2 pt-1">
-            {m.auth.type === "oauth" && !connection ? (
+            {m.auth.type === "oauth" && (!connection || connection.status === "needs_auth") ? (
               m.auth.provider === "google" ? (
                 <Button
                   type="button"
@@ -374,7 +377,7 @@ function ConnectorForm({
                   className="border border-[color:var(--land-gold)]/55 bg-[color:var(--land-gold)]/18 text-[color:var(--land-ink)] hover:bg-[color:var(--land-gold)]/28"
                   onClick={() => void connectGoogleService(m.id)}
                 >
-                  Continue with Google
+                  {connection?.status === "needs_auth" ? "Reconnect with Google" : "Continue with Google"}
                 </Button>
               ) : (
                 <a
@@ -384,7 +387,7 @@ function ConnectorForm({
                     "border border-[color:var(--land-gold)]/55 bg-[color:var(--land-gold)]/18 text-[color:var(--land-ink)] hover:bg-[color:var(--land-gold)]/28",
                   )}
                 >
-                  Continue with {m.name}
+                  {connection?.status === "needs_auth" ? `Reconnect ${m.name}` : `Continue with ${m.name}`}
                 </a>
               )
             ) : m.auth.type === "oauth" && !(m.settings ?? []).length ? null : (

@@ -20,7 +20,22 @@ export const CONNECTOR_CATEGORIES = {
 
 export type ConnectorCategory = keyof typeof CONNECTOR_CATEGORIES;
 
-export type OAuthProvider = "google" | "microsoft" | "strava" | "whoop" | "fitbit" | "garmin" | "spotify" | "slack" | "discord" | "hue" | "notion";
+export type OAuthProvider =
+  | "google"
+  | "microsoft"
+  | "strava"
+  | "whoop"
+  | "fitbit"
+  | "garmin"
+  | "spotify"
+  | "slack"
+  | "discord"
+  | "hue"
+  | "notion"
+  | "tiktok"
+  | "meta"
+  | "x"
+  | "linkedin";
 
 export interface CredentialField {
   key: string;

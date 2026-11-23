@@ -392,6 +392,10 @@ export function CinemaView({
   const [publishAfterExport, setPublishAfterExport] = useState(false);
   const [publishTargetItem, setPublishTargetItem] = useState<VaultItem | null>(null);
   const [connectedConnectors, setConnectedConnectors] = useState<string[]>([]);
+  const [connectedAccounts, setConnectedAccounts] = useState<Record<string, string>>({});
+  const [connectorAvailability, setConnectorAvailability] = useState<
+    Record<string, { connectable: boolean; missing: string[] }>
+  >({});
   const handledVaultSerialRef = useRef<number>(0);
 
   const [saving, setSaving] = useState(false);
@@ -702,11 +706,15 @@ export function CinemaView({
       .state()
       .then((s) => {
         if (!alive) return;
-        setConnectedConnectors(
-          s.connections
-            .filter((c) => c.status === "ok" && c.hasCredentials)
-            .map((c) => c.connectorId),
-        );
+        const okConns = s.connections.filter((c) => c.status === "ok" && c.hasCredentials);
+        setConnectedConnectors(okConns.map((c) => c.connectorId));
+        const accounts: Record<string, string> = {};
+        for (const c of okConns) {
+          const label = c.settings?.["accountLabel"]?.trim();
+          if (label) accounts[c.connectorId] = label;
+        }
+        setConnectedAccounts(accounts);
+        setConnectorAvailability(s.availability);
       })
       .catch(() => {
         // Ignore offline/signed-out checks; SocialPublishStudio prompts gently.
@@ -2971,6 +2979,8 @@ export function CinemaView({
         }}
         item={publishTargetItem}
         connectedConnectorIds={connectedConnectors}
+        connectedAccounts={connectedAccounts}
+        connectorAvailability={connectorAvailability}
         onOpenConnections={(connectorId) => {
           setPublishTargetItem(null);
           onOpenCommandConnections?.(connectorId);

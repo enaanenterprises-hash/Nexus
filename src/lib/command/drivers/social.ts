@@ -1,24 +1,21 @@
 import "server-only";
-import { DriverError, type ConnectorDriver, type DriverContext } from "./types";
+import { accessToken, type OAuthAppId } from "./oauth";
+import { DriverError, type ConnectorDriver } from "./types";
 
-function socialVerify(label: string) {
-  return async (ctx: DriverContext) => {
-    const token = ctx.credentials?.["accessToken"]?.trim();
-    if (!token || token.length < 8) {
-      throw new DriverError(`Paste a valid ${label} access token first.`, "auth");
-    }
-  };
-}
-
-function makeSocialDriver(id: string, label: string): ConnectorDriver {
+function makeSocialDriver(id: string, label: string, app: OAuthAppId): ConnectorDriver {
   return {
     id,
-    verify: socialVerify(label),
+    verify: async (ctx) => {
+      const token = await accessToken(ctx, app);
+      if (!token) {
+        throw new DriverError(`Sign in to your ${label} account first.`, "auth");
+      }
+    },
     actions: {
       "social.publish": async (ctx) => {
-        const token = ctx.credentials?.["accessToken"]?.trim();
+        const token = await accessToken(ctx, app);
         if (!token) {
-          throw new DriverError(`${label} token missing.`, "auth");
+          throw new DriverError(`Sign in to your ${label} account to publish.`, "auth");
         }
         return { detail: `${label} publishing session ready.` };
       },
@@ -26,8 +23,8 @@ function makeSocialDriver(id: string, label: string): ConnectorDriver {
   };
 }
 
-export const tiktokPublishDriver = makeSocialDriver("tiktok-publish", "TikTok");
-export const instagramPublishDriver = makeSocialDriver("instagram-publish", "Instagram");
-export const youtubePublishDriver = makeSocialDriver("youtube-publish", "YouTube");
-export const xPublishDriver = makeSocialDriver("x-publish", "X");
-export const linkedinPublishDriver = makeSocialDriver("linkedin-publish", "LinkedIn");
+export const tiktokPublishDriver = makeSocialDriver("tiktok-publish", "TikTok", "tiktok");
+export const instagramPublishDriver = makeSocialDriver("instagram-publish", "Instagram", "meta");
+export const youtubePublishDriver = makeSocialDriver("youtube-publish", "YouTube", "google");
+export const xPublishDriver = makeSocialDriver("x-publish", "X", "x");
+export const linkedinPublishDriver = makeSocialDriver("linkedin-publish", "LinkedIn", "linkedin");
