@@ -1,48 +1,43 @@
 "use client";
 
-import { AudioWaveform, LayoutGrid, Sparkles, type LucideIcon } from "lucide-react";
-import { TierSilkCanvas } from "./OpticalCanvases";
+import { useEffect, useState } from "react";
+import { ArrowRight, AudioWaveform, LayoutGrid, Sparkles, type LucideIcon } from "lucide-react";
+import { TRIANGLE_NODE_RADIUS, TRIANGLE_VERTICES, TierTriangleCanvas } from "./TierTriangleCanvas";
 import type { EcosystemLayer } from "./WorkspaceVisuals";
 
 type FlowLens = {
   id: EcosystemLayer;
   title: string;
   role: string;
-  signal: string;
-  isNetwork: boolean;
   icon: LucideIcon;
 };
 
 const FLOW_LENSES: readonly FlowLens[] = [
-  {
-    id: "network",
-    title: "Network",
-    role: "Ask",
-    signal: "“Send clips over 5m to Drive”",
-    isNetwork: true,
-    icon: Sparkles,
-  },
-  {
-    id: "command",
-    title: "Command",
-    role: "Route",
-    signal: "Drive & Gmail · Scoped vault",
-    isNetwork: false,
-    icon: LayoutGrid,
-  },
-  {
-    id: "nodes",
-    title: "Nodes",
-    role: "Execute",
-    signal: "Studio → 2 clips over 5:00",
-    isNetwork: false,
-    icon: AudioWaveform,
-  },
-] as const;
+  { id: "network", title: "Network", role: "Ask", icon: Sparkles },
+  { id: "command", title: "Command", role: "Route", icon: LayoutGrid },
+  { id: "nodes", title: "Nodes", role: "Execute", icon: AudioWaveform },
+];
+
+const LAYER_TITLE: Record<EcosystemLayer, string> = {
+  network: "Network",
+  command: "Command",
+  nodes: "Nodes",
+};
+
+type Hop = { from: EcosystemLayer; to: EcosystemLayer; signal: string };
+
+/** One request travelling the full triangle: ask, route, execute, report back. */
+const HOPS: readonly Hop[] = [
+  { from: "network", to: "command", signal: "“Send clips over 5m to Drive”" },
+  { from: "command", to: "nodes", signal: "Routed to Studio with Drive scope" },
+  { from: "nodes", to: "network", signal: "2 clips over 5:00 filed in Drive" },
+];
+
+const HOP_INTERVAL_MS = 3400;
 
 /**
- * Borderless sculptural 3-lens optical bridge directly on #111216:
- * Network gleams in 24k Gold while Command and Nodes operate in platinum-silver.
+ * Triangular request flow: Network, Command, and Nodes bound by living filaments.
+ * Each hop lights the edge it travels along and names the connection in the centre.
  */
 export function TierFlowStrip({
   activeLayer,
@@ -51,85 +46,120 @@ export function TierFlowStrip({
   activeLayer: EcosystemLayer;
   onSelect: (layer: EcosystemLayer) => void;
 }) {
-  const activeLens = FLOW_LENSES.find((lens) => lens.id === activeLayer) ?? FLOW_LENSES[0]!;
+  const [hopSerial, setHopSerial] = useState(0);
+  const hop = HOPS[hopSerial % HOPS.length]!;
+  const centroidY =
+    (TRIANGLE_VERTICES.network.y + TRIANGLE_VERTICES.command.y + TRIANGLE_VERTICES.nodes.y) / 3;
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setHopSerial((s) => s + 1), HOP_INTERVAL_MS);
+    return () => window.clearTimeout(id);
+  }, [hopSerial]);
+
+  function select(layer: EcosystemLayer) {
+    onSelect(layer);
+    setHopSerial((s) => {
+      let next = s + 1;
+      while (HOPS[next % HOPS.length]!.from !== layer) next++;
+      return next;
+    });
+  }
 
   return (
     <div
-      className="flex flex-col items-center py-2"
+      className="relative mx-auto w-full max-w-[600px]"
       role="group"
-      aria-label="Nexus 3-tier request flow"
+      aria-label="How Network, Command, and Nodes pass work between each other"
     >
-      {/* Quiet contextual signal pill */}
-      <div
-        key={activeLens.id}
-        className="lp-stage-panel inline-flex max-w-full items-center gap-2 rounded-full border border-white/[0.09] bg-[#16171d] px-3.5 py-1.5 text-[12.5px] text-[#d1d1d6]"
-      >
-        <span
-          className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-            activeLens.isNetwork ? "bg-[#f0b54a]" : "bg-[#f5f5f7]"
-          }`}
-          aria-hidden="true"
+      <div className="relative aspect-[600/390] w-full">
+        <TierTriangleCanvas
+          className="absolute inset-0"
+          hopFrom={hop.from}
+          hopTo={hop.to}
+          hopSerial={hopSerial}
         />
-        <span className="truncate">{activeLens.signal}</span>
-      </div>
 
-      {/* Living Canvas2D Silk Bridge + 3 Precision Concentric Reticles */}
-      <div className="relative mx-auto mt-4 w-full max-w-[600px]">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-[56px]">
-          <TierSilkCanvas activeLayer={activeLayer} />
+        {/* The live connection, named at the heart of the triangle */}
+        <div
+          className="pointer-events-none absolute left-1/2 w-[46%] max-w-[240px] -translate-x-1/2 -translate-y-1/2 text-center"
+          style={{ top: `${centroidY * 100}%` }}
+          aria-live="polite"
+        >
+          <div key={hopSerial} className="lp-stage-panel">
+            <p className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#8e8e95]">
+              <span className={hop.from === "network" ? "text-[#f0b54a]" : "text-[#d1d1d6]"}>
+                {LAYER_TITLE[hop.from]}
+              </span>
+              <ArrowRight className="size-3 text-[#6e6e76]" strokeWidth={1.75} aria-hidden="true" />
+              <span className={hop.to === "network" ? "text-[#f0b54a]" : "text-[#d1d1d6]"}>
+                {LAYER_TITLE[hop.to]}
+              </span>
+            </p>
+            <p className="mt-1 text-[12px] leading-snug text-[#e5e5ea] sm:text-[13px]">{hop.signal}</p>
+          </div>
         </div>
 
-        <div className="relative z-10 grid grid-cols-3 items-start">
-          {FLOW_LENSES.map((lens) => {
-            const Icon = lens.icon;
-            const isSelected = lens.id === activeLayer;
-            const isNetwork = lens.isNetwork;
+        {FLOW_LENSES.map((lens) => {
+          const Icon = lens.icon;
+          const isSelected = lens.id === activeLayer;
+          const isNetwork = lens.id === "network";
+          const v = TRIANGLE_VERTICES[lens.id];
+          const labelAbove = v.y < 0.5;
 
-            return (
-              <button
-                key={lens.id}
-                type="button"
-                onClick={() => onSelect(lens.id)}
-                aria-pressed={isSelected}
-                aria-label={`Select ${lens.title} tier`}
-                className={`group flex min-h-[44px] cursor-pointer flex-col items-center rounded-[12px] text-center focus-visible:outline-2 focus-visible:outline-offset-4 ${
-                  isNetwork ? "focus-visible:outline-[#f0b54a]" : "focus-visible:outline-white/75"
+          return (
+            <button
+              key={lens.id}
+              type="button"
+              onClick={() => select(lens.id)}
+              aria-pressed={isSelected}
+              aria-label={`Select ${lens.title} tier`}
+              style={{
+                left: `${v.x * 100}%`,
+                top: `${v.y * 100}%`,
+                transform: labelAbove
+                  ? `translate(-50%, calc(-100% + ${TRIANGLE_NODE_RADIUS}px))`
+                  : `translate(-50%, -${TRIANGLE_NODE_RADIUS}px)`,
+              }}
+              className={`group absolute z-10 flex cursor-pointer items-center gap-2.5 rounded-[12px] text-center focus-visible:outline-2 focus-visible:outline-offset-4 ${
+                labelAbove ? "flex-col-reverse" : "flex-col"
+              } ${isNetwork ? "focus-visible:outline-[#f0b54a]" : "focus-visible:outline-white/75"}`}
+            >
+              <span
+                className={`relative flex items-center justify-center rounded-full border transition-[border-color,color,box-shadow] duration-300 ${
+                  isNetwork
+                    ? isSelected
+                      ? "border-[#f0b54a] bg-[#171511] text-[#ffd99a] shadow-[0_0_0_5px_rgba(240,181,74,0.1)]"
+                      : "border-[#f0b54a]/45 bg-[#141418] text-[#f0b54a] group-hover:border-[#f0b54a]/80"
+                    : isSelected
+                      ? "border-[#f5f5f7] bg-[#191a21] text-[#f5f5f7] shadow-[0_0_0_5px_rgba(255,255,255,0.08)]"
+                      : "border-white/20 bg-[#14151a] text-[#9d9da6] group-hover:border-white/45 group-hover:text-[#f5f5f7]"
                 }`}
+                style={{ width: TRIANGLE_NODE_RADIUS * 2, height: TRIANGLE_NODE_RADIUS * 2 }}
               >
-                <span
-                  className={`relative flex h-[56px] w-[56px] items-center justify-center rounded-full border transition-colors duration-200 ${
-                    isNetwork
-                      ? isSelected
-                        ? "border-[#f0b54a] bg-[#171511] text-[#ffd99a] shadow-[0_0_0_5px_rgba(240,181,74,0.1)]"
-                        : "border-[#f0b54a]/45 bg-[#141418] text-[#f0b54a] group-hover:border-[#f0b54a]/80"
-                      : isSelected
-                        ? "border-[#f5f5f7] bg-[#191a21] text-[#f5f5f7] shadow-[0_0_0_5px_rgba(255,255,255,0.08)]"
-                        : "border-white/20 bg-[#14151a] text-[#9d9da6] group-hover:border-white/45 group-hover:text-[#f5f5f7]"
-                  }`}
-                >
-                  {isSelected ? (
-                    <span
-                      className={`pointer-events-none absolute inset-1.5 rounded-full border ${
-                        isNetwork ? "border-[#f0b54a]/40" : "border-white/30"
-                      }`}
-                      aria-hidden="true"
-                    />
-                  ) : null}
-                  <Icon className="relative z-10 size-4" strokeWidth={1.5} aria-hidden="true" />
-                </span>
+                {isSelected ? (
+                  <span
+                    className={`pointer-events-none absolute inset-1.5 rounded-full border ${
+                      isNetwork ? "border-[#f0b54a]/40" : "border-white/30"
+                    }`}
+                    aria-hidden="true"
+                  />
+                ) : null}
+                <Icon className="relative z-10 size-4" strokeWidth={1.5} aria-hidden="true" />
+              </span>
 
+              <span className="flex flex-col items-center whitespace-nowrap">
                 <span
-                  className={`mt-3 text-[13.5px] font-medium tracking-[-0.01em] transition-colors duration-200 ${
+                  className={`text-[13.5px] font-medium tracking-[-0.01em] transition-colors duration-200 ${
                     isSelected ? "text-[#f5f5f7]" : "text-[#a1a1a6] group-hover:text-[#f5f5f7]"
                   }`}
                 >
                   {lens.title}
                 </span>
                 <span className="mt-0.5 text-[11.5px] text-[#8e8e95]">{lens.role}</span>
-              </button>
-            );
-          })}
-        </div>
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
