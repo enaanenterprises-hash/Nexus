@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { STARTER_PHOTOS, generateStarterPhotoBlob } from "@/lib/optics/starter-photos";
+import { STARTER_PHOTOS, generateStarterPhotoBlob, type StarterPhotoSpec } from "@/lib/optics/starter-photos";
 import type { OpticsSourceAsset } from "@/lib/optics/types";
 import { formatVaultBytes, type VaultItem } from "@/lib/storage/types";
 import { resolveVaultItemBlob, useVault } from "@/lib/storage/vault-client";
@@ -53,6 +53,12 @@ export function OpticsImportModal({
     void (async () => {
       for (const spec of STARTER_PHOTOS) {
         if (starterPreviews[spec.id]) continue;
+        if (spec.assetUrl) {
+          if (alive) {
+            setStarterPreviews((prev) => ({ ...prev, [spec.id]: spec.assetUrl! }));
+          }
+          continue;
+        }
         try {
           const blob = await generateStarterPhotoBlob(spec.id);
           if (!alive) return;
@@ -123,17 +129,17 @@ export function OpticsImportModal({
     );
   }, [vault.items, search]);
 
-  async function pickStarter(starterId: NonNullable<OpticsSourceAsset["starterId"]>, title: string, cameraHint: string) {
-    setBusyId(starterId);
+  async function pickStarter(spec: StarterPhotoSpec) {
+    setBusyId(spec.id);
     try {
-      const blob = await generateStarterPhotoBlob(starterId);
+      const blob = await generateStarterPhotoBlob(spec.id);
       onSelectImage({
         blob,
-        name: title,
-        mimeType: "image/png",
+        name: spec.title,
+        mimeType: spec.mimeType,
         source: "starter",
-        starterId,
-        cameraHint,
+        starterId: spec.id,
+        cameraHint: spec.cameraHint,
       });
       onOpenChange(false);
     } finally {
@@ -247,7 +253,7 @@ export function OpticsImportModal({
                   key={spec.id}
                   type="button"
                   disabled={busyId === spec.id}
-                  onClick={() => void pickStarter(spec.id, spec.title, spec.cameraHint)}
+                  onClick={() => void pickStarter(spec)}
                   className="group flex flex-col overflow-hidden rounded-[16px] border border-border/80 bg-background/50 text-left transition-all hover:border-[color:var(--land-gold)]/60 hover:bg-background"
                 >
                   <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted/40">

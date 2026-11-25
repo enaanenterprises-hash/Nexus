@@ -2,6 +2,7 @@
  * Smoke test for the extension socket, run against the real TypeScript sources.
  * Run: npm run smoke
  */
+import fs from "node:fs";
 import { register } from "node:module";
 
 register(
@@ -729,6 +730,20 @@ const allValid = [
 ].every((b) => b.width >= 4 && b.height >= 4 && b.data.length === b.width * b.height * 4 && !Number.isNaN(b.data[0]));
 
 assert(allValid && expandOut.width > plate.width && cropOut.width < plate.width && cropPreviewEditOut.width === plate.width && cropPreviewEditOut.height === plate.height, "All Optics tonal, spatial, U-Point, healing, bokeh, film, and inverted mask processors produce valid pixel buffers");
+
+const opticsStarterMod = await import("../src/lib/optics/starter-photos.ts");
+const defaultStarter = opticsStarterMod.STARTER_PHOTOS[0];
+assert(
+  defaultStarter.id === "alpine-alpenglow" &&
+    defaultStarter.assetUrl === "/images/optics-default-valley.jpg" &&
+    defaultStarter.width === 1024 &&
+    defaultStarter.height === 682,
+  "Optics default starter photo resolves to Autumn Highland Valley (1024x682)",
+);
+assert(
+  fs.statSync("public/images/optics-default-valley.jpg").size === 264168,
+  "Optics default photo binary exists in public/images with exact 264168 bytes",
+);
 
 setStubPro(false);
 

@@ -1,7 +1,11 @@
 "use client";
 
 import { nexusBus } from "@/lib/extensions";
-import { readLocalOpticsSnapshot, writeLocalOpticsSnapshot } from "./optics-db";
+import {
+  readLocalOpticsSnapshot,
+  writeLocalOpticsSnapshot,
+  type LocalOpticsSnapshot,
+} from "./optics-db";
 import type {
   OpticsCollection,
   OpticsProject,
@@ -28,6 +32,8 @@ export function buildStarterOpticsProject(
           title: "Studio Ivory Study",
           width: 1120,
           height: 1400,
+          mimeType: "image/png",
+          byteLength: 0,
           cameraHint: "85mm f/1.4 · ISO 160 · Studio Strobe",
         }
       : starterId === "obsidian-pavilion"
@@ -35,13 +41,17 @@ export function buildStarterOpticsProject(
             title: "Nocturne Pavilion",
             width: 1500,
             height: 1000,
+            mimeType: "image/png",
+            byteLength: 0,
             cameraHint: "24mm f/2.0 · ISO 400 · Blue Hour",
           }
         : {
-            title: "Dolomites First Light",
-            width: 1500,
-            height: 1000,
-            cameraHint: "50mm f/2.8 · ISO 100 · Raw Plate",
+            title: "Autumn Highland Valley",
+            width: 1024,
+            height: 682,
+            mimeType: "image/jpeg",
+            byteLength: 264168,
+            cameraHint: "35mm f/5.6 · ISO 100 · Natural Light",
           };
 
   return {
@@ -54,10 +64,10 @@ export function buildStarterOpticsProject(
     source: {
       id: `src-${starterId}`,
       name: meta.title,
-      mimeType: "image/png",
+      mimeType: meta.mimeType,
       width: meta.width,
       height: meta.height,
-      byteLength: 0,
+      byteLength: meta.byteLength,
       source: "starter",
       starterId,
       idbKey: `starter:${starterId}`,
@@ -103,6 +113,37 @@ export async function fetchOpticsDatabaseStatus(): Promise<boolean> {
   }
 }
 
+function upgradeLegacyStarterProjects(snap: LocalOpticsSnapshot): boolean {
+  let changed = false;
+  snap.projects = snap.projects.map((p) => {
+    if (
+      p.source.idbKey === "starter:alpine-alpenglow" &&
+      p.title === "Dolomites First Light" &&
+      p.editStack.length === 0
+    ) {
+      changed = true;
+      return {
+        ...p,
+        title: "Autumn Highland Valley",
+        width: 1024,
+        height: 682,
+        thumbnailUrl: null,
+        source: {
+          ...p.source,
+          name: "Autumn Highland Valley",
+          mimeType: "image/jpeg",
+          width: 1024,
+          height: 682,
+          byteLength: 264168,
+          cameraHint: "35mm f/5.6 · ISO 100 · Natural Light",
+        },
+      };
+    }
+    return p;
+  });
+  return changed;
+}
+
 export async function listOpticsCollectionsClient(useDatabase: boolean): Promise<OpticsCollection[]> {
   if (useDatabase) {
     const res = await fetch("/api/optics/collections", { cache: "no-store" });
@@ -126,7 +167,11 @@ export async function listOpticsCollectionsClient(useDatabase: boolean): Promise
     snap.collections = [initial];
     if (snap.projects.length === 0) {
       snap.projects = [buildStarterOpticsProject(initial.id, "alpine-alpenglow")];
+    } else {
+      upgradeLegacyStarterProjects(snap);
     }
+    writeLocalOpticsSnapshot(snap);
+  } else if (upgradeLegacyStarterProjects(snap)) {
     writeLocalOpticsSnapshot(snap);
   }
   return snap.collections.map((c) => ({
@@ -179,6 +224,9 @@ export async function listOpticsProjectsClient(
     }
   }
   const snap = readLocalOpticsSnapshot();
+  if (upgradeLegacyStarterProjects(snap)) {
+    writeLocalOpticsSnapshot(snap);
+  }
   return snap.projects
     .filter((p) => !collectionId || p.collectionId === collectionId)
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
@@ -197,6 +245,9 @@ export async function getOpticsProjectClient(
     }
   }
   const snap = readLocalOpticsSnapshot();
+  if (upgradeLegacyStarterProjects(snap)) {
+    writeLocalOpticsSnapshot(snap);
+  }
   return snap.projects.find((p) => p.id === id) ?? null;
 }
 

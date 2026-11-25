@@ -285,6 +285,24 @@ export function OpticsView({
       sourceBlobRef.current = blob;
       const img = await decodeBlobToImageElement(blob);
       if (!alive) return;
+      if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+        setProject((prev) =>
+          prev.source.idbKey === project.source.idbKey &&
+          prev.source.source === "starter" &&
+          (prev.width !== img.naturalWidth || prev.height !== img.naturalHeight)
+            ? {
+                ...prev,
+                width: img.naturalWidth,
+                height: img.naturalHeight,
+                source: {
+                  ...prev.source,
+                  width: img.naturalWidth,
+                  height: img.naturalHeight,
+                },
+              }
+            : prev,
+        );
+      }
       const buf = imageSourceToBuffer(img, 1280);
       setSourcePreview(buf);
     })();

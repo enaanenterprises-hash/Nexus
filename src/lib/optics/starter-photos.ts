@@ -7,18 +7,22 @@ export interface StarterPhotoSpec {
   aspect: string;
   width: number;
   height: number;
+  mimeType: "image/jpeg" | "image/png";
+  assetUrl?: string;
   cameraHint: string;
 }
 
 export const STARTER_PHOTOS: readonly StarterPhotoSpec[] = [
   {
     id: "alpine-alpenglow",
-    title: "Dolomites First Light",
-    subtitle: "High-latitude mountain study · warm peaks & cobalt ridges",
+    title: "Autumn Highland Valley",
+    subtitle: "Golden valley foliage, winding river & storm-lit mountain peaks",
     aspect: "3:2",
-    width: 1500,
-    height: 1000,
-    cameraHint: "50mm f/2.8 · ISO 100 · Raw Plate",
+    width: 1024,
+    height: 682,
+    mimeType: "image/jpeg",
+    assetUrl: "/images/optics-default-valley.jpg",
+    cameraHint: "35mm f/5.6 · ISO 100 · Natural Light",
   },
   {
     id: "atelier-portrait",
@@ -27,6 +31,7 @@ export const STARTER_PHOTOS: readonly StarterPhotoSpec[] = [
     aspect: "4:5",
     width: 1120,
     height: 1400,
+    mimeType: "image/png",
     cameraHint: "85mm f/1.4 · ISO 160 · Studio Strobe",
   },
   {
@@ -36,6 +41,7 @@ export const STARTER_PHOTOS: readonly StarterPhotoSpec[] = [
     aspect: "3:2",
     width: 1500,
     height: 1000,
+    mimeType: "image/png",
     cameraHint: "24mm f/2.0 · ISO 400 · Blue Hour",
   },
 ];
@@ -459,6 +465,18 @@ export async function generateStarterPhotoBlob(
 
   const spec = STARTER_PHOTOS.find((s) => s.id === starterId) ?? STARTER_PHOTOS[0]!;
   const promise = (async () => {
+    if (spec.assetUrl) {
+      try {
+        const res = await fetch(spec.assetUrl, { cache: "force-cache" });
+        if (res.ok) {
+          const blob = await res.blob();
+          if (blob.size > 0) return blob;
+        }
+      } catch {
+        // Fall back to procedural synthesis if static asset fetch is unavailable
+      }
+    }
+
     const canvas = document.createElement("canvas");
     canvas.width = spec.width;
     canvas.height = spec.height;
