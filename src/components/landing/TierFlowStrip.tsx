@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { ArrowRight, AudioWaveform, LayoutGrid, Sparkles, type LucideIcon } from "lucide-react";
 import { TRIANGLE_NODE_RADIUS, TRIANGLE_VERTICES, TierTriangleCanvas } from "./TierTriangleCanvas";
 import type { EcosystemLayer } from "./WorkspaceVisuals";
@@ -67,11 +67,11 @@ export function TierFlowStrip({
 
   return (
     <div
-      className="relative mx-auto w-full max-w-[600px]"
+      className="relative mx-auto w-full max-w-[600px] py-8 sm:py-2"
       role="group"
       aria-label="How Network, Command, and Nodes pass work between each other"
     >
-      <div className="relative aspect-[600/390] w-full">
+      <div className="relative aspect-[6/5] w-full sm:aspect-[600/390]">
         <TierTriangleCanvas
           className="absolute inset-0"
           hopFrom={hop.from}
@@ -81,12 +81,12 @@ export function TierFlowStrip({
 
         {/* The live connection, named at the heart of the triangle */}
         <div
-          className="pointer-events-none absolute left-1/2 w-[46%] max-w-[240px] -translate-x-1/2 -translate-y-1/2 text-center"
-          style={{ top: `${centroidY * 100}%` }}
+          className="pointer-events-none absolute top-[62%] left-1/2 w-[42%] max-w-[152px] -translate-x-1/2 -translate-y-1/2 text-center sm:top-[var(--tri-centroid-y)] sm:w-[46%] sm:max-w-[240px]"
+          style={{ "--tri-centroid-y": `${centroidY * 100}%` } as CSSProperties}
           aria-live="polite"
         >
           <div key={hopSerial} className="lp-stage-panel">
-            <p className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#8e8e95]">
+            <p className="inline-flex items-center gap-1 text-[10.5px] font-medium text-[#8e8e95] sm:gap-1.5 sm:text-[11px]">
               <span className={hop.from === "network" ? "text-[#f0b54a]" : "text-[#d1d1d6]"}>
                 {LAYER_TITLE[hop.from]}
               </span>
@@ -95,7 +95,9 @@ export function TierFlowStrip({
                 {LAYER_TITLE[hop.to]}
               </span>
             </p>
-            <p className="mt-1 text-[12px] leading-snug text-[#e5e5ea] sm:text-[13px]">{hop.signal}</p>
+            <p className="mt-1 text-[11px] leading-[1.35] text-[#e5e5ea] sm:text-[13px] sm:leading-snug">
+              {hop.signal}
+            </p>
           </div>
         </div>
 
