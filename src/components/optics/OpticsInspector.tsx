@@ -465,6 +465,7 @@ export function OpticsInspector({
   onMaskBrushStrengthChange,
   onMaskBrushSizeChange,
   onToggleMaskInvert,
+  onDoneEditingLayer,
 }: {
   open: boolean;
   tab: OpticsInspectorTab;
@@ -496,6 +497,7 @@ export function OpticsInspector({
   onMaskBrushStrengthChange: (strength: 0 | 25 | 50 | 75 | 100) => void;
   onMaskBrushSizeChange: (size: number) => void;
   onToggleMaskInvert: (layerId: string) => void;
+  onDoneEditingLayer?: () => void;
 }) {
   if (!open) return null;
 
@@ -751,7 +753,9 @@ export function OpticsInspector({
               patch({ ...p, aspect });
               return;
             }
-            const imgAspect = project.width / Math.max(1, project.height);
+            const orientedW = p.rotate90 % 2 === 1 ? project.height : project.width;
+            const orientedH = p.rotate90 % 2 === 1 ? project.width : project.height;
+            const imgAspect = orientedW / Math.max(1, orientedH);
             const target =
               aspect === "original"
                 ? imgAspect
@@ -831,6 +835,19 @@ export function OpticsInspector({
                   <span>Flip V</span>
                 </Button>
               </div>
+              {onDoneEditingLayer ? (
+                <div className="px-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={onDoneEditingLayer}
+                    className="h-8 w-full gap-1.5 rounded-xl bg-[color:var(--land-gold)] text-[12px] font-medium text-black hover:bg-[color:var(--land-gold)]/90"
+                  >
+                    <Check className="size-3.5" />
+                    <span>Done Cropping</span>
+                  </Button>
+                </div>
+              ) : null}
             </div>
           );
         })() : null}
@@ -1272,34 +1289,67 @@ export function OpticsInspector({
 
         {activeLayer.toolId === "black-white" ? (() => {
           const p = activeLayer.params as OpticsBlackWhiteParams;
+          const bwPresets: ReadonlyArray<{
+            id: OpticsBlackWhiteParams["preset"];
+            label: string;
+            recipe: Partial<OpticsBlackWhiteParams>;
+          }> = [
+            { id: "neutral", label: "Neutral", recipe: { filterColor: "neutral", brightness: 0, contrast: 8, grain: 4 } },
+            { id: "contrast", label: "Contrast", recipe: { filterColor: "orange", brightness: -4, contrast: 38, grain: 8 } },
+            { id: "bright", label: "Bright", recipe: { filterColor: "yellow", brightness: 24, contrast: 12, grain: 2 } },
+            { id: "dark", label: "Dark", recipe: { filterColor: "red", brightness: -18, contrast: 32, grain: 14 } },
+            { id: "film", label: "Film", recipe: { filterColor: "yellow", brightness: 4, contrast: 22, grain: 36 } },
+            { id: "darken-sky", label: "Darken Sky", recipe: { filterColor: "red", brightness: -6, contrast: 28, grain: 6 } },
+          ];
           return (
-            <div className="space-y-2 px-1">
-              <span className="text-[11.5px] font-medium text-muted-foreground">Optical Glass Filter</span>
-              <div className="grid grid-cols-6 gap-1">
-                {(
-                  [
-                    { id: "neutral", swatch: "#9e9ea6", label: "Neutral" },
-                    { id: "red", swatch: "#d44b48", label: "Red" },
-                    { id: "orange", swatch: "#e48c3c", label: "Orange" },
-                    { id: "yellow", swatch: "#dfc148", label: "Yellow" },
-                    { id: "green", swatch: "#4aa66b", label: "Green" },
-                    { id: "blue", swatch: "#4c84d6", label: "Blue" },
-                  ] as const
-                ).map((flt) => (
-                  <button
-                    key={flt.id}
-                    type="button"
-                    title={`${flt.label} optical glass filter`}
-                    onClick={() => patch({ ...p, filterColor: flt.id })}
-                    className={`grid h-8 place-items-center rounded-lg border ${
-                      p.filterColor === flt.id
-                        ? "border-[color:var(--land-gold)] bg-foreground/10"
-                        : "border-border/70"
-                    }`}
-                  >
-                    <span className="size-4 rounded-full" style={{ backgroundColor: flt.swatch }} />
-                  </button>
-                ))}
+            <div className="space-y-3 px-1">
+              <div className="space-y-1.5">
+                <span className="text-[11.5px] font-medium text-muted-foreground">Monochrome Presets</span>
+                <div className="flex flex-wrap gap-1">
+                  {bwPresets.map((bp) => (
+                    <button
+                      key={bp.id}
+                      type="button"
+                      onClick={() => patch({ ...p, preset: bp.id, ...bp.recipe })}
+                      className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+                        p.preset === bp.id
+                          ? "border-[color:var(--land-gold)] bg-[color:var(--land-gold)]/14 text-foreground"
+                          : "border-border/70 text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {bp.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <span className="text-[11.5px] font-medium text-muted-foreground">Optical Glass Filter</span>
+                <div className="grid grid-cols-6 gap-1">
+                  {(
+                    [
+                      { id: "neutral", swatch: "#9e9ea6", label: "Neutral" },
+                      { id: "red", swatch: "#d44b48", label: "Red" },
+                      { id: "orange", swatch: "#e48c3c", label: "Orange" },
+                      { id: "yellow", swatch: "#dfc148", label: "Yellow" },
+                      { id: "green", swatch: "#4aa66b", label: "Green" },
+                      { id: "blue", swatch: "#4c84d6", label: "Blue" },
+                    ] as const
+                  ).map((flt) => (
+                    <button
+                      key={flt.id}
+                      type="button"
+                      title={`${flt.label} optical glass filter`}
+                      onClick={() => patch({ ...p, filterColor: flt.id })}
+                      className={`grid h-8 place-items-center rounded-lg border ${
+                        p.filterColor === flt.id
+                          ? "border-[color:var(--land-gold)] bg-foreground/10"
+                          : "border-border/70"
+                      }`}
+                    >
+                      <span className="size-4 rounded-full" style={{ backgroundColor: flt.swatch }} />
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           );
@@ -1387,36 +1437,61 @@ export function OpticsInspector({
           activeLayer.toolId === "noir" ||
           activeLayer.toolId === "glamour-glow" ||
           activeLayer.toolId === "portrait") ? (() => {
-          const presets =
-            activeLayer.toolId === "hdr-scape"
-              ? ["nature", "people", "fine", "strong"]
-              : activeLayer.toolId === "drama"
-                ? ["drama", "bright", "dark1", "dark2"]
-                : activeLayer.toolId === "noir"
-                  ? ["S01", "S02", "S03", "S04", "S05"]
-                  : activeLayer.toolId === "portrait"
-                    ? ["spotlight", "smooth-1", "smooth-2", "eye-clarity"]
-                    : ["1", "2", "3", "4", "5"];
+          const presetRecipes: Record<string, ReadonlyArray<{ key: string; label: string; values: Record<string, number | string> }>> = {
+            "hdr-scape": [
+              { key: "nature", label: "Nature", values: { preset: "nature", filterStrength: 45, brightness: 6, saturation: 14, smoothing: 32 } },
+              { key: "people", label: "People", values: { preset: "people", filterStrength: 28, brightness: 4, saturation: 4, smoothing: 52 } },
+              { key: "fine", label: "Fine", values: { preset: "fine", filterStrength: 36, brightness: 2, saturation: 10, smoothing: 18 } },
+              { key: "strong", label: "Strong", values: { preset: "strong", filterStrength: 78, brightness: 8, saturation: 24, smoothing: 26 } },
+            ],
+            drama: [
+              { key: "drama", label: "Drama", values: { preset: "drama", filterStrength: 62, saturation: -14 } },
+              { key: "bright", label: "Bright", values: { preset: "bright", filterStrength: 55, saturation: 10 } },
+              { key: "dark1", label: "Dark 1", values: { preset: "dark1", filterStrength: 72, saturation: -26 } },
+              { key: "dark2", label: "Dark 2", values: { preset: "dark2", filterStrength: 86, saturation: -42 } },
+            ],
+            noir: [
+              { key: "S01", label: "S01", values: { preset: "S01", brightness: 6, wash: 10, grain: 14, filterStrength: 78 } },
+              { key: "S02", label: "S02", values: { preset: "S02", brightness: 0, wash: 18, grain: 24, filterStrength: 88 } },
+              { key: "S03", label: "S03", values: { preset: "S03", brightness: -8, wash: 8, grain: 32, filterStrength: 92 } },
+              { key: "S04", label: "S04", values: { preset: "S04", brightness: 4, wash: 26, grain: 18, filterStrength: 82 } },
+              { key: "S05", label: "S05", values: { preset: "S05", brightness: -14, wash: 14, grain: 42, filterStrength: 96 } },
+            ],
+            portrait: [
+              { key: "spotlight", label: "Spotlight", values: { preset: "spotlight", faceSpotlight: 32, skinSmoothing: 18, eyeClarity: 28 } },
+              { key: "smooth-1", label: "Smooth 1", values: { preset: "smooth-1", faceSpotlight: 16, skinSmoothing: 38, eyeClarity: 32 } },
+              { key: "smooth-2", label: "Smooth 2", values: { preset: "smooth-2", faceSpotlight: 20, skinSmoothing: 64, eyeClarity: 40 } },
+              { key: "eye-clarity", label: "Eye Clarity", values: { preset: "eye-clarity", faceSpotlight: 18, skinSmoothing: 24, eyeClarity: 76 } },
+            ],
+            "glamour-glow": [
+              { key: "1", label: "1", values: { preset: 1, glow: 28, saturation: 6, warmth: 8 } },
+              { key: "2", label: "2", values: { preset: 2, glow: 42, saturation: 12, warmth: 16 } },
+              { key: "3", label: "3", values: { preset: 3, glow: 58, saturation: 4, warmth: 12 } },
+              { key: "4", label: "4", values: { preset: 4, glow: 72, saturation: -6, warmth: 24 } },
+              { key: "5", label: "5", values: { preset: 5, glow: 84, saturation: -14, warmth: -10 } },
+            ],
+          };
+          const recipes = presetRecipes[activeLayer.toolId] ?? [];
           const currentPreset = String((activeLayer.params as { preset: string | number }).preset);
           return (
             <div className="flex flex-wrap gap-1 px-1">
-              {presets.map((pr) => (
+              {recipes.map((recipe) => (
                 <button
-                  key={pr}
+                  key={recipe.key}
                   type="button"
                   onClick={() =>
                     patch({
                       ...(activeLayer.params as unknown as Record<string, unknown>),
-                      preset: activeLayer.toolId === "glamour-glow" ? Number(pr) : pr,
+                      ...recipe.values,
                     } as unknown as OpticsToolParamMap[OpticsToolId])
                   }
-                  className={`rounded-full border px-2.5 py-1 text-[11px] font-medium capitalize ${
-                    currentPreset === pr
+                  className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+                    currentPreset === recipe.key
                       ? "border-[color:var(--land-gold)] bg-[color:var(--land-gold)]/14 text-foreground"
                       : "border-border/70 text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  {pr}
+                  {recipe.label}
                 </button>
               ))}
             </div>

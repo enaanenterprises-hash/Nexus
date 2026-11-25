@@ -317,6 +317,14 @@ export function OpticsView({
   }, [overlayBuffers, project.overlays]);
 
   // Evaluate non-destructive stack sequentially cleanly on source or editStack updates
+  const editingCropLayerId = useMemo(
+    () =>
+      activeLayerId
+        ? project.editStack.find((l) => l.id === activeLayerId && l.toolId === "crop")?.id ?? null
+        : null,
+    [activeLayerId, project.editStack],
+  );
+
   useEffect(() => {
     if (!sourcePreview) return;
     const handle = window.requestAnimationFrame(() => {
@@ -327,6 +335,7 @@ export function OpticsView({
         activeLayerId,
         {
           rubyMaskLayerId: maskingLayerId,
+          editingCropLayerId,
           overlayBuffers,
           upstreamCache: upstreamCacheRef.current,
         },
@@ -343,6 +352,7 @@ export function OpticsView({
     project.editStack,
     activeLayerId,
     maskingLayerId,
+    editingCropLayerId,
     overlayBuffers,
   ]);
 
@@ -1130,6 +1140,7 @@ export function OpticsView({
               onStopMaskBrush={() => setMaskingLayerId(null)}
               onMaskBrushStrengthChange={setMaskBrushStrength}
               onMaskBrushSizeChange={setMaskBrushSize}
+              onDoneEditingLayer={() => setActiveLayerId(null)}
               onToggleMaskInvert={(layerId) =>
                 commitProject((prev) => ({
                   ...prev,
@@ -1309,6 +1320,7 @@ export function OpticsView({
             onStopMaskBrush={() => setMaskingLayerId(null)}
             onMaskBrushStrengthChange={setMaskBrushStrength}
             onMaskBrushSizeChange={setMaskBrushSize}
+            onDoneEditingLayer={() => setActiveLayerId(null)}
             onToggleMaskInvert={(layerId) =>
               commitProject((prev) => ({
                 ...prev,

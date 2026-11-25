@@ -30,6 +30,7 @@ import type {
 import { emitStudioTakeRouted } from "@/lib/studio/studio-client";
 import type { StudioRecording, StudioRecordingContentV1 } from "@/lib/studio/types";
 import {
+  FREE_ACTIVE_EXTENSION_SLOTS,
   canUseSlot,
   computeExtensionLinks,
   extensionRegistry,
@@ -387,11 +388,13 @@ export function Dashboard({
         if (!anyOccupied) {
           const baseNodes = remoteNodes ?? readSavedNodes() ?? DEFAULT_NODE_IDS;
           let initialNodes = baseNodes;
+          let seededOptics = false;
           try {
             if (!window.localStorage.getItem(OPTICS_SEEDED_KEY)) {
               window.localStorage.setItem(OPTICS_SEEDED_KEY, "1");
               if (!initialNodes.includes(OPTICS_NODE_ID)) {
                 initialNodes = [...initialNodes, OPTICS_NODE_ID];
+                seededOptics = true;
               }
             }
           } catch {
@@ -401,6 +404,9 @@ export function Dashboard({
             if (extensionRegistry.get(nodeId)) {
               await extensionRegistry.activate(nodeId);
             }
+          }
+          if (seededOptics) {
+            saveInstalledNodes(extensionRegistry.listActive());
           }
         }
         bootCompleteRef.current = true;
@@ -880,7 +886,9 @@ export function Dashboard({
     } else {
       flash(result.message);
       if (result.reason === "pro_required") {
-        session.announce(`Both free sockets are in use. Release one, or go Pro to wire in ${name} as well.`);
+        session.announce(
+          `All ${FREE_ACTIVE_EXTENSION_SLOTS} free sockets are in use. Release one, or go Pro to wire in ${name} as well.`,
+        );
       }
     }
   }
@@ -895,6 +903,9 @@ export function Dashboard({
         return { view: "home", panel: null };
       }
       if (id === CINEMA_NODE_ID && s.view === "cinema") {
+        return { view: "home", panel: null };
+      }
+      if (id === OPTICS_NODE_ID && s.view === "optics") {
         return { view: "home", panel: null };
       }
       return typeof s.panel === "object" && s.panel?.extension === id ? { ...s, panel: null } : s;

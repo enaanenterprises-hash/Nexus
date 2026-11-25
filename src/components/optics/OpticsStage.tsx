@@ -105,6 +105,15 @@ export function OpticsStage({
   const [draggingSplit, setDraggingSplit] = useState(false);
   const [draggingHandle, setDraggingHandle] = useState<string | null>(null);
   const [dragFileOver, setDragFileOver] = useState(false);
+  const cropDragRef = useRef<{
+    mode: "move" | "nw" | "ne" | "sw" | "se";
+    startNormX: number;
+    startNormY: number;
+    startX: number;
+    startY: number;
+    startW: number;
+    startH: number;
+  } | null>(null);
 
   const gestureRef = useRef<{
     kind: "none" | "gesture-pending" | "scrub-x" | "wheel-y" | "paint" | "pan" | "split";
@@ -630,6 +639,119 @@ export function OpticsStage({
 
     if (activeLayer.toolId === "crop") {
       const p = activeLayer.params as OpticsCropParams;
+      const startCropDrag = (
+        mode: "move" | "nw" | "ne" | "sw" | "se",
+        e: React.PointerEvent<HTMLElement>,
+      ) => {
+        e.stopPropagation();
+        const norm = clientToImageNorm(e.clientX, e.clientY);
+        cropDragRef.current = {
+          mode,
+          startNormX: norm.x,
+          startNormY: norm.y,
+          startX: p.x,
+          startY: p.y,
+          startW: p.width,
+          startH: p.height,
+        };
+        setDraggingHandle(`crop-${mode}`);
+        e.currentTarget.setPointerCapture(e.pointerId);
+      };
+      const moveCropDrag = (
+        mode: "move" | "nw" | "ne" | "sw" | "se",
+        e: React.PointerEvent<HTMLElement>,
+      ) => {
+        const start = cropDragRef.current;
+        if (draggingHandle !== `crop-${mode}` || !start) return;
+        const norm = clientToImageNorm(e.clientX, e.clientY);
+        const dx = norm.x - start.startNormX;
+        const dy = norm.y - start.startNormY;
+        const minSize = 0.14;
+
+        if (mode === "move") {
+          const nx = clamp(start.startX + dx, 0, Math.max(0, 1 - start.startW));
+          const ny = clamp(start.startY + dy, 0, Math.max(0, 1 - start.startH));
+          onUpdateLayerParams(activeLayer.id, { ...p, x: nx, y: ny });
+          return;
+        }
+
+        let left = start.startX;
+        let top = start.startY;
+        let right = start.startX + start.startW;
+        let bottom = start.startY + start.startH;
+
+        if (mode === "nw" || mode === "sw") {
+          left = clamp(start.startX + dx, 0, right - minSize);
+        } else {
+          right = clamp(start.startX + start.startW + dx, left + minSize, 1);
+        }
+
+        if (mode === "nw" || mode === "ne") {
+          top = clamp(start.startY + dy, 0, bottom - minSize);
+        } else {
+          bottom = clamp(start.startY + start.startH + dy, top + minSize, 1);
+        }
+
+        let nw = right - left;
+        let nh = bottom - top;
+
+        if (p.aspect !== "free" && renderedBuffer) {
+          const imgAspect = renderedBuffer.width / Math.max(1, renderedBuffer.height);
+          const targetAspect =
+            p.aspect === "original"
+              ? imgAspect
+              : p.aspect === "1:1"
+                ? 1
+                : p.aspect === "4:5"
+                  ? 0.8
+                  : p.aspect === "16:9"
+                    ? 16 / 9
+                    : p.aspect === "9:16"
+                      ? 9 / 16
+                      : p.aspect === "3:2"
+                        ? 1.5
+                        : 4 / 3;
+          nh = (nw * imgAspect) / targetAspect;
+          const maxH = mode === "nw" || mode === "ne" ? bottom : 1 - top;
+          if (nh > maxH) {
+            nh = maxH;
+            nw = (nh * targetAspect) / imgAspect;
+          }
+          const maxW = mode === "nw" || mode === "sw" ? right : 1 - left;
+          if (nw > maxW) {
+            nw = maxW;
+            nh = (nw * imgAspect) / targetAspect;
+          }
+          if (nw < minSize || nh < minSize) return;
+          if (mode === "nw" || mode === "sw") left = right - nw;
+          if (mode === "nw" || mode === "ne") top = bottom - nh;
+        }
+
+        onUpdateLayerParams(activeLayer.id, {
+          ...p,
+          x: clamp(left, 0, 1 - minSize),
+          y: clamp(top, 0, 1 - minSize),
+          width: clamp(nw, minSize, 1),
+          height: clamp(nh, minSize, 1),
+        });
+      };
+      const endCropDrag = () => {
+        cropDragRef.current = null;
+        setDraggingHandle(null);
+      };
+
+      const corners: ReadonlyArray<{
+        mode: "nw" | "ne" | "sw" | "se";
+        label: string;
+        posClass: string;
+        cursorClass: string;
+      }> = [
+        { mode: "nw", label: "Resize top-left crop corner", posClass: "-top-2 -left-2", cursorClass: "cursor-nwse-resize" },
+        { mode: "ne", label: "Resize top-right crop corner", posClass: "-top-2 -right-2", cursorClass: "cursor-nesw-resize" },
+        { mode: "sw", label: "Resize bottom-left crop corner", posClass: "-bottom-2 -left-2", cursorClass: "cursor-nesw-resize" },
+        { mode: "se", label: "Resize bottom-right crop corner", posClass: "-bottom-2 -right-2", cursorClass: "cursor-nwse-resize" },
+      ];
+
       return (
         <div
           style={{
@@ -638,33 +760,28 @@ export function OpticsStage({
             width: `${p.width * 100}%`,
             height: `${p.height * 100}%`,
           }}
-          className="pointer-events-none absolute border border-[color:var(--land-gold)] shadow-[0_0_0_9999px_rgba(0,0,0,0.42)]"
+          onPointerDown={(e) => startCropDrag("move", e)}
+          onPointerMove={(e) => moveCropDrag("move", e)}
+          onPointerUp={endCropDrag}
+          className="pointer-events-auto absolute cursor-move border border-[color:var(--land-gold)] shadow-[0_0_0_9999px_rgba(0,0,0,0.42)]"
         >
           {/* Rule of thirds hairlines */}
-          <div className="grid h-full w-full grid-cols-3 grid-rows-3">
+          <div className="pointer-events-none grid h-full w-full grid-cols-3 grid-rows-3">
             {Array.from({ length: 9 }, (_, idx) => (
               <div key={idx} className="border-[0.5px] border-white/25" />
             ))}
           </div>
-          {/* Bottom-right resize handle */}
-          <button
-            type="button"
-            aria-label="Resize crop frame"
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              setDraggingHandle("crop-br");
-              (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-            }}
-            onPointerMove={(e) => {
-              if (draggingHandle !== "crop-br") return;
-              const norm = clientToImageNorm(e.clientX, e.clientY);
-              const nextW = clamp(norm.x - p.x, 0.16, 1 - p.x);
-              const nextH = clamp(norm.y - p.y, 0.16, 1 - p.y);
-              onUpdateLayerParams(activeLayer.id, { ...p, width: nextW, height: nextH });
-            }}
-            onPointerUp={() => setDraggingHandle(null)}
-            className="pointer-events-auto absolute -right-2 -bottom-2 size-4 cursor-nwse-resize rounded-sm border border-black bg-[color:var(--land-gold)]"
-          />
+          {corners.map((corner) => (
+            <button
+              key={corner.mode}
+              type="button"
+              aria-label={corner.label}
+              onPointerDown={(e) => startCropDrag(corner.mode, e)}
+              onPointerMove={(e) => moveCropDrag(corner.mode, e)}
+              onPointerUp={endCropDrag}
+              className={`pointer-events-auto absolute ${corner.posClass} size-4 ${corner.cursorClass} rounded-sm border border-black bg-[color:var(--land-gold)] shadow-sm`}
+            />
+          ))}
         </div>
       );
     }

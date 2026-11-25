@@ -35,6 +35,8 @@ export interface OpticsRenderOptions {
   stopAtLayerId?: string | null;
   /** Optional layer currently being masked so its ruby overlay renders live. */
   rubyMaskLayerId?: string | null;
+  /** When actively adjusting a Crop layer, keep its full oriented frame behind the crop box. */
+  editingCropLayerId?: string | null;
   /** Map of double-exposure overlay buffers keyed by overlayAssetId. */
   overlayBuffers?: Map<string, ImageBuffer>;
   /** Optional upstream cache to skip re-evaluating unmodified preceding layers. */
@@ -56,7 +58,7 @@ export interface OpticsRenderResult {
 function applySingleLayer(
   buf: ImageBuffer,
   layer: OpticsEditLayer,
-  overlayBuffers?: Map<string, ImageBuffer>,
+  options: OpticsRenderOptions,
 ): ImageBuffer {
   switch (layer.toolId) {
     case "tune":
@@ -70,7 +72,11 @@ function applySingleLayer(
     case "hsl":
       return applyHslAndSplitTone(buf, layer.params as OpticsToolParamMap["hsl"]);
     case "crop":
-      return applyCrop(buf, layer.params as OpticsToolParamMap["crop"]);
+      return applyCrop(
+        buf,
+        layer.params as OpticsToolParamMap["crop"],
+        options.editingCropLayerId === layer.id,
+      );
     case "perspective":
       return applyPerspective(buf, layer.params as OpticsToolParamMap["perspective"]);
     case "expand":
@@ -87,7 +93,7 @@ function applySingleLayer(
       return applyVignette(buf, layer.params as OpticsToolParamMap["vignette"]);
     case "double-exposure": {
       const p = layer.params as OpticsToolParamMap["double-exposure"];
-      const overlay = p.overlayAssetId ? overlayBuffers?.get(p.overlayAssetId) ?? null : null;
+      const overlay = p.overlayAssetId ? options.overlayBuffers?.get(p.overlayAssetId) ?? null : null;
       return applyDoubleExposure(buf, p, overlay);
     }
     case "text":
@@ -178,7 +184,7 @@ export function evaluateEditStack(
     const layer = editStack[idx]!;
     if (!layer.enabled || layer.opacity <= 0.5) continue;
 
-    const processed = applySingleLayer(current, layer, options.overlayBuffers);
+    const processed = applySingleLayer(current, layer, options);
     const isSpatialResized =
       processed.width !== current.width || processed.height !== current.height;
 

@@ -99,14 +99,19 @@ function sampleFillPixel(
   ];
 }
 
-export function applyCrop(buf: ImageBuffer, params: OpticsCropParams): ImageBuffer {
+export function applyCrop(
+  buf: ImageBuffer,
+  params: OpticsCropParams,
+  skipRectCrop = false,
+): ImageBuffer {
   const { width: srcW, height: srcH, data } = buf;
   const hasStraighten = Math.abs(params.straightenDeg) > 0.05;
   const hasCrop =
-    params.x > 0.002 ||
-    params.y > 0.002 ||
-    params.width < 0.998 ||
-    params.height < 0.998;
+    !skipRectCrop &&
+    (params.x > 0.002 ||
+      params.y > 0.002 ||
+      params.width < 0.998 ||
+      params.height < 0.998);
 
   if (!hasCrop && !hasStraighten && params.rotate90 === 0 && !params.flipX && !params.flipY) {
     return buf;
@@ -118,10 +123,18 @@ export function applyCrop(buf: ImageBuffer, params: OpticsCropParams): ImageBuff
   const rotH = rotSteps % 2 === 1 ? srcW : srcH;
 
   // Crop output rectangle in oriented pixel coordinates
-  const cropW = Math.max(16, Math.round(clamp(params.width, 0.05, 1) * rotW));
-  const cropH = Math.max(16, Math.round(clamp(params.height, 0.05, 1) * rotH));
-  const cropX = clamp(Math.round(params.x * rotW), 0, Math.max(0, rotW - cropW));
-  const cropY = clamp(Math.round(params.y * rotH), 0, Math.max(0, rotH - cropH));
+  const cropW = skipRectCrop
+    ? rotW
+    : Math.max(16, Math.round(clamp(params.width, 0.05, 1) * rotW));
+  const cropH = skipRectCrop
+    ? rotH
+    : Math.max(16, Math.round(clamp(params.height, 0.05, 1) * rotH));
+  const cropX = skipRectCrop
+    ? 0
+    : clamp(Math.round(params.x * rotW), 0, Math.max(0, rotW - cropW));
+  const cropY = skipRectCrop
+    ? 0
+    : clamp(Math.round(params.y * rotH), 0, Math.max(0, rotH - cropH));
 
   const angleRad = (params.straightenDeg * Math.PI) / 180;
   const cosA = Math.cos(angleRad);

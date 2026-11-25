@@ -1725,6 +1725,7 @@ button.landing-signup {
 .nodes-fullscreen,
 .studio-fullscreen,
 .cinema-fullscreen,
+.optics-fullscreen,
 .node-full {
   transition: filter 680ms cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -1736,6 +1737,7 @@ button.landing-signup {
 .dash[data-menu-modal="true"] .nodes-fullscreen,
 .dash[data-menu-modal="true"] .studio-fullscreen,
 .dash[data-menu-modal="true"] .cinema-fullscreen,
+.dash[data-menu-modal="true"] .optics-fullscreen,
 .dash[data-menu-modal="true"] .node-full,
 .dash[data-menu-modal="true"] .node-panel {
   filter: blur(10px) brightness(0.62);
@@ -1749,6 +1751,7 @@ button.landing-signup {
 .dash[data-theme="light"][data-menu-modal="true"] .nodes-fullscreen,
 .dash[data-theme="light"][data-menu-modal="true"] .studio-fullscreen,
 .dash[data-theme="light"][data-menu-modal="true"] .cinema-fullscreen,
+.dash[data-theme="light"][data-menu-modal="true"] .optics-fullscreen,
 .dash[data-theme="light"][data-menu-modal="true"] .node-full,
 .dash[data-theme="light"][data-menu-modal="true"] .node-panel {
   filter: blur(10px) brightness(0.72);
@@ -2211,7 +2214,8 @@ button.landing-signup {
 .dash[data-theme="dark"] .command-screen,
 .dash[data-theme="dark"] .nodes-fullscreen,
 .dash[data-theme="dark"] .studio-fullscreen,
-.dash[data-theme="dark"] .cinema-fullscreen {
+.dash[data-theme="dark"] .cinema-fullscreen,
+.dash[data-theme="dark"] .optics-fullscreen {
   --land-faint: #8e8c86;
   --land-line: rgba(255, 255, 255, 0.14);
   --land-hair: rgba(255, 255, 255, 0.085);
@@ -8868,10 +8872,37 @@ html[data-dash-theme="light"] .cinema-scroll::-webkit-scrollbar-thumb:hover {
 
 /* ——— Nexus Optics Photo Darkroom (Obsidian Observatory Dark + Gallery Light + Liquid Glass) ——— */
 .optics-fullscreen {
-  position: fixed;
+  position: absolute;
   inset: 0;
-  z-index: 38;
+  z-index: 20;
+  padding: 0;
   background: var(--background);
+}
+
+.optics-fullscreen[hidden] {
+  display: none !important;
+}
+
+.optics-dock-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(128, 128, 136, 0.28) transparent;
+}
+
+.optics-dock-scroll::-webkit-scrollbar {
+  height: 5px;
+}
+
+.optics-dock-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.optics-dock-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(128, 128, 136, 0.28);
+}
+
+.optics-dock-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 136, 0.45);
 }
 
 .optics-screen {

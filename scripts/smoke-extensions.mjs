@@ -670,14 +670,16 @@ const hslOut = tonalMod.applyHslAndSplitTone(plate, {
   balance: 15,
   shadows: { hue: 210, saturation: 30 },
 });
-const cropOut = spatialMod.applyCrop(plate, {
+const cropParams = {
   ...opticsToolsMetaMod.createDefaultToolParams("crop"),
   x: 0.1,
   y: 0.1,
   width: 0.75,
   height: 0.75,
   straightenDeg: 4,
-});
+};
+const cropPreviewEditOut = spatialMod.applyCrop(plate, cropParams, true);
+const cropOut = spatialMod.applyCrop(plate, cropParams);
 const perspOut = spatialMod.applyPerspective(plate, {
   ...opticsToolsMetaMod.createDefaultToolParams("perspective"),
   vertical: 22,
@@ -726,7 +728,7 @@ const allValid = [
   filmOut, retroOut, noirOut, portOut, maskOut,
 ].every((b) => b.width >= 4 && b.height >= 4 && b.data.length === b.width * b.height * 4 && !Number.isNaN(b.data[0]));
 
-assert(allValid && expandOut.width > plate.width && cropOut.width < plate.width, "All Optics tonal, spatial, U-Point, healing, bokeh, film, and inverted mask processors produce valid pixel buffers");
+assert(allValid && expandOut.width > plate.width && cropOut.width < plate.width && cropPreviewEditOut.width === plate.width && cropPreviewEditOut.height === plate.height, "All Optics tonal, spatial, U-Point, healing, bokeh, film, and inverted mask processors produce valid pixel buffers");
 
 setStubPro(false);
 

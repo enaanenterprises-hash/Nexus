@@ -875,7 +875,9 @@ export function NodesView({
                                     ? onOpenStudio()
                                     : ext.manifest.id === CINEMA_NODE_ID
                                       ? onOpenCinema()
-                                      : onSelectSlot(boundSlot.id)
+                                      : ext.manifest.id === OPTICS_NODE_ID
+                                        ? onOpenOptics()
+                                        : onSelectSlot(boundSlot.id)
                                 }
                                 className="h-8 rounded-full px-3 text-[12px]"
                               >
@@ -883,7 +885,9 @@ export function NodesView({
                                   ? "Open Studio"
                                   : ext.manifest.id === CINEMA_NODE_ID
                                     ? "Open Cinema"
-                                    : "Inspect"}
+                                    : ext.manifest.id === OPTICS_NODE_ID
+                                      ? "Open Optics"
+                                      : "Inspect"}
                               </Button>
                               <Button
                                 type="button"

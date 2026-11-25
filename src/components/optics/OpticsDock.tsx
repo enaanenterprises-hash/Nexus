@@ -27,7 +27,6 @@ import {
   UserRound,
   Wand2,
 } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { OPTICS_TOOLS_META } from "@/lib/optics/tools-meta";
 import type { OpticsLookPreset, OpticsToolId } from "@/lib/optics/types";
 
@@ -153,7 +152,14 @@ export function OpticsDock({
       <div className="optics-glass-dock pointer-events-auto w-full max-w-[880px] overflow-hidden rounded-[22px] px-2 py-2">
         {dockTab === "looks" ? (
           <div className="flex items-center gap-2 px-1">
-            <ScrollArea className="w-full whitespace-nowrap">
+            <div
+              onWheel={(e) => {
+                if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+                  e.currentTarget.scrollLeft += e.deltaY;
+                }
+              }}
+              className="optics-dock-scroll w-full overflow-x-auto whitespace-nowrap"
+            >
               <div className="flex items-center gap-1.5 py-0.5">
                 {looks.map((look) => {
                   const active = activeLookId === look.id;
@@ -230,12 +236,19 @@ export function OpticsDock({
                   )
                 ) : null}
               </div>
-            </ScrollArea>
+            </div>
           </div>
         ) : null}
 
         {dockTab === "tools" ? (
-          <ScrollArea className="w-full whitespace-nowrap">
+          <div
+            onWheel={(e) => {
+              if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+                e.currentTarget.scrollLeft += e.deltaY;
+              }
+            }}
+            className="optics-dock-scroll w-full overflow-x-auto whitespace-nowrap"
+          >
             <div className="flex items-center gap-1 px-1 py-0.5">
               {coreTools.map((tool) => {
                 const active = activeToolId === tool.id;
@@ -260,11 +273,18 @@ export function OpticsDock({
                 );
               })}
             </div>
-          </ScrollArea>
+          </div>
         ) : null}
 
         {dockTab === "filters" ? (
-          <ScrollArea className="w-full whitespace-nowrap">
+          <div
+            onWheel={(e) => {
+              if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+                e.currentTarget.scrollLeft += e.deltaY;
+              }
+            }}
+            className="optics-dock-scroll w-full overflow-x-auto whitespace-nowrap"
+          >
             <div className="flex items-center gap-1 px-1 py-0.5">
               {filterTools.map((tool) => {
                 const active = activeToolId === tool.id;
@@ -289,7 +309,7 @@ export function OpticsDock({
                 );
               })}
             </div>
-          </ScrollArea>
+          </div>
         ) : null}
       </div>
 

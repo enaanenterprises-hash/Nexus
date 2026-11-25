@@ -42,6 +42,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CINEMA_NODE_ID, cinemaExtension } from "@/extensions/cinema/node";
+import { OPTICS_NODE_ID, opticsExtension } from "@/extensions/optics/node";
 import { SAMPLE_EXTENSIONS } from "@/extensions/samples";
 import { STUDIO_NODE_ID, studioExtension } from "@/extensions/studio/node";
 import { connectGoogleServices } from "@/lib/command/google-connect";
@@ -149,6 +150,7 @@ const OTHER_APP_ORDER: readonly string[] = [
 const DEFAULT_SAMPLE_NODES: ExtensionId[] = [
   STUDIO_NODE_ID,
   CINEMA_NODE_ID,
+  OPTICS_NODE_ID,
 ];
 
 function computeSuggestedWidgets(connectedConnectorIds: Set<string>): string[] {
@@ -1681,9 +1683,10 @@ function SetupNodesStep({
         </span>
       </div>
 
-      <div className="setup-node-matrix !grid-cols-1 sm:!grid-cols-2">
+      <div className="setup-node-matrix !grid-cols-1 sm:!grid-cols-3">
         {renderNodeOption(studioExtension)}
-        {renderNodeOption(cinemaExtension, "!border-r-0")}
+        {renderNodeOption(cinemaExtension)}
+        {renderNodeOption(opticsExtension, "!border-r-0")}
       </div>
 
       <div className="setup-node-matrix">
@@ -1691,7 +1694,7 @@ function SetupNodesStep({
       </div>
 
       <p className="setup-footer-note">
-        Recording Studio and Cinema form the Creative Suite with shared audio stems, markers, and timeline routing; sample nodes remain available for network previews.
+        Recording Studio, Cinema, and Optics form the Creative Suite with shared audio stems, plates, markers, and timeline routing; sample nodes remain available for network previews.
       </p>
     </div>
   );

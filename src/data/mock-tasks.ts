@@ -29,7 +29,7 @@ export const INITIAL_TASKS: NexusTask[] = [
     title: "Draft Pro pricing narrative",
     priority: "high",
     status: "active",
-    note: "Two free nodes, the rest on Pro",
+    note: "25 free nodes, 25 more on Pro",
   },
   {
     id: "t-3",
