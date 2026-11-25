@@ -4,6 +4,7 @@ import {
   AUTH_SCHEMA_STATEMENTS,
   CINEMA_SCHEMA_STATEMENTS,
   COMMAND_SCHEMA_STATEMENTS,
+  OPTICS_SCHEMA_STATEMENTS,
   RESEARCH_SCHEMA_STATEMENTS,
   STORAGE_SCHEMA_STATEMENTS,
   STUDIO_SCHEMA_STATEMENTS,
@@ -20,6 +21,7 @@ let schemaReady: Promise<void> | null = null
 let researchReady: Promise<void> | null = null
 let studioReady: Promise<void> | null = null
 let cinemaReady: Promise<void> | null = null
+let opticsReady: Promise<void> | null = null
 let commandReady: Promise<void> | null = null
 let waitlistReady: Promise<void> | null = null
 let userStateReady: Promise<void> | null = null
@@ -142,6 +144,21 @@ export function ensureCinemaSchema() {
     throw error
   })
   return cinemaReady
+}
+
+/** Creates the Optics darkroom tables (after the Auth.js tables they reference). */
+export function ensureOpticsSchema() {
+  opticsReady ??= (async () => {
+    await ensureAuthSchema()
+    const connection = getSql()
+    for (const statement of OPTICS_SCHEMA_STATEMENTS) {
+      await connection.unsafe(statement)
+    }
+  })().catch((error: unknown) => {
+    opticsReady = null
+    throw error
+  })
+  return opticsReady
 }
 
 /** Creates the per-user workspace state table (after the Auth.js tables it references). */

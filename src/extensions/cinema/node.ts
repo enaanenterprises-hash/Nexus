@@ -20,6 +20,7 @@ export const cinemaExtension = defineExtension({
       "context",
       "content:studio.recording:read",
       "content:studio.recording:annotate",
+      "content:optics.project:read",
     ],
     monogram: "Cn",
     author: "Nexus",

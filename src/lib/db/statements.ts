@@ -258,6 +258,43 @@ export const CINEMA_SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS "cinema_project_collectionId_idx" ON "cinema_project" ("collectionId")`,
 ] as const
 
+/**
+ * Optics photo darkroom & tonal grading tables, scoped per user.
+ * Stores non-destructive edit stacks, looks, overlays, and project metadata.
+ */
+export const OPTICS_SCHEMA_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS "optics_collection" (
+    "id" text PRIMARY KEY NOT NULL,
+    "userId" text NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
+    "name" text NOT NULL,
+    "description" text,
+    "createdAt" timestamptz NOT NULL DEFAULT now(),
+    "updatedAt" timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS "optics_collection_userId_idx" ON "optics_collection" ("userId", "updatedAt" DESC)`,
+  `CREATE TABLE IF NOT EXISTS "optics_project" (
+    "id" text PRIMARY KEY NOT NULL,
+    "userId" text NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
+    "collectionId" text NOT NULL REFERENCES "optics_collection" ("id") ON DELETE CASCADE,
+    "title" text NOT NULL,
+    "description" text,
+    "width" integer NOT NULL DEFAULT 1500,
+    "height" integer NOT NULL DEFAULT 1000,
+    "source" jsonb NOT NULL DEFAULT '{}',
+    "overlays" jsonb NOT NULL DEFAULT '[]',
+    "editStack" jsonb NOT NULL DEFAULT '[]',
+    "activeLookId" text,
+    "matteMode" text NOT NULL DEFAULT 'auto',
+    "thumbnailUrl" text,
+    "tags" text[] NOT NULL DEFAULT '{}',
+    "notes" jsonb,
+    "createdAt" timestamptz NOT NULL DEFAULT now(),
+    "updatedAt" timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS "optics_project_userId_idx" ON "optics_project" ("userId", "updatedAt" DESC)`,
+  `CREATE INDEX IF NOT EXISTS "optics_project_collectionId_idx" ON "optics_project" ("collectionId")`,
+] as const
+
 /** Per-user Nexus workspace preferences & wired node sockets, synced via Postgres. */
 export const USER_STATE_SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS "nexus_user_state" (

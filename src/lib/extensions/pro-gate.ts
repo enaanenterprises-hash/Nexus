@@ -6,7 +6,7 @@ import type { ExtensionSlot, ProEntitlement } from "./types";
  * and only in free sockets. Nexus Pro opens every socket.
  */
 
-export const FREE_ACTIVE_EXTENSION_SLOTS = 2;
+export const FREE_ACTIVE_EXTENSION_SLOTS = 25;
 
 /** Stub: replaced by billing/auth later. */
 let stubIsPro = false;

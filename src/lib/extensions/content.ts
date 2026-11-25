@@ -4,6 +4,11 @@ import type {
   CinemaProjectListItemV1,
 } from "@/lib/cinema/types";
 import type {
+  OpticsProjectAnnotationV1,
+  OpticsProjectContentV1,
+  OpticsProjectListItemV1,
+} from "@/lib/optics/types";
+import type {
   ResearchSourceAnnotationV1,
   ResearchSourceContentV1,
   ResearchSourceListItemV1,
@@ -96,6 +101,12 @@ export interface ContentKindMap extends CommandKindEntries {
     item: CinemaProjectContentV1;
     annotation: CinemaProjectAnnotationV1;
   };
+  "optics.project": {
+    version: 1;
+    listItem: OpticsProjectListItemV1;
+    item: OpticsProjectContentV1;
+    annotation: OpticsProjectAnnotationV1;
+  };
 }
 
 export type KnownContentKind = keyof ContentKindMap;
@@ -105,6 +116,7 @@ export const CONTENT_KIND_VERSIONS: { [K in KnownContentKind]: ContentKindMap[K]
   "research.source": 1,
   "studio.recording": 1,
   "cinema.project": 1,
+  "optics.project": 1,
   "command.event": 1,
   "command.task": 1,
   "command.deadline": 1,

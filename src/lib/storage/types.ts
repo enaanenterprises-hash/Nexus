@@ -18,6 +18,7 @@ export type VaultItemKind =
 export type VaultSpaceId =
   | "all"
   | "videos"
+  | "images"
   | "audio"
   | "documents"
   | "analytics"
@@ -81,6 +82,11 @@ export const DEFAULT_VAULT_FOLDERS: ReadonlyArray<{
     id: "cinema-exports",
     name: "Cinema Exports",
     description: "Rendered timelines and camera captures from Nexus Cinema.",
+  },
+  {
+    id: "optics-darkroom",
+    name: "Optics Darkroom",
+    description: "Finished photographs and non-destructive masters from Nexus Optics.",
   },
   {
     id: "podcast-audio",
@@ -149,8 +155,10 @@ export function classifyVaultKind(mimeType: string, filename: string): VaultItem
 
 export function defaultFolderForKind(kind: VaultItemKind, sourceNodeId?: string): string | null {
   if (sourceNodeId === "dev.nexus.cinema") return "cinema-exports";
+  if (sourceNodeId === "dev.nexus.optics") return "optics-darkroom";
   if (sourceNodeId === "dev.nexus.studio") return "podcast-audio";
   if (kind === "video") return "cinema-exports";
+  if (kind === "image") return "optics-darkroom";
   if (kind === "audio") return "podcast-audio";
   if (kind === "note") return "class-notes";
   if (kind === "dataset") return "business-analytics";
@@ -185,6 +193,8 @@ export function itemMatchesSpace(item: VaultItem, space: VaultSpaceId): boolean 
       return true;
     case "videos":
       return item.kind === "video";
+    case "images":
+      return item.kind === "image";
     case "audio":
       return item.kind === "audio";
     case "documents":

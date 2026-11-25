@@ -20,6 +20,9 @@ export function requiredCapability(event: NexusEvent): ExtensionCapability | nul
     case "cinema:project-saved":
     case "cinema:project-routed":
       return contentCapability("cinema.project", "read");
+    case "optics:project-saved":
+    case "optics:photo-routed":
+      return contentCapability("optics.project", "read");
     default:
       return null;
   }

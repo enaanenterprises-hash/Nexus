@@ -8866,6 +8866,262 @@ html[data-dash-theme="light"] .cinema-scroll::-webkit-scrollbar-thumb:hover {
   }
 }
 
+/* ——— Nexus Optics Photo Darkroom (Obsidian Observatory Dark + Gallery Light + Liquid Glass) ——— */
+.optics-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 38;
+  background: var(--background);
+}
+
+.optics-screen {
+  background: radial-gradient(120% 85% at 50% 0%, rgba(240, 181, 74, 0.04) 0%, transparent 56%), #070709;
+  color: #f5f5f7;
+}
+
+.dash[data-theme="light"] .optics-screen,
+html[data-dash-theme="light"] .optics-screen {
+  background: radial-gradient(120% 85% at 50% 0%, rgba(166, 116, 18, 0.045) 0%, transparent 56%), #f7f6f2;
+  color: #0e0f12;
+}
+
+.optics-glass-pill {
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background: rgba(14, 14, 18, 0.72);
+  backdrop-filter: blur(22px) saturate(1.4);
+  -webkit-backdrop-filter: blur(22px) saturate(1.4);
+  box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.6);
+}
+
+.dash[data-theme="light"] .optics-glass-pill,
+html[data-dash-theme="light"] .optics-glass-pill {
+  border-color: rgba(14, 15, 18, 0.1);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 10px 28px -10px rgba(14, 15, 18, 0.12);
+}
+
+.optics-glass-dock {
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background: rgba(14, 14, 18, 0.78);
+  backdrop-filter: blur(24px) saturate(1.45);
+  -webkit-backdrop-filter: blur(24px) saturate(1.45);
+  box-shadow: 0 18px 42px -14px rgba(0, 0, 0, 0.65);
+}
+
+.dash[data-theme="light"] .optics-glass-dock,
+html[data-dash-theme="light"] .optics-glass-dock {
+  border-color: rgba(14, 15, 18, 0.1);
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 16px 36px -12px rgba(14, 15, 18, 0.14);
+}
+
+.optics-glass-panel {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(14, 14, 18, 0.82);
+  backdrop-filter: blur(24px) saturate(1.35);
+  -webkit-backdrop-filter: blur(24px) saturate(1.35);
+}
+
+.dash[data-theme="light"] .optics-glass-panel,
+html[data-dash-theme="light"] .optics-glass-panel {
+  border-color: rgba(14, 15, 18, 0.1);
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.optics-matte-auto {
+  background: #0a0a0d;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.dash[data-theme="light"] .optics-matte-auto,
+html[data-dash-theme="light"] .optics-matte-auto {
+  background: #eeece6;
+  border-color: rgba(14, 15, 18, 0.07);
+}
+
+.optics-matte-obsidian {
+  background: #070709;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.optics-matte-grey {
+  background: #2b2c30;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.optics-matte-paper {
+  background: #f4f2ec;
+  border: 1px solid rgba(14, 15, 18, 0.09);
+}
+
+/* Handcrafted Optical Iris & Anamorphic Gold Slit Opening Ceremony (~740ms) */
+.optics-aperture-reveal {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  background: rgba(7, 7, 9, 0.96);
+  color: rgba(245, 245, 247, 0.8);
+}
+
+.dash[data-theme="light"] .optics-aperture-reveal,
+html[data-dash-theme="light"] .optics-aperture-reveal {
+  background: rgba(247, 246, 242, 0.96);
+  color: rgba(14, 15, 18, 0.8);
+}
+
+.optics-aperture-reveal--run {
+  animation: optics-veil-out 740ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.optics-aperture-svg {
+  width: min(320px, 68vw);
+  height: min(320px, 68vw);
+}
+
+.optics-aperture-reveal--run .optics-aperture-svg {
+  animation: optics-iris-unfurled 720ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.optics-aperture-slit {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(560px, 76vw);
+  height: 1px;
+  transform: translate(-50%, -50%) scaleX(0);
+  background: linear-gradient(90deg, transparent, rgba(240, 181, 74, 0.9), transparent);
+}
+
+.optics-aperture-reveal--run .optics-aperture-slit {
+  animation: optics-slit-flash 680ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.optics-stage-enter {
+  animation: optics-stage-unfold 680ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.optics-chrome-enter {
+  animation: optics-chrome-settle 540ms 90ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes optics-stage-unfold {
+  from {
+    opacity: 0.45;
+    transform: scale(1.022);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes optics-chrome-settle {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.optics-aperture-caption {
+  position: absolute;
+  bottom: 14%;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+@keyframes optics-iris-unfurled {
+  0% {
+    opacity: 0;
+    transform: scale(0.76) rotate(-24deg);
+  }
+  38% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.22) rotate(16deg);
+  }
+}
+
+@keyframes optics-slit-flash {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scaleX(0.05);
+  }
+  32% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scaleX(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scaleX(1.35);
+  }
+}
+
+@keyframes optics-veil-out {
+  0%, 42% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .optics-aperture-reveal,
+  .optics-aperture-svg,
+  .optics-aperture-slit {
+    animation: none !important;
+    display: none !important;
+  }
+  .optics-stage-enter,
+  .optics-chrome-enter {
+    animation: none !important;
+  }
+}
+
+.optics-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(128, 128, 140, 0.28);
+  outline: none;
+  cursor: pointer;
+}
+
+.optics-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #f5f4f0;
+  border: 2px solid var(--land-gold, #f0b54a);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+  transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.optics-range::-webkit-slider-thumb:hover {
+  transform: scale(1.14);
+}
+
+.optics-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #f5f4f0;
+  border: 2px solid var(--land-gold, #f0b54a);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

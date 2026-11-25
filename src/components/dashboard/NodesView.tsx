@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CINEMA_NODE_ID } from "@/extensions/cinema/node";
+import { OPTICS_NODE_ID } from "@/extensions/optics/node";
 import { STUDIO_NODE_ID } from "@/extensions/studio/node";
 import {
   FREE_ACTIVE_EXTENSION_SLOTS,
@@ -116,7 +117,15 @@ function summarizeEvent(event: NexusEvent): string {
     }
     case "entitlement:changed": {
       const p = event.payload as NexusEventMap["entitlement:changed"];
-      return p.isPro ? "Unlocked Nexus Pro sockets" : "Returned to Free tier (2 sockets)";
+      return p.isPro ? "Unlocked Nexus Pro sockets" : `Returned to Free tier (${FREE_ACTIVE_EXTENSION_SLOTS} sockets)`;
+    }
+    case "optics:project-saved": {
+      const p = event.payload as NexusEventMap["optics:project-saved"];
+      return `Saved Optics plate “${p.title}” (${p.layerCount} layers)`;
+    }
+    case "optics:photo-routed": {
+      const p = event.payload as NexusEventMap["optics:photo-routed"];
+      return `Sent plate “${p.title}” → Cinema`;
     }
     case "command:focus-changed": {
       const p = event.payload as NexusEventMap["command:focus-changed"];
@@ -160,6 +169,7 @@ type Props = {
   onTransfer: (fromId: ExtensionId, toId?: ExtensionId) => void;
   onOpenStudio: () => void;
   onOpenCinema: () => void;
+  onOpenOptics: () => void;
   onClose: () => void;
 };
 
@@ -177,6 +187,7 @@ export function NodesView({
   onTransfer,
   onOpenStudio,
   onOpenCinema,
+  onOpenOptics,
   onClose,
 }: Props) {
   const { theme } = useTheme();
@@ -614,6 +625,16 @@ export function NodesView({
                           className="h-9 gap-1.5 rounded-full bg-foreground px-4 text-[12.5px] text-background hover:bg-foreground/90"
                         >
                           <span>Open Cinema</span>
+                          <ArrowUpRight className="size-3.5" />
+                        </Button>
+                      ) : inspectedExt.manifest.id === OPTICS_NODE_ID ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={onOpenOptics}
+                          className="h-9 gap-1.5 rounded-full bg-foreground px-4 text-[12.5px] text-background hover:bg-foreground/90"
+                        >
+                          <span>Open Optics</span>
                           <ArrowUpRight className="size-3.5" />
                         </Button>
                       ) : null}

@@ -10,11 +10,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { NexusMenuButton } from "./NexusMenuButton";
 import { CinemaView } from "@/components/cinema/CinemaView";
 import { CommandView, type CommandTab } from "@/components/command/CommandView";
+import { OpticsView } from "@/components/optics/OpticsView";
 import { ResearchView } from "@/components/research/ResearchView";
 import { StudioView } from "@/components/studio/StudioView";
 import type { Viewer } from "@/lib/auth/types";
 import { CINEMA_NODE_ID, cinemaExtension } from "@/extensions/cinema/node";
 import { COMMAND_NODE_ID } from "@/extensions/command/node";
+import { OPTICS_NODE_ID, opticsExtension } from "@/extensions/optics/node";
 import { RESEARCH_NODE_ID } from "@/extensions/research/node";
 import { SAMPLE_EXTENSIONS } from "@/extensions/samples";
 import { STUDIO_NODE_ID, studioExtension } from "@/extensions/studio/node";
@@ -58,10 +60,12 @@ import { useTheme } from "@/lib/theme";
 
 const SETUP_DONE_KEY = "nexus:setup-done.v1";
 const INSTALLED_NODES_KEY = "nexus:installed-nodes.v1";
-const BUILTIN_EXTENSIONS = [studioExtension, cinemaExtension, ...SAMPLE_EXTENSIONS] as const;
+const OPTICS_SEEDED_KEY = "nexus:optics-seeded.v1";
+const BUILTIN_EXTENSIONS = [studioExtension, cinemaExtension, opticsExtension, ...SAMPLE_EXTENSIONS] as const;
 const DEFAULT_NODE_IDS: ExtensionId[] = [
   STUDIO_NODE_ID,
   CINEMA_NODE_ID,
+  OPTICS_NODE_ID,
 ];
 
 function readSavedNodes(): ExtensionId[] | null {
@@ -113,6 +117,7 @@ const OAUTH_ERRORS: Record<string, string> = {
 const PRODUCT_PAYLOAD_LABELS: Record<string, string> = {
   [STUDIO_NODE_ID]: "Studio",
   [CINEMA_NODE_ID]: "Cinema",
+  [OPTICS_NODE_ID]: "Optics",
   "dev.nexus.sample.daily-brief": "Daily Brief",
   "dev.nexus.sample.focus-guard": "Focus Guard",
   "dev.nexus.sample.quick-capture": "Quick Capture",
@@ -149,6 +154,11 @@ export function Dashboard({
   const [commandOpenCount, setCommandOpenCount] = useState(0);
   const [studioMounted, setStudioMounted] = useState(false);
   const [cinemaMounted, setCinemaMounted] = useState(false);
+  const [opticsMounted, setOpticsMounted] = useState(false);
+  const [opticsIncomingVaultItem, setOpticsIncomingVaultItem] = useState<{
+    itemId: string;
+    serial: number;
+  } | null>(null);
   const [cinemaIncomingTake, setCinemaIncomingTake] = useState<{
     envelope: StudioRecordingContentV1;
     mode?: "mix" | "stems";
@@ -257,6 +267,12 @@ export function Dashboard({
     setSurface({ view: "cinema", panel: null });
   }, []);
 
+  const openOptics = useCallback(() => {
+    setOpticsMounted(true);
+    setMenuOpen(false);
+    setSurface({ view: "optics", panel: null });
+  }, []);
+
   const openNodes = useCallback((slotId?: SlotId | null) => {
     setMenuOpen(false);
     if (slotId !== undefined) setSelected(slotId);
@@ -277,6 +293,10 @@ export function Dashboard({
         openCinema();
         return;
       }
+      if (typeof panel === "object" && panel.extension === OPTICS_NODE_ID) {
+        openOptics();
+        return;
+      }
       setMenuOpen(false);
       setSurface((s) => {
         const same =
@@ -286,7 +306,7 @@ export function Dashboard({
         return { view: s.view, panel: same ? null : panel };
       });
     },
-    [openCinema, openNodes, openStudio],
+    [openCinema, openNodes, openOptics, openStudio],
   );
 
   const goHome = useCallback(() => {
@@ -365,7 +385,18 @@ export function Dashboard({
         const snap = extensionRegistry.getSnapshot();
         const anyOccupied = snap.slots.some((s) => s.occupiedBy !== null);
         if (!anyOccupied) {
-          const initialNodes = remoteNodes ?? readSavedNodes() ?? DEFAULT_NODE_IDS;
+          const baseNodes = remoteNodes ?? readSavedNodes() ?? DEFAULT_NODE_IDS;
+          let initialNodes = baseNodes;
+          try {
+            if (!window.localStorage.getItem(OPTICS_SEEDED_KEY)) {
+              window.localStorage.setItem(OPTICS_SEEDED_KEY, "1");
+              if (!initialNodes.includes(OPTICS_NODE_ID)) {
+                initialNodes = [...initialNodes, OPTICS_NODE_ID];
+              }
+            }
+          } catch {
+            // Ignore storage access errors
+          }
           for (const nodeId of initialNodes) {
             if (extensionRegistry.get(nodeId)) {
               await extensionRegistry.activate(nodeId);
@@ -633,6 +664,7 @@ export function Dashboard({
         surface.view === "research" ||
         surface.view === "studio" ||
         surface.view === "cinema" ||
+        surface.view === "optics" ||
         surface.view === "nodes"
       ) {
         setSurface({ view: "home", panel: null });
@@ -647,6 +679,7 @@ export function Dashboard({
       (surface.view !== "home" &&
         surface.view !== "studio" &&
         surface.view !== "cinema" &&
+        surface.view !== "optics" &&
         surface.view !== "command" &&
         surface.view !== "nodes") ||
       !menuOpen
@@ -904,6 +937,7 @@ export function Dashboard({
     isNetworkHome ||
     surface.view === "studio" ||
     surface.view === "cinema" ||
+    surface.view === "optics" ||
     surface.view === "command" ||
     surface.view === "nodes";
   const hasCompactTopBar =
@@ -951,7 +985,7 @@ export function Dashboard({
       <section
         aria-label="Nexus Laniakea network"
         className="dash-stage-layer absolute inset-0"
-        hidden={surface.view === "command" || surface.view === "nodes"}
+        hidden={surface.view === "command" || surface.view === "nodes" || surface.view === "optics"}
       >
         <NeuralStage signal={signal} onSelectSocket={handleSelectSocket} />
         <div className="dash-scrim--home pointer-events-none absolute inset-0" />
@@ -1063,6 +1097,15 @@ export function Dashboard({
                     serial: (prev?.serial ?? 0) + 1,
                   }));
                 }}
+                onOpenOpticsWithVaultItem={(itemId) => {
+                  setOpticsMounted(true);
+                  setMenuOpen(false);
+                  setSurface({ view: "optics", panel: null });
+                  setOpticsIncomingVaultItem((prev) => ({
+                    itemId,
+                    serial: (prev?.serial ?? 0) + 1,
+                  }));
+                }}
                 onClose={() => setSurface({ view: "home", panel: null })}
               />
             </div>
@@ -1083,6 +1126,7 @@ export function Dashboard({
                 onTransfer={(fromId, toId) => triggerNodeTransfer(fromId, toId)}
                 onOpenStudio={openStudio}
                 onOpenCinema={openCinema}
+                onOpenOptics={openOptics}
                 onClose={() => setSurface({ view: "home", panel: null })}
               />
             </div>
@@ -1149,6 +1193,44 @@ export function Dashboard({
                   })
                 }
                 onRouteTransfer={(fromId, toId) => triggerNodeTransfer(fromId, toId)}
+              />
+            </div>
+          ) : null}
+
+          {opticsMounted ? (
+            <div className="optics-fullscreen" hidden={surface.view !== "optics"}>
+              <OpticsView
+                hub={hub}
+                visible={surface.view === "optics"}
+                incomingVaultItem={opticsIncomingVaultItem}
+                onClose={() => setSurface({ view: "home", panel: null })}
+                onReleaseNode={() => void release(OPTICS_NODE_ID)}
+                onOpenCommandStorage={(itemId) =>
+                  openCommand({
+                    tab: "overview",
+                    service: null,
+                    notice: null,
+                    widget: "storage",
+                    itemId: itemId ?? null,
+                  })
+                }
+                onOpenCommandConnections={(connectorId) =>
+                  openCommand({
+                    tab: "connections",
+                    service: connectorId ?? null,
+                    notice: null,
+                  })
+                }
+                onSendPlateToCinema={(vaultItem) => {
+                  triggerNodeTransfer(OPTICS_NODE_ID, CINEMA_NODE_ID);
+                  setCinemaMounted(true);
+                  setMenuOpen(false);
+                  setSurface({ view: "cinema", panel: null });
+                  setCinemaIncomingVaultItem((prev) => ({
+                    itemId: vaultItem.id,
+                    serial: (prev?.serial ?? 0) + 1,
+                  }));
+                }}
               />
             </div>
           ) : null}

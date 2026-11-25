@@ -14,6 +14,10 @@ import type {
 } from "@/lib/cinema/types";
 import type { AutomationRun, FocusSession } from "@/lib/command/automation/types";
 import type { CommandItem, CommandKind } from "@/lib/command/kinds";
+import type {
+  OpticsPhotoRoutedTransfer,
+  OpticsProjectContentV1,
+} from "@/lib/optics/types";
 import type { StudioRecordingContentV1, StudioRoutingIntent } from "@/lib/studio/types";
 import type { ContentClient } from "./content-access";
 import type { ContentCapability, ContentKindDeclaration } from "./content";
@@ -125,6 +129,23 @@ export type NexusEventMap = {
   };
   "cinema:voiceover-requested": CinemaVoiceoverRequest;
   "cinema:audio-extracted": CinemaExtractedAudioTransfer;
+  /** Delivered only with `content:optics.project:read`. */
+  "optics:project-saved": {
+    projectId: string;
+    collectionId: string;
+    title: string;
+    width: number;
+    height: number;
+    layerCount: number;
+  };
+  /** Delivered only with `content:optics.project:read`. */
+  "optics:photo-routed": {
+    projectId: string;
+    targetNodeId?: ExtensionId;
+    title: string;
+    transfer: OpticsPhotoRoutedTransfer;
+    envelope: OpticsProjectContentV1;
+  };
   /** A new Command item reached the network. Delivered only with `content:<kind>:read`. */
   "command:item-published": { kind: CommandKind; item: CommandItem };
   /** An automation ran. Delivered only with the `automations` capability. */

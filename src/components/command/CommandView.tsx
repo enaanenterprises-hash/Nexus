@@ -69,6 +69,7 @@ type Props = {
   } | null;
   onOpenCinemaWithVaultItem?: (itemId: string) => void;
   onOpenStudioWithVaultItem?: (itemId: string) => void;
+  onOpenOpticsWithVaultItem?: (itemId: string) => void;
   onClose: () => void;
 };
 
@@ -80,6 +81,7 @@ export function CommandView({
   request,
   onOpenCinemaWithVaultItem,
   onOpenStudioWithVaultItem,
+  onOpenOpticsWithVaultItem,
   onClose,
 }: Props) {
   const command = useCommand();
@@ -348,6 +350,7 @@ export function CommandView({
             }}
             onOpenCinemaWithVaultItem={onOpenCinemaWithVaultItem}
             onOpenStudioWithVaultItem={onOpenStudioWithVaultItem}
+            onOpenOpticsWithVaultItem={onOpenOpticsWithVaultItem}
           />
         ) : tab === "automations" ? (
           <AutomationsView

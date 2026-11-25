@@ -45,6 +45,7 @@ const {
 } = ext;
 const { STUDIO_NODE_ID, studioExtension } = await import("../src/extensions/studio/node.ts");
 const { CINEMA_NODE_ID, cinemaExtension } = await import("../src/extensions/cinema/node.ts");
+const { OPTICS_NODE_ID, opticsExtension } = await import("../src/extensions/optics/node.ts");
 
 let failed = 0;
 function assert(cond, msg) {
@@ -75,30 +76,40 @@ const registry = new ExtensionRegistry(bus);
 const seen = [];
 bus.subscribe("*", (event) => seen.push(event.type));
 
-for (const id of ["com.acme.a", "com.acme.b", "com.acme.c"]) {
-  await registry.register({ manifest: manifest(id) });
+for (let i = 1; i <= 26; i++) {
+  await registry.register({ manifest: manifest(`com.acme.slot-${i}`) });
 }
 
-const a = await registry.activate("com.acme.a");
-const b = await registry.activate("com.acme.b");
-const c = await registry.activate("com.acme.c");
-assert(a.ok && a.slotId === "slot-free-1", "free: first extension takes free socket 1");
-assert(b.ok && b.slotId === "slot-free-2", "free: second extension takes free socket 2");
-assert(!c.ok && c.reason === "pro_required", "free: third extension is gated");
+const firstResult = await registry.activate("com.acme.slot-1");
+const secondResult = await registry.activate("com.acme.slot-2");
+assert(firstResult.ok && firstResult.slotId === "slot-free-1", "free: first extension takes free socket 1");
+assert(secondResult.ok && secondResult.slotId === "slot-free-2", "free: second extension takes free socket 2");
+
+for (let i = 3; i <= 25; i++) {
+  const res = await registry.activate(`com.acme.slot-${i}`);
+  if (!res.ok || res.slotId !== `slot-free-${i}`) {
+    assert(false, `free: extension ${i} takes free socket ${i}`);
+    break;
+  }
+}
+assert(registry.listActive().length === 25, "free tier supports 25 concurrent active extensions");
+
+const gated26 = await registry.activate("com.acme.slot-26");
+assert(!gated26.ok && gated26.reason === "pro_required", "free: 26th extension is gated");
 assert(seen.includes("extension:denied"), "denial is broadcast on the bus");
 
 setStubPro(true);
-const c2 = await registry.activate("com.acme.c");
-assert(c2.ok && c2.slotId.startsWith("slot-pro"), "pro: third extension takes a Pro socket");
+const pro26 = await registry.activate("com.acme.slot-26");
+assert(pro26.ok && pro26.slotId.startsWith("slot-pro"), "pro: 26th extension takes a Pro socket");
 
 setStubPro(false);
 await new Promise((r) => setTimeout(r, 0));
-assert(!registry.isActive("com.acme.c"), "downgrade releases Pro sockets");
-assert(registry.isActive("com.acme.a") && registry.isActive("com.acme.b"), "downgrade keeps free sockets");
+assert(!registry.isActive("com.acme.slot-26"), "downgrade releases Pro sockets");
+assert(registry.isActive("com.acme.slot-1") && registry.isActive("com.acme.slot-25"), "downgrade keeps 25 free sockets");
 
 const snapshot = registry.getSnapshot();
 assert(snapshot === registry.getSnapshot(), "snapshot is stable between changes");
-await registry.deactivate("com.acme.a");
+await registry.deactivate("com.acme.slot-1");
 assert(snapshot !== registry.getSnapshot(), "snapshot changes after deactivate");
 
 const R = "content:research.source:read";
@@ -337,11 +348,13 @@ await suiteReg.register({
 });
 const suiteStAct = await suiteReg.activate(STUDIO_NODE_ID);
 const suiteCnAct = await suiteReg.activate(CINEMA_NODE_ID);
-assert(suiteStAct.ok && suiteCnAct.ok, "Studio and Cinema both snap into the two free Creative Suite sockets");
+const suiteOpAct = await suiteReg.register(opticsExtension).then(() => suiteReg.activate(OPTICS_NODE_ID));
+assert(suiteStAct.ok && suiteCnAct.ok && suiteOpAct.ok, "Studio, Cinema, and Optics all snap cleanly into Free Creative Suite sockets");
 setStubPro(true);
 await suiteReg.activate("com.acme.cinema-reader");
 await suiteReg.activate("com.acme.cinema-blind");
 assert(contentKinds.get("cinema.project")?.provider === CINEMA_NODE_ID, "cinema.project content kind registered to Cinema");
+assert(contentKinds.get("optics.project")?.provider === OPTICS_NODE_ID, "optics.project content kind registered to Optics");
 
 suiteBus.emit(
   "studio:take-routed",
@@ -444,7 +457,7 @@ assert(!suiteSeen.blind.includes("studio:smart-cuts"), "nodes without content:st
 assert(!suiteSeen.blind.includes("studio:rhythm-grid"), "nodes without content:studio.recording:read never see rhythm-grid");
 
 // 50-slot branching hub blueprint & capability inter-node links
-assert(EXTENSION_SLOT_BLUEPRINT.length === 50, "hub defines 50 extension slots (2 free + 48 Pro)");
+assert(EXTENSION_SLOT_BLUEPRINT.length === 50, "hub defines 50 extension slots (25 free + 25 Pro)");
 await suiteReg.register({ manifest: manifest("com.acme.isolated", { capabilities: ["custom"] }) });
 await suiteReg.activate("com.acme.isolated");
 const linkSnap = suiteReg.getSnapshot();
@@ -454,9 +467,18 @@ const studioCinemaLink = computedLinks.find(
     ((l.fromId === STUDIO_NODE_ID && l.toId === CINEMA_NODE_ID) ||
       (l.fromId === CINEMA_NODE_ID && l.toId === STUDIO_NODE_ID)),
 );
+const opticsCinemaLink = computedLinks.find(
+  (l) =>
+    ((l.fromId === OPTICS_NODE_ID && l.toId === CINEMA_NODE_ID) ||
+      (l.fromId === CINEMA_NODE_ID && l.toId === OPTICS_NODE_ID)),
+);
 assert(
   studioCinemaLink?.kind === "content" && studioCinemaLink?.channel === "studio.recording",
   "computeExtensionLinks links Studio and Cinema over studio.recording content envelope",
+);
+assert(
+  opticsCinemaLink?.kind === "content",
+  "computeExtensionLinks links Optics and Cinema over Creative Suite content envelopes",
 );
 assert(
   !computedLinks.some((l) => l.fromId === "com.acme.isolated" || l.toId === "com.acme.isolated"),
@@ -565,6 +587,146 @@ for (const id of ["tiktok-publish", "instagram-publish", "youtube-publish", "x-p
     `social connector ${id} uses end-user OAuth sign-in`,
   );
 }
+
+// Optics Storage integration & Non-destructive DSP stack engine verification
+const sampleImageItem = {
+  ...sampleVideoItem,
+  id: "img-smoke-1",
+  folderId: "optics-darkroom",
+  name: "alpenglow.png",
+  mimeType: "image/png",
+  kind: "image",
+};
+const imageActionIds = storageActionsMod.getVaultActionsForItem(sampleImageItem).map((a) => a.id);
+assert(
+  imageActionIds.includes("dev.nexus.optics.open") && imageActionIds.includes("core.social.publish"),
+  "image items expose Edit in Optics and Publish to Social workflow actions",
+);
+
+const opticsEngineMod = await import("../src/lib/optics/processors/engine.ts");
+const opticsToolsMetaMod = await import("../src/lib/optics/tools-meta.ts");
+const testPixels = new Uint8ClampedArray([
+  100, 120, 140, 255,
+  180, 150, 120, 255,
+  40, 60, 80, 255,
+  220, 210, 195, 255,
+]);
+const srcBuf = { width: 2, height: 2, data: testPixels };
+const tuneLayer = {
+  id: "l-tune",
+  toolId: "tune",
+  label: "Tune Image",
+  enabled: true,
+  opacity: 100,
+  params: { ...opticsToolsMetaMod.createDefaultToolParams("tune"), brightness: 45, contrast: 25, warmth: 30 },
+  mask: null,
+  createdAt: new Date().toISOString(),
+};
+const bwLayer = {
+  id: "l-bw",
+  toolId: "black-white",
+  label: "Black & White",
+  enabled: true,
+  opacity: 100,
+  params: opticsToolsMetaMod.createDefaultToolParams("black-white"),
+  mask: null,
+  createdAt: new Date().toISOString(),
+};
+const evaluated = opticsEngineMod.evaluateEditStack(srcBuf, "smoke-src", [tuneLayer, bwLayer], null);
+assert(
+  evaluated.buffer.width === 2 &&
+    evaluated.buffer.data[0] === evaluated.buffer.data[1] &&
+    evaluated.buffer.data[1] === evaluated.buffer.data[2] &&
+    evaluated.buffer.data[0] !== testPixels[0],
+  "Optics non-destructive edit stack evaluates multi-step Tune + B&W optical transforms cleanly",
+);
+
+const tonalMod = await import("../src/lib/optics/processors/tonal.ts");
+const spatialMod = await import("../src/lib/optics/processors/spatial.ts");
+const localMod = await import("../src/lib/optics/processors/local.ts");
+const fxMod = await import("../src/lib/optics/processors/optics-fx.ts");
+const creativeMod = await import("../src/lib/optics/processors/creative-filters.ts");
+
+const gridSize = 64;
+const plateData = new Uint8ClampedArray(gridSize * gridSize * 4);
+for (let i = 0; i < gridSize * gridSize; i++) {
+  const o = i * 4;
+  plateData[o] = (i * 19) % 256;
+  plateData[o + 1] = (i * 31 + 40) % 256;
+  plateData[o + 2] = (i * 43 + 80) % 256;
+  plateData[o + 3] = 255;
+}
+const plate = { width: gridSize, height: gridSize, data: plateData };
+
+const detOut = tonalMod.applyDetails(plate, { structure: 36, sharpening: 40 });
+const crvOut = tonalMod.applyCurves(plate, {
+  ...opticsToolsMetaMod.createDefaultToolParams("curves"),
+  rgb: [{ x: 0, y: 0 }, { x: 0.25, y: 0.18 }, { x: 0.75, y: 0.84 }, { x: 1, y: 1 }],
+});
+const wbSolved = tonalMod.solveNeutralWhiteBalance(120, 128, 145);
+const wbOut = tonalMod.applyWhiteBalance(plate, wbSolved);
+const hslOut = tonalMod.applyHslAndSplitTone(plate, {
+  ...opticsToolsMetaMod.createDefaultToolParams("hsl"),
+  balance: 15,
+  shadows: { hue: 210, saturation: 30 },
+});
+const cropOut = spatialMod.applyCrop(plate, {
+  ...opticsToolsMetaMod.createDefaultToolParams("crop"),
+  x: 0.1,
+  y: 0.1,
+  width: 0.75,
+  height: 0.75,
+  straightenDeg: 4,
+});
+const perspOut = spatialMod.applyPerspective(plate, {
+  ...opticsToolsMetaMod.createDefaultToolParams("perspective"),
+  vertical: 22,
+  horizontal: -12,
+});
+const expandOut = spatialMod.applyExpand(plate, {
+  top: 12,
+  right: 12,
+  bottom: 12,
+  left: 12,
+  fillMode: "smart",
+});
+const selOut = localMod.applySelectivePoints(plate, opticsToolsMetaMod.createDefaultToolParams("selective"));
+const brushOut = localMod.applyBrushTool(plate, {
+  ...opticsToolsMetaMod.createDefaultToolParams("brush"),
+  strokes: [{ id: "bs1", mode: "dodge-burn", strength: 10, radius: 0.25, points: [{ x: 0.5, y: 0.5 }] }],
+});
+const healOut = localMod.applyHealing(plate, {
+  brushSize: 20,
+  strokes: [{ id: "hs1", radius: 0.2, points: [{ x: 0.45, y: 0.45 }], seed: 3 }],
+});
+const blurOut = fxMod.applyLensBlur(plate, opticsToolsMetaMod.createDefaultToolParams("lens-blur"));
+const vigOut = fxMod.applyVignette(plate, opticsToolsMetaMod.createDefaultToolParams("vignette"));
+const hdrOut = creativeMod.applyHdrScape(plate, opticsToolsMetaMod.createDefaultToolParams("hdr-scape"));
+const tcOut = creativeMod.applyTonalContrast(plate, opticsToolsMetaMod.createDefaultToolParams("tonal-contrast"));
+const filmOut = creativeMod.applyGrainyFilm(plate, opticsToolsMetaMod.createDefaultToolParams("grainy-film"));
+const retroOut = creativeMod.applyRetrolux(plate, opticsToolsMetaMod.createDefaultToolParams("retrolux"));
+const noirOut = creativeMod.applyNoir(plate, opticsToolsMetaMod.createDefaultToolParams("noir"));
+const portOut = creativeMod.applyPortrait(plate, opticsToolsMetaMod.createDefaultToolParams("portrait"));
+const maskOut = localMod.blendWithLayerMask(
+  plate,
+  detOut,
+  {
+    enabled: true,
+    invert: true,
+    baseAlpha: 0,
+    strokes: [{ id: "m1", points: [{ x: 0.5, y: 0.5 }], radius: 0.35, feather: 0.7, strength: 1 }],
+  },
+  90,
+  false,
+);
+
+const allValid = [
+  detOut, crvOut, wbOut, hslOut, cropOut, perspOut, expandOut,
+  selOut, brushOut, healOut, blurOut, vigOut, hdrOut, tcOut,
+  filmOut, retroOut, noirOut, portOut, maskOut,
+].every((b) => b.width >= 4 && b.height >= 4 && b.data.length === b.width * b.height * 4 && !Number.isNaN(b.data[0]));
+
+assert(allValid && expandOut.width > plate.width && cropOut.width < plate.width, "All Optics tonal, spatial, U-Point, healing, bokeh, film, and inverted mask processors produce valid pixel buffers");
 
 setStubPro(false);
 

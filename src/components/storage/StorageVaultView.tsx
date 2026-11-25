@@ -72,6 +72,7 @@ const SPACES: ReadonlyArray<{
 }> = [
   { id: "all", label: "All files", icon: LayoutGrid },
   { id: "videos", label: "Videos & Exports", icon: Film },
+  { id: "images", label: "Photos & Optics", icon: ImageIcon },
   { id: "audio", label: "Podcast & Audio", icon: Music },
   { id: "documents", label: "Notes & Docs", icon: NotebookPen },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
@@ -105,6 +106,7 @@ function VaultKindIcon({ kind, className }: { kind: VaultItemKind; className?: s
 function provenanceLabel(item: VaultItem): string {
   const src = item.metadata.sourceNodeId;
   if (src === "dev.nexus.cinema") return "Cinema";
+  if (src === "dev.nexus.optics") return "Optics";
   if (src === "dev.nexus.studio") return "Studio";
   return kindLabel(item.kind);
 }
@@ -127,6 +129,7 @@ export function StorageVaultView({
   connectorAvailability,
   onOpenCinemaWithItem,
   onOpenStudioWithItem,
+  onOpenOpticsWithItem,
   onOpenConnections,
 }: {
   initialItemId?: string | null;
@@ -135,6 +138,7 @@ export function StorageVaultView({
   connectorAvailability?: Record<string, { connectable: boolean; missing: string[] }>;
   onOpenCinemaWithItem?: (itemId: string) => void;
   onOpenStudioWithItem?: (itemId: string) => void;
+  onOpenOpticsWithItem?: (itemId: string) => void;
   onOpenConnections?: (connectorId: string) => void;
 }) {
   const vault = useVault();
@@ -249,6 +253,13 @@ export function StorageVaultView({
     switch (action.id) {
       case "core.social.publish":
         setPublishItem(item);
+        return;
+      case "dev.nexus.optics.open":
+        if (onOpenOpticsWithItem) {
+          onOpenOpticsWithItem(item.id);
+        } else {
+          setNotice("Switch to Optics in your workspace menu to edit this photograph.");
+        }
         return;
       case "dev.nexus.cinema.open":
         if (onOpenCinemaWithItem) {

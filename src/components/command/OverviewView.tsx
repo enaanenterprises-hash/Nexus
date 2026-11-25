@@ -85,6 +85,7 @@ export function OverviewView({
   onConnections,
   onOpenCinemaWithVaultItem,
   onOpenStudioWithVaultItem,
+  onOpenOpticsWithVaultItem,
 }: {
   command: CommandController;
   expandRequest?: { widgetId: string; itemId?: string | null; serial: number } | null;
@@ -92,6 +93,7 @@ export function OverviewView({
   onConnections: (connectorId?: string) => void;
   onOpenCinemaWithVaultItem?: (itemId: string) => void;
   onOpenStudioWithVaultItem?: (itemId: string) => void;
+  onOpenOpticsWithVaultItem?: (itemId: string) => void;
 }) {
   const overviewIds = command.state?.overview;
   const ids = useMemo(() => overviewIds ?? [], [overviewIds]);
@@ -338,6 +340,7 @@ export function OverviewView({
             onConnections={onConnections}
             onOpenCinemaWithVaultItem={onOpenCinemaWithVaultItem}
             onOpenStudioWithVaultItem={onOpenStudioWithVaultItem}
+            onOpenOpticsWithVaultItem={onOpenOpticsWithVaultItem}
           />
         </div>
       ) : (
@@ -378,6 +381,7 @@ export function OverviewView({
                   onConnections={onConnections}
                   onOpenCinemaWithVaultItem={onOpenCinemaWithVaultItem}
                   onOpenStudioWithVaultItem={onOpenStudioWithVaultItem}
+                  onOpenOpticsWithVaultItem={onOpenOpticsWithVaultItem}
                 />
               </WidgetSlotDragProvider>
             );
@@ -524,6 +528,7 @@ function WidgetSlot({
   onConnections,
   onOpenCinemaWithVaultItem,
   onOpenStudioWithVaultItem,
+  onOpenOpticsWithVaultItem,
 }: {
   id: string;
   style?: CSSProperties;
@@ -539,6 +544,7 @@ function WidgetSlot({
   onConnections: (connectorId?: string) => void;
   onOpenCinemaWithVaultItem?: (itemId: string) => void;
   onOpenStudioWithVaultItem?: (itemId: string) => void;
+  onOpenOpticsWithVaultItem?: (itemId: string) => void;
 }) {
   const props = { command, expanded, onExpand, onCollapse, onRemove, onConnections, style };
   switch (id) {
@@ -554,6 +560,7 @@ function WidgetSlot({
           onConnections={onConnections}
           onOpenCinemaWithItem={onOpenCinemaWithVaultItem}
           onOpenStudioWithItem={onOpenStudioWithVaultItem}
+          onOpenOpticsWithItem={onOpenOpticsWithVaultItem}
           style={style}
         />
       );

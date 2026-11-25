@@ -2,6 +2,7 @@ import "server-only"
 import { contentCapability, type ContentAction, type KnownContentKind } from "@/lib/extensions/content"
 import { cinemaProjectProvider } from "@/lib/cinema/content-provider"
 import { commandContentProviders } from "@/lib/command/content-provider"
+import { opticsProjectProvider } from "@/lib/optics/content-provider"
 import { researchSourceProvider } from "@/lib/research/content-provider"
 import { studioRecordingProvider } from "@/lib/studio/content-provider"
 import { json, jsonError, libraryFailure, requireLibraryUser } from "@/lib/research/route-helpers"
@@ -12,6 +13,7 @@ const PROVIDERS: { [K in KnownContentKind]: ContentProvider<K> } = {
   "research.source": researchSourceProvider,
   "studio.recording": studioRecordingProvider,
   "cinema.project": cinemaProjectProvider,
+  "optics.project": opticsProjectProvider,
   ...commandContentProviders,
 }
 

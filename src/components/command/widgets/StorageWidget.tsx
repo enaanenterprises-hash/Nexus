@@ -44,6 +44,7 @@ export function StorageWidget({
   onConnections,
   onOpenCinemaWithItem,
   onOpenStudioWithItem,
+  onOpenOpticsWithItem,
   style,
 }: {
   command: CommandController;
@@ -55,6 +56,7 @@ export function StorageWidget({
   onConnections?: (connectorId?: string) => void;
   onOpenCinemaWithItem?: (itemId: string) => void;
   onOpenStudioWithItem?: (itemId: string) => void;
+  onOpenOpticsWithItem?: (itemId: string) => void;
   style?: CSSProperties;
 }) {
   const vault = useVault();
@@ -147,6 +149,7 @@ export function StorageWidget({
           connectorAvailability={command.state?.availability}
           onOpenCinemaWithItem={onOpenCinemaWithItem}
           onOpenStudioWithItem={onOpenStudioWithItem}
+          onOpenOpticsWithItem={onOpenOpticsWithItem}
           onOpenConnections={(connectorId) => onConnections?.(connectorId)}
         />
       ) : (

@@ -32,6 +32,15 @@ const BUILTIN_ACTIONS: readonly VaultWorkflowAction[] = [
     emphasis: "gold",
   },
   {
+    id: "dev.nexus.optics.open",
+    label: "Edit in Optics",
+    description: "Develop, retouch, and grade non-destructively in Nexus Optics",
+    group: "open",
+    kinds: ["image"],
+    priority: 15,
+    emphasis: "default",
+  },
+  {
     id: "dev.nexus.cinema.open",
     label: "Open in Cinema",
     description: "Send directly to your active Cinema video timeline",
