@@ -172,7 +172,7 @@ export function CommandView({
         <div className="flex min-w-0 items-baseline gap-2.5">
           <h2
             suppressHydrationWarning
-            className="font-editorial truncate text-[1.12rem] leading-none font-normal tracking-[-0.018em] text-foreground sm:text-[1.22rem]"
+            className="font-editorial truncate text-[1.12rem] leading-none font-medium tracking-[-0.018em] text-foreground sm:text-[1.22rem]"
           >
             {activeGreeting}
           </h2>
@@ -201,12 +201,12 @@ export function CommandView({
               >
                 <span>{t.label}</span>
                 {t.id === "automations" && enabledAutomations > 0 ? (
-                  <span className="rounded-full bg-current/15 px-1.5 py-px text-[10px] leading-none tabular-nums">
+                  <span className="rounded-full bg-current/15 px-1.5 py-px font-mono text-[10px] leading-none tabular-nums">
                     {enabledAutomations}
                   </span>
                 ) : null}
                 {t.id === "connections" && state?.connections.length ? (
-                  <span className="rounded-full bg-current/15 px-1.5 py-px text-[10px] leading-none tabular-nums">
+                  <span className="rounded-full bg-current/15 px-1.5 py-px font-mono text-[10px] leading-none tabular-nums">
                     {state.connections.length}
                   </span>
                 ) : null}

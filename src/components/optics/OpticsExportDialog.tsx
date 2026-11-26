@@ -119,7 +119,7 @@ export function OpticsExportDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg rounded-[22px] border border-border bg-card/95 p-6 text-card-foreground shadow-2xl backdrop-blur-2xl">
         <DialogHeader>
-          <DialogTitle className="font-editorial text-[1.45rem] font-normal tracking-[-0.02em]">
+          <DialogTitle className="font-editorial text-[1.45rem] font-medium tracking-[-0.02em]">
             Develop &amp; Export Master
           </DialogTitle>
           <DialogDescription className="text-[13px] text-muted-foreground">

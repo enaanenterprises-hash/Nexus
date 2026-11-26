@@ -368,7 +368,7 @@ export function WorkflowsShowcase() {
       <div className="mx-auto max-w-[1280px]">
         {/* Compact Editorial Header Row */}
         <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
-          <h2 className="font-editorial text-[clamp(2.2rem,4vw,3.4rem)] font-normal leading-[1.06] tracking-[-0.032em] text-[#f5f5f7] [text-wrap:balance]">
+          <h2 className="font-editorial text-[clamp(2.2rem,4vw,3.4rem)] font-medium leading-[1.06] tracking-[-0.032em] text-[#f5f5f7] [text-wrap:balance]">
             One flow, every craft
           </h2>
 
@@ -410,7 +410,7 @@ export function WorkflowsShowcase() {
         >
           {/* Minimal Top Bar */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] bg-[#13141a] px-5 py-3.5">
-            <p key={current.id} className="lp-stage-panel text-[13.5px] text-[#d1d1d6]">
+            <p key={current.id} className="lp-stage-panel font-literary text-[14.5px] text-[#d1d1d6]">
               {current.headline}
             </p>
             <span

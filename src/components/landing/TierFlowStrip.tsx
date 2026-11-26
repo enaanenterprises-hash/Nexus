@@ -95,7 +95,7 @@ export function TierFlowStrip({
                 {LAYER_TITLE[hop.to]}
               </span>
             </p>
-            <p className="mt-1 text-[11px] leading-[1.35] text-[#e5e5ea] sm:text-[13px] sm:leading-snug">
+            <p className="font-literary mt-1 text-[11.5px] leading-[1.35] text-[#e5e5ea] sm:text-[13.5px] sm:leading-snug">
               {hop.signal}
             </p>
           </div>

@@ -536,7 +536,7 @@ export function SetupExperience({
 
             <DialogHeader className="gap-1.5 px-4 pt-5 pb-3 text-left sm:px-8 sm:pt-7">
               <DialogTitle
-                className="setup-title font-normal"
+                className="setup-title font-medium"
                 data-launching={step === "name" && nameTransition === "launching" ? "true" : "false"}
               >
                 {displayTitle}

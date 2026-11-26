@@ -1661,7 +1661,7 @@ export function SingularityStage() {
         {/* Clean Editorial Header + Borderless 3-Lens Optical Conduit */}
         <div className="grid grid-cols-1 items-center gap-8 lg:grid-cols-12 lg:gap-10">
           <div className="lg:col-span-5">
-            <h2 className="font-editorial text-[clamp(2.55rem,5.1vw,4.35rem)] leading-[1.01] font-normal tracking-[-0.038em] text-[#f5f5f7]">
+            <h2 className="font-editorial text-[clamp(2.55rem,5.1vw,4.35rem)] leading-[1.01] font-medium tracking-[-0.038em] text-[#f5f5f7]">
               Build unified workflows
             </h2>
             <p className="font-literary mt-5 max-w-[40ch] text-[17px] leading-[1.6] text-[#b4b4bc] sm:text-[18.5px]">

@@ -14,7 +14,7 @@ export default function WaitlistPage() {
       <div className="landing-enter w-full max-w-md text-center">
         <p className="site-kicker">Early Access</p>
         <h1 className="landing-title">Join the Nexus waitlist</h1>
-        <p className="mt-3 text-[15px] text-[color:var(--land-muted)]">
+        <p className="font-literary mt-3 text-[16px] leading-[1.6] text-[color:var(--land-muted)]">
           We are onboarding early users in waves to ensure system stability and high-touch support.
           Reserve your spot on the network today.
         </p>

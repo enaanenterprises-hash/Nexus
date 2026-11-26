@@ -298,7 +298,7 @@ export function NeuralNetworkPreview({
             {!conversation ? (
               <div className="flex flex-col items-center gap-1">
                 <p
-                  className={`font-editorial text-[clamp(1.7rem,2.8vw,2.35rem)] leading-[1.1] font-normal tracking-[-0.025em] ${
+                  className={`font-editorial text-[clamp(1.7rem,2.8vw,2.35rem)] leading-[1.1] font-medium tracking-[-0.025em] ${
                     isLight ? "text-[#0e0f12]" : "text-[#f5f5f7]"
                   }`}
                 >

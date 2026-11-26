@@ -16,7 +16,7 @@ async function VerifyBody() {
   return (
     <div className="landing-enter w-full max-w-sm text-center">
       <h1 className="landing-title">Check your email</h1>
-      <p className="mt-3 text-[15px] leading-relaxed text-[color:var(--land-muted)]">
+      <p className="font-literary mt-3 text-[16px] leading-[1.6] text-[color:var(--land-muted)]">
         We sent a sign-in link. It expires in 24 hours. Open it on this device to reach your
         dashboard.
       </p>

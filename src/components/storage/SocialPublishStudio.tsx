@@ -429,7 +429,7 @@ function SocialPublishContent({
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <DialogTitle className="truncate font-sans text-[15px] font-medium tracking-[-0.015em] text-foreground">
+                <DialogTitle className="font-editorial truncate text-[1.1rem] font-medium tracking-[-0.02em] text-foreground">
                   Publish to Social
                 </DialogTitle>
                 <Badge

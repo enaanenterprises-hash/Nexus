@@ -47,7 +47,7 @@ export function AutomationsView({
     <div className="cmd-automations mx-auto">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="max-w-[42rem]">
-          <h2 className="font-editorial text-[1.75rem] leading-tight font-normal tracking-[-0.02em] text-foreground">
+          <h2 className="font-editorial text-[1.75rem] leading-tight font-medium tracking-[-0.02em] text-foreground">
             Deterministic automations
           </h2>
           <p className="mt-1.5 text-[14px] leading-relaxed text-[color:var(--land-muted)]">
@@ -58,11 +58,11 @@ export function AutomationsView({
         </div>
 
         <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 tabular-nums">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 font-mono tabular-nums">
             <span className="size-1.5 rounded-full bg-[color:var(--land-gold)]" />
             {enabledCount} of {state.recipes.length} active
           </span>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 tabular-nums">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 font-mono tabular-nums">
             {state.runs.length} recorded run{state.runs.length === 1 ? "" : "s"}
           </span>
         </div>
@@ -175,7 +175,7 @@ export function AutomationsView({
 
       <section className="mt-12">
         <div className="flex items-center justify-between gap-4">
-          <h3 className="font-editorial text-[1.25rem] font-normal text-foreground">Run log</h3>
+          <h3 className="font-editorial text-[1.25rem] font-medium text-foreground">Run log</h3>
           {!state.focus && onStartQuickFocus ? (
             <Button
               type="button"

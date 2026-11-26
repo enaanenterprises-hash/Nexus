@@ -204,7 +204,7 @@ export function OpticsImportModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl overflow-hidden rounded-[22px] border border-border bg-card/95 p-0 text-card-foreground shadow-2xl backdrop-blur-2xl">
         <DialogHeader className="border-b border-border/70 px-6 pt-5 pb-4">
-          <DialogTitle className="font-editorial text-[1.45rem] font-normal tracking-[-0.02em]">
+          <DialogTitle className="font-editorial text-[1.45rem] font-medium tracking-[-0.02em]">
             {mode === "overlay" ? "Select Double Exposure Plate" : "Open Photograph in Optics"}
           </DialogTitle>
           <DialogDescription className="text-[13px] text-muted-foreground">

@@ -607,8 +607,9 @@ button:hover .nexus-flat-mark .nexus-mark-rotor {
 }
 
 .landing-line {
+  font-family: var(--font-display);
   font-size: clamp(2.25rem, 4.4vw, 4.5rem);
-  font-weight: 300;
+  font-weight: 500;
   line-height: 1.06;
   letter-spacing: -0.035em;
   color: var(--land-ink);
@@ -626,10 +627,11 @@ button:hover .nexus-flat-mark .nexus-mark-rotor {
 }
 
 .landing-title {
+  font-family: var(--font-display);
   font-size: clamp(1.75rem, 3.4vw, 2.5rem);
-  font-weight: 600;
-  line-height: 1.1;
-  letter-spacing: -0.03em;
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.032em;
 }
 
 .landing-signup {
@@ -849,10 +851,11 @@ button.landing-signup {
 }
 
 .site-display {
+  font-family: var(--font-display);
   max-width: 16ch;
   margin: 0;
   font-size: clamp(2.15rem, 4.6vw, 3.65rem);
-  font-weight: 300;
+  font-weight: 500;
   line-height: 1.06;
   letter-spacing: -0.035em;
   color: var(--land-ink);
@@ -899,9 +902,11 @@ button.landing-signup {
 }
 
 .vis-temp {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
   margin: 0.35rem 0 0;
   font-size: clamp(4rem, 12vw, 5.4rem);
-  font-weight: 300;
+  font-weight: 500;
   line-height: 0.9;
   letter-spacing: -0.045em;
   color: var(--land-gold-soft);
@@ -1166,6 +1171,7 @@ button.landing-signup {
 }
 
 .site-lede {
+  font-family: var(--font-serif);
   max-width: 40rem;
   margin-top: 1.6rem;
   color: var(--land-ink);
@@ -1189,6 +1195,7 @@ button.landing-signup {
 }
 
 .site-prose h2 {
+  font-family: var(--font-display);
   margin: 3.1rem 0 0;
   color: var(--land-ink);
   font-size: 1.35rem;
@@ -4226,6 +4233,7 @@ textarea.cmd-field {
 }
 
 .cmd-gmail-time {
+  font-family: var(--font-mono-stack);
   color: var(--land-faint);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
@@ -4255,8 +4263,10 @@ textarea.cmd-field {
 }
 
 .cmd-wx-temp {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
   font-size: 2.4rem;
-  font-weight: 300;
+  font-weight: 500;
   letter-spacing: -0.04em;
   line-height: 1;
   color: var(--land-ink);
@@ -4291,6 +4301,7 @@ textarea.cmd-field {
 }
 
 .cmd-cal-time {
+  font-family: var(--font-mono-stack);
   width: 4.6rem;
   flex: none;
   color: var(--land-muted);
@@ -4307,8 +4318,9 @@ textarea.cmd-field {
 }
 
 .cmd-crypto-price {
+  font-family: var(--font-display);
   font-size: 1.35rem;
-  font-weight: 300;
+  font-weight: 500;
   letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
 }
@@ -4336,8 +4348,10 @@ textarea.cmd-field {
 }
 
 .cmd-run-distance {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
   font-size: 2rem;
-  font-weight: 300;
+  font-weight: 500;
   letter-spacing: -0.04em;
   color: var(--land-ink);
 }
@@ -4437,9 +4451,10 @@ textarea.cmd-field {
 }
 
 .land-section-title {
+  font-family: var(--font-display);
   margin: 0.75rem 0 1rem;
   font-size: clamp(2rem, 4vw, 3.25rem);
-  font-weight: 300;
+  font-weight: 500;
   line-height: 1.1;
   letter-spacing: -0.035em;
   color: var(--land-ink);
@@ -5197,6 +5212,7 @@ textarea.cmd-field {
 }
 
 .vis-transcript-text {
+  font-family: var(--font-serif);
   margin: 0;
   font-size: 0.95rem;
   line-height: 1.6;
@@ -7337,8 +7353,9 @@ html[data-dash-theme="light"] .setup-card {
 }
 
 .setup-subtitle {
-  font-size: 13.5px;
-  line-height: 1.45;
+  font-family: var(--font-serif);
+  font-size: 14.5px;
+  line-height: 1.5;
   color: var(--setup-muted);
 }
 
@@ -7453,7 +7470,7 @@ html[data-dash-theme="light"] .setup-card {
   border-radius: 6px;
   border: 1px solid var(--setup-border);
   background: var(--setup-surface-subtle);
-  font-family: inherit;
+  font-family: var(--font-mono-stack);
   font-size: 11px;
   font-weight: 500;
   color: var(--setup-muted);

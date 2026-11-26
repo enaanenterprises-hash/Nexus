@@ -1167,10 +1167,10 @@ export function NodePlatformSection() {
       <div className="mx-auto grid max-w-[1280px] grid-cols-1 items-center gap-10 lg:grid-cols-12 lg:gap-12">
         {/* Left: Editorial headline + Live Node Switcher Rail */}
         <div className="lg:col-span-4">
-          <h2 className="font-editorial text-[clamp(2.2rem,3.8vw,3.3rem)] font-normal leading-[1.06] tracking-[-0.032em] text-[#f5f5f7] [text-wrap:balance]">
+          <h2 className="font-editorial text-[clamp(2.2rem,3.8vw,3.3rem)] font-medium leading-[1.06] tracking-[-0.032em] text-[#f5f5f7] [text-wrap:balance]">
             Full apps, snapped into one bus
           </h2>
-          <p className="mt-4 max-w-[36ch] text-[15.5px] leading-[1.6] text-[#a1a1a6]">
+          <p className="font-literary mt-4 max-w-[36ch] text-[16.5px] leading-[1.6] text-[#a1a1a6]">
             Like extensions in a code editor—each Node is a complete application built on one
             permission-scoped API. Preview the two creative Nodes live in Nexus today.
           </p>

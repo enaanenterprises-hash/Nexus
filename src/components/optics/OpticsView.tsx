@@ -789,7 +789,7 @@ export function OpticsView({
             }
             onBlur={() => void persistProject(projectRef.current)}
             aria-label="Optics plate title"
-            className="h-8 w-28 min-w-0 border-0 bg-transparent px-2 text-[13px] font-medium text-foreground shadow-none focus-visible:ring-1 sm:w-44"
+            className="font-heading h-8 w-28 min-w-0 border-0 bg-transparent px-2 text-[13.5px] font-medium tracking-[-0.015em] text-foreground shadow-none focus-visible:ring-1 sm:w-44"
           />
 
           <Tooltip>
@@ -1357,7 +1357,7 @@ export function OpticsView({
       <Sheet open={projectsOpen} onOpenChange={setProjectsOpen}>
         <SheetContent side="left" className="w-80 border-r border-border bg-card/95 p-0 backdrop-blur-2xl">
           <SheetHeader className="border-b border-border/70 px-4 py-3.5">
-            <SheetTitle className="font-editorial text-[1.2rem] font-normal">
+            <SheetTitle className="font-editorial text-[1.2rem] font-medium">
               Darkroom Studies
             </SheetTitle>
           </SheetHeader>

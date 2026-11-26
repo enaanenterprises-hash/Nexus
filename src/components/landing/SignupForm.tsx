@@ -46,7 +46,7 @@ export async function SignupForm({
   return (
     <div className="landing-enter w-full max-w-sm text-center">
       <h1 className="landing-title">Create your Nexus</h1>
-      <p className="mt-3 text-[15px] text-[color:var(--land-muted)]">
+      <p className="font-literary mt-3 text-[16px] leading-[1.6] text-[color:var(--land-muted)]">
         Free to start. Two extensions included. Sign in with Google, or get a magic link by email.
         No password.
       </p>

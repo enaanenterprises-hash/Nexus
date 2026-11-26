@@ -561,7 +561,7 @@ function buildEmailSrcDoc(rawHtml: string): string {
     `<meta charset="utf-8" />`,
     `<base target="_blank" />`,
     `<style>`,
-    `html,body{margin:0;padding:18px 22px 28px;background:#ffffff;color:#1f2328;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.55;overflow-wrap:anywhere;-webkit-font-smoothing:antialiased;}`,
+    `html,body{margin:0;padding:18px 22px 28px;background:#ffffff;color:#1f2328;font-family:"General Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.55;overflow-wrap:anywhere;-webkit-font-smoothing:antialiased;}`,
     `img{max-width:100%;}`,
     `img:not([height]){height:auto;}`,
     `a{color:#0b57d0;}`,
@@ -675,7 +675,7 @@ export function RichMailDialog({
     <Dialog open onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="gap-4 border border-border bg-popover p-5 text-popover-foreground shadow-2xl ring-0 sm:max-w-[660px] sm:p-6">
         <DialogHeader>
-          <DialogTitle className="font-sans text-[15px] font-medium">{title}</DialogTitle>
+          <DialogTitle className="font-heading text-[1.05rem] font-medium tracking-[-0.015em]">{title}</DialogTitle>
         </DialogHeader>
 
         {canSend ? (

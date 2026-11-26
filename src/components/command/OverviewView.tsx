@@ -449,7 +449,7 @@ export function OverviewView({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="gap-0 overflow-hidden rounded-3xl border border-border bg-popover p-0 text-popover-foreground shadow-2xl ring-0 sm:max-w-[940px]">
           <DialogHeader className="border-b border-border px-6 pt-5 pb-4">
-            <DialogTitle className="font-editorial text-2xl font-normal tracking-tight">
+            <DialogTitle className="font-editorial text-2xl font-medium tracking-tight">
               Curate your Command board
             </DialogTitle>
             <DialogDescription className="text-[13px]">

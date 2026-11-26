@@ -65,7 +65,7 @@ export function TodayPanel({ tasks, threads, touched, organized, onToggle }: Pro
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-1">
-            <p className="text-[17px] font-medium leading-snug tracking-[-0.015em]">
+            <p className="font-editorial text-[18px] font-medium leading-snug tracking-[-0.02em]">
               {focus.title}
             </p>
             <p className="text-[13px] text-muted-foreground">{focus.note}</p>

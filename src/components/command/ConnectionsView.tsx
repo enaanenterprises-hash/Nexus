@@ -68,7 +68,7 @@ export function ConnectionsView({
     <div className="cmd-connections mx-auto">
       <header className="space-y-4">
         <div className="max-w-[42rem]">
-          <h2 className="font-editorial text-[1.75rem] leading-tight font-normal tracking-[-0.02em] text-foreground">
+          <h2 className="font-editorial text-[1.75rem] leading-tight font-medium tracking-[-0.02em] text-foreground">
             Connected services
           </h2>
           <p className="mt-1.5 text-[14px] leading-relaxed text-[color:var(--land-muted)]">

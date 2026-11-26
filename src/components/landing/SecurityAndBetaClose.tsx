@@ -38,7 +38,7 @@ export function SecurityAndBetaClose() {
         aria-label="Security"
       >
         <div className="mx-auto flex max-w-[880px] flex-col items-center text-center">
-          <h2 className="font-editorial text-[clamp(1.95rem,4.1vw,3.35rem)] font-normal leading-[1.22] tracking-[-0.034em] text-[#f5f5f7] [text-wrap:balance]">
+          <h2 className="font-editorial text-[clamp(1.95rem,4.1vw,3.35rem)] font-medium leading-[1.22] tracking-[-0.034em] text-[#f5f5f7] [text-wrap:balance]">
             <span>Private by architecture:</span>
 
             <button
@@ -97,7 +97,7 @@ export function SecurityAndBetaClose() {
           {/* Interactive 1-Line Specification Caption */}
           <p
             key={SEALS[activeSeal]!.id}
-            className="lp-stage-panel mt-8 min-h-[24px] max-w-[56ch] text-[14.5px] leading-[1.55] text-[#a1a1a6]"
+            className="lp-stage-panel font-literary mt-8 min-h-[24px] max-w-[56ch] text-[16px] leading-[1.55] text-[#a1a1a6]"
           >
             {SEALS[activeSeal]!.caption}
           </p>
@@ -136,10 +136,10 @@ export function SecurityAndBetaClose() {
         </div>
 
         <div className="relative z-10 mx-auto flex max-w-[580px] flex-col items-center px-6 pt-4 text-center sm:px-10">
-          <h2 className="font-editorial text-[clamp(2.35rem,4.6vw,3.65rem)] font-normal leading-[1.06] tracking-[-0.035em] text-[#f5f5f7] [text-wrap:balance]">
+          <h2 className="font-editorial text-[clamp(2.35rem,4.6vw,3.65rem)] font-medium leading-[1.06] tracking-[-0.035em] text-[#f5f5f7] [text-wrap:balance]">
             Run your day from one environment
           </h2>
-          <p className="mt-4 text-[15.5px] leading-[1.6] text-[#a1a1a6]">
+          <p className="font-literary mt-4 text-[17px] leading-[1.6] text-[#a1a1a6]">
             Free to start in open beta. No card required.
           </p>
 

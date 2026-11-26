@@ -78,7 +78,7 @@ export function GalleryFooter() {
             <Link
               key={link.href}
               href={link.href}
-              className="gal-link-underline font-editorial px-4 py-1 text-[clamp(2rem,4.3vw,3.35rem)] font-normal leading-[1.15] tracking-[-0.032em] text-[#0e0f12] transition-colors duration-200 hover:text-[#52545d] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0e0f12]"
+              className="gal-link-underline font-editorial px-4 py-1 text-[clamp(2rem,4.3vw,3.35rem)] font-medium leading-[1.15] tracking-[-0.032em] text-[#0e0f12] transition-colors duration-200 hover:text-[#52545d] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0e0f12]"
             >
               {link.label}
             </Link>
@@ -125,7 +125,7 @@ export function GalleryFooter() {
               className="inline-flex items-center gap-2.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0e0f12]"
             >
               <NexusMark className="h-8 w-8 shrink-0" />
-              <span className="text-[16px] font-semibold tracking-[-0.025em] text-[#0e0f12]">Nexus Atelier</span>
+              <span className="font-editorial text-[16.5px] font-medium tracking-[-0.025em] text-[#0e0f12]">Nexus Atelier</span>
             </Link>
           </div>
 

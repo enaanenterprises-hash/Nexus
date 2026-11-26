@@ -341,7 +341,7 @@ export function LibraryPanel({
       >
         <AlertDialogContent className="border border-border bg-popover text-popover-foreground ring-0 sm:max-w-md">
           <AlertDialogHeader className="place-items-start text-left">
-            <AlertDialogTitle className="font-heading text-xl font-normal">
+            <AlertDialogTitle className="font-heading text-xl font-medium">
               Delete collection “{deleteTarget?.name}”?
             </AlertDialogTitle>
             <AlertDialogDescription>

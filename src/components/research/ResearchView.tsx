@@ -565,7 +565,7 @@ function StartPage({
   return (
     <div className="mx-auto flex w-full max-w-[40rem] flex-col px-6 pb-24 pt-[12vh] sm:px-10">
       <p className="dash-eyebrow">Research · core node</p>
-      <h2 className="mt-3 text-[clamp(1.8rem,3.4vw,2.6rem)] font-light leading-tight tracking-[-0.025em]">
+      <h2 className="font-editorial mt-3 text-[clamp(1.8rem,3.4vw,2.6rem)] font-medium leading-tight tracking-[-0.025em]">
         Search, read, and keep what matters.
       </h2>
       <form

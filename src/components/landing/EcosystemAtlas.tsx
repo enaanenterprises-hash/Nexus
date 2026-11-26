@@ -68,7 +68,7 @@ export function IntegrationsAtlas() {
     >
       <div className="mx-auto max-w-[1280px]">
         <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
-          <h2 className="font-editorial max-w-[20ch] text-[clamp(2.1rem,3.8vw,3.2rem)] font-normal leading-[1.08] tracking-[-0.032em] text-[#f5f5f7] [text-wrap:balance]">
+          <h2 className="font-editorial max-w-[20ch] text-[clamp(2.1rem,3.8vw,3.2rem)] font-medium leading-[1.08] tracking-[-0.032em] text-[#f5f5f7] [text-wrap:balance]">
             Connected today, expanding across your stack
           </h2>
           <div className="flex items-center gap-6 text-[13px] text-[#a1a1a6]">

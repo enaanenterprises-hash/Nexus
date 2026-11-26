@@ -166,7 +166,7 @@ export function HeroStage() {
                   <NexusMark className="h-[20px] w-[20px] sm:h-[22px] sm:w-[22px]" />
                 </span>
                 <span
-                  className={`text-[15.5px] font-semibold tracking-[-0.028em] transition-colors duration-300 ${
+                  className={`font-editorial text-[16px] font-medium tracking-[-0.028em] transition-colors duration-300 ${
                     darkHeader
                       ? "landing-glass-text--dark text-[#ffffff]"
                       : "landing-glass-text--light text-[#09090b]"
@@ -274,7 +274,7 @@ export function HeroStage() {
         />
 
         <div className="relative z-10 mx-auto flex w-full max-w-[820px] flex-col items-center text-center">
-          <h1 className="font-editorial text-[clamp(3.75rem,8.4vw,7.1rem)] font-normal leading-[0.98] tracking-[-0.045em] text-[#0e0f12]">
+          <h1 className="font-editorial text-[clamp(3.75rem,8.4vw,7.1rem)] font-medium leading-[0.98] tracking-[-0.045em] text-[#0e0f12]">
             <span className="gal-line-mask">
               <span className="gal-line-inner gal-line-inner--1">Welcome</span>
             </span>

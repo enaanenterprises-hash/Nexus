@@ -505,7 +505,7 @@ export function StorageVaultView({
           {/* Toolbar */}
           <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-border/80 px-4 py-3 sm:px-5">
             <div className="flex min-w-0 items-center gap-2.5">
-              <h2 className="font-editorial truncate text-[1.35rem] leading-none font-normal tracking-[-0.02em] text-foreground">
+              <h2 className="font-editorial truncate text-[1.35rem] leading-none font-medium tracking-[-0.02em] text-foreground">
                 {folderName}
               </h2>
               <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
@@ -640,7 +640,7 @@ export function StorageVaultView({
                 <div className="flex size-12 items-center justify-center rounded-2xl border border-border bg-muted/40 text-muted-foreground">
                   <Upload className="size-5 text-[color:var(--land-gold)]" />
                 </div>
-                <p className="mt-4 font-editorial text-xl font-normal text-foreground">
+                <p className="mt-4 font-editorial text-xl font-medium text-foreground">
                   {query ? "Nothing matched that filter" : "Your Command Storage is ready"}
                 </p>
                 <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">

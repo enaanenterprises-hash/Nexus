@@ -30,10 +30,10 @@ export function ArchitecturePrinciple() {
       <div className="mx-auto max-w-[1280px]">
         {/* Centered Monumental Header + Segmented Mode Switch */}
         <div className="mx-auto max-w-[700px] text-center">
-          <h2 className="font-editorial text-[clamp(2.4rem,4.8vw,4.15rem)] font-normal leading-[1.04] tracking-[-0.036em] text-[#f5f5f7] [text-wrap:balance]">
+          <h2 className="font-editorial text-[clamp(2.4rem,4.8vw,4.15rem)] font-medium leading-[1.04] tracking-[-0.036em] text-[#f5f5f7] [text-wrap:balance]">
             Intelligence optional. Foundation unbreakable.
           </h2>
-          <p className="mt-4 text-[16px] leading-[1.6] text-[#a1a1a6]">
+          <p className="font-literary mt-4 text-[17.5px] leading-[1.6] text-[#a1a1a6]">
             Pause Network AI—Command and every Node never flinch.
           </p>
 
@@ -91,7 +91,7 @@ export function ArchitecturePrinciple() {
                 Active on demand
               </span>
             ) : (
-              <span className="text-[11.5px] font-medium text-[#8e8e95] tabular-nums sm:text-[12.5px]">
+              <span className="font-mono text-[11.5px] font-medium text-[#8e8e95] tabular-nums sm:text-[12.5px]">
                 Paused · $0 AI cost
               </span>
             )}
@@ -100,7 +100,7 @@ export function ArchitecturePrinciple() {
           {/* ─── Middle Horizon Labels: Command (Always Platinum-Silver) ─── */}
           <div className="pointer-events-none absolute inset-x-0 top-[41%] flex items-center justify-between gap-4 px-5 sm:px-8">
             <span className="text-[14px] font-medium text-[#f5f5f7] sm:text-[15px]">Command</span>
-            <span className="inline-flex items-center gap-2 text-[11.5px] font-medium text-[#d1d1d6] tabular-nums sm:text-[12.5px]">
+            <span className="inline-flex items-center gap-2 font-mono text-[11.5px] font-medium text-[#d1d1d6] tabular-nums sm:text-[12.5px]">
               <span className="h-1.5 w-1.5 rounded-full bg-[#22c55e]" aria-hidden="true" />
               Always running · $0
             </span>

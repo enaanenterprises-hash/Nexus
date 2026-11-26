@@ -355,10 +355,10 @@ export function NodesView({
       {/* Top Liquid Glass Header */}
       <header className="nodes-header flex shrink-0 flex-wrap items-center justify-between gap-3 py-2.5 pr-4 pl-[66px] sm:pr-6">
         <div className="flex min-w-0 items-baseline gap-3">
-          <h2 className="font-editorial text-[1.2rem] leading-none font-normal tracking-[-0.018em] text-foreground sm:text-[1.3rem]">
+          <h2 className="font-editorial text-[1.2rem] leading-none font-medium tracking-[-0.018em] text-foreground sm:text-[1.3rem]">
             Modular nodes
           </h2>
-          <span className="hidden text-[12px] tabular-nums text-muted-foreground sm:inline">
+          <span className="hidden font-mono text-[12px] tabular-nums text-muted-foreground sm:inline">
             {activeSlots.length} of {maxSockets} {entitlement.isPro ? "Pro" : "free"} sockets active
           </span>
         </div>
@@ -444,7 +444,7 @@ export function NodesView({
             <div className="nodes-constellation-stage flex flex-col justify-between p-5 sm:p-6">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h3 className="font-editorial text-[1.35rem] leading-tight font-normal text-foreground">
+                  <h3 className="font-editorial text-[1.35rem] leading-tight font-medium text-foreground">
                     Socket topology
                   </h3>
                   <p className="mt-1 text-[13px] text-muted-foreground">
@@ -570,7 +570,7 @@ export function NodesView({
                                 {inspectedSlot.label} · Connected
                               </span>
                             </div>
-                            <h3 className="font-editorial text-[1.45rem] leading-tight font-normal text-foreground">
+                            <h3 className="font-editorial text-[1.45rem] leading-tight font-medium text-foreground">
                               {inspectedExt.manifest.name}
                             </h3>
                           </div>
@@ -668,7 +668,7 @@ export function NodesView({
                         <Plus className="size-3.5 text-[color:var(--land-gold)]" />
                         <span>{inspectedSlot.label} · Open socket</span>
                       </div>
-                      <h3 className="font-editorial text-[1.45rem] leading-tight font-normal text-foreground">
+                      <h3 className="font-editorial text-[1.45rem] leading-tight font-medium text-foreground">
                         Ready for a node
                       </h3>
                       <p className="text-[13.5px] leading-relaxed text-muted-foreground">
@@ -719,7 +719,7 @@ export function NodesView({
                         <Lock className="size-3.5" />
                         <span>{inspectedSlot.label} · Pro socket</span>
                       </div>
-                      <h3 className="font-editorial text-[1.45rem] leading-tight font-normal text-foreground">
+                      <h3 className="font-editorial text-[1.45rem] leading-tight font-medium text-foreground">
                         Reserved for {placeholderName(inspectedSlot.placeholderKey)}
                       </h3>
                       <p className="text-[13.5px] leading-relaxed text-muted-foreground">
@@ -750,7 +750,7 @@ export function NodesView({
             <div className="nodes-panel-card p-5 sm:p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h3 className="font-editorial text-[1.35rem] leading-tight font-normal text-foreground">
+                  <h3 className="font-editorial text-[1.35rem] leading-tight font-medium text-foreground">
                     Module atelier
                   </h3>
                   <p className="mt-0.5 text-[13px] text-muted-foreground">
@@ -953,7 +953,7 @@ export function NodesView({
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <Activity className="size-4 text-[color:var(--land-gold)]" />
-                    <h3 className="font-editorial text-[1.2rem] font-normal text-foreground">
+                    <h3 className="font-editorial text-[1.2rem] font-medium text-foreground">
                       Live network bus
                     </h3>
                   </div>
@@ -1003,7 +1003,7 @@ export function NodesView({
               {/* Build a Node SDK Starter */}
               <div className="nodes-panel-card flex flex-col gap-3 p-5">
                 <div className="flex items-center justify-between gap-2">
-                  <h3 className="font-editorial text-[1.2rem] font-normal text-foreground">
+                  <h3 className="font-editorial text-[1.2rem] font-medium text-foreground">
                     Build a node
                   </h3>
                   <Button

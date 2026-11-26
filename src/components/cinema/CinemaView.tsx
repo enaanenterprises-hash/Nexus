@@ -2232,7 +2232,7 @@ export function CinemaView({
             }
             onBlur={() => void persistProject(projectRef.current)}
             aria-label="Cinema project title"
-            className="h-7 w-full max-w-[160px] min-w-0 border-0 bg-transparent px-1.5 text-[13.5px] font-medium tracking-[-0.01em] text-foreground shadow-none focus-visible:ring-1 sm:max-w-[210px]"
+            className="font-heading h-7 w-full max-w-[160px] min-w-0 border-0 bg-transparent px-1.5 text-[14px] font-medium tracking-[-0.015em] text-foreground shadow-none focus-visible:ring-1 sm:max-w-[210px]"
           />
 
           <Tooltip>
@@ -2807,7 +2807,7 @@ export function CinemaView({
           className="dark w-[304px] border-white/10 bg-[#08080c] p-0 text-[#f4f4f6] sm:max-w-[340px]"
         >
           <SheetHeader className="border-b border-white/10 px-4 py-3">
-            <SheetTitle className="flex items-center gap-2 text-[14px] font-medium text-[#f4f4f6]">
+            <SheetTitle className="font-heading flex items-center gap-2 text-[15px] font-medium text-[#f4f4f6]">
               <Layers className="size-4 text-[color:var(--cinema-select)]" />
               <span>Projects · {activeFolderName}</span>
             </SheetTitle>

@@ -171,10 +171,10 @@ export function ReaderView({ doc, mode, savedCopy, highlights, canHighlight, foc
           <span>· {minutes} min read</span>
           {savedCopy ? <span className="text-[color:var(--land-gold-soft)]">· Saved copy</span> : null}
         </p>
-        <h1 className="mt-4 text-[clamp(1.7rem,3vw,2.35rem)] font-medium leading-[1.15] tracking-[-0.02em] text-[color:var(--land-ink)]">
+        <h1 className="font-editorial mt-4 text-[clamp(1.7rem,3vw,2.35rem)] font-medium leading-[1.15] tracking-[-0.02em] text-[color:var(--land-ink)]">
           {doc.title}
         </h1>
-        {doc.author ? <p className="mt-3 text-[14.5px] text-[color:var(--land-muted)]">By {doc.author}</p> : null}
+        {doc.author ? <p className="font-literary mt-3 text-[15px] italic text-[color:var(--land-muted)]">By {doc.author}</p> : null}
         <dl className="mt-4 grid gap-1 text-[12px] text-[color:var(--land-faint)]">
           <div className="flex min-w-0 gap-2">
             <dt className="shrink-0">Source</dt>

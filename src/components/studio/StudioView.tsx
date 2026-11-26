@@ -1412,7 +1412,7 @@ export function StudioView({
                   if (tracks.length > 0 || activeId) void persistDraft(tracks, markers);
                 }}
                 aria-label="Recording session title"
-                className="h-8 w-full min-w-0 max-w-[168px] border-0 bg-transparent px-1.5 text-[14px] font-medium tracking-[-0.01em] text-foreground/90 shadow-none hover:text-foreground focus-visible:ring-1 sm:max-w-[204px]"
+                className="font-heading h-8 w-full min-w-0 max-w-[168px] border-0 bg-transparent px-1.5 text-[14.5px] font-medium tracking-[-0.015em] text-foreground/90 shadow-none hover:text-foreground focus-visible:ring-1 sm:max-w-[204px]"
               />
               <Tooltip>
                 <TooltipTrigger
@@ -2323,7 +2323,7 @@ export function StudioView({
           className="dark w-[300px] border-white/10 bg-[#08080b] p-0 text-[#f4f4f6] sm:max-w-[340px]"
         >
           <SheetHeader className="border-b border-white/10 px-4 py-3">
-            <SheetTitle className="text-[14px] font-medium text-[#f4f4f6]">
+            <SheetTitle className="font-heading text-[15px] font-medium text-[#f4f4f6]">
               Sessions · {activeFolderName}
             </SheetTitle>
           </SheetHeader>

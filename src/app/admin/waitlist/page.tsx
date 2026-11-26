@@ -32,7 +32,7 @@ async function WaitlistTable() {
 
   return (
     <main className="min-h-[100svh] bg-[#faf8f2] px-6 py-16 text-[15px] text-[#0e0f12]"><div className="mx-auto max-w-[720px]">
-      <h1 className="font-editorial text-[2rem] tracking-[-0.03em]">Waitlist</h1>
+      <h1 className="font-editorial text-[2rem] font-medium tracking-[-0.03em]">Waitlist</h1>
       <p className="mt-2 text-[#636570]">{problem ?? `${rows.length} signup${rows.length === 1 ? "" : "s"}, newest first.`}</p>
       {rows.length > 0 ? (
         <table className="mt-8 w-full border-collapse text-left">
@@ -46,7 +46,7 @@ async function WaitlistTable() {
             {rows.map((row) => (
               <tr key={row.id} className="border-b border-[#0e0f12]/[0.07]">
                 <td className="py-2.5 pr-4">{row.email}</td>
-                <td className="py-2.5 tabular-nums text-[#636570]">
+                <td className="py-2.5 font-mono tabular-nums text-[#636570]">
                   {new Date(row.createdAt).toISOString().slice(0, 16).replace("T", " ")} UTC
                 </td>
               </tr>
