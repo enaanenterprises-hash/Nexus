@@ -102,7 +102,7 @@ export function GalleryFooter() {
                 textAnchor="middle"
                 fill="#0e0f12"
                 style={{
-                  fontFamily: 'var(--font-editorial), "New York", Georgia, serif',
+                  fontFamily: "var(--font-display)",
                   fontSize: "388px",
                   fontWeight: 500,
                   letterSpacing: "-0.048em",

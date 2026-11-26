@@ -191,10 +191,10 @@ export interface CinemaImageClip extends CinemaClipBase {
 }
 
 export type CinemaFontFamily =
-  | "Manrope, -apple-system, 'SF Pro Display', sans-serif"
-  | "'Source Serif 4', 'New York', Georgia, serif"
-  | "'Cormorant Garamond', Georgia, serif"
-  | "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace";
+  | "General Sans, -apple-system, sans-serif"
+  | "'Cabinet Grotesk', -apple-system, sans-serif"
+  | "'Gambetta', Georgia, serif"
+  | "'Commit Mono', ui-monospace, monospace";
 
 export interface CinemaTextClip extends CinemaClipBase {
   kind: "text";

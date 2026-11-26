@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { ExtensionLink } from "@/lib/extensions";
+import { resolveRuntimeFontFamily } from "@/lib/fonts-runtime";
 import {
   add,
   bezier,
@@ -1944,7 +1945,7 @@ export function BranchingNetworkCanvas({
 
             if (meta.monogram) {
               ctx.fillStyle = isLight ? "#14151a" : "#f5f5f7";
-              ctx.font = `600 ${bNode.tier === 1 ? 10 : 9}px var(--font-sans, sans-serif)`;
+              ctx.font = `600 ${bNode.tier === 1 ? 10 : 9}px ${resolveRuntimeFontFamily("sans")}`;
               ctx.textAlign = "center";
               ctx.textBaseline = "middle";
               ctx.fillText(meta.monogram.slice(0, 2), livePos.x, livePos.y + 0.5);

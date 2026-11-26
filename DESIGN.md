@@ -42,50 +42,56 @@ colors:
   gallery-success: "#15803d"
 typography:
   display:
-    fontFamily: "Source Serif 4, 'New York', Georgia, serif"
+    fontFamily: "'Cabinet Grotesk', -apple-system, 'SF Pro Display', sans-serif"
     fontSize: "clamp(2.75rem, 5.9vw, 5rem)"
-    fontWeight: 400
+    fontWeight: 500
     lineHeight: 1.03
     letterSpacing: "-0.04em"
   display-editorial:
-    fontFamily: "Cormorant Garamond, Georgia, serif"
+    fontFamily: "'Cabinet Grotesk', -apple-system, 'SF Pro Display', sans-serif"
     fontSize: "clamp(1.9rem, 3.2vw, 2.3rem)"
-    fontWeight: 400
+    fontWeight: 500
     lineHeight: 1.08
     letterSpacing: "-0.02em"
   headline:
-    fontFamily: "Source Serif 4, 'New York', Georgia, serif"
+    fontFamily: "'Cabinet Grotesk', -apple-system, 'SF Pro Display', sans-serif"
     fontSize: "clamp(2.1rem, 3.8vw, 3.45rem)"
-    fontWeight: 400
+    fontWeight: 500
     lineHeight: 1.08
     letterSpacing: "-0.032em"
-  title:
-    fontFamily: "Manrope, -apple-system, 'SF Pro Display', 'Helvetica Neue', sans-serif"
-    fontSize: "1.375rem"
+  literary:
+    fontFamily: "'Gambetta', 'New York', Georgia, serif"
+    fontSize: "1.0625rem"
     fontWeight: 400
+    lineHeight: 1.65
+    letterSpacing: "-0.005em"
+  title:
+    fontFamily: "'General Sans', -apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif"
+    fontSize: "1.375rem"
+    fontWeight: 500
     lineHeight: 1.25
     letterSpacing: "-0.02em"
   body:
-    fontFamily: "Manrope, -apple-system, 'SF Pro Display', 'Helvetica Neue', sans-serif"
+    fontFamily: "'General Sans', -apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif"
     fontSize: "0.9375rem"
     fontWeight: 400
     lineHeight: 1.65
     letterSpacing: "0em"
   body-compact:
-    fontFamily: "Manrope, -apple-system, 'SF Pro Display', 'Helvetica Neue', sans-serif"
+    fontFamily: "'General Sans', -apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif"
     fontSize: "0.875rem"
     fontWeight: 400
     lineHeight: 1.55
     letterSpacing: "-0.005em"
   label:
-    fontFamily: "Manrope, -apple-system, 'SF Pro Display', 'Helvetica Neue', sans-serif"
+    fontFamily: "'General Sans', -apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif"
     fontSize: "0.75rem"
     fontWeight: 500
     lineHeight: 1.35
     letterSpacing: "0em"
     fontFeature: "\"tnum\" 1"
   mono:
-    fontFamily: "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+    fontFamily: "'Commit Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace"
     fontSize: "0.75rem"
     fontWeight: 400
     lineHeight: 1.6
@@ -174,7 +180,7 @@ components:
 **Creative North Star: "Gallery Light Precision & The Obsidian Observatory"**
 
 Nexus spans two complementary visual polarities built on one architectural grammar:
-- **Public Landing Surface (`/` — Dual-Polarity Gallery Light -> Golden Lightfall -> Obsidian Observatory -> Gallery Light Colophon):** Opens in luminous Gallery Light (`#ffffff` ground, `#0e0f12` obsidian ink, `Source Serif 4` editorial display, flat 2D Nexus mark, living sunlit gold neural network, and inline-medallion editorial manifesto), transitions seamlessly into pitch black (`#000000`) through a full-bleed WebGL2 golden `<Lightfall />` curtain (`#eab308` falling warp streaks), presents Workspace, Philosophy, Roadmap, Integrations, Security, and Waitlist in deep Obsidian Observatory (`#000000` / `#050507`, `#f5f5f7` chalk ink, molten 24k gold `#f0b54a` optics) with adaptive Light/Dark Apple Liquid Glass floating chrome, and closes by returning to pure Gallery Light (`#ffffff`) for the centered editorial footer navigation, monumental `Nexus` wordmark, and `Nexus Atelier · Designed & Engineered in Toronto` colophon.
+- **Public Landing Surface (`/` — Dual-Polarity Gallery Light -> Golden Lightfall -> Obsidian Observatory -> Gallery Light Colophon):** Opens in luminous Gallery Light (`#ffffff` ground, `#0e0f12` obsidian ink, `Cabinet Grotesk` display headlines paired with `Gambetta` literary prose, flat 2D Nexus mark, living sunlit gold neural network, and inline-medallion editorial manifesto), transitions seamlessly into pitch black (`#000000`) through a full-bleed WebGL2 golden `<Lightfall />` curtain (`#eab308` falling warp streaks), presents Workspace, Philosophy, Roadmap, Integrations, Security, and Waitlist in deep Obsidian Observatory (`#000000` / `#050507`, `#f5f5f7` chalk ink, molten 24k gold `#f0b54a` optics) with adaptive Light/Dark Apple Liquid Glass floating chrome, and closes by returning to pure Gallery Light (`#ffffff`) for the centered editorial footer navigation, monumental `Nexus` wordmark, and `Nexus Atelier · Designed & Engineered in Toronto` colophon.
 - **Authenticated Operating Environment & Auxiliary Routes (`/dashboard`, `/waitlist`, `/signup`, `/about`, `/security` — Dual-Mode Atelier: Obsidian Observatory & Gallery Light):** Unified across Network, Command, Studio, and Nodes in both **Obsidian Dark** (`#070709` neural stage, `#0c0c0f` Command & Nodes canvas, `#131317` surfaces, `#f0b54a` molten 24k gold optics) and **Gallery Light** (`#ffffff` neural paper, `#f7f6f2` Command & Nodes canvas, `#ffffff` crisp cards, `#0e0f12` obsidian ink, `#c88d18` / `#a67412` radiant 24k gold optics). Floating chrome (flat 2D geometric blade menu, Spotlight `⌘K` Quick Bar, Focus Session Popover, voice bar, node panels) uses Apple Liquid Glass strictly over moving content. The Network stage runs a single analytical WebGL2 Singularity Canopy engine (`NeuralThreadsWebGL`, inspired by `<WebThreads />`'s sinusoidal braiding, nested taper, 3D depth twist, and optical pulses, recreated natively around Nexus's compact pearl-gold Singularity Core, 5 C1-smooth S-curved orbital socket arms, and whispered basal horizon cradle with filmic tone-mapping, fluid silk pointer deflection, click/transfer surges, and native Dark/Light ink rendering) synced sub-pixel to concentric SVG optical node reticles; Command elevates into a 3-tab hub (`Overview | Automations | Connections`) with Live Focus timer ring, `⌘K` Quick Bar, 1-click 4×2 Board Presets, and visual automation signal conduits; Nodes expands into a full-screen Spatial Nodes Studio with an interactive 5-socket SVG constellation, live Signal Router, plain-English capability matrix, and real-time `nexusBus` stream.
 
 Across both the public landing experience and the authenticated operating environment, information density is disciplined rather than decorative. Editorial bands use asymmetric two-column splits, generous pitch-black breathing room, and hairline-divided ledgers; interactive workspaces compress cleanly into nested obsidian containers with tabular alignment and zero gratuitous chrome. Authenticated dashboard and onboarding flows also carry a Gallery Light counterpart built on warm stone surfaces and charcoal ink with muted bronze-gold accents, preserving identical monochrome restraint in daylight.
@@ -184,7 +190,7 @@ Confirmed visual rejections shape every surface: Nexus refuses stacked glowing f
 **Key Characteristics:**
 - Neutral obsidian luminance ladder stepping cleanly from pitch black (`#000000`) through matte obsidian (`#0a0a0c`), canvas (`#0f0f12`), surface (`#16161a`), elevated (`#1c1c21`), and active selection (`#24242b`).
 - Monochrome chalk-on-obsidian controls paired with strictly rationed Singularity Gold (`#f0b54a`) reserved for the vertical spine hairline, active selection ticks, live status dots, text caret, and focus rings.
-- Light-weight `Manrope` (`300`) display typography paired with tabular numerals across all live cockpit readouts, with `Cormorant Garamond` reserved exclusively for ceremonial onboarding prompts.
+- Architectural `Cabinet Grotesk` (`500`) display typography paired with `Gambetta` literary serif accents and tabular `Commit Mono` numerals across all live cockpit readouts.
 - Flat-at-rest surfaces delineated by crisp `1px` neutral white hairlines (`rgba(255, 255, 255, 0.09–0.16)`), reserving shadows and backdrop blur solely for floating chrome and drag states.
 - Unified Lucide `1.5px` vector stroke iconography and restrained `180ms–260ms` motion choreography honoring `prefers-reduced-motion`.
 
@@ -232,24 +238,25 @@ A disciplined pitch-black and neutral obsidian palette accented by one rationed 
 
 ## Typography
 
-**Display Font:** `Manrope` (with `-apple-system, "SF Pro Display", "Helvetica Neue", sans-serif` fallback); `Cormorant Garamond` (with `Georgia, serif` fallback) reserved strictly for ceremonial onboarding prompts.
-**Body Font:** `Manrope` (weights `300`, `400`, `500`, `600`, loaded via `next/font/google` as `--font-manrope` / `--font-landing`).
-**Label/Mono Font:** `Manrope` with `font-variant-numeric: tabular-nums` for telemetry labels; `ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace` for inline code and extension capability scopes.
+**Display Font:** `Cabinet Grotesk` (loaded via `next/font/local` as `--font-cabinet-grotesk` / `--font-display`, with `-apple-system, "SF Pro Display", "Helvetica Neue", sans-serif` fallback) across hero headlines, section titles, and ceremonial onboarding prompts.
+**Literary Serif Counterpoint:** `Gambetta` (`300–700` normal & italic, loaded via `next/font/local` as `--font-gambetta` / `--font-serif`) reserved for editorial manifestos, landing subheads, Research Reader long-form articles, and Nexus Voice utterances.
+**Body & UI Font:** `General Sans` (`200–700`, loaded via `next/font/local` as `--font-general-sans` / `--font-landing`) for all dense dashboard chrome, buttons, inputs, and cockpit tiles.
+**Mono Font:** `Commit Mono` (loaded via `next/font/local` as `--font-commit-mono` / `--font-mono-stack`) paired with `font-variant-numeric: tabular-nums` for telemetry readouts, timecodes, inline code, and extension capability scopes.
 
-**Character:** Calm, architectural geometric sans-serif restraint. Light-weight (`300`) headlines paired with tight negative tracking give marketing sections an unhurried editorial presence, while `400–500` weights and tabular numerals keep dense workstation readouts razor-aligned without visual bulk.
+**Character:** Bespoke foundry editorial precision. Sculpted `Cabinet Grotesk` (`500`) headlines paired with warm `Gambetta` prose accents give marketing and reading surfaces quiet editorial authority, while `General Sans` (`400–500`) and `Commit Mono` keep dense workstation readouts razor-aligned without visual bulk.
 
 ### Hierarchy
-- **Display** (`300`, `clamp(2.25rem, 4.4vw, 4.5rem)`, `1.06` line-height, `-0.035em` tracking): Reserved for the full-viewport hero statement (`max-w-[18ch]`, `text-wrap: balance`).
-- **Editorial Display** (`Cormorant Garamond`, `400`, `clamp(1.9rem, 3.2vw, 2.3rem)`, `1.08` line-height, `-0.02em` tracking): Ceremonial onboarding prompt (`"Press to get Started"`) and sequential setup step titles inside the authenticated first-run flow.
-- **Headline** (`300`, `clamp(2rem, 3.6vw, 3rem)` to `clamp(2.25rem, 4.4vw, 3.5rem)`, `1.06–1.08` line-height, `-0.03em` to `-0.035em` tracking): Primary section headings across the landing page (`text-wrap: balance`).
+- **Display** (`Cabinet Grotesk`, `500`, `clamp(2.25rem, 4.4vw, 4.5rem)`, `1.06` line-height, `-0.035em` tracking): Reserved for the full-viewport hero statement (`max-w-[18ch]`, `text-wrap: balance`).
+- **Editorial Display** (`Cabinet Grotesk`, `500`, `clamp(1.9rem, 3.2vw, 2.3rem)`, `1.08` line-height, `-0.02em` tracking): Ceremonial onboarding prompt (`"Press to get Started"`) and sequential setup step titles inside the authenticated first-run flow.
+- **Headline** (`Cabinet Grotesk`, `500`, `clamp(2rem, 3.6vw, 3rem)` to `clamp(2.25rem, 4.4vw, 3.5rem)`, `1.06–1.08` line-height, `-0.03em` to `-0.035em` tracking): Primary section headings across the landing page (`text-wrap: balance`).
 - **Title** (`400–500`, `20px–22px`, `1.25` line-height, `-0.02em` tracking): Interactive desktop layer selector labels (`21px`), expandable roadmap step titles (`20px–22px`), and dashboard panel headings (`22px`).
-- **Body** (`400`, `15px–16px`, `1.58–1.7` line-height): Narrative paragraphs, design principles, roadmap summaries, and open-beta framing. Keep prose measure constrained to `46ch–60ch`.
-- **Compact UI Body** (`400–500`, `13px–14px`, `1.5–1.65` line-height): Cockpit widget headers (`14px–15px`), inbox subjects, reader excerpts, connector directory items, form controls, and footer navigation.
-- **Label** (`500`, `11px–12px`, `1.35` line-height, `tabular-nums`): Calendar weekday columns (`11px`), weather hour slots, Formula 1 timing headers, Command date stamp, and status counts.
-- **Mono** (`400`, `11.5px–12px`, `1.6–1.7` line-height): Inline documentation code and developer capability diagnostics.
+- **Body** (`400`, `15px–16px`, `1.58–1.7` line-height): Narrative paragraphs, design principles, roadmap summaries, and open-beta framing (`Gambetta` serif for editorial voice, `General Sans` for product copy). Keep prose measure constrained to `46ch–60ch`.
+- **Compact UI Body** (`General Sans`, `400–500`, `13px–14px`, `1.5–1.65` line-height): Cockpit widget headers (`14px–15px`), inbox subjects, reader excerpts, connector directory items, form controls, and footer navigation.
+- **Label** (`General Sans`, `500`, `11px–12px`, `1.35` line-height, `tabular-nums`): Calendar weekday columns (`11px`), weather hour slots, Formula 1 timing headers, Command date stamp, and status counts.
+- **Mono** (`Commit Mono`, `400`, `11.5px–12px`, `1.6–1.7` line-height): Timecodes, EXIF/EV telemetry, inline documentation code, and developer capability diagnostics.
 
 ### Named Rules
-**The Light-Display Rule.** Set display and section headlines in `Manrope` Light (`300`) with tight negative tracking (`-0.03em` to `-0.035em`) and `text-wrap: balance`; convey hierarchy through scale and negative space rather than heavy bolding.
+**The Architectural Display Rule.** Set display and section headlines in `Cabinet Grotesk` Medium (`500`) with tight negative tracking (`-0.03em` to `-0.035em`) and `text-wrap: balance`; convey hierarchy through scale and negative space rather than heavy bolding.
 
 **The Tabular Telemetry Rule.** Apply `font-variant-numeric: tabular-nums` to every timestamp, calendar grid, weather readout, audio timecode, and race timing column so live numbers never jitter horizontally.
 
@@ -304,7 +311,7 @@ Interactive surfaces feel calm, matte, and precision-machined—quiet at rest, i
 
 ### Buttons
 - **Shape:** Full pill capsule (`999px` radius) for landing conversion CTAs, header pills, and Command utility controls; `14px` radius for stacked authentication form buttons; `16px` (`rounded-2xl`) for base UI buttons.
-- **Primary:** Chalk Ink fill (`#f5f5f7`) with Obsidian-on-Light text (`#09090b`), `14px` `Manrope` Medium (`500`), `11.5px 23px` padding (`0.72rem 1.45rem`), zero border.
+- **Primary:** Chalk Ink fill (`#f5f5f7`) with Obsidian-on-Light text (`#09090b`), `14px` `General Sans` Medium (`500`), `11.5px 23px` padding (`0.72rem 1.45rem`), zero border.
 - **Hover / Focus:** Transitions over `180ms–200ms ease` to Pure White (`#ffffff`). Keyboard focus renders a `2px solid #f0b54a` outline with `2px` offset (or `ring-3` `rgba(240, 181, 74, 0.56)` on Base UI controls).
 - **Frosted Glass Header CTA:** Translucent white fill (`rgba(255, 255, 255, 0.07)`), `1px solid rgba(255, 255, 255, 0.16)`, `backdrop-filter: blur(16px)`, `36px` height, `0 18.4px` padding; hovers to `rgba(255, 255, 255, 0.14)` fill and `rgba(255, 255, 255, 0.3)` border.
 - **Ghost / Quiet Text Action:** Transparent resting background with Ash Muted (`#a1a1a6`) or Silver Secondary (`#d1d1d6`) ink, shifting cleanly to Chalk Ink (`#f5f5f7`) or Singularity Gold (`#f0b54a`) on hover.
@@ -340,7 +347,7 @@ A continuous `1px` vertical axis hairline (`w-px`) descending from the preserved
 - **Do** step surfaces cleanly along the obsidian luminance ladder (`#000000` -> `#0a0a0c` -> `#0f0f12` -> `#16161a` -> `#1c1c21`) separated by `1px` translucent white hairlines (`rgba(255, 255, 255, 0.08–0.16)`).
 - **Do** follow **The Singularity Gold Reserve Rule**—restrict `#f0b54a` to the vertical spine hairline, active selection ticks, live status dots, text caret, playhead, and `:focus-visible` outlines.
 - **Do** keep primary conversion buttons and active segmented tabs in monochrome chalk-on-obsidian contrast (`#f5f5f7` / `#f4f4f6` with `#09090b` ink).
-- **Do** set section headlines in `Manrope` Light (`300`) with `-0.03em` to `-0.035em` tracking and `text-wrap: balance`, and apply `tabular-nums` to all clocks, dates, temperatures, and timing tables.
+- **Do** set section headlines in `Cabinet Grotesk` Medium (`500`) with `-0.03em` to `-0.035em` tracking and `text-wrap: balance`, and apply `tabular-nums` to all clocks, dates, temperatures, and timing tables.
 - **Do** use asymmetric split grids (`232px / 1fr`, `0.82fr / 1.18fr`, `0.72fr / 1.28fr`) and hairline-divided rows for editorial and specification sections.
 - **Do** maintain Pewter Meta (`#8e8e95`) as the darkest readable metadata ink on black/obsidian surfaces and honor `prefers-reduced-motion: reduce` on every transition or entrance animation.
 
@@ -350,4 +357,4 @@ A continuous `1px` vertical axis hairline (`w-px`) descending from the preserved
 - **Don't** build equal-width 3-column icon-heading-paragraph feature-card grids or invented dollar pricing tier tables.
 - **Don't** fill primary buttons, badges, or full cards with solid Singularity Gold (`#f0b54a`)—its restraint is what anchors the hierarchy.
 - **Don't** mix multiple icon libraries or emoji glyphs into UI chrome; stay exclusively on Lucide `1.5px` stroke vectors.
-- **Don't** use `Cormorant Garamond` inside the dense Command cockpit or marketing landing bands—keep it exclusively within ceremonial onboarding prompts.
+- **Don't** overuse `Gambetta` serif inside dense Command cockpit tiles—reserve it for editorial manifestos, voice utterances, and long-form reading.

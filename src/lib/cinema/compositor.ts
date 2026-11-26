@@ -1,5 +1,6 @@
 import { VideoSample } from "mediabunny";
 import { sampleClipEnvelopeAt } from "@/lib/creative/nexus-bridge";
+import { resolveCinemaCanvasFont } from "./presets";
 import type {
   CinemaAnimation,
   CinemaAudioClip,
@@ -458,7 +459,7 @@ function drawTextClip(
   const fontPx = Math.max(10, (clip.fontSize / 1080) * canvasHeight);
   const visibleChars = Math.max(1, Math.round(clip.text.length * charFraction));
   const rawText = charFraction < 0.999 ? clip.text.slice(0, visibleChars) : clip.text;
-  const fontSpec = `${clip.fontWeight} ${fontPx}px ${clip.fontFamily}`;
+  const fontSpec = `${clip.fontWeight} ${fontPx}px ${resolveCinemaCanvasFont(clip.fontFamily)}`;
   ctx.font = fontSpec;
   ctx.textBaseline = "middle";
 

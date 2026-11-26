@@ -1664,7 +1664,7 @@ export function SingularityStage() {
             <h2 className="font-editorial text-[clamp(2.55rem,5.1vw,4.35rem)] leading-[1.01] font-normal tracking-[-0.038em] text-[#f5f5f7]">
               Build unified workflows
             </h2>
-            <p className="mt-5 max-w-[40ch] text-[16.5px] leading-[1.6] text-[#b4b4bc] sm:text-[18px]">
+            <p className="font-literary mt-5 max-w-[40ch] text-[17px] leading-[1.6] text-[#b4b4bc] sm:text-[18.5px]">
               One quiet environment uniting your agent, your dashboard, and standalone apps.
             </p>
           </div>

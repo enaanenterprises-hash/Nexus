@@ -39,6 +39,7 @@ import {
   CINEMA_TEMPLATES,
   ELEMENT_PRESETS,
   TEXT_PRESETS,
+  resolveCinemaDomFont,
   type TextStylePreset,
 } from "@/lib/cinema/presets";
 import type {
@@ -536,7 +537,7 @@ export const CinemaSidebar = memo(function CinemaSidebar({
               className="flex w-full flex-col items-start gap-0.5 rounded-lg border border-white/[0.08] bg-[#0c0c12] px-3 py-2.5 text-left transition-colors hover:border-white/30"
             >
               <span
-                style={{ fontFamily: preset.fontFamily, fontWeight: preset.fontWeight }}
+                style={{ fontFamily: resolveCinemaDomFont(preset.fontFamily), fontWeight: preset.fontWeight }}
                 className="line-clamp-1 text-[15px] text-foreground"
               >
                 {preset.previewText}

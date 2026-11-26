@@ -1,3 +1,4 @@
+import { resolveRuntimeFontFamily } from "@/lib/fonts-runtime";
 import { boxBlurRgba, clamp, clampByte, smoothstep } from "../color-math";
 import type { ImageBuffer } from "./tonal";
 import type {
@@ -204,20 +205,24 @@ export function applyDoubleExposure(
 
 function resolveTextFont(item: OpticsTextItem, scale: number): { font: string; upper: boolean } {
   const px = Math.max(12, Math.round(item.size * scale));
+  const serif = resolveRuntimeFontFamily("serif");
+  const display = resolveRuntimeFontFamily("display");
+  const sans = resolveRuntimeFontFamily("sans");
+  const mono = resolveRuntimeFontFamily("mono");
   switch (item.styleId) {
     case "editorial-serif":
-      return { font: `400 ${px}px "Instrument Serif", Georgia, serif`, upper: false };
+      return { font: `400 ${px}px ${serif}`, upper: false };
     case "technical-mono":
     case "film-frame-caption":
-      return { font: `500 ${Math.round(px * 0.72)}px "Geist Mono", ui-monospace, monospace`, upper: true };
+      return { font: `500 ${Math.round(px * 0.72)}px ${mono}`, upper: true };
     case "swiss-clean":
     case "cutout-badge":
-      return { font: `600 ${px}px "Geist", -apple-system, BlinkMacSystemFont, sans-serif`, upper: true };
+      return { font: `600 ${px}px ${display}`, upper: true };
     case "gallery-stamp":
     case "double-hairline":
-      return { font: `500 ${Math.round(px * 0.85)}px "Geist", sans-serif`, upper: true };
+      return { font: `500 ${Math.round(px * 0.85)}px ${sans}`, upper: true };
     case "horizon-bar":
-      return { font: `500 ${px}px "Instrument Serif", Georgia, serif`, upper: false };
+      return { font: `500 ${px}px ${serif}`, upper: false };
   }
 }
 

@@ -222,17 +222,17 @@ export const CinemaInspectorContent = memo(function CinemaInspectorContent({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Manrope, -apple-system, 'SF Pro Display', sans-serif">
-                      Manrope / SF Sans
+                    <SelectItem value="General Sans, -apple-system, sans-serif">
+                      General Sans (UI)
                     </SelectItem>
-                    <SelectItem value="'Source Serif 4', 'New York', Georgia, serif">
-                      Source Serif 4 (Editorial)
+                    <SelectItem value="'Cabinet Grotesk', -apple-system, sans-serif">
+                      Cabinet Grotesk (Display)
                     </SelectItem>
-                    <SelectItem value="'Cormorant Garamond', Georgia, serif">
-                      Cormorant Garamond
+                    <SelectItem value="'Gambetta', Georgia, serif">
+                      Gambetta (Editorial Serif)
                     </SelectItem>
-                    <SelectItem value="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace">
-                      SF Mono (Technical)
+                    <SelectItem value="'Commit Mono', ui-monospace, monospace">
+                      Commit Mono (Technical)
                     </SelectItem>
                   </SelectContent>
                 </Select>

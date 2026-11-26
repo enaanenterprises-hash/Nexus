@@ -280,7 +280,7 @@ export function HeroStage() {
             </span>
           </h1>
 
-          <p className="gal-enter gal-enter-delay-1 mt-4 max-w-[44ch] text-[16.5px] leading-[1.6] text-[#4a4c55] [text-wrap:pretty] sm:mt-5 sm:text-[18.5px]">
+          <p className="gal-enter gal-enter-delay-1 font-literary mt-4 max-w-[44ch] text-[17.5px] leading-[1.6] text-[#4a4c55] [text-wrap:pretty] sm:mt-5 sm:text-[19.5px]">
             Effortlessly connect your everyday workflows together with Nexus Atelier
           </p>
 

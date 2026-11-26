@@ -13,6 +13,7 @@ import { Plus, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatGainDb } from "@/lib/studio/capture-engine";
+import { resolveRuntimeFontFamily } from "@/lib/fonts-runtime";
 import { STUDIO_STEM_COLORS, normalizeStudioColor } from "@/lib/studio/colors";
 import type { StudioMarkerV1, StudioTrackColor, StudioTrackV1 } from "@/lib/studio/types";
 
@@ -241,7 +242,7 @@ export function TimelineWaveform({
     }
 
     const stepSec = minWidthMs > 180_000 ? 30 : minWidthMs > 90_000 ? 15 : minWidthMs > 40_000 ? 10 : 5;
-    ctx.font = "500 10px ui-monospace, SFMono-Regular, Menlo, monospace";
+    ctx.font = `500 10px ${resolveRuntimeFontFamily("mono")}`;
     ctx.fillStyle = isLight ? "rgba(14, 15, 18, 0.56)" : "rgba(232, 232, 236, 0.52)";
     for (let sec = 0; sec * 1000 <= minWidthMs; sec += stepSec) {
       const x = sec * 1000 * pxPerMs;
@@ -325,7 +326,7 @@ export function TimelineWaveform({
         ctx.beginPath();
         ctx.rect(x0 + 6, clipTop + 3, clipW - 12, 16);
         ctx.clip();
-        ctx.font = "500 10px ui-sans-serif, system-ui, sans-serif";
+        ctx.font = `500 10px ${resolveRuntimeFontFamily("sans")}`;
         ctx.fillStyle = isLight
           ? `rgba(14, 15, 18, ${audible ? 0.78 : 0.35})`
           : `rgba(244, 244, 246, ${audible ? 0.82 : 0.36})`;

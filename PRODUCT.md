@@ -32,7 +32,7 @@ Nexus unifies a spatial neural interface, voice assistant, live external data fe
 
 - Name: **Nexus**
 - Core visual metaphor: golden singularity & neural web anchored on the exact dashboard core position, paired with monochrome black/white product chrome and surfaces across Dark and Light modes.
-- Typography loaded at the root layout: `Cormorant Garamond` (`--font-display`) and `Manrope` (`--font-manrope`).
+- Typography loaded self-hosted at the root layout (`next/font/local`): `Cabinet Grotesk` (`--font-cabinet-grotesk`), `Gambetta` (`--font-gambetta`), `General Sans` (`--font-general-sans`), and `Commit Mono` (`--font-commit-mono`).
 
 ## Evidence on Hand
 

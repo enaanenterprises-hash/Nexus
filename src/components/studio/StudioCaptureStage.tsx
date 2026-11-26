@@ -16,6 +16,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import GlassSurface from "@/components/landing/GlassSurface";
+import { resolveRuntimeFontFamily } from "@/lib/fonts-runtime";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
@@ -118,7 +119,7 @@ function drawAcousticRibbon(
   }
 
   if (label) {
-    ctx.font = "500 11px Manrope, -apple-system, 'SF Pro Display', sans-serif";
+    ctx.font = `500 11px ${resolveRuntimeFontFamily("sans")}`;
     ctx.fillStyle = isLight
       ? `rgba(14, 15, 18, ${isMuted ? 0.3 : 0.48})`
       : `rgba(244, 244, 246, ${isMuted ? 0.28 : 0.48})`;

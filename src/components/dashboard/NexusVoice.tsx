@@ -69,7 +69,7 @@ export function NexusVoice({
               </p>
             ) : null}
             {current ? (
-              <p key={current.id} className="dash-utterance font-editorial" aria-live="polite">
+              <p key={current.id} className="dash-utterance font-literary" aria-live="polite">
                 {current.text.split(/\s+/).map((word, i) => (
                   <span key={i} className={`word ${i < revealed ? "" : "word--hidden"}`}>
                     {word}{" "}
@@ -77,7 +77,7 @@ export function NexusVoice({
                 ))}
               </p>
             ) : (
-              <p className="dash-utterance font-editorial text-[color:var(--land-faint)]">
+              <p className="dash-utterance font-literary text-[color:var(--land-faint)]">
                 Working through your network…
               </p>
             )}

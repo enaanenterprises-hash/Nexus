@@ -388,7 +388,7 @@ export async function importStudioRecordingIntoCinema(
             locked: false,
             hidden: false,
             text: seg.text,
-            fontFamily: "Manrope, -apple-system, 'SF Pro Display', sans-serif",
+            fontFamily: "General Sans, -apple-system, sans-serif",
             fontSize: 38,
             fontWeight: 600,
             letterSpacing: -0.015,

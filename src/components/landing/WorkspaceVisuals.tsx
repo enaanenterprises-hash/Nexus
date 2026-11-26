@@ -318,7 +318,7 @@ export function NeuralNetworkPreview({
                   {conversation.sourceLabel} · {conversation.prompt}
                 </p>
                 <p
-                  className={`font-editorial max-w-[52ch] text-[clamp(1.05rem,1.5vw,1.25rem)] leading-[1.38] ${
+                  className={`font-literary max-w-[52ch] text-[clamp(1.08rem,1.55vw,1.3rem)] leading-[1.38] ${
                     isLight ? "text-[#0e0f12]" : "text-[#f5f5f7]"
                   }`}
                 >

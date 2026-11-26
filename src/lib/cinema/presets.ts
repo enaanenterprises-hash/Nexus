@@ -1,4 +1,32 @@
+import { resolveRuntimeFontFamily, type NexusFontRole } from "@/lib/fonts-runtime";
 import type { CinemaAspectRatio, CinemaBackground, CinemaFilter, CinemaFilterPresetId, CinemaProject, CinemaShapeKind, CinemaTrack, CinemaTransform, CinemaTransitionType, CinemaVisualizerStyle } from "./types";
+
+function roleForCinemaFont(family: string): NexusFontRole {
+  const lower = family.toLowerCase();
+  if (lower.includes("commit mono") || lower.includes("monospace")) return "mono";
+  if (lower.includes("gambetta") || lower.includes("cormorant") || lower.includes("serif")) return "serif";
+  if (lower.includes("cabinet grotesk")) return "display";
+  return "sans";
+}
+
+/** SSR-safe CSS `var(--font-...)` stack for React JSX DOM previews in Cinema. */
+export function resolveCinemaDomFont(family: string): string {
+  switch (roleForCinemaFont(family)) {
+    case "display":
+      return "var(--font-display)";
+    case "serif":
+      return "var(--font-serif)";
+    case "mono":
+      return "var(--font-mono-stack)";
+    case "sans":
+      return "var(--font-landing)";
+  }
+}
+
+/** Live Canvas2D `@font-face` stack for Mediabunny / Cinema video rendering (handles legacy presets too). */
+export function resolveCinemaCanvasFont(family: string): string {
+  return resolveRuntimeFontFamily(roleForCinemaFont(family));
+}
 
 export const ASPECT_RATIO_PRESETS: Record<
   CinemaAspectRatio,
@@ -70,10 +98,10 @@ export interface TextStylePreset {
   name: string;
   previewText: string;
   fontFamily:
-    | "Manrope, -apple-system, 'SF Pro Display', sans-serif"
-    | "'Source Serif 4', 'New York', Georgia, serif"
-    | "'Cormorant Garamond', Georgia, serif"
-    | "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace";
+    | "General Sans, -apple-system, sans-serif"
+    | "'Cabinet Grotesk', -apple-system, sans-serif"
+    | "'Gambetta', Georgia, serif"
+    | "'Commit Mono', ui-monospace, monospace";
   fontSize: number;
   fontWeight: 300 | 400 | 500 | 600 | 700;
   letterSpacing: number;
@@ -93,7 +121,7 @@ export const TEXT_PRESETS: TextStylePreset[] = [
     id: "editorial-title",
     name: "Editorial Title",
     previewText: "Design in motion",
-    fontFamily: "'Source Serif 4', 'New York', Georgia, serif",
+    fontFamily: "'Cabinet Grotesk', -apple-system, sans-serif",
     fontSize: 82,
     fontWeight: 400,
     letterSpacing: -0.03,
@@ -111,7 +139,7 @@ export const TEXT_PRESETS: TextStylePreset[] = [
     id: "ceremonial-serif",
     name: "Ceremonial Serif",
     previewText: "Chapter One",
-    fontFamily: "'Cormorant Garamond', Georgia, serif",
+    fontFamily: "'Gambetta', Georgia, serif",
     fontSize: 92,
     fontWeight: 400,
     letterSpacing: -0.02,
@@ -129,7 +157,7 @@ export const TEXT_PRESETS: TextStylePreset[] = [
     id: "swiss-subhead",
     name: "Swiss Subhead",
     previewText: "Precision workspace",
-    fontFamily: "Manrope, -apple-system, 'SF Pro Display', sans-serif",
+    fontFamily: "General Sans, -apple-system, sans-serif",
     fontSize: 46,
     fontWeight: 300,
     letterSpacing: -0.025,
@@ -147,7 +175,7 @@ export const TEXT_PRESETS: TextStylePreset[] = [
     id: "lower-third",
     name: "Lower Third",
     previewText: "Nexus Creative Suite · 2026",
-    fontFamily: "Manrope, -apple-system, 'SF Pro Display', sans-serif",
+    fontFamily: "General Sans, -apple-system, sans-serif",
     fontSize: 30,
     fontWeight: 500,
     letterSpacing: -0.01,
@@ -165,7 +193,7 @@ export const TEXT_PRESETS: TextStylePreset[] = [
     id: "kinetic-caption",
     name: "Kinetic Caption",
     previewText: "One environment for your craft.",
-    fontFamily: "Manrope, -apple-system, 'SF Pro Display', sans-serif",
+    fontFamily: "General Sans, -apple-system, sans-serif",
     fontSize: 40,
     fontWeight: 600,
     letterSpacing: -0.015,
@@ -183,7 +211,7 @@ export const TEXT_PRESETS: TextStylePreset[] = [
     id: "pull-quote",
     name: "Pull Quote",
     previewText: "“Simplicity carried to the extreme becomes elegance.”",
-    fontFamily: "'Source Serif 4', 'New York', Georgia, serif",
+    fontFamily: "'Cabinet Grotesk', -apple-system, sans-serif",
     fontSize: 44,
     fontWeight: 400,
     letterSpacing: -0.02,
@@ -201,7 +229,7 @@ export const TEXT_PRESETS: TextStylePreset[] = [
     id: "timecode-stamp",
     name: "Timecode Stamp",
     previewText: "REC · 48 KHZ · 01",
-    fontFamily: "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace",
+    fontFamily: "'Commit Mono', ui-monospace, monospace",
     fontSize: 24,
     fontWeight: 500,
     letterSpacing: 0.04,
@@ -219,7 +247,7 @@ export const TEXT_PRESETS: TextStylePreset[] = [
     id: "pill-tag",
     name: "Monochrome Badge",
     previewText: "Chapter 01",
-    fontFamily: "Manrope, -apple-system, 'SF Pro Display', sans-serif",
+    fontFamily: "General Sans, -apple-system, sans-serif",
     fontSize: 26,
     fontWeight: 500,
     letterSpacing: 0,
@@ -375,7 +403,7 @@ export function buildTemplateProject(
         locked: false,
         hidden: false,
         text: "Untitled Sequence",
-        fontFamily: "'Source Serif 4', 'New York', Georgia, serif",
+        fontFamily: "'Cabinet Grotesk', -apple-system, sans-serif",
         fontSize: 76,
         fontWeight: 400,
         letterSpacing: -0.03,
@@ -429,7 +457,7 @@ export function buildTemplateProject(
         locked: false,
         hidden: false,
         text: "EPISODE 01 · MASTER MIX",
-        fontFamily: "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace",
+        fontFamily: "'Commit Mono', ui-monospace, monospace",
         fontSize: 22,
         fontWeight: 500,
         letterSpacing: 0.04,
@@ -458,7 +486,7 @@ export function buildTemplateProject(
         locked: false,
         hidden: false,
         text: "Conversation & Notes",
-        fontFamily: "'Source Serif 4', 'New York', Georgia, serif",
+        fontFamily: "'Cabinet Grotesk', -apple-system, sans-serif",
         fontSize: 78,
         fontWeight: 400,
         letterSpacing: -0.03,
@@ -551,7 +579,7 @@ export function buildTemplateProject(
         locked: false,
         hidden: false,
         text: "Crafted for speed.",
-        fontFamily: "'Source Serif 4', 'New York', Georgia, serif",
+        fontFamily: "'Cabinet Grotesk', -apple-system, sans-serif",
         fontSize: 72,
         fontWeight: 400,
         letterSpacing: -0.03,
@@ -580,7 +608,7 @@ export function buildTemplateProject(
         locked: false,
         hidden: false,
         text: "Frame exact sound & motion.",
-        fontFamily: "Manrope, -apple-system, 'SF Pro Display', sans-serif",
+        fontFamily: "General Sans, -apple-system, sans-serif",
         fontSize: 52,
         fontWeight: 400,
         letterSpacing: -0.025,
@@ -614,7 +642,7 @@ export function buildTemplateProject(
         locked: false,
         hidden: false,
         text: "Why creators unify audio & video",
-        fontFamily: "Manrope, -apple-system, 'SF Pro Display', sans-serif",
+        fontFamily: "General Sans, -apple-system, sans-serif",
         fontSize: 56,
         fontWeight: 600,
         letterSpacing: -0.02,
@@ -643,7 +671,7 @@ export function buildTemplateProject(
         locked: false,
         hidden: false,
         text: "Record once. Edit everywhere.",
-        fontFamily: "'Source Serif 4', 'New York', Georgia, serif",
+        fontFamily: "'Cabinet Grotesk', -apple-system, sans-serif",
         fontSize: 64,
         fontWeight: 400,
         letterSpacing: -0.03,
@@ -716,7 +744,7 @@ export function buildTemplateProject(
         locked: false,
         hidden: false,
         text: "The Calm Atelier",
-        fontFamily: "'Cormorant Garamond', Georgia, serif",
+        fontFamily: "'Gambetta', Georgia, serif",
         fontSize: 96,
         fontWeight: 400,
         letterSpacing: -0.025,
@@ -745,7 +773,7 @@ export function buildTemplateProject(
         locked: false,
         hidden: false,
         text: "DIRECTED IN NEXUS CINEMA",
-        fontFamily: "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace",
+        fontFamily: "'Commit Mono', ui-monospace, monospace",
         fontSize: 22,
         fontWeight: 500,
         letterSpacing: 0.08,
@@ -779,7 +807,7 @@ export function buildTemplateProject(
         locked: false,
         hidden: false,
         text: "Precision leaves room for silence.",
-        fontFamily: "'Source Serif 4', 'New York', Georgia, serif",
+        fontFamily: "'Cabinet Grotesk', -apple-system, sans-serif",
         fontSize: 64,
         fontWeight: 400,
         letterSpacing: -0.03,
@@ -808,7 +836,7 @@ export function buildTemplateProject(
         locked: false,
         hidden: false,
         text: "Nexus Creative Suite",
-        fontFamily: "Manrope, -apple-system, 'SF Pro Display', sans-serif",
+        fontFamily: "General Sans, -apple-system, sans-serif",
         fontSize: 28,
         fontWeight: 500,
         letterSpacing: 0,
